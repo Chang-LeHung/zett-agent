@@ -173,14 +173,16 @@ def tool(
 def render_tool_guidance(tools: Sequence[AgentTool]) -> str:
     """Render all snippets first, followed by all usage guidelines."""
     snippets = [f"- {registered.name}: {registered.snippet}" for registered in tools if registered.snippet]
-    guidelines = [
-        f"- {registered.name}: {guideline}" for registered in tools for guideline in registered.guidelines if guideline
-    ]
+    guideline_groups = []
+    for registered in tools:
+        items = [f"- {guideline}" for guideline in registered.guidelines if guideline]
+        if items:
+            guideline_groups.append(f"## {registered.name}\n" + "\n".join(items))
     sections = []
     if snippets:
         sections.append("# Tool snippets\n" + "\n".join(snippets))
-    if guidelines:
-        sections.append("# Tool guidelines\n" + "\n".join(guidelines))
+    if guideline_groups:
+        sections.append("# Tool guidelines\n" + "\n\n".join(guideline_groups))
     return "\n\n".join(sections)
 
 

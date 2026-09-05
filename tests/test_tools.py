@@ -117,7 +117,10 @@ def test_tool_docstring_supplies_description_args_snippet_and_guidelines():
     prompt = render_tool_guidance([documented])
     assert prompt.index("# Tool snippets") < prompt.index("# Tool guidelines")
     assert documented.snippet in prompt
-    assert "- documented: Use a narrow query first." in prompt
+    assert "# Tool guidelines\n## documented" in prompt
+    assert "- Use a narrow query first." in prompt
+    assert "- Increase limit only when needed." in prompt
+    assert prompt.count("## documented") == 1
 
 
 def test_tool_docstring_rejects_unknown_argument_documentation():

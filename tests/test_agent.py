@@ -198,7 +198,7 @@ async def test_context_shares_injected_tools_and_is_new_for_each_run():
     assert contexts[1].state is agent.state
     assert contexts[0].tools is contexts[1].tools is agent.tools
     assert model.requests[0].tools == (add.definition,)
-    assert any("- add: Use for exact addition." in message.content for message in model.requests[0].messages)
+    assert any("## add\n- Use for exact addition." in message.content for message in model.requests[0].messages)
     assert model.requests[1].messages[-1].content == "5"
 
 
@@ -422,7 +422,7 @@ async def test_tool_guidance_follows_all_instructions_without_duplication():
     for request in model.requests:
         prompt = "\n\n".join(message.content for message in request.messages if isinstance(message, SystemMessage))
         assert prompt.startswith("Base\n\nSnapshot")
-        assert prompt.endswith("- add: Use for exact addition.")
+        assert prompt.endswith("## add\n- Use for exact addition.")
         assert prompt.count("# Tool guidelines") == 1
     assert sum("# Tool guidelines" in message.content for message in agent.state.messages) == 1
 

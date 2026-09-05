@@ -75,14 +75,14 @@ class SessionView(BaseModel):
         +-----------------+------------------------------------------------------+
         | Snapshot        | One checkpoint replacing a compacted Raw Log prefix. |
         +-----------------+------------------------------------------------------+
-        | Session Context | Latest Snapshot plus the Raw Log tail after it.       |
+        | Session Context | Latest Snapshot plus the Raw Log tail after it.      |
         +-----------------+------------------------------------------------------+
 
     A Snapshot stores only one CompactedMessage. Recent messages remain solely
     in the Raw Log and are selected using the Snapshot boundary::
 
         Raw Log       [1] [2] [3] [4] [5] [6] [7] | [8] [9] [10]
-                       \\________ compacted _______/   \\___ tail ___/
+                       \\______ compacted ______/   \\__ tail__/
 
         Snapshot      [CompactedMessage through sequence 7]
 

@@ -87,6 +87,20 @@ async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_pa
         second.close()
 
 
+async def test_sqlite_session_extension_lists_paginated_raw_messages(tmp_path):
+    extension = SQLiteSessionExtension(tmp_path / "owned.sqlite3")
+    try:
+        await extension.storage.append("session", "request", UserMessage(content="First"))
+        await extension.storage.append("session", "request", AssistantMessage(content="Second"))
+
+        records = extension.list_raw_messages("session", limit=1, offset=1)
+
+        assert [record.sequence for record in records] == [2]
+        assert [record.message for record in records] == [AssistantMessage(content="Second")]
+    finally:
+        extension.close()
+
+
 async def test_same_agent_reloads_snapshot_and_external_tail_every_request(storage):
     session_id = "test-session"
     model = Model()
@@ -126,7 +140,9 @@ async def test_configured_request_id_is_persisted(storage):
         extensions=[SessionPersistenceExtension(storage)],
     )
     await agent.run("Hello")
-    assert {record.request_id for record in storage.list_messages("test-session")} == {"request-from-application"}
+    assert {record.request_id for record in storage.list_raw_messages("test-session")} == {
+        "request-from-application"
+    }
 
 
 async def test_compaction_snapshot_keeps_raw_log_and_restores_checkpoint(storage):
@@ -217,12 +233,16 @@ async def test_lists_typed_raw_messages_and_deletes_one_session(storage):
     await storage.append("first", "request-1", AssistantMessage(content="Hi"))
     await storage.append("second", "request-2", UserMessage(content="Keep"))
 
-    records = storage.list_messages("first", after_sequence=0, through_sequence=1)
+    records = storage.list_raw_messages("first", after_sequence=0, through_sequence=1)
     assert len(records) == 1
     assert records[0].request_id == "request-1"
     assert records[0].message == UserMessage(content="Hello")
     assert records[0].created_at.tzinfo is not None
     assert storage.count_messages("first") == 2
+    second_page = storage.list_raw_messages("first", limit=1, offset=1)
+    assert [record.sequence for record in second_page] == [2]
+    assert [record.message for record in second_page] == [AssistantMessage(content="Hi")]
+    assert storage.list_raw_messages("first", limit=1, offset=2) == []
 
     sessions = storage.list_sessions()
     assert [(session.session_id, session.message_count) for session in sessions] == [("second", 1), ("first", 2)]
@@ -230,9 +250,9 @@ async def test_lists_typed_raw_messages_and_deletes_one_session(storage):
     assert len(storage.list_sessions(limit=1)) == 1
 
     assert storage.delete_session("first") is True
-    assert storage.list_messages("first") == []
+    assert storage.list_raw_messages("first") == []
     assert storage.count_messages("first") == 0
-    assert [record.message for record in storage.list_messages("second")] == [UserMessage(content="Keep")]
+    assert [record.message for record in storage.list_raw_messages("second")] == [UserMessage(content="Keep")]
     assert storage.delete_session("missing") is False
 
 
@@ -242,11 +262,12 @@ async def test_lists_typed_raw_messages_and_deletes_one_session(storage):
         ({"after_sequence": -1}, "after_sequence"),
         ({"through_sequence": 0}, "through_sequence"),
         ({"limit": 0}, "limit"),
+        ({"offset": -1}, "offset"),
     ],
 )
-def test_list_messages_rejects_invalid_ranges(storage, options, error):
+def test_list_raw_messages_rejects_invalid_query_options(storage, options, error):
     with pytest.raises(ValueError, match=error):
-        storage.list_messages("session", **options)
+        storage.list_raw_messages("session", **options)
 
 
 def test_list_sessions_rejects_invalid_limit(storage):

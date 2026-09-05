@@ -68,7 +68,7 @@ The latest version is active, so no mutable is_active flag is needed.
 Restore `snapshot.messages_json` followed by raw entries with
 `sequence > snapshot.base_sequence`. Never interpret compacted list offsets as
 raw-log positions. Raw messages and snapshots retain their complete typed runtime
-envelopes. `list_messages()` exposes typed raw records for history UIs and
+envelopes. `list_raw_messages()` exposes typed, paginated Raw Log records for history UIs and
 auditing. `delete_session()` explicitly removes both table ranges for a session.
 Storage can be closed and reopened without depending on a KCS process.
 

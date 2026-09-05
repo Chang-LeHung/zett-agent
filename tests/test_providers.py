@@ -39,6 +39,7 @@ from kcs_agent.providers import (
     ProviderResponseError,
     _message_to_openai_payload,
     _normalize_image_source,
+    _usage_from_mapping,
 )
 
 
@@ -181,6 +182,45 @@ def test_message_to_openai_payload_supports_image_bytes_parts() -> None:
     block = payload["content"][0]
     assert block["type"] == "image_url"
     assert block["image_url"]["url"].startswith("data:image/jpeg;base64")
+
+
+def test_usage_from_mapping_normalizes_openai_token_details() -> None:
+    usage = _usage_from_mapping(
+        {
+            "prompt_tokens": 120,
+            "completion_tokens": 45,
+            "total_tokens": 165,
+            "prompt_tokens_details": {"cached_tokens": 80},
+            "completion_tokens_details": {"reasoning_tokens": 30},
+        }
+    )
+
+    assert usage.input_tokens == 120
+    assert usage.output_tokens == 45
+    assert usage.cache_read_tokens == 80
+    assert usage.cache_write_tokens == 0
+    assert usage.reasoning_tokens == 30
+    assert usage.total_tokens == 165
+
+
+def test_usage_from_mapping_normalizes_deepseek_cache_counters() -> None:
+    usage = _usage_from_mapping(
+        {
+            "prompt_tokens": 120,
+            "completion_tokens": 45,
+            "total_tokens": 165,
+            "prompt_cache_hit_tokens": 80,
+            "prompt_cache_miss_tokens": 40,
+            "completion_tokens_details": {"reasoning_tokens": 30},
+        }
+    )
+
+    assert usage.input_tokens == 120
+    assert usage.output_tokens == 45
+    assert usage.cache_read_tokens == 80
+    assert usage.cache_write_tokens == 0
+    assert usage.reasoning_tokens == 30
+    assert usage.total_tokens == 165
 
 
 # ----------------------------------------------------------------------

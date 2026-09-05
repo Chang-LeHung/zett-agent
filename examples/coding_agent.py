@@ -199,11 +199,12 @@ def message_sections(message: AnyMessage) -> list[tuple[str, str]]:
 
 def print_history(storage: SQLiteSessionStorage, session_id: str, limit: int) -> None:
     """Print the newest raw messages while preserving their original order."""
-    records = storage.list_messages(session_id)
+    offset = max(storage.count_messages(session_id) - limit, 0)
+    records = storage.list_raw_messages(session_id, limit=limit, offset=offset)
     if not records:
         print("This session has no messages.")
         return
-    for record in records[-limit:]:
+    for record in records:
         created_at = record.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S")
         print(f"{record.sequence:>4}  {record.message.role.value:<9}  {created_at}")
         for label, content in message_sections(record.message):

@@ -299,23 +299,53 @@ def _parse_tool_calls(streams: Mapping[int, _ToolCallAccumulator]) -> tuple[Tool
 
 
 def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:
-    cache_read = int(payload.get("prompt_cache_hit_tokens", 0) or 0)
-    cache_write = 0
-    reasoning = 0
+    """Normalize token usage returned by OpenAI-compatible chat APIs.
 
-    if "prompt_tokens_details" in payload and isinstance(payload["prompt_tokens_details"], dict):
-        details = payload["prompt_tokens_details"]
-        cache_read = int(details.get("cached_tokens", cache_read) or 0)
-    if "completion_tokens_details" in payload and isinstance(payload["completion_tokens_details"], dict):
-        details = payload["completion_tokens_details"]
-        reasoning = int(details.get("reasoning_tokens", 0) or 0)
+    This helper is shared by :class:`OpenAIProvider` and
+    :class:`DeepSeekProvider`. Their response fields map as follows::
+
+        Provider   API field                                  ModelUsage field
+        ---------- ------------------------------------------ ----------------------
+        OpenAI     prompt_tokens                              input_tokens
+        OpenAI     completion_tokens                          output_tokens
+        OpenAI     prompt_tokens_details.cached_tokens        cache_read_tokens
+        OpenAI     completion_tokens_details.reasoning_tokens reasoning_tokens
+        DeepSeek   prompt_tokens                              input_tokens
+        DeepSeek   completion_tokens                          output_tokens
+        DeepSeek   prompt_cache_hit_tokens                    cache_read_tokens
+        DeepSeek   completion_tokens_details.reasoning_tokens reasoning_tokens
+
+    ``prompt_tokens`` includes cached input tokens. For DeepSeek it is the sum
+    of ``prompt_cache_hit_tokens`` and ``prompt_cache_miss_tokens``; the miss
+    count therefore has no separate destination in :class:`ModelUsage`.
+    Likewise, ``completion_tokens`` includes reasoning tokens rather than being
+    added to them. Both providers return ``total_tokens``, but ``ModelUsage``
+    derives that total from input plus output to preserve one internal invariant.
+
+    Neither schema reports cache-creation tokens, so ``cache_write_tokens`` is
+    zero. Anthropic reports ``input_tokens``, ``cache_read_input_tokens``, and
+    ``cache_creation_input_tokens`` separately. Gemini reports
+    ``prompt_token_count``, ``candidates_token_count``,
+    ``cached_content_token_count``, and ``thoughts_token_count``. Ollama reports
+    ``prompt_eval_count`` and ``eval_count``. Those provider-specific schemas
+    are normalized in their own adapters rather than by this helper.
+    """
+    cache_read_tokens = int(payload.get("prompt_cache_hit_tokens", 0) or 0)
+    reasoning_tokens = 0
+
+    prompt_details = payload.get("prompt_tokens_details")
+    if isinstance(prompt_details, Mapping):
+        cache_read_tokens = int(prompt_details.get("cached_tokens", cache_read_tokens) or 0)
+    completion_details = payload.get("completion_tokens_details")
+    if isinstance(completion_details, Mapping):
+        reasoning_tokens = int(completion_details.get("reasoning_tokens", 0) or 0)
 
     return ModelUsage(
         input_tokens=int(payload.get("prompt_tokens", 0) or 0),
         output_tokens=int(payload.get("completion_tokens", 0) or 0),
-        cache_read_tokens=cache_read,
-        cache_write_tokens=cache_write,
-        reasoning_tokens=reasoning,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=0,
+        reasoning_tokens=reasoning_tokens,
     )
 
 

@@ -137,21 +137,30 @@ class SQLiteSessionStorage:
         """Release the connection pool without deleting stored data."""
         self.engine.dispose()
 
-    def list_messages(
+    def list_raw_messages(
         self,
         session_id: str,
         *,
         after_sequence: int = 0,
         through_sequence: int | None = None,
         limit: int = 10_000,
+        offset: int = 0,
     ) -> list[RawMessageRecord]:
-        """Return an ordered raw-log range for history UIs, auditing, or export."""
+        """Return one chronological page from a session's immutable Raw Log.
+
+        This query deliberately ignores snapshots: snapshots are compact model
+        context, while a conversation UI must display the original messages.
+        ``after_sequence`` and ``through_sequence`` optionally restrict the Raw
+        Log sequence range; ``offset`` and ``limit`` paginate that filtered range.
+        """
         if after_sequence < 0:
             raise ValueError("after_sequence cannot be negative")
         if through_sequence is not None and through_sequence < 1:
             raise ValueError("through_sequence must be positive")
         if limit < 1:
             raise ValueError("limit must be positive")
+        if offset < 0:
+            raise ValueError("offset cannot be negative")
         with self._session_scope() as session:
             statement = select(RawLogMessageModel).where(
                 RawLogMessageModel.session_id == session_id,
@@ -159,7 +168,9 @@ class SQLiteSessionStorage:
             )
             if through_sequence is not None:
                 statement = statement.where(RawLogMessageModel.sequence <= through_sequence)
-            rows = session.scalars(statement.order_by(RawLogMessageModel.sequence).limit(limit))
+            rows = session.scalars(
+                statement.order_by(RawLogMessageModel.sequence).offset(offset).limit(limit)
+            )
             return [self._record(row) for row in rows]
 
     def list_sessions(self, *, limit: int = 100) -> list[SessionSummary]:
@@ -337,6 +348,24 @@ class SQLiteSessionExtension(SessionPersistenceExtension):
 
     def __init__(self, path: str | Path | None = None) -> None:
         super().__init__(SQLiteSessionStorage(path))
+
+    def list_raw_messages(
+        self,
+        session_id: str,
+        *,
+        after_sequence: int = 0,
+        through_sequence: int | None = None,
+        limit: int = 10_000,
+        offset: int = 0,
+    ) -> list[RawMessageRecord]:
+        """Forward a paginated Raw Log query to the owned session storage."""
+        return self.storage.list_raw_messages(
+            session_id,
+            after_sequence=after_sequence,
+            through_sequence=through_sequence,
+            limit=limit,
+            offset=offset,
+        )
 
     def close(self) -> None:
         """Release the SQLite connection pool without deleting history."""

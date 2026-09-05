@@ -338,7 +338,9 @@ class _OpenAIStyleProvider:
         self.model = model
         self.temperature = temperature
         self._http_client = httpx.AsyncClient(
-            transport=transport, verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            transport=transport,
+            verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+            trust_env=True,
         )
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=self._http_client)
 
@@ -535,7 +537,9 @@ class AnthropicProvider(AgentModel):
             raise ValueError("api_key is required")
         self.model = model
         self._http_client = httpx.AsyncClient(
-            transport=transport, verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            transport=transport,
+            verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+            trust_env=True,
         )
         self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, http_client=self._http_client)
 
@@ -709,7 +713,9 @@ class GoogleProvider(AgentModel):
             raise ValueError("api_key is required")
         self.model = model
         self._http_client = httpx.AsyncClient(
-            transport=transport, verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            transport=transport,
+            verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+            trust_env=True,
         )
         self._client = genai.Client(
             api_key=api_key,
@@ -880,7 +886,10 @@ class OllamaProvider(AgentModel):
 
         self.model = model
         self._client = AsyncClient(
-            host=base_url, transport=transport, verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            host=base_url,
+            transport=transport,
+            verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+            trust_env=True,
         )
 
     async def aclose(self) -> None:

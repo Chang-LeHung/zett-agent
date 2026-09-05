@@ -10,12 +10,16 @@ import truststore
 
 from kcs_agent import (
     Agent,
+    AgentConfig,
     AgentEventType,
     AnthropicProvider,
+    AssistantMessage,
+    CompactionExtension,
     DeepSeekProvider,
     ModelEventType,
     ModelRequest,
     ReasoningEffort,
+    SQLiteSessionExtension,
     UserMessage,
     tool,
 )
@@ -79,17 +83,19 @@ def add(left: int, right: int) -> int:
 async def test_live_tool_round_trip(protocol: str, effort: ReasoningEffort) -> None:
     provider = provider_for(protocol)
     try:
-        agent = Agent(
+        agent = await Agent.create(
             provider,
             system_prompt="Call add exactly once to compute 2+3, then reply with the tool result only.",
             tools=[add],
             max_iterations=3,
+            config=AgentConfig(session_id=f"live-{protocol}"),
         )
         async with asyncio.timeout(90):
             events = [
                 event
                 async for event in agent.stream(
                     UserMessage(content="Use add to compute 2+3."),
+                    config=AgentConfig(session_id=f"live-{protocol}"),
                     reasoning_effort=effort,
                 )
             ]
@@ -107,4 +113,60 @@ async def test_live_tool_round_trip(protocol: str, effort: ReasoningEffort) -> N
         )
         assert streamed_reasoning == completed_reasoning
     finally:
+        await provider.aclose()
+
+
+async def test_live_compaction_persists_snapshot_and_answers_from_summary(tmp_path) -> None:
+    provider = provider_for("openai")
+    history = SQLiteSessionExtension(tmp_path / "compaction.sqlite3")
+    session_id = "live-compaction"
+    try:
+        await history.storage.append(
+            session_id,
+            "old-request",
+            UserMessage(content="Remember that the durable project code is cobalt-731."),
+        )
+        await history.storage.append(
+            session_id,
+            "old-request",
+            AssistantMessage(content="I will remember the durable project code."),
+        )
+        agent = await Agent.create(
+            provider,
+            system_prompt="Answer from the supplied conversation context using one short sentence.",
+            extensions=[
+                history,
+                CompactionExtension(
+                    provider,
+                    max_tokens=3,
+                    keep_recent_tokens=1,
+                    count_tokens=len,
+                    reasoning_effort=ReasoningEffort.OFF,
+                ),
+            ],
+            config=AgentConfig(session_id=session_id),
+        )
+        async with asyncio.timeout(120):
+            events = [
+                event
+                async for event in agent.stream(
+                    "What is the durable project code?",
+                    config=AgentConfig(session_id=session_id),
+                    reasoning_effort=ReasoningEffort.OFF,
+                )
+            ]
+
+        completed = [event for event in events if event.type == AgentEventType.COMPACTION_COMPLETED]
+        assert len(completed) == 1
+        assert completed[0].applied is True
+        assert events[-1].type == AgentEventType.RUN_COMPLETED
+        assert "cobalt-731" in events[-1].message.content.lower()
+
+        view = await history.storage.load(session_id)
+        assert view.snapshot is not None
+        assert view.snapshot.compacted_through_sequence == 2
+        assert [record.sequence for record in view.raw_tail] == [3, 4]
+        assert history.storage.count_messages(session_id) == 4
+    finally:
+        history.close()
         await provider.aclose()

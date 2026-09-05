@@ -1,15 +1,27 @@
 from .agent import (
     Agent,
+    AgentConfig,
+    AgentContext,
+    AgentExtension,
+    AgentState,
 )
+from .compaction import CompactionExtension
 from .events import (
     AgentEvent,
     AgentEventType,
+    AgentPhase,
 )
 from .exceptions import (
     AgentError,
     AgentIterationLimitError,
     AgentProtocolError,
 )
+from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent
+from .extensions import (
+    InMemoryMessageAccumulator,
+    ToolGuidelinesExtension,
+)
+from .ids import new_uuid7
 from .messages import (
     AnyMessage,
     AssistantMessage,
@@ -39,6 +51,14 @@ from .model import (
     ToolCallDelta,
     ToolDefinition,
 )
+from .persistence import (
+    ContextSnapshot,
+    RawMessageRecord,
+    SessionPersistenceExtension,
+    SessionStorage,
+    SessionSummary,
+    SessionView,
+)
 from .providers import (
     AnthropicProvider,
     DeepSeekProvider,
@@ -49,19 +69,53 @@ from .providers import (
     ProviderError,
     ProviderResponseError,
 )
+from .storage import SQLiteSessionExtension, SQLiteSessionStorage
 from .tools import (
     AgentTool,
+    GlobResult,
+    GrepMatch,
+    GrepResult,
+    ReadFileResult,
+    ReplaceFileResult,
+    ShellResult,
+    WriteFileResult,
+    glob,
+    grep,
+    read_file,
     render_tool_guidance,
+    replace_in_file,
+    run_shell,
     tool,
+    write_file,
 )
 
 __all__ = [
     "Agent",
+    "MessageAppendedEvent",
+    "new_uuid7",
+    "SessionPersistenceExtension",
+    "SessionStorage",
+    "SQLiteSessionStorage",
+    "SQLiteSessionExtension",
+    "SessionView",
+    "SessionSummary",
+    "ContextSnapshot",
+    "RawMessageRecord",
+    "CompactionExtension",
+    "AgentConfig",
+    "AgentContext",
+    "AgentExtension",
+    "AgentState",
+    "CompactionEvent",
+    "ExtensionEvent",
     "AgentEvent",
     "AgentEventType",
+    "AgentPhase",
     "AgentError",
     "AgentProtocolError",
     "AgentIterationLimitError",
+    "InMemoryMessageAccumulator",
+    "ToolGuidelinesExtension",
     "AnyMessage",
     "Message",
     "MessageRole",
@@ -88,6 +142,19 @@ __all__ = [
     "ToolCallDelta",
     "ToolDefinition",
     "AgentTool",
+    "GlobResult",
+    "GrepMatch",
+    "GrepResult",
+    "ReadFileResult",
+    "WriteFileResult",
+    "ReplaceFileResult",
+    "ShellResult",
+    "glob",
+    "grep",
+    "read_file",
+    "write_file",
+    "replace_in_file",
+    "run_shell",
     "tool",
     "render_tool_guidance",
     "OpenAIProvider",

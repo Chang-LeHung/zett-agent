@@ -105,6 +105,61 @@ def _mock_transport(handler) -> httpx.MockTransport:
     return httpx.MockTransport(handler)
 
 
+def _environment_proxy_urls(client: httpx.AsyncClient) -> dict[str, str]:
+    """Inspect HTTPX transports to verify terminal proxy variables were applied."""
+    proxies = {}
+    for pattern, transport in client._mounts.items():
+        pool = getattr(transport, "_pool", None)
+        proxy_url = getattr(pool, "_proxy_url", None)
+        if proxy_url is not None:
+            proxies[pattern.pattern] = bytes(proxy_url).decode("ascii").removesuffix("/")
+    return proxies
+
+
+@pytest.mark.parametrize("provider_name", ["openai", "deepseek", "anthropic", "google", "ollama"])
+async def test_provider_uses_terminal_http_and_https_proxy_environment(monkeypatch, provider_name: str) -> None:
+    for variable in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:18080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:18443")
+
+    match provider_name:
+        case "openai":
+            provider = OpenAIProvider(model="gpt-4o", api_key="test")
+            client = provider._http_client
+        case "deepseek":
+            provider = DeepSeekProvider(model="deepseek-chat", api_key="test")
+            client = provider._http_client
+        case "anthropic":
+            provider = AnthropicProvider(model="claude", api_key="test")
+            client = provider._http_client
+        case "google":
+            provider = GoogleProvider(model="gemini", api_key="test")
+            client = provider._http_client
+        case "ollama":
+            provider = OllamaProvider(model="llama")
+            client = provider._client._client
+        case _:
+            raise AssertionError(f"Unhandled provider: {provider_name}")
+
+    try:
+        assert _environment_proxy_urls(client) == {
+            "https://": "http://127.0.0.1:18443",
+            "http://": "http://127.0.0.1:18080",
+        }
+    finally:
+        await provider.aclose()
+
+
 def test_message_to_openai_payload_supports_text_and_image_parts() -> None:
     message = UserMessage(
         content=[TextContent(text="hello"), ImageContent(source=ImageUrlSource(url="https://example.com/a.png"))]

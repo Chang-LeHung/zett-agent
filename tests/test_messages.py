@@ -42,6 +42,7 @@ def test_user_text_and_image_parts():
 @pytest.mark.parametrize(
     "source",
     [
+        lambda: ImageUrlSource("  "),
         lambda: ImageUrlSource("file:///tmp/private.png"),
         lambda: ImageBytesSource(b"", "image/png"),
         lambda: ImageBytesSource(b"image", "application/octet-stream"),

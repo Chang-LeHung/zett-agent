@@ -4,20 +4,169 @@ import pytest
 
 from kcs_agent import (
     Agent,
+    AgentConfig,
+    AgentContext,
+    AgentEvent,
     AgentEventType,
+    AgentExtension,
     AgentIterationLimitError,
+    AgentPhase,
     AgentProtocolError,
     AssistantMessage,
+    InMemoryMessageAccumulator,
     ModelEvent,
     ModelRequest,
     ModelResponse,
     ReasoningEffort,
     SystemMessage,
     ToolCall,
+    ToolGuidelinesExtension,
     ToolMessage,
     UserMessage,
     tool,
 )
+
+CONFIG = AgentConfig(session_id="test-session")
+
+
+async def test_uninitialized_agent_rejects_requests_without_calling_model():
+    model = ScriptedModel(AssistantMessage(content="Ready"))
+    agent = Agent(model)
+    with pytest.raises(AgentProtocolError, match="not initialized"):
+        await agent.run("Hello", config=CONFIG)
+    with pytest.raises(AgentProtocolError, match="not initialized"):
+        _ = [event async for event in agent.stream("Hello")]
+    assert model.requests == []
+    await agent.initialize(config=CONFIG)
+    assert (await agent.run("Hello")).content == "Ready"
+
+
+async def test_failed_initialization_does_not_enable_requests():
+    class Failure(AgentExtension):
+        async def on_message(self, context):
+            raise RuntimeError("Restore failed")
+
+    agent = Agent(ScriptedModel(), extensions=[Failure()])
+    await agent.initialize(config=CONFIG)
+    with pytest.raises(RuntimeError, match="Restore failed"):
+        await agent.run("Hello")
+
+
+async def test_create_preserves_subclass_and_restores_when_a_request_starts():
+    class Restore(AgentExtension):
+        async def on_message(self, context):
+            await asyncio.sleep(0)
+            context.state.messages.append(UserMessage(content="Restored"))
+
+    class CustomAgent(Agent):
+        pass
+
+    agent = await CustomAgent.create(
+        ScriptedModel(AssistantMessage(content="Done")), config=CONFIG, extensions=[Restore()]
+    )
+    assert isinstance(agent, CustomAgent)
+    assert agent.state.messages == []
+    await agent.run("Hello")
+    assert agent.state.messages[1].content == "Restored"
+
+
+@pytest.mark.parametrize("failure_hook", ["after_run", "on_success"])
+async def test_success_callback_failures_prevent_completion(failure_hook):
+    calls = []
+
+    class Callback(AgentExtension):
+        async def after_run(self, context, result):
+            if failure_hook == "after_run":
+                raise RuntimeError("Callback failed")
+
+        async def on_success(self, context, result):
+            calls.append("success")
+            raise RuntimeError("Callback failed")
+
+        async def on_error(self, context, error):
+            calls.append("error")
+
+    agent = await Agent.create(ScriptedModel(AssistantMessage(content="Done")), extensions=[Callback()], config=CONFIG)
+    events = []
+    with pytest.raises(RuntimeError, match="Callback failed"):
+        async for event in agent.stream("Hello", config=CONFIG):
+            events.append(event)
+    assert calls == (["error"] if failure_hook == "after_run" else ["success", "error"])
+    assert all(event.type != AgentEventType.RUN_COMPLETED for event in events)
+
+
+async def test_context_shares_injected_tools_and_is_new_for_each_run():
+    contexts: list[AgentContext] = []
+
+    class RegisterTools(AgentExtension):
+        async def on_message(self, context: AgentContext) -> None:
+            context.tools[add.name] = add
+
+        async def before_run(self, context: AgentContext) -> None:
+            contexts.append(context)
+
+        async def before_tool(self, context: AgentContext, call: ToolCall) -> None:
+            assert context is contexts[-1]
+
+    model = ScriptedModel(
+        AssistantMessage(tool_calls=(ToolCall("c1", "add", {"left": 2, "right": 3}),)),
+        AssistantMessage(content="5"),
+        AssistantMessage(content="Again"),
+    )
+    agent = await Agent.create(model, extensions=[RegisterTools(), ToolGuidelinesExtension()], config=CONFIG)
+    await agent.run("Add", config=CONFIG)
+    next_config = AgentConfig(session_id=CONFIG.session_id)
+    await agent.run("Continue", config=next_config)
+    assert contexts[0] is not contexts[1]
+    assert contexts[1].config is next_config
+    assert contexts[0].state is not contexts[1].state
+    assert contexts[1].state is agent.state
+    assert contexts[0].tools is contexts[1].tools is agent.tools
+    assert model.requests[0].tools == (add.definition,)
+    assert any("- add: Use for exact addition." in message.content for message in model.requests[0].messages)
+    assert model.requests[1].messages[-1].content == "5"
+
+
+async def test_extension_can_stream_typed_events_before_the_primary_model():
+    class VisiblePreprocessing(AgentExtension):
+        async def before_model_events(self, context):
+            yield AgentEvent(AgentEventType.COMPACTION_STARTED, context.config.session_id)
+            yield AgentEvent(AgentEventType.COMPACTION_COMPLETED, context.config.session_id, applied=False)
+
+    agent = await Agent.create(
+        ScriptedModel(AssistantMessage(content="Done")),
+        extensions=[VisiblePreprocessing()],
+        config=CONFIG,
+    )
+    events = [event async for event in agent.stream("Hello")]
+    assert [event.type for event in events[:3]] == [
+        AgentEventType.COMPACTION_STARTED,
+        AgentEventType.COMPACTION_COMPLETED,
+        AgentEventType.MODEL_STARTED,
+    ]
+    assert events[2].phase == AgentPhase.GENERATING
+    assert agent.state.phase == AgentPhase.COMPLETED
+
+
+async def test_default_extensions_keep_agent_histories_isolated():
+    first = await Agent.create(ScriptedModel(AssistantMessage(content="First reply")), config=CONFIG)
+    second = await Agent.create(ScriptedModel(AssistantMessage(content="Second reply")), config=CONFIG)
+    await first.run("First", config=CONFIG)
+    await second.run("Second", config=CONFIG)
+    first_memory, guidance = first.extensions
+    second_memory, _ = second.extensions
+    assert isinstance(first_memory, InMemoryMessageAccumulator)
+    assert isinstance(guidance, ToolGuidelinesExtension)
+    assert first_memory is not second_memory
+    assert [message.content for message in first_memory.messages(CONFIG.session_id)] == [
+        "First",
+        "First reply",
+    ]
+    assert [message.content for message in second_memory.messages(CONFIG.session_id)] == [
+        "Second",
+        "Second reply",
+    ]
+    assert (await Agent.create(ScriptedModel(), extensions=[], config=CONFIG)).extensions == ()
 
 
 @tool(guidelines="Use for exact addition.")
@@ -45,7 +194,10 @@ async def test_model_tool_model_loop_preserves_order_and_usage_response():
         AssistantMessage(tool_calls=(ToolCall("c1", "add", {"left": 2, "right": 3}),)),
         AssistantMessage(content="5"),
     )
-    events = [event async for event in Agent(model, tools=[add]).stream(UserMessage(content="Add 2 and 3"))]
+    events = [
+        event
+        async for event in (await Agent.create(model, tools=[add], config=CONFIG)).stream("Add 2 and 3", config=CONFIG)
+    ]
     assert [event.type for event in events] == [
         AgentEventType.MODEL_STARTED,
         AgentEventType.MODEL_COMPLETED,
@@ -58,6 +210,7 @@ async def test_model_tool_model_loop_preserves_order_and_usage_response():
         AgentEventType.RUN_COMPLETED,
     ]
     assert events[-1].message.content == "5"
+    assert {event.session_id for event in events} == {CONFIG.session_id}
     assert isinstance(model.requests[1].messages[-1], ToolMessage)
     assert model.requests[1].messages[-1].content == "5"
     assert model.requests[1].messages[-2].tool_calls[0].id == "c1"
@@ -65,7 +218,9 @@ async def test_model_tool_model_loop_preserves_order_and_usage_response():
 
 async def test_run_returns_a_plain_assistant_message():
     model = ScriptedModel(AssistantMessage(content="Hello"))
-    reply = await Agent(model).run(UserMessage(content="Hi"), reasoning_effort=ReasoningEffort.LOW)
+    reply = await (await Agent.create(model, config=CONFIG)).run(
+        "Hi", config=CONFIG, reasoning_effort=ReasoningEffort.LOW
+    )
     assert reply.content == "Hello"
     assert model.requests[0].reasoning_effort == ReasoningEffort.LOW
 
@@ -79,20 +234,34 @@ async def test_run_returns_a_plain_assistant_message():
 )
 async def test_tool_error_returns_to_model(call):
     model = ScriptedModel(AssistantMessage(tool_calls=(call,)), AssistantMessage(content="Please clarify."))
-    events = [event async for event in Agent(model, tools=[add]).stream(UserMessage(content="Do it"))]
+    events = [
+        event async for event in (await Agent.create(model, tools=[add], config=CONFIG)).stream("Do it", config=CONFIG)
+    ]
     assert any(event.type == AgentEventType.TOOL_FAILED for event in events)
     assert model.requests[1].messages[-1].success is False
     assert events[-1].message.content == "Please clarify."
 
 
-async def test_history_is_explicit_and_not_mutated_or_retained_between_runs():
+async def test_agent_state_retains_messages_between_runs():
     history = [UserMessage(content="Old question"), AssistantMessage(content="Old reply")]
     model = ScriptedModel(AssistantMessage(content="New reply"), AssistantMessage(content="Other reply"))
-    agent = Agent(model, system_prompt="")
-    await agent.run(UserMessage(content="Latest"), history=history)
-    await agent.run(UserMessage(content="Other session"))
+
+    class Restore(AgentExtension):
+        async def on_message(self, context):
+            context.state.messages.extend(history)
+
+    accumulator = InMemoryMessageAccumulator()
+    agent = await Agent.create(model, system_prompt="", extensions=[Restore(), accumulator], config=CONFIG)
+    await agent.run(UserMessage(content="Latest"), config=CONFIG)
+    await agent.run("Follow up", config=CONFIG)
     assert [item.content for item in model.requests[0].messages] == ["Old question", "Old reply", "Latest"]
-    assert [item.content for item in model.requests[1].messages] == ["Other session"]
+    assert [item.content for item in model.requests[1].messages] == [
+        "Old question",
+        "Old reply",
+        "Latest",
+        "New reply",
+        "Follow up",
+    ]
     assert len(history) == 2
 
 
@@ -101,21 +270,31 @@ async def test_tool_guidance_follows_all_instructions_without_duplication():
         AssistantMessage(tool_calls=(ToolCall("c1", "add", {"left": 1, "right": 2}),)),
         AssistantMessage(content="3"),
     )
-    await Agent(model, system_prompt="Base", tools=[add]).run(
-        UserMessage(content="Add"),
-        history=[SystemMessage(content="Snapshot")],
+
+    class Restore(AgentExtension):
+        async def on_message(self, context):
+            context.state.messages.append(SystemMessage(content="Snapshot"))
+
+    agent = await Agent.create(
+        model,
+        system_prompt="Base",
+        tools=[add],
+        extensions=[Restore(), ToolGuidelinesExtension()],
+        config=CONFIG,
     )
+    await agent.run("Add", config=CONFIG)
     for request in model.requests:
-        prompt = request.messages[0].content
+        prompt = "\n\n".join(message.content for message in request.messages if isinstance(message, SystemMessage))
         assert prompt.startswith("Base\n\nSnapshot")
         assert prompt.endswith("- add: Use for exact addition.")
         assert prompt.count("# Tool guidelines") == 1
+    assert sum("# Tool guidelines" in message.content for message in agent.state.messages) == 1
 
 
 async def test_iteration_limit_is_explicit():
     model = ScriptedModel(AssistantMessage(tool_calls=(ToolCall("c", "add", {"left": 1, "right": 2}),)))
     with pytest.raises(AgentIterationLimitError):
-        await Agent(model, tools=[add], max_iterations=1).run(UserMessage(content="Add"))
+        await (await Agent.create(model, tools=[add], max_iterations=1, config=CONFIG)).run("Add", config=CONFIG)
 
 
 @pytest.mark.parametrize("extra_response", [False, True])
@@ -127,7 +306,7 @@ async def test_invalid_model_stream_fails(extra_response):
             yield ModelEvent.text("unexpected")
 
     with pytest.raises(AgentProtocolError):
-        await Agent(InvalidModel()).run(UserMessage(content="Hi"))
+        await (await Agent.create(InvalidModel(), config=CONFIG)).run("Hi", config=CONFIG)
 
 
 async def test_task_cancellation_closes_provider_stream():
@@ -142,7 +321,7 @@ async def test_task_cancellation_closes_provider_stream():
             finally:
                 closed.set()
 
-    task = asyncio.create_task(Agent(SlowModel()).run(UserMessage(content="Hi")))
+    task = asyncio.create_task((await Agent.create(SlowModel(), config=CONFIG)).run("Hi", config=CONFIG))
     await asyncio.wait_for(waiting.wait(), timeout=2)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -150,6 +329,222 @@ async def test_task_cancellation_closes_provider_stream():
     assert closed.is_set()
 
 
+async def test_agent_rejects_a_concurrent_request_while_generating():
+    started, release = asyncio.Event(), asyncio.Event()
+
+    class BlockingModel:
+        async def stream(self, request):
+            started.set()
+            await release.wait()
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Done")))
+
+    agent = await Agent.create(BlockingModel(), config=CONFIG)
+    active_request = asyncio.create_task(agent.run("First"))
+    await asyncio.wait_for(started.wait(), timeout=2)
+
+    assert agent.state.phase == AgentPhase.GENERATING
+    with pytest.raises(AgentProtocolError, match="current phase is 'generating'"):
+        await agent.run("Second")
+
+    release.set()
+    assert (await active_request).content == "Done"
+    assert agent.state.phase == AgentPhase.COMPLETED
+
+
 async def test_duplicate_tools_are_rejected():
     with pytest.raises(ValueError, match="unique"):
-        Agent(ScriptedModel(), tools=[add, add])
+        (await Agent.create(ScriptedModel(), tools=[add, add], config=CONFIG))
+
+
+def test_agent_config_rejects_an_empty_session_id():
+    with pytest.raises(ValueError, match="session_id"):
+        AgentConfig(session_id="  ")
+
+    with pytest.raises(ValueError, match="request_id"):
+        AgentConfig(session_id="session", request_id="  ")
+
+
+async def test_agent_rejects_invalid_initialization_transitions():
+    with pytest.raises(ValueError, match="max_iterations"):
+        Agent(ScriptedModel(), max_iterations=0)
+
+    agent = Agent(ScriptedModel())
+    await agent.initialize(config=CONFIG)
+    with pytest.raises(AgentProtocolError, match="another session"):
+        await agent.initialize(config=AgentConfig("other-session"))
+
+
+async def test_extensions_receive_all_success_hooks_and_can_modify_messages():
+    calls: list[str] = []
+
+    class RecordingExtension(AgentExtension):
+        async def on_message(self, context):
+            calls.append("on_message")
+
+        async def before_run(self, context):
+            calls.append("before_run")
+            context.state.messages.append(SystemMessage(content=f"Loaded {context.config.session_id}"))
+
+        async def before_model(self, context):
+            calls.append("before_model")
+
+        async def after_model(self, context, response):
+            calls.append("after_model")
+
+        async def before_tool(self, context, call):
+            calls.append("before_tool")
+
+        async def after_tool(self, context, call, result):
+            calls.append("after_tool")
+
+        async def after_run(self, context, result):
+            calls.append("after_run")
+
+        async def on_success(self, context, result):
+            calls.append("on_success")
+            assert result.content == "5"
+
+    model = ScriptedModel(
+        AssistantMessage(tool_calls=(ToolCall("c1", "add", {"left": 2, "right": 3}),)),
+        AssistantMessage(content="5"),
+    )
+    agent = await Agent.create(model, tools=[add], extensions=[RecordingExtension()], config=CONFIG)
+    await agent.run("Add", config=CONFIG)
+
+    assert calls == [
+        "on_message",
+        "before_run",
+        "before_model",
+        "after_model",
+        "before_tool",
+        "after_tool",
+        "before_model",
+        "after_model",
+        "after_run",
+        "on_success",
+    ]
+    assert [message.content for message in model.requests[0].messages[:2]] == [
+        "You are a helpful assistant.",
+        "Loaded test-session",
+    ]
+
+
+async def test_message_injection_runs_for_each_fresh_request_state():
+    class Instructions(AgentExtension):
+        calls = 0
+
+        async def on_message(self, context):
+            self.calls += 1
+            context.state.messages.insert(1, SystemMessage(content="Extra instructions"))
+
+    extension = Instructions()
+    model = ScriptedModel(AssistantMessage(content="First"), AssistantMessage(content="Second"))
+    agent = Agent(model, system_prompt="Base", extensions=[extension])
+    assert agent.state.messages == []
+    await agent.initialize(config=CONFIG)
+    await agent.initialize(config=CONFIG)
+    assert extension.calls == 0
+    await agent.run("Hello", config=CONFIG)
+    await agent.run("Continue", config=CONFIG)
+    assert extension.calls == 2
+    assert model.requests[1].messages[:2] == (
+        SystemMessage(content="Base"),
+        SystemMessage(content="Extra instructions"),
+    )
+
+
+async def test_extension_receives_errors():
+    errors: list[Exception] = []
+
+    class EmptyModel:
+        async def stream(self, request):
+            if False:
+                yield
+
+    class ErrorExtension(AgentExtension):
+        async def on_error(self, context, error):
+            errors.append(error)
+
+    with pytest.raises(AgentProtocolError):
+        await (await Agent.create(EmptyModel(), extensions=[ErrorExtension()], config=CONFIG)).run(
+            "Fail", config=CONFIG
+        )
+    assert len(errors) == 1
+
+
+async def test_in_memory_accumulator_reuses_messages_across_agent_instances():
+    accumulator = InMemoryMessageAccumulator()
+    first_model = ScriptedModel(AssistantMessage(content="First reply"))
+    await (await Agent.create(first_model, system_prompt="", extensions=[accumulator], config=CONFIG)).run(
+        "First", config=CONFIG
+    )
+
+    second_model = ScriptedModel(AssistantMessage(content="Second reply"))
+    second_agent = await Agent.create(second_model, system_prompt="", extensions=[accumulator], config=CONFIG)
+    await second_agent.run("Second", config=CONFIG)
+
+    assert [message.content for message in second_model.requests[0].messages] == [
+        "First",
+        "First reply",
+        "Second",
+    ]
+    assert [message.content for message in accumulator.messages(CONFIG.session_id)] == [
+        "First",
+        "First reply",
+        "Second",
+        "Second reply",
+    ]
+    accumulator.clear(CONFIG.session_id)
+    assert accumulator.messages(CONFIG.session_id) == ()
+
+
+async def test_in_memory_accumulator_rebuilds_current_system_instructions():
+    accumulator = InMemoryMessageAccumulator()
+    await (
+        await Agent.create(
+            ScriptedModel(AssistantMessage(content="First reply")),
+            system_prompt="Old instructions",
+            extensions=[accumulator],
+            config=CONFIG,
+        )
+    ).run("First")
+
+    model = ScriptedModel(AssistantMessage(content="Second reply"))
+    agent = await Agent.create(
+        model,
+        system_prompt="Current instructions",
+        extensions=[accumulator],
+        config=CONFIG,
+    )
+    await agent.run("Second")
+
+    instructions = [message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)]
+    assert instructions == ["Current instructions"]
+    assert all(not isinstance(message, SystemMessage) for message in accumulator.messages(CONFIG.session_id))
+
+
+async def test_in_memory_accumulator_retains_tool_calls_and_results():
+    accumulator = InMemoryMessageAccumulator()
+    first_model = ScriptedModel(
+        AssistantMessage(tool_calls=(ToolCall("call-1", "add", {"left": 1, "right": 2}),)),
+        AssistantMessage(content="Three"),
+    )
+    first = await Agent.create(
+        first_model,
+        system_prompt="",
+        tools=[add],
+        extensions=[accumulator],
+        config=CONFIG,
+    )
+    await first.run("Add the numbers")
+
+    remembered = accumulator.messages(CONFIG.session_id)
+    assert isinstance(remembered[1], AssistantMessage)
+    assert remembered[1].tool_calls == (ToolCall("call-1", "add", {"left": 1, "right": 2}),)
+    assert isinstance(remembered[2], ToolMessage)
+    assert remembered[2].tool_call_id == "call-1"
+
+    next_model = ScriptedModel(AssistantMessage(content="Continued"))
+    second = await Agent.create(next_model, system_prompt="", extensions=[accumulator], config=CONFIG)
+    await second.run("Continue")
+    assert next_model.requests[0].messages[:-1] == remembered

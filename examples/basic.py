@@ -4,20 +4,24 @@ import asyncio
 
 from kcs_agent import (
     Agent,
+    AgentConfig,
     AssistantMessage,
     ModelEvent,
     ModelRequest,
     ModelResponse,
     ToolCall,
     ToolMessage,
-    UserMessage,
     tool,
 )
 
 
 @tool
 def add(left: int, right: int) -> int:
-    """Add two integers."""
+    """Add two integers.
+
+    Guidelines:
+        - Use for exact integer addition.
+    """
     return left + right
 
 
@@ -35,8 +39,8 @@ class DemoModel:
 
 
 async def main() -> None:
-    agent = Agent(DemoModel(), tools=[add])
-    reply = await agent.run(UserMessage(content="What is 2 + 3?"))
+    agent = await Agent.create(DemoModel(), tools=[add], config=AgentConfig(session_id="example-session"))
+    reply = await agent.run("What is 2 + 3?", config=AgentConfig(session_id="example-session"))
     print(reply.content)
 
 

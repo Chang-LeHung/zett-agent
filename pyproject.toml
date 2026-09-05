@@ -17,8 +17,12 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "sqlalchemy>=2.0,<3",
+  "tiktoken>=0.12,<1",
+  "uuid6>=2024.7.10,<2027",
   "httpx>=0.27,<1",
   "pydantic>=2.12,<3",
+  "prompt-toolkit>=3.0,<4",
   "truststore>=0.10,<1",
   "openai>=2.54,<3",
   "anthropic>=0.125,<1",
@@ -43,12 +47,20 @@ include = ["/src", "/README.md", "/LICENSE", "/pyproject.toml"]
 dev = [
   "pytest>=8,<9",
   "pytest-asyncio>=0.26,<2",
+  "pytest-cov>=7,<8",
   "ruff>=0.11,<1",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["kcs_agent"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
 
 [tool.ruff]
 line-length = 120

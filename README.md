@@ -37,20 +37,27 @@ A real provider uses the same interface:
 import asyncio
 import os
 
-from kcs_agent import Agent, DeepSeekProvider, UserMessage, tool
+from kcs_agent import Agent, AgentConfig, AgentState, AssistantMessage, DeepSeekProvider, UserMessage, tool
 
 
 @tool
 def add(left: int, right: int) -> int:
-    """Add two integers."""
+    """Add two integers.
+
+    Guidelines:
+        - Use for exact integer addition.
+    """
     return left + right
 
 
 async def main() -> None:
     model = DeepSeekProvider("deepseek-v4-flash", os.environ["DEEPSEEK_API"])
     try:
-        agent = Agent(model, tools=[add])
-        reply = await agent.run(UserMessage(content="Use add to calculate 2 + 3."))
+        agent = await Agent.create(model, tools=[add], config=AgentConfig(session_id="calculator-session"))
+        reply = await agent.run(
+            "Use add to calculate 2 + 3.",
+            config=AgentConfig(session_id="calculator-session"),
+        )
         print(reply.content)
     finally:
         await model.aclose()
@@ -58,6 +65,21 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+## Initialization
+
+Direct construction requires explicit initialization:
+
+```python
+agent = Agent(model)
+await agent.initialize(config=AgentConfig(session_id="session-42"))
+reply = await agent.run("Hello")
+```
+
+Alternatively, `await Agent.create(model, config=...)` returns an initialized
+agent. Calling run or consuming stream before initialization raises
+`AgentProtocolError`. Initialization binds the default session configuration;
+it does not load messages. Requests default to that configuration.
 
 ## Messages and history
 
@@ -68,44 +90,269 @@ Use `SystemMessage(content=...)`, `UserMessage(content=...)`,
 There are no `data`/`metadata` wrappers or message generics.
 User messages also support the existing text/image content blocks.
 
-Each call supplies the latest user message. Pass earlier messages explicitly:
+Every request receives a fresh `AgentState`. Restore history through an extension:
 
 ```python
+class RestoreHistory(AgentExtension):
+    async def on_message(self, context):
+        context.state.messages.extend(await load_messages(context.config.session_id))
+
+
+agent = await Agent.create(
+    model,
+    extensions=[RestoreHistory()],
+    config=AgentConfig(session_id="conversation-42"),
+)
 reply = await agent.run(
-    UserMessage(content="What was my previous question?"),
-    history=[
-        UserMessage(content="What is 2 + 3?"),
-        AssistantMessage(content="5"),
+    "What was my previous question?",
+    config=AgentConfig(session_id="conversation-42"),
+)
+```
+
+`AgentConfig.session_id` identifies the conversation that owns a run and is
+included in every streamed event. `on_message` runs for every request and fills
+the new state before the incoming user message is appended.
+
+## Extensions
+
+Subclass `AgentExtension` to observe lifecycle steps or modify `state.messages`.
+Available hooks are `on_message`, `before_run`, `before_model`,
+`before_model_events`, `after_model`, `before_tool`, `after_tool`, `after_run`,
+`on_success`, `on_error`, and `on_event`. Hooks run sequentially in extension
+registration order. `before_model_events` is an async event stream for visible
+pre-model work such as compaction.
+
+`on_success(context, result)` runs once per successful request, after all
+`after_run` hooks and before `RUN_COMPLETED` is emitted. It does not run for
+intermediate model steps, failed requests, or cancellation. Callback failures
+propagate through `on_error` and prevent the completion event.
+
+Each hook receives an `AgentContext` containing this run's `config`, fresh
+`state`, and the live `tools` dictionary. A new context and state are created for
+each run; only the tools registry remains shared with the Agent. Responses, tool calls, and tool
+results remain separate arguments on their respective hooks.
+
+Register additional tools through `context.tools[tool.name] = tool` in
+`on_message`. Place that extension before `ToolGuidelinesExtension()` so guidance
+includes the injected tools. Model schemas and execution use the same registry.
+
+The system prompt enters each fresh `state.messages` before `on_message` runs.
+Model requests read the state messages directly.
+
+By default, each Agent creates its own `InMemoryMessageAccumulator` and
+`ToolGuidelinesExtension`, so `Agent(model, tools=[add])` enables both. Passing
+an explicit `extensions` sequence replaces the defaults; `extensions=[]`
+disables them. To share history across Agent instances, supply a shared accumulator:
+
+```python
+memory = InMemoryMessageAccumulator()
+guidance = ToolGuidelinesExtension()
+
+agent = await Agent.create(
+    model,
+    config=AgentConfig(session_id="math"),
+    tools=[add],
+    extensions=[memory, guidance],
+)
+await agent.run("Add 2 and 3", config=AgentConfig(session_id="math"))
+
+# A later Agent instance can continue the same in-memory session.
+next_agent = await Agent.create(
+    model, tools=[add], extensions=[memory, guidance], config=AgentConfig(session_id="math")
+)
+await next_agent.run("Now add 4", config=AgentConfig(session_id="math"))
+```
+
+`ToolGuidelinesExtension` injects guidance into every fresh state through
+`on_message`, after the other system instructions and before dialogue.
+`InMemoryMessageAccumulator` stores one mutable message list per session and
+offers `messages(session_id)` and `clear(session_id)` for inspection and cleanup.
+
+## Tools
+
+For database-backed sessions, see [Session storage](docs/session-storage.md).
+`SQLiteSessionExtension(path)` owns a SQLite storage and reloads the latest
+snapshot and raw-log tail before every request, including repeated calls on the same Agent. New messages are
+persisted through `MessageAppendedEvent`; only compaction creates snapshots.
+
+Use `CompactionExtension` to summarize older context before a model call:
+
+```python
+from kcs_agent import CompactionExtension
+
+agent = await Agent.create(
+    model,
+    config=AgentConfig(session_id="example"),
+    extensions=[
+        InMemoryMessageAccumulator(),
+        ToolGuidelinesExtension(),
+        CompactionExtension(model, max_tokens=128_000, keep_recent_tokens=32_000),
     ],
 )
 ```
 
-The agent copies the history and keeps no conversation state between calls.
-Applications own persistence and compaction. KCS prepares its snapshot and replay
-tail before calling this loop.
+The default trigger is 128,000 tokens, retaining at least 32,000 recent tokens.
+These are compaction budgets, not a model context-window declaration. Configure
+them for both the primary model and the summarization model, leaving room for
+tool schemas, summary instructions, and generated output.
 
-## Tools
+Both limits use tokens. The default o200k_base tokenizer counts message representations;
+this estimates provider context usage. Supply count_tokens for model-specific accounting,
+including image token costs. Recent turns are retained until keep_recent_tokens is reached.
+The extension preserves system instructions and complete recent user turns,
+including tool calls and results. Its output is system messages, one historical
+checkpoint, then recent dialogue. Later checkpoints incorporate earlier ones.
+An oversized current turn is kept intact. Invalid summaries raise an error without
+changing messages; summaries that do not reduce size are ignored. This updates
+active context; register `SessionPersistenceExtension` to retain immutable raw
+history and create a snapshot only when compaction occurs.
 
-`@tool` uses the function's first docstring paragraph as its description.
-Pydantic generates the argument schema and validates input before execution.
-Use `Annotated[T, Field(description="...")]` for parameter descriptions.
+After replacing context successfully, compaction calls `await context.publish`
+with an immutable `CompactionEvent`. It contains `compressed_from`,
+`compressed_to`, `kept_from`, `kept_to`, and `summary`. Ranges are one-based,
+inclusive positions in the non-system context before that compaction, not raw
+log IDs or user-turn numbers. A previous checkpoint counts as one message.
+At the public stream boundary it also emits `COMPACTION_STARTED`, incremental
+`COMPACTION_REASONING_DELTA` / `COMPACTION_TEXT_DELTA`, and
+`COMPACTION_COMPLETED`. The completion event exposes `applied` and the internal
+`CompactionEvent`, allowing Web and TUI clients to show compaction as a distinct
+runtime state before `MODEL_STARTED`.
 
-Optional usage rules use `@tool(guidelines="...")` and are appended to the system
-instructions. There is no docstring DSL, separate parser, or tool extension.
+```python
+class Observer(AgentExtension):
+    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+        match event:
+            case CompactionEvent():
+                print(event.compressed_from, event.compressed_to)
+```
+
+Publishing awaits each registered extension in order. Handler errors stop
+delivery and propagate; completed compaction is not rolled back. Context does
+not retain events or compaction flags. Subscribers own any history they need.
+Consumers that stop iterating early must close the stream, for example with
+`contextlib.aclosing`.
+
+`@tool` reads its prompt metadata from the function docstring. The first
+paragraph becomes the description; `Args`, `Snippet`, and `Guidelines` provide
+JSON Schema field descriptions and grouped system-prompt guidance:
+
+```python
+from pathlib import Path
+
+
+@tool
+def read_file(path: str) -> str:
+    """Read one text file.
+
+    Args:
+        path: File path relative to the workspace.
+
+    Snippet:
+        read_file(path="README.md")
+
+    Guidelines:
+        - Read the current content before editing it.
+    """
+    return Path(path).read_text()
+```
+
+Python annotations still define types and Pydantic validates arguments before
+execution. A description and at least one guideline are required. Explicit
+decorator metadata remains available as an override.
+
+The built-in local tools operate relative to the process's current working
+directory:
+
+```python
+from kcs_agent import (
+    Agent,
+    AgentConfig,
+    glob,
+    grep,
+    read_file,
+    replace_in_file,
+    run_shell,
+    write_file,
+)
+
+agent = await Agent.create(
+    model,
+    config=AgentConfig(session_id="session-42"),
+    tools=[glob, grep, read_file, write_file, replace_in_file, run_shell],
+)
+```
+
+File paths must be relative and cannot escape the current working directory.
+`glob` discovers paths and `grep` searches UTF-8 text with regular expressions.
+Reads support one-based line ranges, writes are atomic, and exact replacement
+requires a unique match unless `replace_all=True`. Shell output includes
+`exit_code`, `stdout`, `stderr`, timeout state, and truncation state. `run_shell`
+executes arbitrary host commands and is not a security sandbox; register it only
+for trusted agents.
+
+`ToolGuidelinesExtension` groups all snippets before all guidelines and appends
+both sections to the system instructions.
 
 ## Streaming
 
-`agent.stream(message, history=..., reasoning_effort=...)` yields
-`AgentEvent` objects in order. Events expose text/reasoning deltas, model responses,
-tool calls, tool results, and the final answer. `run()` collects that stream and
+`agent.stream(message, config=..., reasoning_effort=...)` yields
+`AgentEvent` objects in order. Events expose compaction progress, text/reasoning
+deltas, model responses, tool calls, tool results, and the final answer. `run()` collects that stream and
 returns the final `AssistantMessage`.
 
 Tool errors are returned to the model. Model errors propagate to the application.
+
+## Persistent coding-agent example
+
+Run the minimal terminal coding agent from the directory it should work in:
+
+```bash
+export DEEPSEEK_API="..."
+uv run --project /path/to/kcs-agent python /path/to/kcs-agent/examples/coding_agent.py
+```
+
+It registers `glob`, `grep`, `read_file`, `write_file`, `replace_in_file`, and
+`run_shell`. Conversation history is stored in
+`~/.kcs-agent/coding-agent.sqlite3`; restarting the example restores the most
+recent session. Use `/sessions` to list sessions, `/history` to inspect the
+active history, `/new` to start another session, and `/use <session-id>` to
+switch sessions. The prompt editor supports Unicode and bracketed paste. Tab
+completes slash commands or inserts indentation; Esc followed by Enter inserts
+a newline, while Enter sends the input.
+
+Compaction is enabled with a 128,000-token trigger and a 32,000-token recent
+budget. To observe it quickly with a real provider, use a disposable session and
+lower limits:
+
+```bash
+uv run python examples/coding_agent.py \
+  --session compaction-demo \
+  --compaction-max-tokens 500 \
+  --compaction-keep-tokens 100 \
+  --compaction-reasoning-effort high
+```
+
+After a few turns, the terminal streams compaction reasoning and summary events.
+The immutable Raw Log remains complete, while the generated checkpoint is saved
+in SQLite and restored on later runs.
 Cancel the consuming asyncio task to interrupt generation. A running synchronous
 tool cannot be forcibly stopped by task cancellation.
 
 Native provider details stay in `providers.py`; they are not part of the core loop.
 Existing adapters: OpenAI, DeepSeek, Anthropic, Google, and Ollama.
+
+Provider HTTP clients trust the process environment by default. Standard terminal
+variables such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` are
+applied automatically. For example:
+
+```bash
+export HTTP_PROXY="http://127.0.0.1:7890"
+export HTTPS_PROXY="http://127.0.0.1:7890"
+uv run python examples/coding_agent.py
+```
+
+An explicitly supplied custom HTTP transport takes precedence and does not use
+environment proxy mounts, which keeps mocked and embedded transports isolated.
 
 ## Checks
 

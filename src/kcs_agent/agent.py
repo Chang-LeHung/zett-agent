@@ -5,9 +5,9 @@ from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Self, overload
 
-from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin
+from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
 from .exceptions import AgentIterationLimitError, AgentProtocolError
-from .extension_events import ExtensionEvent, MessageAppendedEvent
+from .extension_events import ExtensionEvent, MessageAppendedEvent, MessageTiming
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
 from .tools import AgentTool
@@ -66,6 +66,20 @@ class AgentContext:
         """
         for extension in self.extensions:
             await extension.on_event(self, event)
+
+    async def append_message(self, message: AnyMessage, timing: MessageTiming) -> None:
+        """Append one newly produced message and publish its Raw Log event.
+
+        Runtime code must use this method for user, assistant, and tool messages
+        so in-memory context and persistence notifications cannot drift apart.
+        Restored history and generated system instructions are existing context,
+        not new Raw Log messages, and therefore do not use this method.
+
+        The message is visible in ``state.messages`` before subscribers run.
+        Subscriber failures propagate and do not roll back the in-memory append.
+        """
+        self.state.messages.append(message)
+        await self.publish(MessageAppendedEvent(message, timing))
 
 
 class AgentExtension:
@@ -387,20 +401,22 @@ class Agent(AgentPhaseTransitionMixin):
                 await extension.on_message(context)
             await self._finish_context_loading(context)
             await self._notify_before_run(context)
-            state.messages.append(user_message)
-            await context.publish(MessageAppendedEvent(user_message))
+            await context.append_message(user_message, MessageTiming.instant())
 
             for _ in range(self.max_iterations):
                 await self._notify_before_model(context)
+
                 async for event in self._before_model_events(context):
                     await self._apply_extension_event_phase(context, event)
                     yield event
+
                 request = ModelRequest(
                     messages=tuple(state.messages),
                     tools=tuple(tool.definition for tool in self.tools.values()),
                     reasoning_effort=reasoning_effort,
                 )
-                await self._start_model_generation(context)
+                model_started = await self._start_model_generation(context)
+                output_tracker = ModelOutputTracker()
                 yield AgentEvent(
                     AgentEventType.MODEL_STARTED,
                     session_id=config.session_id,
@@ -411,6 +427,7 @@ class Agent(AgentPhaseTransitionMixin):
                     async for event in events:
                         if response is not None:
                             raise AgentProtocolError("Model emitted events after its final response")
+                        await output_tracker.observe(context, event)
                         match event.type:
                             case ModelEventType.TEXT_DELTA:
                                 yield AgentEvent(
@@ -442,9 +459,11 @@ class Agent(AgentPhaseTransitionMixin):
                 if response is None:
                     raise AgentProtocolError("Model stream ended without a response")
 
-                state.messages.append(response.message)
-                await self._finish_model_generation(context)
-                await context.publish(MessageAppendedEvent(response.message))
+                model_completed = await self._finish_model_generation(context)
+                await context.append_message(
+                    response.message,
+                    output_tracker.message_timing(model_started, model_completed),
+                )
                 await self._notify_after_model(context, response)
                 yield AgentEvent(
                     AgentEventType.MODEL_COMPLETED,
@@ -483,7 +502,7 @@ class Agent(AgentPhaseTransitionMixin):
     ) -> AsyncIterator[AgentEvent]:
         for call in calls:
             await self._notify_before_tool(context, call)
-            await self._start_tool_execution(context)
+            tool_started = await self._start_tool_execution(context)
             yield AgentEvent(
                 AgentEventType.TOOL_STARTED,
                 session_id=context.config.session_id,
@@ -506,10 +525,16 @@ class Agent(AgentPhaseTransitionMixin):
                 content=content,
                 success=error is None,
             )
-            context.state.messages.append(result)
-            await context.publish(MessageAppendedEvent(result))
+            tool_completed = await self._finish_tool_execution(context)
+            await context.append_message(
+                result,
+                MessageTiming(
+                    started_at=tool_started.occurred_at,
+                    completed_at=tool_completed.occurred_at,
+                    duration_ns=max(0, tool_completed.monotonic_ns - tool_started.monotonic_ns),
+                ),
+            )
             await self._notify_after_tool(context, call, result)
-            await self._finish_tool_execution(context)
             yield AgentEvent(
                 AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
                 session_id=context.config.session_id,

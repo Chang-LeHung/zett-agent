@@ -2,15 +2,26 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
+from time import monotonic_ns
 from typing import TYPE_CHECKING, Protocol
 
 from .exceptions import AgentProtocolError
 from .messages import AssistantMessage, ToolCall, ToolMessage
-from .model import ModelResponse, ToolCallDelta
+from .model import ModelEvent, ModelEventType, ModelResponse, ToolCallDelta
 
 if TYPE_CHECKING:
-    from .extension_events import CompactionEvent, ExtensionEvent
+    from .extension_events import (
+        CompactionEvent,
+        ContentCompletedEvent,
+        ContentStartedEvent,
+        ExtensionEvent,
+        MessageTiming,
+        PhaseTransitionEvent,
+        ReasoningCompletedEvent,
+        ReasoningStartedEvent,
+    )
 
 
 class AgentEventType(StrEnum):
@@ -124,7 +135,7 @@ class AgentPhaseTransitionMixin:
         target: AgentPhase,
         *,
         expected: Collection[AgentPhase],
-    ) -> None:
+    ) -> PhaseTransitionEvent:
         """Validate, apply, and publish one phase transition."""
         from .extension_events import PhaseTransitionEvent
 
@@ -137,7 +148,14 @@ class AgentPhaseTransitionMixin:
             )
         previous = state.phase
         state.phase = target
-        await context.publish(PhaseTransitionEvent(previous_phase=previous, current_phase=target))
+        transition = PhaseTransitionEvent(
+            previous_phase=previous,
+            current_phase=target,
+            occurred_at=datetime.now(UTC),
+            monotonic_ns=monotonic_ns(),
+        )
+        await context.publish(transition)
+        return transition
 
     async def _start_context_loading(self, context: PhaseContext) -> None:
         await self._transition_phase(context, AgentPhase.LOADING_CONTEXT, expected=(AgentPhase.CREATED,))
@@ -151,17 +169,17 @@ class AgentPhaseTransitionMixin:
     async def _finish_compaction(self, context: PhaseContext) -> None:
         await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.COMPACTING,))
 
-    async def _start_model_generation(self, context: PhaseContext) -> None:
-        await self._transition_phase(context, AgentPhase.GENERATING, expected=(AgentPhase.READY,))
+    async def _start_model_generation(self, context: PhaseContext) -> PhaseTransitionEvent:
+        return await self._transition_phase(context, AgentPhase.GENERATING, expected=(AgentPhase.READY,))
 
-    async def _finish_model_generation(self, context: PhaseContext) -> None:
-        await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.GENERATING,))
+    async def _finish_model_generation(self, context: PhaseContext) -> PhaseTransitionEvent:
+        return await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.GENERATING,))
 
-    async def _start_tool_execution(self, context: PhaseContext) -> None:
-        await self._transition_phase(context, AgentPhase.RUNNING_TOOL, expected=(AgentPhase.READY,))
+    async def _start_tool_execution(self, context: PhaseContext) -> PhaseTransitionEvent:
+        return await self._transition_phase(context, AgentPhase.RUNNING_TOOL, expected=(AgentPhase.READY,))
 
-    async def _finish_tool_execution(self, context: PhaseContext) -> None:
-        await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.RUNNING_TOOL,))
+    async def _finish_tool_execution(self, context: PhaseContext) -> PhaseTransitionEvent:
+        return await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.RUNNING_TOOL,))
 
     async def _complete_request(self, context: PhaseContext) -> None:
         await self._transition_phase(context, AgentPhase.COMPLETED, expected=(AgentPhase.READY,))
@@ -181,6 +199,78 @@ class AgentPhaseTransitionMixin:
         """Reject an event emitted outside the phase in which it is valid."""
         if state.phase != expected:
             raise AgentProtocolError(f"Agent phase must be {expected.value!r}, found {state.phase.value!r}")
+
+
+@dataclass(slots=True)
+class ModelOutputTracker:
+    """Publish and retain the reasoning/content boundaries of one model call."""
+
+    reasoning_started: ReasoningStartedEvent | None = None
+    reasoning_completed: ReasoningCompletedEvent | None = None
+    content_started: ContentStartedEvent | None = None
+    content_completed: ContentCompletedEvent | None = None
+
+    async def observe(self, context: PhaseContext, event: ModelEvent) -> None:
+        """Translate provider-neutral stream deltas into extension events."""
+        from .extension_events import (
+            ContentCompletedEvent,
+            ContentStartedEvent,
+            ReasoningStartedEvent,
+        )
+
+        match event.type:
+            case ModelEventType.REASONING_DELTA if event.delta and self.reasoning_started is None:
+                self.reasoning_started = ReasoningStartedEvent.now()
+                await context.publish(self.reasoning_started)
+            case ModelEventType.TEXT_DELTA if event.delta:
+                await self._complete_reasoning(context)
+                if self.content_started is None:
+                    self.content_started = ContentStartedEvent.now()
+                    await context.publish(self.content_started)
+            case ModelEventType.TOOL_CALL_DELTA:
+                await self._complete_reasoning(context)
+            case ModelEventType.RESPONSE:
+                await self._complete_reasoning(context)
+                if self.content_started is not None and self.content_completed is None:
+                    self.content_completed = ContentCompletedEvent.now()
+                    await context.publish(self.content_completed)
+            case _:
+                return
+
+    async def _complete_reasoning(self, context: PhaseContext) -> None:
+        from .extension_events import ReasoningCompletedEvent
+
+        if self.reasoning_started is not None and self.reasoning_completed is None:
+            self.reasoning_completed = ReasoningCompletedEvent.now()
+            await context.publish(self.reasoning_completed)
+
+    def message_timing(
+        self,
+        started: PhaseTransitionEvent,
+        completed: PhaseTransitionEvent,
+    ) -> MessageTiming:
+        """Build persistable durations from monotonic lifecycle boundaries."""
+        from .extension_events import MessageTiming
+
+        reasoning = self._span(self.reasoning_started, self.reasoning_completed)
+        content = self._span(self.content_started, self.content_completed)
+        return MessageTiming(
+            started_at=started.occurred_at,
+            completed_at=completed.occurred_at,
+            duration_ns=max(0, completed.monotonic_ns - started.monotonic_ns),
+            reasoning_started_at=reasoning[0],
+            reasoning_completed_at=reasoning[1],
+            reasoning_duration_ns=reasoning[2],
+            content_started_at=content[0],
+            content_completed_at=content[1],
+            content_duration_ns=content[2],
+        )
+
+    @staticmethod
+    def _span(started, completed) -> tuple[datetime | None, datetime | None, int | None]:
+        if started is None or completed is None:
+            return None, None, None
+        return started.occurred_at, completed.occurred_at, max(0, completed.monotonic_ns - started.monotonic_ns)
 
 
 @dataclass(slots=True)

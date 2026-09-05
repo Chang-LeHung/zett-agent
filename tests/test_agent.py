@@ -15,12 +15,17 @@ from kcs_agent import (
     AgentProtocolError,
     AgentState,
     AssistantMessage,
+    ContentCompletedEvent,
+    ContentStartedEvent,
     InMemoryMessageAccumulator,
+    MessageAppendedEvent,
     ModelEvent,
     ModelRequest,
     ModelResponse,
     PhaseTransitionEvent,
+    ReasoningCompletedEvent,
     ReasoningEffort,
+    ReasoningStartedEvent,
     SystemMessage,
     ToolCall,
     ToolGuidelinesExtension,
@@ -93,10 +98,10 @@ async def test_phase_transition_mixin_supports_terminal_paths(terminal: str) -> 
     else:
         await machine._cancel_request(context)
         assert state.phase == AgentPhase.CANCELLED
-    assert transitions[-1] == PhaseTransitionEvent(
-        previous_phase=AgentPhase.LOADING_CONTEXT,
-        current_phase=state.phase,
-    )
+    assert transitions[-1].previous_phase == AgentPhase.LOADING_CONTEXT
+    assert transitions[-1].current_phase == state.phase
+    assert transitions[-1].occurred_at.tzinfo is not None
+    assert transitions[-1].monotonic_ns > 0
 
 
 async def test_uninitialized_agent_rejects_requests_without_calling_model():
@@ -257,6 +262,67 @@ class ScriptedModel:
             yield ModelEvent.reasoning("Checking.")
             yield ModelEvent.text(message.content)
         yield ModelEvent.completed(ModelResponse(message))
+
+
+async def test_model_output_boundaries_publish_in_order_and_measure_assistant_message():
+    observed = []
+
+    class Observer(AgentExtension):
+        async def on_event(self, context, event):
+            observed.append(event)
+
+    agent = await Agent.create(
+        ScriptedModel(AssistantMessage(content="Answer")),
+        config=CONFIG,
+        extensions=[Observer()],
+    )
+    await agent.run("Question")
+
+    lifecycle_types = (
+        ReasoningStartedEvent,
+        ReasoningCompletedEvent,
+        ContentStartedEvent,
+        ContentCompletedEvent,
+    )
+    lifecycle = [event for event in observed if isinstance(event, lifecycle_types)]
+    assert [type(event) for event in lifecycle] == list(lifecycle_types)
+    assert [event.occurred_at for event in lifecycle] == sorted(event.occurred_at for event in lifecycle)
+    assert [event.monotonic_ns for event in lifecycle] == sorted(event.monotonic_ns for event in lifecycle)
+
+    appended = [event for event in observed if isinstance(event, MessageAppendedEvent)]
+    assert appended[0].timing.duration_ns == 0
+    assistant_timing = appended[-1].timing
+    assert assistant_timing.duration_ns >= assistant_timing.reasoning_duration_ns >= 0
+    assert assistant_timing.duration_ns >= assistant_timing.content_duration_ns >= 0
+    assert assistant_timing.reasoning_started_at == lifecycle[0].occurred_at
+    assert assistant_timing.reasoning_completed_at == lifecycle[1].occurred_at
+    assert assistant_timing.content_started_at == lifecycle[2].occurred_at
+    assert assistant_timing.content_completed_at == lifecycle[3].occurred_at
+
+
+async def test_tool_message_uses_running_tool_transition_for_duration():
+    appended = []
+
+    class Observer(AgentExtension):
+        async def on_event(self, context, event):
+            if isinstance(event, MessageAppendedEvent):
+                appended.append(event)
+
+    agent = await Agent.create(
+        ScriptedModel(
+            AssistantMessage(tool_calls=(ToolCall("c1", "add", {"left": 2, "right": 3}),)),
+            AssistantMessage(content="5"),
+        ),
+        config=CONFIG,
+        tools=[add],
+        extensions=[Observer()],
+    )
+    await agent.run("Add")
+
+    tool_event = next(event for event in appended if isinstance(event.message, ToolMessage))
+    assert tool_event.timing.duration_ns >= 0
+    assert tool_event.timing.reasoning_duration_ns is None
+    assert tool_event.timing.content_duration_ns is None
 
 
 async def test_model_tool_model_loop_preserves_order_and_usage_response():

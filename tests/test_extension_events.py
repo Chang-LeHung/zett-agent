@@ -10,10 +10,34 @@ from kcs_agent import (
     CompactionEvent,
     InMemoryMessageAccumulator,
     MessageAppendedEvent,
+    MessageTiming,
     SystemMessage,
     UserMessage,
 )
 from kcs_agent.compaction import CompactedMessage
+
+
+async def test_context_appends_message_before_publishing_its_event():
+    observed = []
+
+    class Subscriber(AgentExtension):
+        async def on_event(self, context, event):
+            assert context.state.messages[-1] is event.message
+            observed.append(event)
+
+    context = AgentContext(
+        AgentConfig("session"),
+        AgentState(),
+        {},
+        (Subscriber(),),
+    )
+    message = UserMessage(content="New message")
+    timing = MessageTiming.instant()
+
+    await context.append_message(message, timing)
+
+    assert context.state.messages == [message]
+    assert observed == [MessageAppendedEvent(message, timing)]
 
 
 async def test_publish_preserves_order_and_stops_on_handler_failure():
@@ -52,7 +76,10 @@ async def test_memory_accumulator_ignores_system_events_and_tracks_compaction():
         (accumulator,),
     )
     await accumulator.on_message(context)
-    await accumulator.on_event(context, MessageAppendedEvent(SystemMessage(content="Transient")))
+    await accumulator.on_event(
+        context,
+        MessageAppendedEvent(SystemMessage(content="Transient"), MessageTiming.instant()),
+    )
 
     checkpoint = CompactedMessage(content="Checkpoint")
     recent = UserMessage(content="Recent")

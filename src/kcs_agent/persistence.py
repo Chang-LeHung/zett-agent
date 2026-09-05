@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from .agent import AgentContext, AgentExtension
 from .compaction import CompactedMessage
-from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent
+from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, MessageTiming
 from .ids import new_uuid7
 from .messages import AnyMessage, AssistantMessage, SystemMessage
 
@@ -21,6 +21,25 @@ class RawMessageRecord:
     request_id: str
     sequence: int
     message: AnyMessage
+    # UTC operation start; GENERATING for assistants, RUNNING_TOOL for tools,
+    # and append time for user-authored or directly imported messages.
+    started_at: datetime
+    # UTC operation completion; equal to started_at for instantaneous messages.
+    completed_at: datetime
+    # Total operation duration in nanoseconds, measured by a monotonic clock.
+    duration_ns: int
+    # UTC arrival time of the first streamed reasoning delta, when present.
+    reasoning_started_at: datetime | None
+    # UTC boundary where reasoning ended before content, tools, or completion.
+    reasoning_completed_at: datetime | None
+    # Monotonic elapsed reasoning time in nanoseconds; None if not observed.
+    reasoning_duration_ns: int | None
+    # UTC arrival time of the first streamed answer-content delta, when present.
+    content_started_at: datetime | None
+    # UTC final-response boundary for a streamed answer-content segment.
+    content_completed_at: datetime | None
+    # Monotonic elapsed content-streaming time in nanoseconds; None if absent.
+    content_duration_ns: int | None
     created_at: datetime
     updated_at: datetime
 
@@ -94,8 +113,18 @@ class SessionStorage(Protocol):
         """Load the latest checkpoint and all Raw Log messages after its boundary."""
         ...
 
-    async def append(self, session_id: str, request_id: str, message: AnyMessage) -> int:
-        """Append one immutable Raw Log message and return its allocated sequence."""
+    async def append(
+        self,
+        session_id: str,
+        request_id: str,
+        message: AnyMessage,
+        timing: MessageTiming | None = None,
+    ) -> int:
+        """Append one immutable Raw Log message and return its allocated sequence.
+
+        A direct storage caller may omit timing for an instantaneous imported
+        message. The Agent runtime always supplies measured timing.
+        """
         ...
 
     async def snapshot(
@@ -165,8 +194,13 @@ class SessionPersistenceExtension(AgentExtension):
         if request is None:
             return
         match event:
-            case MessageAppendedEvent(message=message):
-                sequence = await self.storage.append(context.config.session_id, request.request_id, message)
+            case MessageAppendedEvent(message=message, timing=timing):
+                sequence = await self.storage.append(
+                    context.config.session_id,
+                    request.request_id,
+                    message,
+                    timing,
+                )
                 request.context_sequences.append(sequence)
             case CompactionEvent() as compaction:
                 await self._snapshot(context, request, compaction)

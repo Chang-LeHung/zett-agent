@@ -11,13 +11,24 @@ from .events import (
     AgentEventType,
     AgentPhase,
     AgentPhaseTransitionMixin,
+    ModelOutputTracker,
 )
 from .exceptions import (
     AgentError,
     AgentIterationLimitError,
     AgentProtocolError,
 )
-from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, PhaseTransitionEvent
+from .extension_events import (
+    CompactionEvent,
+    ContentCompletedEvent,
+    ContentStartedEvent,
+    ExtensionEvent,
+    MessageAppendedEvent,
+    MessageTiming,
+    PhaseTransitionEvent,
+    ReasoningCompletedEvent,
+    ReasoningStartedEvent,
+)
 from .extensions import (
     InMemoryMessageAccumulator,
     ToolGuidelinesExtension,
@@ -94,6 +105,11 @@ __all__ = [
     "Agent",
     "MessageAppendedEvent",
     "PhaseTransitionEvent",
+    "ReasoningStartedEvent",
+    "ReasoningCompletedEvent",
+    "ContentStartedEvent",
+    "ContentCompletedEvent",
+    "MessageTiming",
     "new_uuid7",
     "SessionPersistenceExtension",
     "SessionStorage",
@@ -114,6 +130,7 @@ __all__ = [
     "AgentEventType",
     "AgentPhase",
     "AgentPhaseTransitionMixin",
+    "ModelOutputTracker",
     "AgentError",
     "AgentProtocolError",
     "AgentIterationLimitError",

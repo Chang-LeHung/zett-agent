@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from time import monotonic_ns
+from typing import Self
 
 from .events import AgentPhase
 from .messages import AnyMessage
@@ -10,10 +13,86 @@ class ExtensionEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class MessageTiming:
+    """Persistable timing measurements for one immutable Raw Log message.
+
+    UTC timestamps describe when work happened and can be displayed or compared
+    across processes. Durations are measured with a monotonic clock so wall-clock
+    corrections cannot produce negative or inaccurate elapsed times. Monotonic
+    clock readings themselves are intentionally not persisted.
+    """
+
+    # UTC time when processing began. For assistant and tool messages this is
+    # the transition into GENERATING and RUNNING_TOOL, respectively. A directly
+    # appended or user-authored message uses its append time.
+    started_at: datetime
+    # UTC time when processing ended. For assistant and tool messages this is
+    # the transition back to READY after the operation finished.
+    completed_at: datetime
+    # Total elapsed processing time in nanoseconds, calculated from monotonic
+    # clock readings rather than by subtracting the UTC timestamps.
+    duration_ns: int
+    # UTC arrival time of the first non-empty reasoning delta. None when the
+    # model did not stream reasoning for this message.
+    reasoning_started_at: datetime | None = None
+    # UTC time when reasoning gave way to content, a tool call, or the final
+    # response. None when no reasoning segment was observed.
+    reasoning_completed_at: datetime | None = None
+    # Elapsed reasoning time in nanoseconds measured with a monotonic clock.
+    # None when no complete reasoning segment was observed.
+    reasoning_duration_ns: int | None = None
+    # UTC arrival time of the first non-empty answer-content delta. None for
+    # messages without streamed answer content, including tool messages.
+    content_started_at: datetime | None = None
+    # UTC time of the final model response after streamed content. None when no
+    # content segment was observed.
+    content_completed_at: datetime | None = None
+    # Elapsed answer-content streaming time in nanoseconds measured with a
+    # monotonic clock. None when no complete content segment was observed.
+    content_duration_ns: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.duration_ns < 0:
+            raise ValueError("duration_ns cannot be negative")
+        self._validate_optional_span(
+            "reasoning",
+            self.reasoning_started_at,
+            self.reasoning_completed_at,
+            self.reasoning_duration_ns,
+        )
+        self._validate_optional_span(
+            "content",
+            self.content_started_at,
+            self.content_completed_at,
+            self.content_duration_ns,
+        )
+
+    @staticmethod
+    def _validate_optional_span(
+        name: str,
+        started_at: datetime | None,
+        completed_at: datetime | None,
+        duration_ns: int | None,
+    ) -> None:
+        values = (started_at, completed_at, duration_ns)
+        if any(value is None for value in values) and any(value is not None for value in values):
+            raise ValueError(f"{name} timing fields must be supplied together")
+        if duration_ns is not None and duration_ns < 0:
+            raise ValueError(f"{name}_duration_ns cannot be negative")
+
+    @classmethod
+    def instant(cls) -> "MessageTiming":
+        """Represent a message that required no measured processing interval."""
+        now = datetime.now(UTC)
+        return cls(started_at=now, completed_at=now, duration_ns=0)
+
+
+@dataclass(frozen=True, slots=True)
 class MessageAppendedEvent(ExtensionEvent):
     """One newly produced raw message; restoration and compaction do not emit it."""
 
     message: AnyMessage
+    timing: MessageTiming
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +105,45 @@ class PhaseTransitionEvent(ExtensionEvent):
 
     previous_phase: AgentPhase
     current_phase: AgentPhase
+    # UTC wall-clock time suitable for persistence, logs, and user interfaces.
+    occurred_at: datetime
+    # Process-local monotonic reading used only to calculate elapsed durations.
+    monotonic_ns: int
+
+
+@dataclass(frozen=True, slots=True)
+class ModelOutputLifecycleEvent(ExtensionEvent):
+    """A precise boundary within one streamed model response."""
+
+    # UTC wall-clock time suitable for persistence, logs, and user interfaces.
+    occurred_at: datetime
+    # Process-local monotonic reading used only to calculate elapsed durations.
+    monotonic_ns: int
+
+    @classmethod
+    def now(cls) -> Self:
+        """Capture wall and monotonic clocks at the same lifecycle boundary."""
+        return cls(occurred_at=datetime.now(UTC), monotonic_ns=monotonic_ns())
+
+
+@dataclass(frozen=True, slots=True)
+class ReasoningStartedEvent(ModelOutputLifecycleEvent):
+    """The first non-empty reasoning delta of one model call arrived."""
+
+
+@dataclass(frozen=True, slots=True)
+class ReasoningCompletedEvent(ModelOutputLifecycleEvent):
+    """The reasoning segment of one model call ended."""
+
+
+@dataclass(frozen=True, slots=True)
+class ContentStartedEvent(ModelOutputLifecycleEvent):
+    """The first non-empty answer-content delta of one model call arrived."""
+
+
+@dataclass(frozen=True, slots=True)
+class ContentCompletedEvent(ModelOutputLifecycleEvent):
+    """The answer-content segment of one model call ended."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -87,6 +87,35 @@ async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_pa
         second.close()
 
 
+async def test_raw_log_persists_model_output_timing(storage):
+    class StreamingModel:
+        async def stream(self, request):
+            message = AssistantMessage(content="Answer", reasoning="Think")
+            yield ModelEvent.reasoning("Think")
+            yield ModelEvent.text("Answer")
+            yield ModelEvent.completed(ModelResponse(message))
+
+    agent = await Agent.create(
+        StreamingModel(),
+        config=AgentConfig("timed-session"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("Question")
+
+    user, assistant = storage.list_raw_messages("timed-session")
+    assert user.duration_ns == 0
+    assert user.started_at == user.completed_at
+    assert assistant.duration_ns >= 0
+    assert assistant.reasoning_duration_ns is not None
+    assert assistant.content_duration_ns is not None
+    assert assistant.reasoning_started_at is not None
+    assert assistant.reasoning_completed_at is not None
+    assert assistant.content_started_at is not None
+    assert assistant.content_completed_at is not None
+    assert assistant.started_at.tzinfo is not None
+    assert assistant.completed_at.tzinfo is not None
+
+
 async def test_sqlite_session_extension_lists_paginated_raw_messages(tmp_path):
     extension = SQLiteSessionExtension(tmp_path / "owned.sqlite3")
     try:
@@ -224,6 +253,23 @@ def test_message_codec_preserves_multimodal_and_tool_replay():
         CompactedMessage(content="Checkpoint"),
     ]
     assert decode_messages(encode_messages(messages)) == messages
+
+
+def test_message_codec_rejects_values_outside_the_supported_envelope():
+    message = AssistantMessage(replay_blocks=({"unsupported": object()},))
+    with pytest.raises(TypeError, match="Unsupported message value"):
+        encode_messages([message])
+
+
+async def test_load_rejects_a_corrupted_snapshot_payload(storage):
+    await storage.append("session", "request", UserMessage(content="One"))
+    snapshot = await storage.snapshot("session", CompactedMessage(content="Checkpoint"), 1, 0)
+    with Session(storage.engine) as session, session.begin():
+        row = session.get(ContextSnapshotModel, snapshot.id)
+        row.message_json = encode_messages([UserMessage(content="Not a checkpoint")])
+
+    with pytest.raises(ValueError, match="exactly one CompactedMessage"):
+        await storage.load("session")
 
 
 async def test_lists_typed_raw_messages_and_deletes_one_session(storage):

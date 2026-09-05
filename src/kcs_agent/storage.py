@@ -13,6 +13,7 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from .compaction import CompactedMessage
+from .extension_events import MessageTiming
 from .ids import new_uuid7
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolMessage, UserMessage
 from .persistence import ContextSnapshot, RawMessageRecord, SessionPersistenceExtension, SessionSummary, SessionView
@@ -36,6 +37,24 @@ class RawLogMessageModel(Base):
     content: Mapped[str] = mapped_column(Text)
     tool_name: Mapped[str | None] = mapped_column(String)
     message_json: Mapped[str] = mapped_column(Text)
+    # UTC start of message processing, not the later database insertion time.
+    started_at: Mapped[datetime] = mapped_column()
+    # UTC completion of message processing.
+    completed_at: Mapped[datetime] = mapped_column()
+    # Total monotonic elapsed time in nanoseconds.
+    duration_ns: Mapped[int] = mapped_column(Integer)
+    # UTC first-reasoning-delta boundary; null when reasoning was not streamed.
+    reasoning_started_at: Mapped[datetime | None] = mapped_column()
+    # UTC reasoning completion boundary; null when reasoning was not streamed.
+    reasoning_completed_at: Mapped[datetime | None] = mapped_column()
+    # Monotonic reasoning duration in nanoseconds; null when not observed.
+    reasoning_duration_ns: Mapped[int | None] = mapped_column(Integer)
+    # UTC first-content-delta boundary; null when content was not streamed.
+    content_started_at: Mapped[datetime | None] = mapped_column()
+    # UTC final-response boundary for streamed content; null when not observed.
+    content_completed_at: Mapped[datetime | None] = mapped_column()
+    # Monotonic content-streaming duration in nanoseconds; null when absent.
+    content_duration_ns: Mapped[int | None] = mapped_column(Integer)
     # UTC timestamps; immutable records have identical creation/modification times.
     created_at: Mapped[datetime] = mapped_column()
     updated_at: Mapped[datetime] = mapped_column()
@@ -230,6 +249,23 @@ class SQLiteSessionStorage:
             request_id=row.request_id,
             sequence=row.sequence,
             message=message,
+            started_at=row.started_at.replace(tzinfo=UTC),
+            completed_at=row.completed_at.replace(tzinfo=UTC),
+            duration_ns=row.duration_ns,
+            reasoning_started_at=(
+                row.reasoning_started_at.replace(tzinfo=UTC) if row.reasoning_started_at is not None else None
+            ),
+            reasoning_completed_at=(
+                row.reasoning_completed_at.replace(tzinfo=UTC) if row.reasoning_completed_at is not None else None
+            ),
+            reasoning_duration_ns=row.reasoning_duration_ns,
+            content_started_at=(
+                row.content_started_at.replace(tzinfo=UTC) if row.content_started_at is not None else None
+            ),
+            content_completed_at=(
+                row.content_completed_at.replace(tzinfo=UTC) if row.content_completed_at is not None else None
+            ),
+            content_duration_ns=row.content_duration_ns,
             created_at=row.created_at.replace(tzinfo=UTC),
             updated_at=row.updated_at.replace(tzinfo=UTC),
         )
@@ -283,10 +319,17 @@ class SQLiteSessionStorage:
             )
             return SessionView(snapshot=snapshot, raw_tail=[self._record(row) for row in rows])
 
-    async def append(self, session_id: str, request_id: str, message: AnyMessage) -> int:
+    async def append(
+        self,
+        session_id: str,
+        request_id: str,
+        message: AnyMessage,
+        timing: MessageTiming | None = None,
+    ) -> int:
         with self._session_scope() as session:
             sequence = self._sequence(session, session_id)
             now = datetime.now(UTC)
+            timing = timing or MessageTiming.instant()
             kind = next(kind for kind, cls in MESSAGE_TYPES.items() if type(message) is cls)
             if kind == MessageKind.CHECKPOINT:
                 raise ValueError("Checkpoints belong in snapshots, not raw logs")
@@ -300,6 +343,15 @@ class SQLiteSessionStorage:
                     content=message.text if isinstance(message, UserMessage) else message.content,
                     tool_name=message.name if isinstance(message, ToolMessage) else None,
                     message_json=encode_messages([message]),
+                    started_at=timing.started_at,
+                    completed_at=timing.completed_at,
+                    duration_ns=timing.duration_ns,
+                    reasoning_started_at=timing.reasoning_started_at,
+                    reasoning_completed_at=timing.reasoning_completed_at,
+                    reasoning_duration_ns=timing.reasoning_duration_ns,
+                    content_started_at=timing.content_started_at,
+                    content_completed_at=timing.content_completed_at,
+                    content_duration_ns=timing.content_duration_ns,
                     created_at=now,
                     updated_at=now,
                 )

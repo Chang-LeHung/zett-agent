@@ -76,7 +76,10 @@ def _to_model_data(payload: Any) -> dict[str, Any]:
         return payload.dict()  # type: ignore[operator]
     if isinstance(payload, Message):
         return {"role": payload.role, **asdict(payload)}
-    return json.loads(json.dumps(payload, default=str))
+    normalized = json.loads(json.dumps(payload, default=str))
+    if not isinstance(normalized, dict):
+        raise ProviderResponseError(f"Provider SDK value did not normalize to an object: {payload!r}")
+    return normalized
 
 
 def _normalize_image_source(

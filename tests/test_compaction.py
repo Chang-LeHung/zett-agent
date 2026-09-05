@@ -84,9 +84,7 @@ async def test_compaction_preserves_instructions_and_whole_tool_turn():
     assert sum(isinstance(m, CompactedMessage) for m in state.state.messages) == 1
     assert len(state.extensions[0].events) == 2
     assert events[0].type == AgentEventType.COMPACTION_STARTED
-    assert events[0].phase == AgentPhase.COMPACTING
     assert events[-1].type == AgentEventType.COMPACTION_COMPLETED
-    assert events[-1].phase == AgentPhase.READY
 
 
 @pytest.mark.parametrize("limit,recent", [(100000, 1), (1, 20)])
@@ -154,6 +152,11 @@ async def test_compaction_event_delivered_after_context_update(fail):
         AgentEventType.COMPACTION_STARTED,
         AgentEventType.COMPACTION_TEXT_DELTA,
         AgentEventType.COMPACTION_COMPLETED,
+    ]
+    assert [event.phase for event in streamed[:3]] == [
+        AgentPhase.COMPACTING,
+        AgentPhase.COMPACTING,
+        AgentPhase.READY,
     ]
     assert streamed[2].compaction is observed[0]
     assert streamed[2].applied is True

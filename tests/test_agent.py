@@ -11,12 +11,15 @@ from kcs_agent import (
     AgentExtension,
     AgentIterationLimitError,
     AgentPhase,
+    AgentPhaseTransitionMixin,
     AgentProtocolError,
+    AgentState,
     AssistantMessage,
     InMemoryMessageAccumulator,
     ModelEvent,
     ModelRequest,
     ModelResponse,
+    PhaseTransitionEvent,
     ReasoningEffort,
     SystemMessage,
     ToolCall,
@@ -27,6 +30,73 @@ from kcs_agent import (
 )
 
 CONFIG = AgentConfig(session_id="test-session")
+
+
+async def test_phase_transition_mixin_validates_predecessors() -> None:
+    transitions: list[PhaseTransitionEvent] = []
+
+    class Observer(AgentExtension):
+        async def on_event(self, context, event):
+            if isinstance(event, PhaseTransitionEvent):
+                assert context.state.phase == event.current_phase
+                transitions.append(event)
+
+    machine = AgentPhaseTransitionMixin()
+    state = AgentState()
+    context = AgentContext(CONFIG, state, {}, (Observer(),))
+
+    await machine._start_context_loading(context)
+    await machine._finish_context_loading(context)
+    await machine._start_compaction(context)
+    await machine._finish_compaction(context)
+    await machine._start_model_generation(context)
+    await machine._finish_model_generation(context)
+    await machine._start_tool_execution(context)
+    await machine._finish_tool_execution(context)
+    await machine._complete_request(context)
+
+    assert state.phase == AgentPhase.COMPLETED
+    assert [(event.previous_phase, event.current_phase) for event in transitions] == [
+        (AgentPhase.CREATED, AgentPhase.LOADING_CONTEXT),
+        (AgentPhase.LOADING_CONTEXT, AgentPhase.READY),
+        (AgentPhase.READY, AgentPhase.COMPACTING),
+        (AgentPhase.COMPACTING, AgentPhase.READY),
+        (AgentPhase.READY, AgentPhase.GENERATING),
+        (AgentPhase.GENERATING, AgentPhase.READY),
+        (AgentPhase.READY, AgentPhase.RUNNING_TOOL),
+        (AgentPhase.RUNNING_TOOL, AgentPhase.READY),
+        (AgentPhase.READY, AgentPhase.COMPLETED),
+    ]
+    with pytest.raises(AgentProtocolError, match="Invalid agent phase transition"):
+        await machine._start_model_generation(context)
+    assert state.phase == AgentPhase.COMPLETED
+    assert len(transitions) == 9
+
+
+@pytest.mark.parametrize("terminal", ["failed", "cancelled"])
+async def test_phase_transition_mixin_supports_terminal_paths(terminal: str) -> None:
+    transitions: list[PhaseTransitionEvent] = []
+
+    class Observer(AgentExtension):
+        async def on_event(self, context, event):
+            if isinstance(event, PhaseTransitionEvent):
+                transitions.append(event)
+
+    machine = AgentPhaseTransitionMixin()
+    state = AgentState()
+    context = AgentContext(CONFIG, state, {}, (Observer(),))
+    await machine._start_context_loading(context)
+
+    if terminal == "failed":
+        await machine._fail_request(context)
+        assert state.phase == AgentPhase.FAILED
+    else:
+        await machine._cancel_request(context)
+        assert state.phase == AgentPhase.CANCELLED
+    assert transitions[-1] == PhaseTransitionEvent(
+        previous_phase=AgentPhase.LOADING_CONTEXT,
+        current_phase=state.phase,
+    )
 
 
 async def test_uninitialized_agent_rejects_requests_without_calling_model():

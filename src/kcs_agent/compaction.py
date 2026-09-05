@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import tiktoken
 
 from .agent import AgentContext, AgentExtension
-from .events import AgentEvent, AgentEventType, AgentPhase
+from .events import AgentEvent, AgentEventType
 from .exceptions import AgentProtocolError
 from .extension_events import CompactionEvent
 from .messages import AnyMessage, SystemMessage, UserMessage
@@ -96,11 +96,9 @@ class CompactionExtension(AgentExtension):
         # Do not repeatedly summarize a checkpoint with no new completed turns.
         if all(isinstance(message, CompactedMessage) for message in older):
             return
-        context.state.phase = AgentPhase.COMPACTING
         yield AgentEvent(
             AgentEventType.COMPACTION_STARTED,
             session_id=context.config.session_id,
-            phase=context.state.phase,
         )
         request = ModelRequest(
             messages=(
@@ -133,14 +131,12 @@ class CompactionExtension(AgentExtension):
                         yield AgentEvent(
                             AgentEventType.COMPACTION_TEXT_DELTA,
                             session_id=context.config.session_id,
-                            phase=context.state.phase,
                             delta=event.delta,
                         )
                     case ModelEventType.REASONING_DELTA:
                         yield AgentEvent(
                             AgentEventType.COMPACTION_REASONING_DELTA,
                             session_id=context.config.session_id,
-                            phase=context.state.phase,
                             delta=event.delta,
                         )
                     case ModelEventType.TOOL_CALL_DELTA:
@@ -154,11 +150,9 @@ class CompactionExtension(AgentExtension):
             )
         )
         if self.count_tokens([summary]) >= self.count_tokens(older):
-            context.state.phase = AgentPhase.READY
             yield AgentEvent(
                 AgentEventType.COMPACTION_COMPLETED,
                 session_id=context.config.session_id,
-                phase=context.state.phase,
                 applied=False,
             )
             return
@@ -171,11 +165,9 @@ class CompactionExtension(AgentExtension):
             summary=summary.content,
         )
         await context.publish(compacted)
-        context.state.phase = AgentPhase.READY
         yield AgentEvent(
             AgentEventType.COMPACTION_COMPLETED,
             session_id=context.config.session_id,
-            phase=context.state.phase,
             compaction=compacted,
             applied=True,
         )

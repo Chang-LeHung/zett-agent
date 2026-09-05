@@ -5,7 +5,7 @@ from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Self, overload
 
-from .events import AgentEvent, AgentEventType, AgentPhase
+from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin
 from .exceptions import AgentIterationLimitError, AgentProtocolError
 from .extension_events import ExtensionEvent, MessageAppendedEvent
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
@@ -207,7 +207,7 @@ class AgentExtension:
         """Run before an agent error is propagated to the caller."""
 
 
-class Agent:
+class Agent(AgentPhaseTransitionMixin):
     """A small stateful model/tool loop with optional lifecycle extensions."""
 
     def __init__(
@@ -382,10 +382,10 @@ class Agent:
         context = AgentContext(config=config, state=state, tools=self.tools, extensions=self.extensions)
         user_message = UserMessage(content=message) if isinstance(message, str) else message
         try:
-            state.phase = AgentPhase.LOADING_CONTEXT
+            await self._start_context_loading(context)
             for extension in self.extensions:
                 await extension.on_message(context)
-            state.phase = AgentPhase.READY
+            await self._finish_context_loading(context)
             await self._notify_before_run(context)
             state.messages.append(user_message)
             await context.publish(MessageAppendedEvent(user_message))
@@ -393,13 +393,14 @@ class Agent:
             for _ in range(self.max_iterations):
                 await self._notify_before_model(context)
                 async for event in self._before_model_events(context):
+                    await self._apply_extension_event_phase(context, event)
                     yield event
                 request = ModelRequest(
                     messages=tuple(state.messages),
                     tools=tuple(tool.definition for tool in self.tools.values()),
                     reasoning_effort=reasoning_effort,
                 )
-                state.phase = AgentPhase.GENERATING
+                await self._start_model_generation(context)
                 yield AgentEvent(
                     AgentEventType.MODEL_STARTED,
                     session_id=config.session_id,
@@ -442,7 +443,7 @@ class Agent:
                     raise AgentProtocolError("Model stream ended without a response")
 
                 state.messages.append(response.message)
-                state.phase = AgentPhase.READY
+                await self._finish_model_generation(context)
                 await context.publish(MessageAppendedEvent(response.message))
                 await self._notify_after_model(context, response)
                 yield AgentEvent(
@@ -455,7 +456,7 @@ class Agent:
                     await self._notify_after_run(context, response.message)
                     for extension in self.extensions:
                         await extension.on_success(context, response.message)
-                    state.phase = AgentPhase.COMPLETED
+                    await self._complete_request(context)
                     yield AgentEvent(
                         AgentEventType.RUN_COMPLETED,
                         session_id=config.session_id,
@@ -468,11 +469,10 @@ class Agent:
                     yield event
             raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
         except (asyncio.CancelledError, GeneratorExit):
-            if state.phase != AgentPhase.COMPLETED:
-                state.phase = AgentPhase.CANCELLED
+            await self._cancel_request(context)
             raise
         except Exception as error:
-            state.phase = AgentPhase.FAILED
+            await self._fail_request(context)
             await self._notify_error(context, error)
             raise
 
@@ -483,7 +483,7 @@ class Agent:
     ) -> AsyncIterator[AgentEvent]:
         for call in calls:
             await self._notify_before_tool(context, call)
-            context.state.phase = AgentPhase.RUNNING_TOOL
+            await self._start_tool_execution(context)
             yield AgentEvent(
                 AgentEventType.TOOL_STARTED,
                 session_id=context.config.session_id,
@@ -509,7 +509,7 @@ class Agent:
             context.state.messages.append(result)
             await context.publish(MessageAppendedEvent(result))
             await self._notify_after_tool(context, call, result)
-            context.state.phase = AgentPhase.READY
+            await self._finish_tool_execution(context)
             yield AgentEvent(
                 AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
                 session_id=context.config.session_id,
@@ -518,6 +518,19 @@ class Agent:
                 message=result,
                 error=error,
             )
+
+    async def _apply_extension_event_phase(self, context: AgentContext, event: AgentEvent) -> None:
+        """Validate and apply phase transitions represented by extension events."""
+        match event.type:
+            case AgentEventType.COMPACTION_STARTED:
+                await self._start_compaction(context)
+            case AgentEventType.COMPACTION_TEXT_DELTA | AgentEventType.COMPACTION_REASONING_DELTA:
+                self._require_phase(context.state, AgentPhase.COMPACTING)
+            case AgentEventType.COMPACTION_COMPLETED:
+                await self._finish_compaction(context)
+            case _:
+                raise AgentProtocolError(f"Extension emitted unsupported pre-model event: {event.type.value!r}")
+        event.phase = context.state.phase
 
     async def _notify_before_run(self, context: AgentContext) -> None:
         for extension in self.extensions:

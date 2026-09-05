@@ -1,9 +1,16 @@
+from __future__ import annotations
+
+from collections.abc import Collection
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING, Protocol
 
-from .extension_events import CompactionEvent
+from .exceptions import AgentProtocolError
 from .messages import AssistantMessage, ToolCall, ToolMessage
 from .model import ModelResponse, ToolCallDelta
+
+if TYPE_CHECKING:
+    from .extension_events import CompactionEvent, ExtensionEvent
 
 
 class AgentEventType(StrEnum):
@@ -27,27 +34,40 @@ class AgentEventType(StrEnum):
 class AgentPhase(StrEnum):
     """Exclusive execution phase of one request-scoped AgentState.
 
-    State transitions::
+    Complete transition diagram::
 
-        +---------+     +-----------------+     +-------+
-        | CREATED | --> | LOADING_CONTEXT | --> | READY |
-        +---------+     +-----------------+     +-------+
-                                                 |   ^
-                              +------------------+   +------------------+
-                              v                                         |
-                       +------------+     +-------+              +------------+
-                       | COMPACTING | --> | READY | ------------>| GENERATING |
-                       +------------+     +-------+              +------------+
-                                                                    |     |
-                                             final answer           |     | tool calls
-                              +-----------+ <-----------------------+     v
-                              | COMPLETED |                    +--------------+
-                              +-----------+                    | RUNNING_TOOL |
-                                                               +--------------+
-                                                                      |
-                                                                      +----> READY
+        +---------+     +-----------------+     +-------+   final answer   +-----------+
+        | CREATED | --> | LOADING_CONTEXT | --> | READY | --------------> | COMPLETED |
+        +---------+     +-----------------+     +---+---+                 +-----------+
+                                                   |
+                         +-------------------------+-------------------------+
+                         | compact                 | generate                | tool call
+                         v                         v                         v
+                  +------------+            +------------+           +--------------+
+                  | COMPACTING |            | GENERATING |           | RUNNING_TOOL |
+                  +------+-----+            +------+-----+           +-------+------+
+                         |                         |                         |
+                         +-------------------------+-------------------------+
+                                                   |
+                                                   | operation completed
+                                                   v
+                                               +-------+
+                                               | READY |
+                                               +-------+
 
-        Any active phase may terminate as FAILED or CANCELLED.
+                                         +------------------+
+                                         | ANY ACTIVE PHASE |
+                                         +----+--------+----+
+                                              |        |
+                                    exception |        | cancellation
+                                              v        v
+                                         +--------+  +-----------+
+                                         | FAILED |  | CANCELLED |
+                                         +--------+  +-----------+
+
+    Active phases are LOADING_CONTEXT, READY, COMPACTING, GENERATING, and
+    RUNNING_TOOL. COMPLETED, FAILED, and CANCELLED are terminal for the current
+    request. A later request receives a fresh AgentState beginning at CREATED.
     """
 
     CREATED = "created"
@@ -68,6 +88,99 @@ class AgentPhase(StrEnum):
                 return True
             case _:
                 return False
+
+
+class PhaseState(Protocol):
+    """Minimal mutable state required by phase transitions."""
+
+    phase: AgentPhase
+
+
+class PhaseContext(Protocol):
+    """Context operations required to transition and publish a phase."""
+
+    state: PhaseState
+
+    async def publish(self, event: ExtensionEvent) -> None:
+        """Publish one extension event."""
+
+
+class AgentPhaseTransitionMixin:
+    """Own and validate every transition in the Agent request state machine."""
+
+    _ACTIVE_PHASES = frozenset(
+        {
+            AgentPhase.LOADING_CONTEXT,
+            AgentPhase.READY,
+            AgentPhase.COMPACTING,
+            AgentPhase.GENERATING,
+            AgentPhase.RUNNING_TOOL,
+        }
+    )
+
+    @staticmethod
+    async def _transition_phase(
+        context: PhaseContext,
+        target: AgentPhase,
+        *,
+        expected: Collection[AgentPhase],
+    ) -> None:
+        """Validate, apply, and publish one phase transition."""
+        from .extension_events import PhaseTransitionEvent
+
+        state = context.state
+        if state.phase not in expected:
+            allowed = ", ".join(sorted(phase.value for phase in expected))
+            raise AgentProtocolError(
+                f"Invalid agent phase transition from {state.phase.value!r} to {target.value!r}; "
+                f"expected one of: {allowed}"
+            )
+        previous = state.phase
+        state.phase = target
+        await context.publish(PhaseTransitionEvent(previous_phase=previous, current_phase=target))
+
+    async def _start_context_loading(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.LOADING_CONTEXT, expected=(AgentPhase.CREATED,))
+
+    async def _finish_context_loading(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.LOADING_CONTEXT,))
+
+    async def _start_compaction(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.COMPACTING, expected=(AgentPhase.READY,))
+
+    async def _finish_compaction(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.COMPACTING,))
+
+    async def _start_model_generation(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.GENERATING, expected=(AgentPhase.READY,))
+
+    async def _finish_model_generation(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.GENERATING,))
+
+    async def _start_tool_execution(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.RUNNING_TOOL, expected=(AgentPhase.READY,))
+
+    async def _finish_tool_execution(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.READY, expected=(AgentPhase.RUNNING_TOOL,))
+
+    async def _complete_request(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.COMPLETED, expected=(AgentPhase.READY,))
+
+    async def _fail_request(self, context: PhaseContext) -> None:
+        await self._transition_phase(context, AgentPhase.FAILED, expected=self._ACTIVE_PHASES)
+
+    async def _cancel_request(self, context: PhaseContext) -> None:
+        """Cancel an active request while preserving an already completed state."""
+        state = context.state
+        if state.phase == AgentPhase.COMPLETED:
+            return
+        await self._transition_phase(context, AgentPhase.CANCELLED, expected=self._ACTIVE_PHASES)
+
+    @staticmethod
+    def _require_phase(state: PhaseState, expected: AgentPhase) -> None:
+        """Reject an event emitted outside the phase in which it is valid."""
+        if state.phase != expected:
+            raise AgentProtocolError(f"Agent phase must be {expected.value!r}, found {state.phase.value!r}")
 
 
 @dataclass(slots=True)

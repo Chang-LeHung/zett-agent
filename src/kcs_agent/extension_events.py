@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from .events import AgentPhase
 from .messages import AnyMessage
 
 
@@ -13,6 +14,18 @@ class MessageAppendedEvent(ExtensionEvent):
     """One newly produced raw message; restoration and compaction do not emit it."""
 
     message: AnyMessage
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseTransitionEvent(ExtensionEvent):
+    """One validated request-state transition published after the phase changes.
+
+    ``context.state.phase`` already equals ``current_phase`` while subscribers
+    process this event. Rejected transitions never publish an event.
+    """
+
+    previous_phase: AgentPhase
+    current_phase: AgentPhase
 
 
 @dataclass(frozen=True, slots=True)

@@ -140,9 +140,7 @@ async def test_configured_request_id_is_persisted(storage):
         extensions=[SessionPersistenceExtension(storage)],
     )
     await agent.run("Hello")
-    assert {record.request_id for record in storage.list_raw_messages("test-session")} == {
-        "request-from-application"
-    }
+    assert {record.request_id for record in storage.list_raw_messages("test-session")} == {"request-from-application"}
 
 
 async def test_compaction_snapshot_keeps_raw_log_and_restores_checkpoint(storage):

@@ -168,9 +168,7 @@ class SQLiteSessionStorage:
             )
             if through_sequence is not None:
                 statement = statement.where(RawLogMessageModel.sequence <= through_sequence)
-            rows = session.scalars(
-                statement.order_by(RawLogMessageModel.sequence).offset(offset).limit(limit)
-            )
+            rows = session.scalars(statement.order_by(RawLogMessageModel.sequence).offset(offset).limit(limit))
             return [self._record(row) for row in rows]
 
     def list_sessions(self, *, limit: int = 100) -> list[SessionSummary]:

@@ -409,7 +409,7 @@ async def run_shell(
     """
     if not command.strip():
         raise ValueError("Shell command cannot be blank")
-    working_directory, output_root = _resolve_working_path(".kcs-tool-output")
+    working_directory, output_root = _resolve_working_path(".zett-tool-output")
     output_root.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="shell-", dir=output_root))
     stdout_file, stderr_file = directory / "stdout.txt", directory / "stderr.txt"

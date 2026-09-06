@@ -7,8 +7,8 @@ import sys
 
 import pytest
 
-from kcs_agent import glob, grep, read_file, run_shell
-from kcs_agent.tools import output as tool_output
+from zett_agent import glob, grep, read_file, run_shell
+from zett_agent.tools import output as tool_output
 
 
 @pytest.mark.parametrize("text", ["", "abc", "\u4e2d\u6587" * 4000, "row\n" * 4000])
@@ -27,7 +27,7 @@ def test_shell_preview_respects_both_budgets(tmp_path, text):
 
 async def test_long_unicode_line_can_be_read_without_losing_characters(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    module = importlib.import_module("kcs_agent.tools.coding")
+    module = importlib.import_module("zett_agent.tools.coding")
     monkeypatch.setattr(module, "MAX_OUTPUT_BYTES", 101)
     text = "\u4e2d\u6587" * 120 + "\nsecond\nthird\n"
     (tmp_path / "long.txt").write_text(text, encoding="utf-8")
@@ -64,7 +64,7 @@ async def test_read_large_file_and_out_of_range_cursor(tmp_path, monkeypatch):
 
 async def test_search_caps_output_and_preserves_distant_match(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    module = importlib.import_module("kcs_agent.tools.coding")
+    module = importlib.import_module("zett_agent.tools.coding")
     (tmp_path / "long.txt").write_text("x" * 10000 + "TARGET" + "y" * 10000)
     result = await grep({"pattern": "TARGET"})
     match = result.matches[0]

@@ -15,7 +15,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.patch_stdout import patch_stdout
 
-from kcs_agent import (
+from zett_agent import (
     Agent,
     AgentConfig,
     AgentEvent,
@@ -63,31 +63,31 @@ use tools to verify mutable state when accuracy matters."""
 
 def parse_args() -> argparse.Namespace:
     """Parse the small set of options needed by the example."""
-    parser = argparse.ArgumentParser(description="Run the persistent KCS coding agent")
+    parser = argparse.ArgumentParser(description="Run the persistent Zett coding agent")
     parser.add_argument("--session", help="Session ID to restore; defaults to the latest session")
-    parser.add_argument("--model", default=os.getenv("KCS_AGENT_MODEL", "deepseek-v4-flash"))
+    parser.add_argument("--model", default=os.getenv("ZETT_AGENT_MODEL", "deepseek-v4-flash"))
     parser.add_argument(
         "--database",
         type=Path,
-        default=Path.home() / ".kcs-agent" / "coding-agent.sqlite3",
+        default=Path.home() / ".zett-agent" / "coding-agent.sqlite3",
         help="SQLite history database",
     )
     parser.add_argument(
         "--compaction-max-tokens",
         type=int,
-        default=int(os.getenv("KCS_COMPACTION_MAX_TOKENS", "128000")),
+        default=int(os.getenv("ZETT_COMPACTION_MAX_TOKENS", "128000")),
         help="Compact before a model call when context exceeds this token estimate",
     )
     parser.add_argument(
         "--compaction-keep-tokens",
         type=int,
-        default=int(os.getenv("KCS_COMPACTION_KEEP_TOKENS", "32000")),
+        default=int(os.getenv("ZETT_COMPACTION_KEEP_TOKENS", "32000")),
         help="Minimum recent-token budget retained without summarization",
     )
     parser.add_argument(
         "--compaction-reasoning-effort",
         choices=[effort.value for effort in ReasoningEffort],
-        default=os.getenv("KCS_COMPACTION_REASONING_EFFORT", ReasoningEffort.LOW.value),
+        default=os.getenv("ZETT_COMPACTION_REASONING_EFFORT", ReasoningEffort.LOW.value),
         help="Reasoning effort used by the compaction model",
     )
     args = parser.parse_args()
@@ -293,7 +293,7 @@ async def main() -> None:
         config=AgentConfig(session_id=session_id),
     )
 
-    print(f"KCS Coding Agent | cwd={Path.cwd()} | session={session_id}")
+    print(f"Zett Coding Agent | cwd={Path.cwd()} | session={session_id}")
     print(
         f"Compaction | trigger>{args.compaction_max_tokens} tokens | "
         f"keep>={args.compaction_keep_tokens} recent tokens | reasoning={args.compaction_reasoning_effort}"

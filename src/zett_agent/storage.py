@@ -27,7 +27,7 @@ from .persistence import (
 
 
 class Base(DeclarativeBase):
-    """Schema owned exclusively by kcs-agent."""
+    """Schema owned exclusively by zett-agent."""
 
 
 class AgentSessionModel(Base):
@@ -175,7 +175,7 @@ def _decode_context_data(payload: str, *, field_name: str, nonempty_keys: bool =
 
 
 class SQLiteSessionStorage:
-    """Standalone SQLite session storage shipped with kcs-agent.
+    """Standalone SQLite session storage shipped with zett-agent.
 
     The first append creates session identity and history. Root sessions store
     no parent; delegated sessions store a plain parent ID without a foreign key.
@@ -183,13 +183,13 @@ class SQLiteSessionStorage:
     compaction creates snapshots.
 
     Example:
-        storage = SQLiteSessionStorage(Path.home() / ".kcs-agent" / "sessions.sqlite3")
+        storage = SQLiteSessionStorage(Path.home() / ".zett-agent" / "sessions.sqlite3")
         # Register SessionPersistenceExtension(storage), then close when finished.
         storage.close()
     """
 
     def __init__(self, path: str | Path | None = None) -> None:
-        self.path = Path(path) if path is not None else Path.home() / ".kcs-agent" / "sessions.sqlite3"
+        self.path = Path(path) if path is not None else Path.home() / ".zett-agent" / "sessions.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.engine = create_engine(URL.create("sqlite", database=str(self.path)))
         Base.metadata.create_all(self.engine)

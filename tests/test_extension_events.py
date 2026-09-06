@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     AgentConfig,
     AgentContext,
     AgentExtension,
@@ -14,7 +14,7 @@ from kcs_agent import (
     SystemMessage,
     UserMessage,
 )
-from kcs_agent.compaction import CompactedMessage
+from zett_agent.compaction import CompactedMessage
 
 
 async def test_context_appends_message_before_publishing_its_event():

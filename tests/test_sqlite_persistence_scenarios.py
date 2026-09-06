@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from kcs_agent import (
+from zett_agent import (
     Agent,
     AgentConfig,
     AgentExtension,
@@ -21,8 +21,8 @@ from kcs_agent import (
     UserMessage,
     tool,
 )
-from kcs_agent.compaction import CompactedMessage
-from kcs_agent.storage import AgentSessionModel, ContextSnapshotModel, MessageKind, RawLogMessageModel
+from zett_agent.compaction import CompactedMessage
+from zett_agent.storage import AgentSessionModel, ContextSnapshotModel, MessageKind, RawLogMessageModel
 
 
 class AnswerModel:

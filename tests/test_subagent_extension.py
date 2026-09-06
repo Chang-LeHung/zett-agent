@@ -7,7 +7,7 @@ from uuid import UUID
 
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     Agent,
     AgentConfig,
     AgentExtension,
@@ -75,7 +75,7 @@ class DelegatingModel:
             "",
         )
         if system.startswith("You are a read-only code exploration subagent"):
-            message = AssistantMessage(content="Found the storage boundary in src/kcs_agent/storage.py")
+            message = AssistantMessage(content="Found the storage boundary in src/zett_agent/storage.py")
         elif system.startswith("You are a reasoning subagent"):
             message = AssistantMessage(content="Prefer the smaller design because it has fewer states")
         elif system.startswith("You are a custom subagent"):
@@ -138,7 +138,7 @@ async def test_explore_subagent_runs_end_to_end_in_a_persisted_child_session(sto
         "session_id": child_session_id,
         "parent_session_id": "parent-session",
         "subagent_type": "explore",
-        "content": "Found the storage boundary in src/kcs_agent/storage.py",
+        "content": "Found the storage boundary in src/zett_agent/storage.py",
     }
 
     subagent_storage = child_storage(definitions)
@@ -148,7 +148,7 @@ async def test_explore_subagent_runs_end_to_end_in_a_persisted_child_session(sto
     assert child_view.agent_name is None
     assert [record.message.content for record in child_view.raw_tail] == [
         "Find the session storage boundary and return one relevant path.",
-        "Found the storage boundary in src/kcs_agent/storage.py",
+        "Found the storage boundary in src/zett_agent/storage.py",
     ]
     parent_summary = storage.list_sessions()[0]
     assert parent_summary.session_id == "parent-session"
@@ -303,7 +303,7 @@ def test_subagent_extension_requires_unique_nonempty_definitions(storage):
 async def test_default_subagents_do_not_require_parent_persistence(builtins, monkeypatch):
     model = DelegatingModel()
     definitions = builtins(model)
-    monkeypatch.setattr("kcs_agent.subagents.default_subagents", lambda resolved_model: definitions)
+    monkeypatch.setattr("zett_agent.subagents.default_subagents", lambda resolved_model: definitions)
     agent = await Agent.create(
         model,
         config=AgentConfig("parent"),

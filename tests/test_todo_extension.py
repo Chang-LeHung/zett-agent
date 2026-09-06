@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     TODO_WRITE_TOOL_NAME,
     Agent,
     AgentConfig,

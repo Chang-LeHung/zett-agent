@@ -678,7 +678,7 @@ wheels = [
 ]
 
 [[package]]
-name = "kcs-agent"
+name = "zett-agent"
 version = "0.2.0.dev0"
 source = { editable = "." }
 dependencies = [

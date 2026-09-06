@@ -2,7 +2,7 @@
 
 import asyncio
 
-from kcs_agent import (
+from zett_agent import (
     Agent,
     AgentConfig,
     AssistantMessage,

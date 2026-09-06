@@ -1,5 +1,5 @@
 [project]
-name = "kcs-agent"
+name = "zett-agent"
 version = "0.2.0.dev0"
 description = "A small readable model and tool loop"
 readme = "README.md"
@@ -38,7 +38,7 @@ build-backend = "hatchling.build"
 Repository = "https://github.com/Chang-LeHung/knowledge-cards-system"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/kcs_agent"]
+packages = ["src/zett_agent"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/src", "/README.md", "/LICENSE", "/pyproject.toml"]
@@ -56,7 +56,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["kcs_agent"]
+source = ["zett_agent"]
 branch = true
 
 [tool.coverage.report]
@@ -73,7 +73,7 @@ select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["kcs_agent"]
+known-first-party = ["zett_agent"]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -2,7 +2,7 @@
 
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     Agent,
     AgentConfig,
     AgentEvent,

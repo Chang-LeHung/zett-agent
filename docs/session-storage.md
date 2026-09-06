@@ -5,7 +5,7 @@ the SQLite storage and restores history before every request. The lower-level
 `SessionPersistenceExtension(storage)` remains available for custom storage.
 
 ```python
-from kcs_agent import SQLiteSessionExtension
+from zett_agent import SQLiteSessionExtension
 
 history = SQLiteSessionExtension()
 agent = await Agent.create(model, config=AgentConfig(session_id=session_id), extensions=[
@@ -17,7 +17,7 @@ await agent.run("Hello")
 history.close()
 ```
 
-Storage defaults to `~/.kcs-agent/sessions.sqlite3`. Pass an explicit filesystem
+Storage defaults to `~/.zett-agent/sessions.sqlite3`. Pass an explicit filesystem
 path to select another database. No application session table is required; the
 first message starts its session log. Register persistence before extensions
 that compact or modify request context.
@@ -70,7 +70,7 @@ Restore `snapshot.messages_json` followed by raw entries with
 raw-log positions. Raw messages and snapshots retain their complete typed runtime
 envelopes. `list_raw_messages()` exposes typed, paginated Raw Log records for history UIs and
 auditing. `delete_session()` explicitly removes both table ranges for a session.
-Storage can be closed and reopened without depending on a KCS process.
+Storage can be closed and reopened without depending on a Zett process.
 
-Tests use temporary SQLite databases. Existing KCS application data is not
+Tests use temporary SQLite databases. Existing Zett application data is not
 migrated or deleted. Raw assistant messages are emitted on complete model responses.

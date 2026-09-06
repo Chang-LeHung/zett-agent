@@ -8,7 +8,7 @@ import httpx
 import pytest
 import truststore
 
-from kcs_agent import (
+from zett_agent import (
     Agent,
     AgentConfig,
     AgentEventType,
@@ -25,8 +25,8 @@ from kcs_agent import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("KCS_AGENT_LIVE_TESTS") != "1" or not os.getenv("DEEPSEEK_API"),
-    reason="Set KCS_AGENT_LIVE_TESTS=1 and DEEPSEEK_API to run live provider checks",
+    os.getenv("ZETT_AGENT_LIVE_TESTS") != "1" or not os.getenv("DEEPSEEK_API"),
+    reason="Set ZETT_AGENT_LIVE_TESTS=1 and DEEPSEEK_API to run live provider checks",
 )
 
 

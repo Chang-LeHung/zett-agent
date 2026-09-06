@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
@@ -28,8 +28,8 @@ from kcs_agent import (
     ToolMessage,
     UserMessage,
 )
-from kcs_agent.model import ModelRequest
-from kcs_agent.providers import (
+from zett_agent.model import ModelRequest
+from zett_agent.providers import (
     AnthropicProvider,
     DeepSeekProvider,
     GoogleProvider,

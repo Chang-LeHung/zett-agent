@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     AnthropicProvider,
     AssistantMessage,
     DeepSeekProvider,
@@ -26,9 +26,9 @@ from kcs_agent import (
     ToolMessage,
     UserMessage,
 )
-from kcs_agent.model import ModelEvent
-from kcs_agent.providers.anthropic import _to_anthropic_image_block
-from kcs_agent.providers.base import (
+from zett_agent.model import ModelEvent
+from zett_agent.providers.anthropic import _to_anthropic_image_block
+from zett_agent.providers.base import (
     _normalize_image_source,
     _parse_tool_calls,
     _reasoning_effort_to_budget,

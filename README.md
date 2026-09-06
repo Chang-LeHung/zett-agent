@@ -1,4 +1,4 @@
-# KCS Agent
+# Zett Agent
 
 A small Python model/tool loop. Python 3.12+, MIT licensed.
 
@@ -38,7 +38,7 @@ A real provider uses the same interface:
 import asyncio
 import os
 
-from kcs_agent import Agent, AgentConfig, AgentState, AssistantMessage, DeepSeekProvider, UserMessage, tool
+from zett_agent import Agent, AgentConfig, AgentState, AssistantMessage, DeepSeekProvider, UserMessage, tool
 
 
 @tool
@@ -233,7 +233,7 @@ concurrent tool batch without another field-shape change.
 Use `CompactionExtension` to summarize older context before a model call:
 
 ```python
-from kcs_agent import CompactionExtension
+from zett_agent import CompactionExtension
 
 agent = await Agent.create(
     model,
@@ -328,7 +328,7 @@ directory:
 commands cannot be classified as read-only at the extension boundary.
 
 ```python
-from kcs_agent import (
+from zett_agent import (
     Agent,
     AgentConfig,
     glob,
@@ -373,7 +373,7 @@ Tool output uses bounded previews:
   These are byte/line limits, not token limits, and JSON encoding adds overhead.
 
 If either shell preview truncates, both original streams are retained under
-`.kcs-tool-output/shell-*/` in the working directory. Use `read_file` with
+`.zett-tool-output/shell-*/` in the working directory. Use `read_file` with
 `stdout_path` or `stderr_path` to inspect omitted content. Untruncated command
 files are removed; retained logs require manual cleanup and have no disk quota.
 Stdout/stderr ordering across streams is not reconstructed. On POSIX, timeout
@@ -388,7 +388,7 @@ matter; the full saved output is necessary when the root cause lies in between.
 `ToolGuidelinesExtension` groups all snippets before all guidelines and appends
 both sections to the system instructions.
 
-Tool code is organized under `kcs_agent/tools/`: `base.py` defines `AgentTool`,
+Tool code is organized under `zett_agent/tools/`: `base.py` defines `AgentTool`,
 the `@tool` decorator, schema generation, and prompt guidance; `coding.py`
 contains the local coding tools; `output.py` owns bounded preview behavior.
 The package `__init__.py` exposes the stable public tool API.
@@ -581,12 +581,12 @@ Run the minimal terminal coding agent from the directory it should work in:
 
 ```bash
 export DEEPSEEK_API="..."
-uv run --project /path/to/kcs-agent python /path/to/kcs-agent/examples/coding_agent.py
+uv run --project /path/to/zett-agent python /path/to/zett-agent/examples/coding_agent.py
 ```
 
 It registers `glob`, `grep`, `read_file`, `write_file`, `replace_in_file`, and
 `run_shell`. Conversation history is stored in
-`~/.kcs-agent/coding-agent.sqlite3`; restarting the example restores the most
+`~/.zett-agent/coding-agent.sqlite3`; restarting the example restores the most
 recent session. Use `/sessions` to list sessions, `/history` to inspect the
 active history, `/new` to start another session, and `/use <session-id>` to
 switch sessions. The prompt editor supports Unicode and bracketed paste. Tab
@@ -638,5 +638,5 @@ uv run ruff format --check src tests examples
 Live checks are opt-in and use `DEEPSEEK_API`:
 
 ```bash
-KCS_AGENT_LIVE_TESTS=1 uv run pytest tests/test_live_providers.py
+ZETT_AGENT_LIVE_TESTS=1 uv run pytest tests/test_live_providers.py
 ```

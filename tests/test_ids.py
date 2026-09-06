@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from kcs_agent.ids import new_uuid7
+from zett_agent.ids import new_uuid7
 
 
 def test_new_uuid7_returns_time_ordered_version_seven_ids():

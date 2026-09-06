@@ -1,7 +1,7 @@
 import runpy
 from pathlib import Path
 
-from kcs_agent import AgentEvent, AgentEventType
+from zett_agent import AgentEvent, AgentEventType
 
 
 def test_each_compaction_cycle_prints_its_own_reasoning_and_summary_labels(capsys):

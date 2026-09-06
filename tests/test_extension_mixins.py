@@ -1,6 +1,6 @@
 """Public extension hook groups remain small, disjoint, and composable."""
 
-from kcs_agent import (
+from zett_agent import (
     AgentEventHooksMixin,
     AgentExtension,
     AgentModelHooksMixin,

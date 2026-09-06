@@ -5,7 +5,7 @@ import json
 
 import httpx
 
-from kcs_agent import (
+from zett_agent import (
     AssistantMessage,
     DeepSeekProvider,
     ImageContent,
@@ -19,7 +19,7 @@ from kcs_agent import (
     ToolMessage,
     UserMessage,
 )
-from kcs_agent.providers import _message_to_openai_payload, _to_anthropic_content_blocks, _usage_from_mapping
+from zett_agent.providers import _message_to_openai_payload, _to_anthropic_content_blocks, _usage_from_mapping
 
 
 def test_tool_arguments_are_serializable_in_both_protocols() -> None:

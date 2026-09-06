@@ -1,6 +1,6 @@
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     Agent,
     AgentConfig,
     AgentContext,
@@ -21,7 +21,7 @@ from kcs_agent import (
     ToolMessage,
     UserMessage,
 )
-from kcs_agent.compaction import CompactedMessage
+from zett_agent.compaction import CompactedMessage
 
 
 class SummaryModel:

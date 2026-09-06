@@ -3,7 +3,7 @@ from typing import Annotated
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
-from kcs_agent import render_tool_guidance, tool
+from zett_agent import render_tool_guidance, tool
 
 
 class Item(BaseModel):
@@ -137,11 +137,11 @@ def test_tool_docstring_rejects_unknown_argument_documentation():
 
 
 def test_decorator_metadata_can_explicitly_override_docstring_metadata():
-    @tool(name="lookup", snippet='lookup(query="kcs")', guidelines=["First rule.", "Second rule."])
+    @tool(name="lookup", snippet='lookup(query="zett")', guidelines=["First rule.", "Second rule."])
     def search(query: str) -> str:
         """Search content."""
         return query
 
     assert search.name == "lookup"
-    assert search.snippet == 'lookup(query="kcs")'
+    assert search.snippet == 'lookup(query="zett")'
     assert search.guidelines == ("First rule.", "Second rule.")

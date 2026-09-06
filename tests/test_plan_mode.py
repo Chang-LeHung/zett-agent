@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     ENTER_PLAN_MODE_EVENT_NAME,
     ENTER_PLAN_MODE_RESPONSE_EVENT_NAME,
     ENTER_PLAN_MODE_TOOL_NAME,

@@ -28,7 +28,7 @@ print(reply.content)
 - Extensions can modify messages at explicit lifecycle hooks.
 - Extensions own history restoration, compaction, and optional persistence.
 
-Streaming events make the existing KCS UI work. Provider adapters handle vendor
+Streaming events make the existing Zett UI work. Provider adapters handle vendor
 protocols, including signed thinking blocks needed to replay tool calls.
 
 There is no generic state container, checkpoint system, version lock, or

@@ -7,7 +7,7 @@ from time import monotonic_ns
 
 import pytest
 
-from kcs_agent import (
+from zett_agent import (
     ASK_USER_RESPONSE_EVENT_NAME,
     Agent,
     AgentConfig,

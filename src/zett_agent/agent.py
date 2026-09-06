@@ -7,9 +7,9 @@ from typing import Self, overload
 
 from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
 from .exceptions import AgentIterationLimitError, AgentProtocolError
-from .extension_events import ExtensionEvent, MessageAppendedEvent, MessageTiming
-from .extension_hooks import AgentExtension
-from .external_events import ExternalEvent
+from .extensions.base import AgentExtension
+from .extensions.events import ExtensionEvent, MessageAppendedEvent, MessageTiming
+from .extensions.external import ExternalEvent
 from .json_types import JsonValue, json_object
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
@@ -134,7 +134,8 @@ class Agent(AgentPhaseTransitionMixin):
                 reasoning_effort=ReasoningEffort.HIGH,
             )
         """
-        from .extensions import InMemoryMessageAccumulator, ToolGuidelinesExtension
+        from .extensions.memory import InMemoryMessageAccumulator
+        from .extensions.tool_guidelines import ToolGuidelinesExtension
 
         if max_iterations < 1:
             raise ValueError("max_iterations must be positive")

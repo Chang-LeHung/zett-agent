@@ -7,10 +7,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .agent import AgentContext
-from .extension_hooks import AgentExtension
-from .messages import SystemMessage
-from .tools import AgentTool, tool
+from ..agent import AgentContext
+from ..messages import SystemMessage
+from ..tools import AgentTool, tool
+from .base import AgentExtension
 
 SKILL_FILE_NAME = "SKILL.md"
 READ_SKILL_TOOL_NAME = "read_skill"

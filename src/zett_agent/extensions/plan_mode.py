@@ -6,14 +6,15 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
-from .agent import AgentContext
-from .events import AgentEvent, AgentEventType
-from .exceptions import AgentProtocolError
-from .extension_events import ExtensionEvent, RunCancelledEvent
-from .extensions import FileSystemExtension, ToolGuidelinesExtension
-from .external_events import ExternalEventExtension
-from .messages import AssistantMessage, SystemMessage, ToolCall
-from .tools import AgentTool, render_tool_guidance, run_shell, tool
+from ..agent import AgentContext
+from ..events import AgentEvent, AgentEventType
+from ..exceptions import AgentProtocolError
+from ..messages import AssistantMessage, SystemMessage, ToolCall
+from ..tools import AgentTool, render_tool_guidance, run_shell, tool
+from .events import ExtensionEvent, RunCancelledEvent
+from .external import ExternalEventExtension
+from .file_system import FileSystemExtension
+from .tool_guidelines import ToolGuidelinesExtension
 
 ENTER_PLAN_MODE_TOOL_NAME = "enter_plan_mode"
 ENTER_PLAN_MODE_EVENT_NAME = "enter_plan_mode"

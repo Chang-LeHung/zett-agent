@@ -11,11 +11,11 @@ from typing import Any, Protocol
 from mcp import Client, StdioServerParameters
 from mcp_types import CallToolResult, ListToolsResult, Tool
 
-from .agent import AgentContext
-from .extension_events import ExtensionEvent, RunCancelledEvent
-from .extension_hooks import AgentExtension
-from .messages import AssistantMessage
-from .tools import AgentTool
+from ..agent import AgentContext
+from ..messages import AssistantMessage
+from ..tools import AgentTool
+from .base import AgentExtension
+from .events import ExtensionEvent, RunCancelledEvent
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,7 +14,7 @@ from zett_agent import (
     SystemMessage,
     UserMessage,
 )
-from zett_agent.compaction import CompactedMessage
+from zett_agent.extensions.compaction import CompactedMessage
 
 
 async def test_context_appends_message_before_publishing_its_event():

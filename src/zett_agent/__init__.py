@@ -4,16 +4,6 @@ from .agent import (
     AgentContext,
     AgentState,
 )
-from .ask_user import (
-    ASK_USER_EVENT_NAME,
-    ASK_USER_RESPONSE_EVENT_NAME,
-    ASK_USER_TOOL_NAME,
-    AskUserEvent,
-    AskUserExtension,
-    AskUserRequest,
-    AskUserResult,
-)
-from .compaction import CompactionExtension
 from .events import (
     AgentEvent,
     AgentEventType,
@@ -26,36 +16,90 @@ from .exceptions import (
     AgentIterationLimitError,
     AgentProtocolError,
 )
-from .extension_events import (
-    CompactionEvent,
-    ContentCompletedEvent,
-    ContentStartedEvent,
-    ExtensionEvent,
-    MessageAppendedEvent,
-    MessageTiming,
-    PhaseTransitionEvent,
-    ReasoningCompletedEvent,
-    ReasoningStartedEvent,
-    RunCancelledEvent,
-)
-from .extension_hooks import (
+from .extensions.exports import (
+    ASK_USER_EVENT_NAME,
+    ASK_USER_RESPONSE_EVENT_NAME,
+    ASK_USER_TOOL_NAME,
+    DEFAULT_SKILL_ROOTS,
+    ENTER_PLAN_MODE_EVENT_NAME,
+    ENTER_PLAN_MODE_RESPONSE_EVENT_NAME,
+    ENTER_PLAN_MODE_TOOL_NAME,
+    EXIT_PLAN_MODE_EVENT_NAME,
+    EXIT_PLAN_MODE_RESPONSE_EVENT_NAME,
+    EXIT_PLAN_MODE_TOOL_NAME,
+    PLAN_MODE_ENTERED_EVENT_NAME,
+    PLAN_MODE_EXITED_EVENT_NAME,
+    PLAN_MODE_SYSTEM_PROMPT,
+    READ_SKILL_TOOL_NAME,
+    SKILL_FILE_NAME,
+    TASK_TOOL_NAME,
+    TODO_WRITE_TOOL_NAME,
     AgentEventHooksMixin,
     AgentExtension,
     AgentModelHooksMixin,
     AgentRunHooksMixin,
     AgentSetupHooksMixin,
     AgentToolHooksMixin,
-)
-from .extensions import (
+    AskUserEvent,
+    AskUserExtension,
+    AskUserRequest,
+    AskUserResult,
+    BaseSessionPersistenceExtension,
     CodingExtension,
+    CompactionEvent,
+    CompactionExtension,
+    ContentCompletedEvent,
+    ContentStartedEvent,
+    ContextSnapshot,
+    EnterPlanModeEvent,
+    EnterPlanModeRequest,
+    EnterPlanModeResponse,
+    EnterPlanModeResult,
+    ExitPlanModeEvent,
+    ExitPlanModeRequest,
+    ExitPlanModeResponse,
+    ExitPlanModeResult,
+    ExtensionEvent,
+    ExternalEvent,
+    ExternalEventExtension,
     FileSystemExtension,
     InMemoryMessageAccumulator,
+    McpClient,
+    McpClientFactory,
+    McpExtension,
+    McpHttpServer,
+    McpServer,
+    McpStdioServer,
+    MessageAppendedEvent,
+    MessageTiming,
+    PhaseTransitionEvent,
+    PlanModeEnteredEvent,
+    PlanModeExitedEvent,
+    PlanModeExtension,
+    RawMessageRecord,
+    ReasoningCompletedEvent,
+    ReasoningStartedEvent,
+    RunCancelledEvent,
+    SessionPersistenceExtension,
+    SessionStorage,
+    SessionSummary,
+    SessionView,
+    SkillDefinition,
+    SkillExtension,
+    SkillFileParser,
+    SQLiteSessionExtension,
+    SubAgentDefinition,
+    SubAgentExtension,
+    SubAgentResult,
+    TodoItem,
+    TodoStatus,
+    TodoWriteExtension,
+    TodoWriteResult,
     ToolGuidelinesExtension,
+    default_subagents,
 )
-from .external_events import ExternalEvent, ExternalEventExtension
 from .ids import new_uuid7
 from .json_types import JsonValue
-from .mcp import McpClient, McpClientFactory, McpExtension, McpHttpServer, McpServer, McpStdioServer
 from .messages import (
     AnyMessage,
     AssistantMessage,
@@ -85,37 +129,6 @@ from .model import (
     ToolCallDelta,
     ToolDefinition,
 )
-from .persistence import (
-    BaseSessionPersistenceExtension,
-    ContextSnapshot,
-    RawMessageRecord,
-    SessionPersistenceExtension,
-    SessionStorage,
-    SessionSummary,
-    SessionView,
-)
-from .plan_mode import (
-    ENTER_PLAN_MODE_EVENT_NAME,
-    ENTER_PLAN_MODE_RESPONSE_EVENT_NAME,
-    ENTER_PLAN_MODE_TOOL_NAME,
-    EXIT_PLAN_MODE_EVENT_NAME,
-    EXIT_PLAN_MODE_RESPONSE_EVENT_NAME,
-    EXIT_PLAN_MODE_TOOL_NAME,
-    PLAN_MODE_ENTERED_EVENT_NAME,
-    PLAN_MODE_EXITED_EVENT_NAME,
-    PLAN_MODE_SYSTEM_PROMPT,
-    EnterPlanModeEvent,
-    EnterPlanModeRequest,
-    EnterPlanModeResponse,
-    EnterPlanModeResult,
-    ExitPlanModeEvent,
-    ExitPlanModeRequest,
-    ExitPlanModeResponse,
-    ExitPlanModeResult,
-    PlanModeEnteredEvent,
-    PlanModeExitedEvent,
-    PlanModeExtension,
-)
 from .providers import (
     AnthropicProvider,
     DeepSeekProvider,
@@ -126,29 +139,7 @@ from .providers import (
     ProviderError,
     ProviderResponseError,
 )
-from .skills import (
-    DEFAULT_SKILL_ROOTS,
-    READ_SKILL_TOOL_NAME,
-    SKILL_FILE_NAME,
-    SkillDefinition,
-    SkillExtension,
-    SkillFileParser,
-)
-from .storage import SQLiteSessionExtension, SQLiteSessionStorage
-from .subagents import (
-    TASK_TOOL_NAME,
-    SubAgentDefinition,
-    SubAgentExtension,
-    SubAgentResult,
-    default_subagents,
-)
-from .todo import (
-    TODO_WRITE_TOOL_NAME,
-    TodoItem,
-    TodoStatus,
-    TodoWriteExtension,
-    TodoWriteResult,
-)
+from .storage import SQLiteSessionStorage
 from .tools import (
     AgentTool,
     GlobResult,

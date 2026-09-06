@@ -7,11 +7,11 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .agent import AgentContext
-from .events import AgentEvent, AgentEventType
-from .external_events import ExternalEventExtension
-from .messages import ToolCall
-from .tools import AgentTool, tool
+from ..agent import AgentContext
+from ..events import AgentEvent, AgentEventType
+from ..messages import ToolCall
+from ..tools import AgentTool, tool
+from .external import ExternalEventExtension
 
 ASK_USER_TOOL_NAME = "ask_user"
 ASK_USER_EVENT_NAME = "ask_user"

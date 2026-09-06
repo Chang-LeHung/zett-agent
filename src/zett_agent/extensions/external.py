@@ -9,11 +9,11 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
-from .extension_events import ExtensionEvent, RunCancelledEvent
-from .extension_hooks import AgentExtension
+from .base import AgentExtension
+from .events import ExtensionEvent, RunCancelledEvent
 
 if TYPE_CHECKING:
-    from .agent import AgentContext
+    from ..agent import AgentContext
 
 
 @dataclass(frozen=True, slots=True)

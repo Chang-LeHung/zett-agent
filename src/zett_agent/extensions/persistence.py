@@ -6,13 +6,13 @@ from weakref import WeakKeyDictionary
 
 from pydantic import BaseModel, Field
 
-from .agent import AgentContext
+from ..agent import AgentContext
+from ..ids import new_uuid7
+from ..json_types import JsonValue
+from ..messages import AnyMessage, AssistantMessage, SystemMessage
+from .base import AgentExtension
 from .compaction import CompactedMessage
-from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, MessageTiming
-from .extension_hooks import AgentExtension
-from .ids import new_uuid7
-from .json_types import JsonValue
-from .messages import AnyMessage, AssistantMessage, SystemMessage
+from .events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, MessageTiming
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,12 +295,3 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
     async def on_error(self, context: AgentContext, error: Exception) -> None:
         """Release bookkeeping; append-only Raw Log history remains available."""
         self._requests.pop(context, None)
-
-
-class SessionPersistenceExtension(BaseSessionPersistenceExtension[SessionStorage]):
-    """Ready-to-use lifecycle adapter for any SessionStorage implementation.
-
-    Use this directly when the application already owns a storage instance.
-    Subclass BaseSessionPersistenceExtension only when the extension itself must
-    construct or own storage resources.
-    """

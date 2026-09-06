@@ -12,7 +12,7 @@ from .messages import AssistantMessage, ToolCall, ToolMessage
 from .model import ModelEvent, ModelEventType, ModelResponse, ToolCallDelta
 
 if TYPE_CHECKING:
-    from .extension_events import (
+    from .extensions.events import (
         CompactionEvent,
         ContentCompletedEvent,
         ContentStartedEvent,
@@ -148,7 +148,7 @@ class AgentPhaseTransitionMixin:
         expected: Collection[AgentPhase],
     ) -> PhaseTransitionEvent:
         """Validate, apply, and publish one phase transition."""
-        from .extension_events import PhaseTransitionEvent
+        from .extensions.events import PhaseTransitionEvent
 
         state = context.state
         if state.phase not in expected:
@@ -200,7 +200,7 @@ class AgentPhaseTransitionMixin:
 
     async def _cancel_request(self, context: PhaseContext) -> None:
         """Enter CANCELLED and broadcast its dedicated notification once."""
-        from .extension_events import RunCancelledEvent
+        from .extensions.events import RunCancelledEvent
 
         state = context.state
         if state.phase in (AgentPhase.COMPLETED, AgentPhase.CANCELLED):
@@ -232,7 +232,7 @@ class ModelOutputTracker:
 
     async def observe(self, context: PhaseContext, event: ModelEvent) -> None:
         """Translate provider-neutral stream deltas into extension events."""
-        from .extension_events import (
+        from .extensions.events import (
             ContentCompletedEvent,
             ContentStartedEvent,
             ReasoningStartedEvent,
@@ -258,7 +258,7 @@ class ModelOutputTracker:
                 return
 
     async def _complete_reasoning(self, context: PhaseContext) -> None:
-        from .extension_events import ReasoningCompletedEvent
+        from .extensions.events import ReasoningCompletedEvent
 
         if self.reasoning_started is not None and self.reasoning_completed is None:
             self.reasoning_completed = ReasoningCompletedEvent.now()
@@ -270,7 +270,7 @@ class ModelOutputTracker:
         completed: PhaseTransitionEvent,
     ) -> MessageTiming:
         """Build persistable durations from monotonic lifecycle boundaries."""
-        from .extension_events import MessageTiming
+        from .extensions.events import MessageTiming
 
         reasoning = self._span(self.reasoning_started, self.reasoning_completed)
         content = self._span(self.content_started, self.content_completed)

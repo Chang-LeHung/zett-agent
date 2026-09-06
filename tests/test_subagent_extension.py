@@ -303,7 +303,7 @@ def test_subagent_extension_requires_unique_nonempty_definitions(storage):
 async def test_default_subagents_do_not_require_parent_persistence(builtins, monkeypatch):
     model = DelegatingModel()
     definitions = builtins(model)
-    monkeypatch.setattr("zett_agent.subagents.default_subagents", lambda resolved_model: definitions)
+    monkeypatch.setattr("zett_agent.extensions.subagent.default_subagents", lambda resolved_model: definitions)
     agent = await Agent.create(
         model,
         config=AgentConfig("parent"),

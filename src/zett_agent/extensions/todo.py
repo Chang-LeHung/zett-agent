@@ -5,11 +5,11 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from .agent import AgentContext
-from .extension_events import ExtensionEvent, RunCancelledEvent
-from .extension_hooks import AgentExtension
-from .messages import AssistantMessage
-from .tools import AgentTool, tool
+from ..agent import AgentContext
+from ..messages import AssistantMessage
+from ..tools import AgentTool, tool
+from .base import AgentExtension
+from .events import ExtensionEvent, RunCancelledEvent
 
 TODO_WRITE_TOOL_NAME = "todo_write"
 

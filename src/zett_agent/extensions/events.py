@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 from time import monotonic_ns
 from typing import Self
 
-from .events import AgentPhase
-from .messages import AnyMessage
+from ..events import AgentPhase
+from ..messages import AnyMessage
 
 
 @dataclass(frozen=True, slots=True)

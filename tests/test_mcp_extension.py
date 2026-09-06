@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import pytest
 from mcp_types import CallToolResult, ListToolsResult, TextContent, Tool
 
-import zett_agent.mcp as mcp_module
+import zett_agent.extensions.mcp as mcp_module
 from zett_agent import (
     Agent,
     AgentConfig,

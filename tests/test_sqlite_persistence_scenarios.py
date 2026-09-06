@@ -21,7 +21,7 @@ from zett_agent import (
     UserMessage,
     tool,
 )
-from zett_agent.compaction import CompactedMessage
+from zett_agent.extensions.compaction import CompactedMessage
 from zett_agent.storage import AgentSessionModel, ContextSnapshotModel, MessageKind, RawLogMessageModel
 
 

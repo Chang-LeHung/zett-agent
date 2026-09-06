@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
-from .events import AgentEvent, AgentEventType
+from ..events import AgentEvent, AgentEventType
 
 if TYPE_CHECKING:
-    from .agent import AgentContext
-    from .extension_events import ExtensionEvent
-    from .external_events import ExternalEvent
-    from .messages import AssistantMessage, ToolCall, ToolMessage
-    from .model import ModelResponse
+    from ..agent import AgentContext
+    from ..messages import AssistantMessage, ToolCall, ToolMessage
+    from ..model import ModelResponse
+    from .events import ExtensionEvent
+    from .external import ExternalEvent
 
 
 class AgentSetupHooksMixin:

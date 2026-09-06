@@ -4,13 +4,13 @@ from dataclasses import dataclass
 
 import tiktoken
 
-from .agent import AgentContext
-from .events import AgentEvent, AgentEventType
-from .exceptions import AgentProtocolError
-from .extension_events import CompactionEvent
-from .extension_hooks import AgentExtension
-from .messages import AnyMessage, SystemMessage, UserMessage
-from .model import AgentModel, ModelEventType, ModelRequest, ReasoningEffort
+from ..agent import AgentContext
+from ..events import AgentEvent, AgentEventType
+from ..exceptions import AgentProtocolError
+from ..messages import AnyMessage, SystemMessage, UserMessage
+from ..model import AgentModel, ModelEventType, ModelRequest, ReasoningEffort
+from .base import AgentExtension
+from .events import CompactionEvent
 
 
 @dataclass(slots=True, kw_only=True)

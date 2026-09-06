@@ -22,7 +22,7 @@ from zett_agent import (
     ToolMessage,
     UserMessage,
 )
-from zett_agent.compaction import CompactedMessage
+from zett_agent.extensions.compaction import CompactedMessage
 from zett_agent.storage import (
     AgentSessionModel,
     ContextSnapshotModel,

@@ -10,13 +10,14 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from .agent import Agent, AgentConfig, AgentContext
-from .extension_hooks import AgentExtension
-from .extensions import FileSystemExtension, ToolGuidelinesExtension
-from .ids import new_uuid7
-from .model import AgentModel, ReasoningEffort
-from .storage import SQLiteSessionExtension
-from .tools import AgentTool, tool
+from ..agent import Agent, AgentConfig, AgentContext
+from ..ids import new_uuid7
+from ..model import AgentModel, ReasoningEffort
+from ..tools import AgentTool, tool
+from .base import AgentExtension
+from .file_system import FileSystemExtension
+from .sqlite import SQLiteSessionExtension
+from .tool_guidelines import ToolGuidelinesExtension
 
 TASK_TOOL_NAME = "task"
 

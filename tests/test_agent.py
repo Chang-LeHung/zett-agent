@@ -37,6 +37,12 @@ from kcs_agent import (
 CONFIG = AgentConfig(session_id="test-session")
 
 
+def test_agent_config_validates_session_identity_fields() -> None:
+    config = AgentConfig("session", request_id="request", parent_session_id="parent")
+
+    assert (config.session_id, config.request_id, config.parent_session_id) == ("session", "request", "parent")
+
+
 async def test_phase_transition_mixin_validates_predecessors() -> None:
     transitions: list[PhaseTransitionEvent] = []
 
@@ -114,6 +120,62 @@ async def test_uninitialized_agent_rejects_requests_without_calling_model():
     assert model.requests == []
     await agent.initialize(config=CONFIG)
     assert (await agent.run("Hello")).content == "Ready"
+
+
+async def test_run_exposes_metadata_and_tags_only_through_agent_context():
+    observed = []
+
+    class ContextObserver(AgentExtension):
+        async def before_run(self, context):
+            observed.append((context.metadata, context.tags))
+
+    model = ScriptedModel(AssistantMessage(content="Done"))
+    agent = await Agent.create(model, config=CONFIG, extensions=[ContextObserver()])
+
+    await agent.run(
+        "Classify this input",
+        metadata={"source": "clipboard", "asset_ids": ["asset-1"]},
+        tags={"domain": "python"},
+    )
+
+    user = next(message for message in model.requests[0].messages if isinstance(message, UserMessage))
+    assert user == UserMessage(content="Classify this input")
+    assert observed == [({"source": "clipboard", "asset_ids": ["asset-1"]}, {"domain": "python"})]
+
+
+async def test_user_message_input_can_use_separate_extension_context():
+    observed = []
+
+    class ContextObserver(AgentExtension):
+        async def before_run(self, context):
+            observed.append(context.metadata)
+
+    model = ScriptedModel(AssistantMessage(content="Done"))
+    agent = await Agent.create(model, config=CONFIG, extensions=[ContextObserver()])
+    await agent.run(UserMessage(content="Input"), metadata={"source": "editor"})
+
+    assert observed == [{"source": "editor"}]
+    assert UserMessage(content="Input") in model.requests[0].messages
+
+
+@pytest.mark.parametrize(
+    "kwargs,error",
+    [
+        ({"metadata": {1: "invalid"}}, "metadata keys"),
+        ({"tags": {"": "invalid"}}, "tags keys"),
+        ({"metadata": {"value": object()}}, "JSON serializable"),
+        ({"metadata": {"value": (1, 2)}}, "JSON serializable"),
+        ({"tags": {"score": float("nan")}}, "JSON serializable"),
+    ],
+)
+async def test_run_rejects_invalid_extension_context(kwargs, error):
+    model = ScriptedModel(AssistantMessage(content="Unused"))
+    agent = await Agent.create(model, config=CONFIG)
+
+    with pytest.raises(ValueError, match=error):
+        await agent.run("Input", **kwargs)
+
+    assert model.requests == []
 
 
 async def test_failed_initialization_does_not_enable_requests():

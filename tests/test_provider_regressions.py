@@ -30,6 +30,14 @@ def test_tool_arguments_are_serializable_in_both_protocols() -> None:
     assert json.loads(json.dumps(anthropic))[0]["input"] == {"left": 2}
 
 
+def test_model_messages_have_no_extension_context_fields_to_send_to_providers() -> None:
+    message = UserMessage(content="Visible content")
+    assert _message_to_openai_payload(message) == {"role": "user", "content": "Visible content"}
+    assert _to_anthropic_content_blocks(message) == [{"type": "text", "text": "Visible content"}]
+    assert not hasattr(message, "metadata")
+    assert not hasattr(message, "tags")
+
+
 def test_anthropic_signed_thinking_and_redacted_blocks_round_trip() -> None:
     blocks = (
         {"type": "thinking", "thinking": "Provider reasoning", "signature": "opaque-signature"},

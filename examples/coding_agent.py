@@ -236,15 +236,16 @@ def print_event(event: AgentEvent, output_state: dict[str, bool]) -> None:
                 print("\n[assistant] ", end="", flush=True)
                 output_state["answer"] = True
             print(event.delta, end="", flush=True)
-        case AgentEventType.TOOL_STARTED if event.call is not None:
-            print(f"\n[tool] {event.call.name}({event.call.arguments})", flush=True)
+        case AgentEventType.TOOL_STARTED if event.tool_calls:
+            call = event.tool_calls[0]
+            print(f"\n[tool] {call.name}({call.arguments})", flush=True)
         case AgentEventType.TOOL_COMPLETED if isinstance(event.message, ToolMessage):
             preview = event.message.content
             if len(preview) > 500:
                 preview = preview[:497] + "..."
             print(f"[tool result] {preview}", flush=True)
-        case AgentEventType.TOOL_FAILED if event.call is not None:
-            print(f"[tool failed] {event.call.name}: {event.error}", flush=True)
+        case AgentEventType.TOOL_FAILED if event.tool_calls:
+            print(f"[tool failed] {event.tool_calls[0].name}: {event.error}", flush=True)
         case _:
             return
 

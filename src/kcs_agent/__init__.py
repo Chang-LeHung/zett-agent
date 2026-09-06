@@ -48,11 +48,13 @@ from .extension_hooks import (
 )
 from .extensions import (
     CodingExtension,
+    FileSystemExtension,
     InMemoryMessageAccumulator,
     ToolGuidelinesExtension,
 )
 from .external_events import ExternalEvent, ExternalEventExtension
 from .ids import new_uuid7
+from .json_types import JsonValue
 from .messages import (
     AnyMessage,
     AssistantMessage,
@@ -83,6 +85,7 @@ from .model import (
     ToolDefinition,
 )
 from .persistence import (
+    BaseSessionPersistenceExtension,
     ContextSnapshot,
     RawMessageRecord,
     SessionPersistenceExtension,
@@ -101,6 +104,13 @@ from .providers import (
     ProviderResponseError,
 )
 from .storage import SQLiteSessionExtension, SQLiteSessionStorage
+from .subagents import (
+    TASK_TOOL_NAME,
+    SubAgentDefinition,
+    SubAgentExtension,
+    SubAgentResult,
+    default_subagents,
+)
 from .tools import (
     AgentTool,
     GlobResult,
@@ -141,6 +151,7 @@ __all__ = [
     "MessageTiming",
     "new_uuid7",
     "SessionPersistenceExtension",
+    "BaseSessionPersistenceExtension",
     "SessionStorage",
     "SQLiteSessionStorage",
     "SQLiteSessionExtension",
@@ -170,8 +181,15 @@ __all__ = [
     "AgentIterationLimitError",
     "InMemoryMessageAccumulator",
     "CodingExtension",
+    "FileSystemExtension",
     "ToolGuidelinesExtension",
+    "TASK_TOOL_NAME",
+    "SubAgentDefinition",
+    "SubAgentExtension",
+    "SubAgentResult",
+    "default_subagents",
     "AnyMessage",
+    "JsonValue",
     "Message",
     "MessageRole",
     "SystemMessage",

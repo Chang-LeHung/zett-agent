@@ -31,6 +31,13 @@ def test_message_fields_are_direct_and_role_specific():
         UserMessage(content="Question", tool_calls=(call,))
 
 
+def test_message_protocol_does_not_accept_extension_context_data():
+    with pytest.raises(TypeError):
+        UserMessage(content="Question", metadata={"source": "clipboard"})
+    with pytest.raises(TypeError):
+        AssistantMessage(content="Answer", tags={"kind": "internal"})
+
+
 def test_user_text_and_image_parts():
     image = ImageContent(ImageUrlSource("https://example.com/a.png"), ImageDetail.HIGH)
     message = UserMessage(content=[TextContent("Explain"), image, TextContent("Focus on arrows")])

@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Self, overload
@@ -10,6 +10,7 @@ from .exceptions import AgentIterationLimitError, AgentProtocolError
 from .extension_events import ExtensionEvent, MessageAppendedEvent, MessageTiming
 from .extension_hooks import AgentExtension
 from .external_events import ExternalEvent
+from .json_types import JsonValue, json_object
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
 from .tools import AgentTool
@@ -21,12 +22,18 @@ class AgentConfig:
 
     session_id: str
     request_id: str | None = None
+    parent_session_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.session_id.strip():
             raise ValueError("session_id cannot be empty")
         if self.request_id is not None and not self.request_id.strip():
             raise ValueError("request_id cannot be empty")
+        if self.parent_session_id is not None:
+            if not self.parent_session_id.strip():
+                raise ValueError("parent_session_id cannot be empty")
+            if self.parent_session_id == self.session_id:
+                raise ValueError("parent_session_id must differ from session_id")
 
 
 @dataclass(slots=True)
@@ -35,6 +42,8 @@ class AgentState:
 
     messages: list[AnyMessage] = field(default_factory=list)
     phase: AgentPhase = AgentPhase.CREATED
+    # Parent conversation when this request belongs to a delegated subagent.
+    parent_session_id: str | None = None
 
 
 @dataclass(slots=True, weakref_slot=True, eq=False)
@@ -54,6 +63,13 @@ class AgentContext:
     tools: dict[str, AgentTool]
     # Fixed subscriber order for this run; no event history is retained.
     extensions: tuple["AgentExtension", ...] = ()
+    # Model owned by the current Agent; setup extensions may inspect it when
+    # constructing request-scoped capabilities such as default subagents.
+    model: AgentModel | None = None
+    # Application input available to extensions and Raw Log persistence only.
+    metadata: dict[str, JsonValue] = field(default_factory=dict)
+    # Request classifications available to extensions and Raw Log persistence.
+    tags: dict[str, JsonValue] = field(default_factory=dict)
 
     def register_tool(self, tool: AgentTool) -> None:
         """Register one request-scoped tool while rejecting ambiguous names."""
@@ -207,6 +223,8 @@ class Agent(AgentPhaseTransitionMixin):
         *,
         config: AgentConfig | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage: ...
 
     @overload
@@ -216,6 +234,8 @@ class Agent(AgentPhaseTransitionMixin):
         *,
         config: AgentConfig | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage: ...
 
     async def run(
@@ -224,6 +244,8 @@ class Agent(AgentPhaseTransitionMixin):
         *,
         config: AgentConfig | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage:
         """Collect one run and return its final answer.
 
@@ -234,10 +256,20 @@ class Agent(AgentPhaseTransitionMixin):
             reply = await agent.run(
                 "Summarize this conversation.",
                 config=AgentConfig(session_id="session-42"),
+                metadata={"source": "editor"},
+                tags={"domain": "notes"},
             )
         """
         result: AssistantMessage | None = None
-        async with aclosing(self.stream(message, config=config, reasoning_effort=reasoning_effort)) as events:
+        async with aclosing(
+            self.stream(
+                message,
+                config=config,
+                reasoning_effort=reasoning_effort,
+                metadata=metadata,
+                tags=tags,
+            )
+        ) as events:
             async for event in events:
                 if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
                     result = event.message
@@ -252,6 +284,8 @@ class Agent(AgentPhaseTransitionMixin):
         *,
         config: AgentConfig | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
     ) -> AsyncIterator[AgentEvent]: ...
 
     @overload
@@ -261,6 +295,8 @@ class Agent(AgentPhaseTransitionMixin):
         *,
         config: AgentConfig | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
     ) -> AsyncIterator[AgentEvent]: ...
 
     async def stream(
@@ -269,6 +305,8 @@ class Agent(AgentPhaseTransitionMixin):
         *,
         config: AgentConfig | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
     ) -> AsyncIterator[AgentEvent]:
         """Stream one run while retaining messages in the agent state.
 
@@ -279,9 +317,11 @@ class Agent(AgentPhaseTransitionMixin):
         Example:
             agent = await Agent.create(model, config=config, extensions=[history_extension])
             async for event in agent.stream(
-                UserMessage(content="Continue the summary."),
+                "Continue the summary.",
                 config=AgentConfig(session_id="session-42"),
                 reasoning_effort=ReasoningEffort.HIGH,
+                metadata={"source": "command-palette"},
+                tags={"intent": "summary"},
             ):
                 print(event.type, event.session_id)
         """
@@ -298,10 +338,21 @@ class Agent(AgentPhaseTransitionMixin):
         messages = [SystemMessage(content=self.system_prompt)] if self.system_prompt else []
         # State and dynamic tools are request-scoped. Constructor tools are copied
         # so extension registrations cannot leak into later requests or sessions.
-        state = AgentState(messages=messages)
+        state = AgentState(
+            messages=messages,
+            parent_session_id=config.parent_session_id,
+        )
         self.state = state
-        context = AgentContext(config=config, state=state, tools=dict(self.tools), extensions=self.extensions)
-        user_message = UserMessage(content=message) if isinstance(message, str) else message
+        context = AgentContext(
+            config=config,
+            state=state,
+            tools=dict(self.tools),
+            extensions=self.extensions,
+            model=self.model,
+            metadata=json_object(metadata, field_name="Context metadata"),
+            tags=json_object(tags, field_name="Context tags", nonempty_keys=True),
+        )
+        user_message = message if isinstance(message, UserMessage) else UserMessage(content=message)
         self._request_active = True
         try:
             await self._start_context_loading(context)
@@ -434,7 +485,7 @@ class Agent(AgentPhaseTransitionMixin):
                 AgentEventType.TOOL_STARTED,
                 session_id=context.config.session_id,
                 phase=context.state.phase,
-                call=call,
+                tool_calls=[call],
             )
             error = None
             try:
@@ -466,7 +517,7 @@ class Agent(AgentPhaseTransitionMixin):
                 AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
                 session_id=context.config.session_id,
                 phase=context.state.phase,
-                call=call,
+                tool_calls=[call],
                 message=result,
                 error=error,
             )

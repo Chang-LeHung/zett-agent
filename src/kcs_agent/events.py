@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from time import monotonic_ns
@@ -59,7 +59,7 @@ class AgentPhase(StrEnum):
         |       +-----------------+                                      |
         |       | LOADING_CONTEXT |                                      |
         |       +-----------------+                                      |
-        |                | on_tool(): register request tools            |
+        |                | on_tool(): register request tools             |
         |                | on_message(): restore context                 |
         |                v                                               |
         |       +-----------------+ compact / done  +-----------------+  |
@@ -306,8 +306,9 @@ class AgentEvent:
     delta: str = ""
     # Incomplete tool arguments for display, never for execution.
     tool_call_delta: ToolCallDelta | None = None
-    # Complete invocation associated with a tool event.
-    call: ToolCall | None = None
+    # Complete invocations associated with a tool event. Current execution emits
+    # one item per event; the list shape also supports future concurrent batches.
+    tool_calls: list[ToolCall] = field(default_factory=list)
     # Final model response, including usage.
     response: ModelResponse | None = None
     # Tool result or final assistant answer.

@@ -1,6 +1,6 @@
 import base64
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -15,12 +15,32 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from .compaction import CompactedMessage
 from .extension_events import MessageTiming
 from .ids import new_uuid7
+from .json_types import JsonValue, json_object
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolMessage, UserMessage
-from .persistence import ContextSnapshot, RawMessageRecord, SessionPersistenceExtension, SessionSummary, SessionView
+from .persistence import (
+    BaseSessionPersistenceExtension,
+    ContextSnapshot,
+    RawMessageRecord,
+    SessionSummary,
+    SessionView,
+)
 
 
 class Base(DeclarativeBase):
     """Schema owned exclusively by kcs-agent."""
+
+
+class AgentSessionModel(Base):
+    """One root or delegated conversation and its provider-neutral identity."""
+
+    __tablename__ = "agent_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    parent_session_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    title: Mapped[str | None] = mapped_column(String(200))
+    agent_name: Mapped[str | None] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column()
+    updated_at: Mapped[datetime] = mapped_column()
 
 
 class RawLogMessageModel(Base):
@@ -37,6 +57,8 @@ class RawLogMessageModel(Base):
     content: Mapped[str] = mapped_column(Text)
     tool_name: Mapped[str | None] = mapped_column(String)
     message_json: Mapped[str] = mapped_column(Text)
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    tags_json: Mapped[str] = mapped_column(Text, default="{}")
     # UTC start of message processing, not the later database insertion time.
     started_at: Mapped[datetime] = mapped_column()
     # UTC completion of message processing.
@@ -112,6 +134,7 @@ def encode_messages(messages: Sequence[AnyMessage]) -> str:
         ],
         default=encode_bytes,
         ensure_ascii=False,
+        allow_nan=False,
     )
 
 
@@ -129,11 +152,35 @@ def decode_messages(payload: str) -> list[AnyMessage]:
     ]
 
 
+def _encode_context_data(
+    value: Mapping[str, JsonValue] | None,
+    *,
+    field_name: str,
+    nonempty_keys: bool = False,
+) -> str:
+    """Validate and encode request context stored beside one Raw Log message."""
+    validated = json_object(value, field_name=field_name, nonempty_keys=nonempty_keys)
+    return json.dumps(validated, ensure_ascii=False, sort_keys=True, allow_nan=False)
+
+
+def _decode_context_data(payload: str, *, field_name: str, nonempty_keys: bool = False) -> dict[str, JsonValue]:
+    """Decode one Raw Log context object and reject corrupt storage values."""
+    try:
+        value = json.loads(payload)
+    except (TypeError, json.JSONDecodeError) as error:
+        raise ValueError(f"Stored {field_name} is not valid JSON") from error
+    if not isinstance(value, dict):
+        raise ValueError(f"Stored {field_name} must be a JSON object")
+    return json_object(value, field_name=f"Stored {field_name}", nonempty_keys=nonempty_keys)
+
+
 class SQLiteSessionStorage:
     """Standalone SQLite session storage shipped with kcs-agent.
 
-    No application session table is required. The first append creates a session's
-    history. Only compaction creates snapshots. Pass a temporary path in tests.
+    The first append creates session identity and history. Root sessions store
+    no parent; delegated sessions store a plain parent ID without a foreign key.
+    Message metadata and tags live in each Raw Log message JSON envelope. Only
+    compaction creates snapshots.
 
     Example:
         storage = SQLiteSessionStorage(Path.home() / ".kcs-agent" / "sessions.sqlite3")
@@ -190,27 +237,42 @@ class SQLiteSessionStorage:
             rows = session.scalars(statement.order_by(RawLogMessageModel.sequence).offset(offset).limit(limit))
             return [self._record(row) for row in rows]
 
-    def list_sessions(self, *, limit: int = 100) -> list[SessionSummary]:
-        """List sessions by latest activity without requiring a separate session table."""
+    def list_sessions(self, *, limit: int = 100, offset: int = 0) -> list[SessionSummary]:
+        """Return one page of root and subagent sessions by latest activity."""
         if limit < 1:
             raise ValueError("limit must be positive")
+        if offset < 0:
+            raise ValueError("offset cannot be negative")
         with self._session_scope() as session:
-            first_message_at = func.min(RawLogMessageModel.created_at).label("created_at")
-            latest_message_at = func.max(RawLogMessageModel.updated_at).label("updated_at")
             rows = session.execute(
                 select(
-                    RawLogMessageModel.session_id,
+                    AgentSessionModel.id.label("session_id"),
+                    AgentSessionModel.parent_session_id,
+                    AgentSessionModel.title,
+                    AgentSessionModel.agent_name,
                     func.count(RawLogMessageModel.id).label("message_count"),
-                    first_message_at,
-                    latest_message_at,
+                    AgentSessionModel.created_at,
+                    AgentSessionModel.updated_at,
                 )
-                .group_by(RawLogMessageModel.session_id)
-                .order_by(latest_message_at.desc())
+                .outerjoin(RawLogMessageModel, RawLogMessageModel.session_id == AgentSessionModel.id)
+                .group_by(
+                    AgentSessionModel.id,
+                    AgentSessionModel.parent_session_id,
+                    AgentSessionModel.title,
+                    AgentSessionModel.agent_name,
+                    AgentSessionModel.created_at,
+                    AgentSessionModel.updated_at,
+                )
+                .order_by(AgentSessionModel.updated_at.desc(), AgentSessionModel.id.desc())
+                .offset(offset)
                 .limit(limit)
             )
             return [
                 SessionSummary(
                     session_id=row.session_id,
+                    parent_session_id=row.parent_session_id,
+                    title=row.title,
+                    agent_name=row.agent_name,
                     message_count=row.message_count,
                     created_at=row.created_at.replace(tzinfo=UTC),
                     updated_at=row.updated_at.replace(tzinfo=UTC),
@@ -228,6 +290,62 @@ class SQLiteSessionStorage:
                 or 0
             )
 
+    def get_session(self, session_id: str) -> SessionSummary | None:
+        """Return one session's storage metadata without loading its messages."""
+        with self._session_scope() as session:
+            row = session.get(AgentSessionModel, session_id)
+            return self._summary(session, row) if row is not None else None
+
+    def update_session(
+        self,
+        session_id: str,
+        *,
+        title: str | None = None,
+        agent_name: str | None = None,
+    ) -> SessionSummary | None:
+        """Update mutable session fields and return the refreshed typed summary.
+
+        Session identity, parent linkage, and Raw Log messages are immutable.
+        Display values are normalized before persistence. ``None`` leaves that
+        field unchanged; at least one field must be supplied.
+        """
+        if title is None and agent_name is None:
+            raise ValueError("At least one session field must be supplied")
+        normalized_title = title.strip() if title is not None else None
+        normalized_agent_name = agent_name.strip() if agent_name is not None else None
+        if normalized_title is not None and (not normalized_title or len(normalized_title) > 200):
+            raise ValueError("Session title must contain between 1 and 200 characters")
+        if normalized_agent_name is not None and (not normalized_agent_name or len(normalized_agent_name) > 64):
+            raise ValueError("Agent name must contain between 1 and 64 characters")
+        with self._session_scope() as session:
+            row = session.get(AgentSessionModel, session_id)
+            if row is None:
+                return None
+            if normalized_title is not None:
+                row.title = normalized_title
+            if normalized_agent_name is not None:
+                row.agent_name = normalized_agent_name
+            row.updated_at = datetime.now(UTC)
+            session.flush()
+            return self._summary(session, row)
+
+    @staticmethod
+    def _summary(session: Session, row: AgentSessionModel) -> SessionSummary:
+        """Hydrate one session ORM row and its message count into a read model."""
+        message_count = int(
+            session.scalar(select(func.count(RawLogMessageModel.id)).where(RawLogMessageModel.session_id == row.id))
+            or 0
+        )
+        return SessionSummary(
+            session_id=row.id,
+            parent_session_id=row.parent_session_id,
+            title=row.title,
+            agent_name=row.agent_name,
+            message_count=message_count,
+            created_at=row.created_at.replace(tzinfo=UTC),
+            updated_at=row.updated_at.replace(tzinfo=UTC),
+        )
+
     def delete_session(self, session_id: str) -> bool:
         """Explicitly delete raw messages and snapshots owned by one session."""
         with self._session_scope() as session:
@@ -237,7 +355,10 @@ class SQLiteSessionStorage:
             snapshot_count = session.execute(
                 delete(ContextSnapshotModel).where(ContextSnapshotModel.session_id == session_id)
             ).rowcount
-            return bool(message_count or snapshot_count)
+            session_count = session.execute(
+                delete(AgentSessionModel).where(AgentSessionModel.id == session_id)
+            ).rowcount
+            return bool(message_count or snapshot_count or session_count)
 
     @staticmethod
     def _record(row: RawLogMessageModel) -> RawMessageRecord:
@@ -249,6 +370,8 @@ class SQLiteSessionStorage:
             request_id=row.request_id,
             sequence=row.sequence,
             message=message,
+            metadata=_decode_context_data(row.metadata_json, field_name="message metadata"),
+            tags=_decode_context_data(row.tags_json, field_name="message tags", nonempty_keys=True),
             started_at=row.started_at.replace(tzinfo=UTC),
             completed_at=row.completed_at.replace(tzinfo=UTC),
             duration_ns=row.duration_ns,
@@ -306,6 +429,7 @@ class SQLiteSessionStorage:
 
     async def load(self, session_id: str) -> SessionView:
         with self._session_scope() as session:
+            session_row = session.get(AgentSessionModel, session_id)
             snapshot_row = self._latest(session, session_id)
             snapshot = self._snapshot_record(snapshot_row) if snapshot_row is not None else None
             compacted_through_sequence = snapshot.compacted_through_sequence if snapshot is not None else 0
@@ -317,7 +441,13 @@ class SQLiteSessionStorage:
                 )
                 .order_by(RawLogMessageModel.sequence)
             )
-            return SessionView(snapshot=snapshot, raw_tail=[self._record(row) for row in rows])
+            return SessionView(
+                parent_session_id=session_row.parent_session_id if session_row is not None else None,
+                title=session_row.title if session_row is not None else None,
+                agent_name=session_row.agent_name if session_row is not None else None,
+                snapshot=snapshot,
+                raw_tail=[self._record(row) for row in rows],
+            )
 
     async def append(
         self,
@@ -325,10 +455,40 @@ class SQLiteSessionStorage:
         request_id: str,
         message: AnyMessage,
         timing: MessageTiming | None = None,
+        parent_session_id: str | None = None,
+        title: str | None = None,
+        agent_name: str | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
     ) -> int:
+        if title is not None and (not title.strip() or len(title) > 200):
+            raise ValueError("Session title must contain between 1 and 200 characters")
+        if agent_name is not None and (not agent_name.strip() or len(agent_name) > 64):
+            raise ValueError("Agent name must contain between 1 and 64 characters")
+        encoded_metadata = _encode_context_data(metadata, field_name="Message metadata")
+        encoded_tags = _encode_context_data(tags, field_name="Message tags", nonempty_keys=True)
         with self._session_scope() as session:
             sequence = self._sequence(session, session_id)
             now = datetime.now(UTC)
+            session_row = session.get(AgentSessionModel, session_id)
+            if session_row is None:
+                session_row = AgentSessionModel(
+                    id=session_id,
+                    parent_session_id=parent_session_id,
+                    title=title,
+                    agent_name=agent_name,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(session_row)
+            elif session_row.parent_session_id != parent_session_id:
+                raise ValueError("Session parent cannot change after creation")
+            else:
+                if title is not None:
+                    session_row.title = title
+                if agent_name is not None:
+                    session_row.agent_name = agent_name
+                session_row.updated_at = now
             timing = timing or MessageTiming.instant()
             kind = next(kind for kind, cls in MESSAGE_TYPES.items() if type(message) is cls)
             if kind == MessageKind.CHECKPOINT:
@@ -343,6 +503,8 @@ class SQLiteSessionStorage:
                     content=message.text if isinstance(message, UserMessage) else message.content,
                     tool_name=message.name if isinstance(message, ToolMessage) else None,
                     message_json=encode_messages([message]),
+                    metadata_json=encoded_metadata,
+                    tags_json=encoded_tags,
                     started_at=timing.started_at,
                     completed_at=timing.completed_at,
                     duration_ns=timing.duration_ns,
@@ -391,7 +553,7 @@ class SQLiteSessionStorage:
             return self._snapshot_record(row)
 
 
-class SQLiteSessionExtension(SessionPersistenceExtension):
+class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorage]):
     """Restore and save agent sessions in an owned SQLite database."""
 
     storage: SQLiteSessionStorage
@@ -416,6 +578,28 @@ class SQLiteSessionExtension(SessionPersistenceExtension):
             limit=limit,
             offset=offset,
         )
+
+    def list_sessions(self, *, limit: int = 100, offset: int = 0) -> list[SessionSummary]:
+        """Forward a paginated session-summary query to owned storage."""
+        return self.storage.list_sessions(limit=limit, offset=offset)
+
+    def get_session(self, session_id: str) -> SessionSummary | None:
+        """Forward a typed session metadata lookup to the owned storage."""
+        return self.storage.get_session(session_id)
+
+    def update_session(
+        self,
+        session_id: str,
+        *,
+        title: str | None = None,
+        agent_name: str | None = None,
+    ) -> SessionSummary | None:
+        """Forward a typed session update to the owned storage."""
+        return self.storage.update_session(session_id, title=title, agent_name=agent_name)
+
+    def delete_session(self, session_id: str) -> bool:
+        """Delete one session and its Raw Log and snapshot records explicitly."""
+        return self.storage.delete_session(session_id)
 
     def close(self) -> None:
         """Release the SQLite connection pool without deleting history."""

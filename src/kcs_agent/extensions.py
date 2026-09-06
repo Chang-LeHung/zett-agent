@@ -4,10 +4,38 @@ from .agent import AgentContext
 from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent
 from .extension_hooks import AgentExtension
 from .messages import AnyMessage, SystemMessage
-from .tools import glob, grep, read_file, render_tool_guidance, replace_in_file, run_shell, write_file
+from .tools import AgentTool, glob, grep, read_file, render_tool_guidance, replace_in_file, run_shell, write_file
 
 
-class CodingExtension(AgentExtension):
+class FileSystemExtension(AgentExtension):
+    """Register working-directory file tools with an optional read-only boundary.
+
+    Read-only mode exposes read_file, glob, and grep. Writable mode additionally
+    exposes write_file and replace_in_file. Shell execution is deliberately not
+    a filesystem capability because arbitrary commands cannot guarantee that
+    they will leave the workspace unchanged.
+
+    Example:
+        extension = FileSystemExtension(read_only=True)
+        agent = await Agent.create(model, config=config, extensions=[extension])
+    """
+
+    def __init__(self, *, read_only: bool = False) -> None:
+        self.read_only = read_only
+
+    @property
+    def tools(self) -> tuple[AgentTool, ...]:
+        """Return the exact immutable registration set for the configured mode."""
+        read_tools = (read_file, glob, grep)
+        return read_tools if self.read_only else (*read_tools, write_file, replace_in_file)
+
+    async def on_tool(self, context: AgentContext) -> None:
+        """Register the selected filesystem tools for this request."""
+        for registered in self.tools:
+            context.register_tool(registered)
+
+
+class CodingExtension(FileSystemExtension):
     """Register local coding tools using the process working directory.
 
     Provides read_file, write_file, replace_in_file, glob, grep, and run_shell.
@@ -25,10 +53,13 @@ class CodingExtension(AgentExtension):
         await agent.run("Read README.md and find Python files.")
     """
 
+    def __init__(self) -> None:
+        super().__init__(read_only=False)
+
     async def on_tool(self, context: AgentContext) -> None:
-        """Register file tools for this request using the shared name checks."""
-        for registered in (read_file, write_file, replace_in_file, glob, grep, run_shell):
-            context.register_tool(registered)
+        """Register writable filesystem tools followed by shell execution."""
+        await super().on_tool(context)
+        context.register_tool(run_shell)
 
 
 class ToolGuidelinesExtension(AgentExtension):

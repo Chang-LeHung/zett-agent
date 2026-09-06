@@ -1,13 +1,15 @@
+import json
 from uuid import UUID
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from kcs_agent import (
     Agent,
     AgentConfig,
     AssistantMessage,
+    BaseSessionPersistenceExtension,
     CompactionExtension,
     ImageBytesSource,
     ImageContent,
@@ -22,6 +24,7 @@ from kcs_agent import (
 )
 from kcs_agent.compaction import CompactedMessage
 from kcs_agent.storage import (
+    AgentSessionModel,
     ContextSnapshotModel,
     RawLogMessageModel,
     SQLiteSessionStorage,
@@ -63,6 +66,138 @@ async def test_storage_reopens_without_application_database(tmp_path):
         reopened.close()
 
 
+async def test_storage_persists_parent_identity_and_message_metadata(storage):
+    await storage.append("parent", "parent-request", UserMessage(content="Parent"))
+    await storage.append(
+        "child",
+        "child-request",
+        UserMessage(content="Child"),
+        parent_session_id="parent",
+        title="Inspect session storage",
+        agent_name="explore",
+        metadata={"subagent_type": "explore", "depth": 1},
+        tags={"domain": "code", "read_only": True},
+    )
+
+    view = await storage.load("child")
+    summaries = {summary.session_id: summary for summary in storage.list_sessions()}
+
+    assert view.parent_session_id == "parent"
+    assert view.title == "Inspect session storage"
+    assert view.agent_name == "explore"
+    assert view.raw_tail[0].metadata == {"depth": 1, "subagent_type": "explore"}
+    assert view.raw_tail[0].tags == {"domain": "code", "read_only": True}
+    assert summaries["parent"].parent_session_id is None
+    assert summaries["child"].parent_session_id == "parent"
+    assert summaries["child"].title == "Inspect session storage"
+    assert summaries["child"].agent_name == "explore"
+    with Session(storage.engine) as session:
+        child = session.get(AgentSessionModel, "child")
+        assert child.parent_session_id == "parent"
+        columns = {column["name"] for column in inspect(storage.engine).get_columns("agent_sessions")}
+        assert "metadata_json" not in columns
+        assert "tags_json" not in columns
+        raw = session.scalar(select(RawLogMessageModel).where(RawLogMessageModel.session_id == "child"))
+        assert json.loads(raw.metadata_json) == {"subagent_type": "explore", "depth": 1}
+        assert json.loads(raw.tags_json) == {"domain": "code", "read_only": True}
+        assert set(json.loads(raw.message_json)[0]["data"]) == {"content"}
+
+    with pytest.raises(ValueError, match="parent cannot change"):
+        await storage.append(
+            "child",
+            "another-request",
+            AssistantMessage(content="Invalid"),
+            parent_session_id="another-parent",
+        )
+
+    assert all(
+        inspect(storage.engine).get_foreign_keys(table) == []
+        for table in ("agent_sessions", "raw_messages", "session_snapshots")
+    )
+    assert storage.delete_session("parent") is True
+    assert (await storage.load("child")).parent_session_id == "parent"
+    assert storage.count_messages("child") == 1
+
+
+async def test_storage_updates_mutable_session_identity_without_copying_it_to_raw_log(storage):
+    await storage.append("session", "first", UserMessage(content="One"))
+    await storage.append(
+        "session",
+        "second",
+        AssistantMessage(content="Two"),
+        title="Updated title",
+        agent_name="coding",
+        metadata={"workspace": "/tmp/project"},
+        tags={"domain": "coding"},
+    )
+
+    view = await storage.load("session")
+    assert view.title == "Updated title"
+    assert view.agent_name == "coding"
+    assert view.raw_tail[1].metadata == {"workspace": "/tmp/project"}
+    assert view.raw_tail[1].tags == {"domain": "coding"}
+    with Session(storage.engine) as session:
+        assert session.scalar(select(RawLogMessageModel.message_json).limit(1)) is not None
+        assert "Updated title" not in session.scalar(select(RawLogMessageModel.message_json).limit(1))
+
+    with pytest.raises(ValueError, match="Session title"):
+        await storage.append("invalid", "request", UserMessage(content="One"), title="")
+    with pytest.raises(ValueError, match="Agent name"):
+        await storage.append("invalid", "request", UserMessage(content="One"), agent_name="x" * 65)
+
+
+async def test_raw_message_context_rejects_invalid_input_and_corrupt_rows(storage):
+    with pytest.raises(ValueError, match="Message metadata"):
+        await storage.append("invalid", "request", UserMessage(content="One"), metadata={"value": object()})
+    with pytest.raises(ValueError, match="Message tags keys"):
+        await storage.append("invalid", "request", UserMessage(content="One"), tags={"": True})
+
+    await storage.append("corrupt", "request", UserMessage(content="One"), metadata={"valid": True})
+    with Session(storage.engine) as session, session.begin():
+        row = session.scalar(select(RawLogMessageModel).where(RawLogMessageModel.session_id == "corrupt"))
+        row.metadata_json = "[]"
+
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        storage.list_raw_messages("corrupt")
+
+
+async def test_persistence_restores_a_child_parent_when_config_omits_it(storage):
+    first = await Agent.create(
+        Model("Child answer"),
+        config=AgentConfig(
+            "child",
+            parent_session_id="parent",
+        ),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await first.run("Child question", metadata={"scope": "storage"}, tags={"domain": "code"})
+
+    restored = await Agent.create(
+        Model("Continued"),
+        config=AgentConfig("child"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await restored.run("Continue")
+
+    assert restored.state.parent_session_id == "parent"
+    restored_record = storage.list_raw_messages("child")[0]
+    assert restored_record.metadata == {"scope": "storage"}
+    assert restored_record.tags == {"domain": "code"}
+    assert (await storage.load("child")).parent_session_id == "parent"
+
+
+async def test_persistence_rejects_changing_an_existing_root_into_a_child(storage):
+    await storage.append("root", "request", UserMessage(content="Existing root"))
+    agent = await Agent.create(
+        Model(),
+        config=AgentConfig("root", parent_session_id="parent"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+
+    with pytest.raises(ValueError, match="different parent"):
+        await agent.run("Invalid continuation")
+
+
 async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_path):
     path = tmp_path / "owned.sqlite3"
     first = SQLiteSessionExtension(path)
@@ -85,6 +220,30 @@ async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_pa
         ]
     finally:
         second.close()
+
+
+async def test_custom_persistence_extension_only_wires_its_storage(tmp_path):
+    class CustomSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorage]):
+        def __init__(self, path):
+            super().__init__(SQLiteSessionStorage(path))
+
+        def close(self) -> None:
+            self.storage.close()
+
+    extension = CustomSessionExtension(tmp_path / "custom.sqlite3")
+    try:
+        first = await Agent.create(Model("Stored"), config=AgentConfig("session"), extensions=[extension])
+        await first.run("Remember this")
+        second_model = Model("Continued")
+        second = await Agent.create(second_model, config=AgentConfig("session"), extensions=[extension])
+        await second.run("Continue")
+
+        assert [message.content for message in second_model.requests[0].messages[1:-1]] == [
+            "Remember this",
+            "Stored",
+        ]
+    finally:
+        extension.close()
 
 
 async def test_raw_log_persists_model_output_timing(storage):
@@ -126,6 +285,10 @@ async def test_sqlite_session_extension_lists_paginated_raw_messages(tmp_path):
 
         assert [record.sequence for record in records] == [2]
         assert [record.message for record in records] == [AssistantMessage(content="Second")]
+
+        await extension.storage.append("newer", "request", UserMessage(content="Third"))
+        sessions = extension.list_sessions(limit=1, offset=1)
+        assert [summary.session_id for summary in sessions] == ["session"]
     finally:
         extension.close()
 
@@ -292,6 +455,9 @@ async def test_lists_typed_raw_messages_and_deletes_one_session(storage):
     assert [(session.session_id, session.message_count) for session in sessions] == [("second", 1), ("first", 2)]
     assert all(session.created_at.tzinfo is not None and session.updated_at.tzinfo is not None for session in sessions)
     assert len(storage.list_sessions(limit=1)) == 1
+    assert storage.list_sessions(limit=1, offset=0) == sessions[:1]
+    assert storage.list_sessions(limit=1, offset=1) == sessions[1:]
+    assert storage.list_sessions(limit=1, offset=2) == []
 
     assert storage.delete_session("first") is True
     assert storage.list_raw_messages("first") == []
@@ -314,9 +480,10 @@ def test_list_raw_messages_rejects_invalid_query_options(storage, options, error
         storage.list_raw_messages("session", **options)
 
 
-def test_list_sessions_rejects_invalid_limit(storage):
-    with pytest.raises(ValueError, match="limit"):
-        storage.list_sessions(limit=0)
+@pytest.mark.parametrize("options,error", [({"limit": 0}, "limit"), ({"offset": -1}, "offset")])
+def test_list_sessions_rejects_invalid_query_options(storage, options, error):
+    with pytest.raises(ValueError, match=error):
+        storage.list_sessions(**options)
 
 
 async def test_storage_rejects_invalid_checkpoint_writes(storage):

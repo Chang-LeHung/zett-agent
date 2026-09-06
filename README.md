@@ -188,6 +188,41 @@ For database-backed sessions, see [Session storage](docs/session-storage.md).
 `SQLiteSessionExtension(path)` owns a SQLite storage and reloads the latest
 snapshot and raw-log tail before every request, including repeated calls on the same Agent. New messages are
 persisted through `MessageAppendedEvent`; only compaction creates snapshots.
+`BaseSessionPersistenceExtension[StorageT]` contains all lifecycle integration.
+A backend-specific extension only constructs its `SessionStorage` and passes it
+to `super().__init__`; it does not implement Agent hooks. When an application
+already owns a storage instance, use `SessionPersistenceExtension(storage)` as
+the ready-made adapter.
+Each session row stores only its identity, optional parent, display title,
+provider-neutral agent name, and timestamps. Title and agent name are storage
+metadata, not Agent runtime configuration. Read them with
+`SQLiteSessionExtension.get_session(session_id)` and change them with
+`update_session(session_id, title=..., agent_name=...)`.
+`delete_session(session_id)` explicitly removes the session, its Raw Log, and
+its snapshots.
+
+`run()` and `stream()` accept JSON-compatible `metadata` and `tags` as
+request-scoped extension context:
+
+```python
+reply = await agent.run(
+    "Summarize this note",
+    metadata={"source": "clipboard", "asset_ids": ["asset-1"]},
+    tags={"domain": "python"},
+)
+```
+
+The values are available as `AgentContext.metadata` and `AgentContext.tags` at
+every lifecycle hook. They are never attached to `UserMessage`,
+`AssistantMessage`, or `ToolMessage`, so provider requests cannot receive them.
+The persistence extension captures the current context values beside every
+appended Raw Log message in dedicated JSON columns. `RawMessageRecord` exposes
+the decoded values to a UI or another storage consumer.
+
+Tool lifecycle events expose `tool_calls: list[ToolCall]`. Sequential execution
+currently emits one call in each `TOOL_STARTED`, `TOOL_COMPLETED`, or
+`TOOL_FAILED` event; using a list keeps the event protocol ready for a future
+concurrent tool batch without another field-shape change.
 
 Use `CompactionExtension` to summarize older context before a model call:
 
@@ -276,6 +311,15 @@ decorator metadata remains available as an override.
 
 The built-in local tools operate relative to the process's current working
 directory:
+
+- `FileSystemExtension(read_only=True)` registers `read_file`, `glob`, and
+  `grep` only.
+- `FileSystemExtension(read_only=False)` additionally registers `write_file`
+  and `replace_in_file`.
+- `CodingExtension()` provides writable filesystem tools plus `run_shell`.
+
+`run_shell` is intentionally excluded from `FileSystemExtension`: arbitrary
+commands cannot be classified as read-only at the extension boundary.
 
 ```python
 from kcs_agent import (
@@ -382,10 +426,12 @@ streaming UI collects input. Add the extension to the Agent, forward its
 ask_user_extension = AskUserExtension()
 agent = await Agent.create(model, config=config, extensions=[ask_user_extension])
 
+
 async def stream_to_ui():
     async for event in agent.stream("Prepare my document"):
         if isinstance(event, AskUserEvent):
             send_to_ui(event.name, event.payload)
+
 
 # Called independently by the UI response endpoint while stream_to_ui waits.
 def accept_from_ui(name: str, payload: dict[str, object]) -> bool:
@@ -402,6 +448,45 @@ confirms that the answer has been returned to the model.
 `emit_external_event()` broadcasts to every extension and returns `True` when at
 least one accepts the event. It returns `False` when no extension recognizes it,
 including malformed, duplicated, stale, or cancelled ask-user responses.
+
+## Subagent extension
+
+`SubAgentExtension` registers a foreground `task` tool with built-in
+`reasoning` and read-only `explore` profiles. Every task receives a fresh UUIDv7
+session. Each built-in profile declares its own `SQLiteSessionExtension()` and
+persists `parent_session_id` without inspecting the parent Agent's extensions:
+
+```python
+storage = SQLiteSessionStorage("sessions.sqlite3")
+history = SessionPersistenceExtension(storage)
+subagents = SubAgentExtension()
+
+agent = await Agent.create(
+    model,
+    config=AgentConfig(session_id="parent-session"),
+    extensions=[
+        history,
+        subagents,
+        ToolGuidelinesExtension(),
+    ],
+)
+```
+
+The generated tool schema restricts `subagent_type` to configured names, while
+snippets and selection guidelines are added by `ToolGuidelinesExtension`. The
+built-in `reasoning` profile has no tools and uses high reasoning effort.
+`explore` receives only `read_file`, `glob`, and `grep`, so it cannot modify the
+workspace or run shell commands.
+
+Create custom profiles with `SubAgentDefinition`. A profile may select its own
+model, prompt, tools, extensions, reasoning effort, and iteration limit.
+`SubAgentDefinition.extensions` is the complete, ordered child lifecycle: add a
+`SessionPersistenceExtension` there when the child history must be durable, and
+add `ToolGuidelinesExtension` when its tools need prompt guidance. The task tool
+does not silently insert either extension. Built-in profiles declare both rules
+explicitly. This first version runs in the foreground and returns the child
+agent's final report to the parent as a normal tool result; it does not implement
+background jobs or task resume.
 
 ## Persistent coding-agent example
 

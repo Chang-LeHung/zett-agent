@@ -7,6 +7,7 @@ from kcs_agent import (
     AgentConfig,
     AssistantMessage,
     CodingExtension,
+    FileSystemExtension,
     ModelEvent,
     ModelResponse,
     SystemMessage,
@@ -14,6 +15,40 @@ from kcs_agent import (
     ToolGuidelinesExtension,
     ToolMessage,
 )
+
+
+async def test_filesystem_extension_selects_tools_from_read_only_mode():
+    class Model:
+        def __init__(self):
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
+
+    expected = {
+        True: {"read_file", "glob", "grep"},
+        False: {"read_file", "glob", "grep", "write_file", "replace_in_file"},
+    }
+    for read_only, tool_names in expected.items():
+        model = Model()
+        agent = await Agent.create(
+            model,
+            config=AgentConfig(f"filesystem-{read_only}"),
+            extensions=[FileSystemExtension(read_only=read_only), ToolGuidelinesExtension()],
+        )
+
+        await agent.run("Inspect the workspace")
+
+        assert {definition.name for definition in model.requests[0].tools} == tool_names
+        assert "run_shell" not in tool_names
+        guidance = "\n".join(
+            message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)
+        )
+        assert all(f"## {name}" in guidance for name in tool_names)
+        if read_only:
+            assert "## write_file" not in guidance
+            assert "## replace_in_file" not in guidance
 
 
 async def test_coding_extension_executes_tools_and_registers_again(tmp_path, monkeypatch):

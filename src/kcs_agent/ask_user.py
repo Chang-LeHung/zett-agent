@@ -48,7 +48,7 @@ class AskUserEvent(AgentEvent):
         super().__init__(
             AgentEventType.CUSTOM,
             session_id=session_id,
-            call=call,
+            tool_calls=[call],
             name=ASK_USER_EVENT_NAME,
             payload={
                 "session_id": session_id,

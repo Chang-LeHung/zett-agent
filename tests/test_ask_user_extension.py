@@ -180,7 +180,7 @@ async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():
     assert ask.name == "ask_user"
     assert ask.session_id == "session-1"
     assert ask.phase == AgentPhase.READY
-    assert ask.call.id == "question-1"
+    assert [call.id for call in ask.tool_calls] == ["question-1"]
     assert ask.payload == {
         "session_id": "session-1",
         "tool_call_id": "question-1",
@@ -307,14 +307,14 @@ async def test_multiple_questions_complete_end_to_end_in_model_order():
                     ASK_USER_RESPONSE_EVENT_NAME,
                     {
                         "session_id": "two-questions",
-                        "tool_call_id": event.call.id,
+                        "tool_call_id": event.tool_calls[0].id,
                         "answer": event.payload["question"],
                     },
                 )
             )
 
     assert agent.state.phase == AgentPhase.COMPLETED
-    assert [event.call.id for event in events if isinstance(event, AskUserEvent)] == [
+    assert [event.tool_calls[0].id for event in events if isinstance(event, AskUserEvent)] == [
         "first-question",
         "second-question",
     ]

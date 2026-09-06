@@ -79,7 +79,21 @@ async def test_hooks_run_for_each_call_in_order_before_tool_execution():
         AgentEventType.TOOL_STARTED,
     ] * 2
     assert all(event.phase == AgentPhase.READY for event in relevant if event.type == AgentEventType.CUSTOM)
+    tool_events = [
+        event for event in events if event.type in (AgentEventType.TOOL_STARTED, AgentEventType.TOOL_COMPLETED)
+    ]
+    assert [[call.id for call in event.tool_calls] for event in tool_events] == [["a"], ["a"], ["b"], ["b"]]
     assert executed == [True, True]
+
+
+def test_agent_event_tool_call_lists_are_not_shared_between_events():
+    first = AgentEvent(AgentEventType.TOOL_STARTED, "session")
+    second = AgentEvent(AgentEventType.TOOL_STARTED, "session")
+
+    first.tool_calls.append(ToolCall("call-1", "record"))
+
+    assert [call.id for call in first.tool_calls] == ["call-1"]
+    assert second.tool_calls == []
 
 
 @pytest.mark.parametrize("mode", ["close", "invalid", "error"])

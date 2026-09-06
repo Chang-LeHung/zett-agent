@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -10,6 +11,7 @@ from .compaction import CompactedMessage
 from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, MessageTiming
 from .extension_hooks import AgentExtension
 from .ids import new_uuid7
+from .json_types import JsonValue
 from .messages import AnyMessage, AssistantMessage, SystemMessage
 
 
@@ -22,6 +24,10 @@ class RawMessageRecord:
     request_id: str
     sequence: int
     message: AnyMessage
+    # Request-scoped application data captured independently of model messages.
+    metadata: dict[str, JsonValue]
+    # Request-scoped classifications captured independently of model messages.
+    tags: dict[str, JsonValue]
     # UTC operation start; GENERATING for assistants, RUNNING_TOOL for tools,
     # and append time for user-authored or directly imported messages.
     started_at: datetime
@@ -49,6 +55,22 @@ class SessionSummary(BaseModel):
     """Small read model used to list persisted conversation sessions."""
 
     session_id: str = Field(description="Stable conversation identifier")
+    parent_session_id: str | None = Field(
+        default=None,
+        description="Parent conversation for a delegated subagent; null for a root session",
+    )
+    title: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="Human-readable session title; applications may update it",
+    )
+    agent_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        description="Provider-neutral agent profile owning the session",
+    )
     message_count: int = Field(description="Number of immutable Raw Log messages")
     created_at: datetime = Field(description="UTC time of the first Raw Log message")
     updated_at: datetime = Field(description="UTC time of the latest Raw Log message")
@@ -94,6 +116,22 @@ class SessionView(BaseModel):
     identify Raw Log records and the Snapshot boundary only.
     """
 
+    parent_session_id: str | None = Field(
+        default=None,
+        description="Parent conversation for a delegated subagent; null for a root session",
+    )
+    title: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="Human-readable session title; applications may update it",
+    )
+    agent_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        description="Provider-neutral agent profile owning the session",
+    )
     snapshot: ContextSnapshot | None = Field(default=None, description="Latest compacted checkpoint, if any")
     raw_tail: list[RawMessageRecord] = Field(
         default_factory=list,
@@ -120,11 +158,18 @@ class SessionStorage(Protocol):
         request_id: str,
         message: AnyMessage,
         timing: MessageTiming | None = None,
+        parent_session_id: str | None = None,
+        title: str | None = None,
+        agent_name: str | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
     ) -> int:
         """Append one immutable Raw Log message and return its allocated sequence.
 
         A direct storage caller may omit timing for an instantaneous imported
-        message. The Agent runtime always supplies measured timing.
+        message. The Agent runtime always supplies measured timing. The optional
+        Session attributes initialize the session record on its first append and
+        are not copied into each Raw Log row. The parent ID is immutable.
         """
         ...
 
@@ -150,8 +195,17 @@ class _Request:
     context_sequences: list[int] = field(default_factory=list)
 
 
-class SessionPersistenceExtension(AgentExtension):
-    """Restore context before every request and append original messages.
+class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
+    """Reusable lifecycle adapter for one typed session storage implementation.
+
+    This base owns all framework-specific behavior: request bookkeeping,
+    context restoration, immutable Raw Log appends, compaction snapshots, and
+    cleanup. A concrete persistence extension only needs to construct a storage
+    implementation and pass it to ``super().__init__``::
+
+        class CustomSessionExtension(BaseSessionPersistenceExtension[CustomStorage]):
+            def __init__(self, client: CustomClient) -> None:
+                super().__init__(CustomStorage(client))
 
     Register this instead of InMemoryMessageAccumulator, before prompt extensions.
     Raw messages remain immutable. A compaction event stores only its new
@@ -159,18 +213,23 @@ class SessionPersistenceExtension(AgentExtension):
 
     Example:
         agent = await Agent.create(model, config=config, extensions=[
-            SessionPersistenceExtension(storage),
+            CustomSessionExtension(client),
             ToolGuidelinesExtension(),
             CompactionExtension(model),
         ])
     """
 
-    def __init__(self, storage: SessionStorage) -> None:
+    def __init__(self, storage: StorageT) -> None:
         self.storage = storage
         self._requests: WeakKeyDictionary[AgentContext, _Request] = WeakKeyDictionary()
 
     async def _restore(self, context: AgentContext) -> SessionView:
         view = await self.storage.load(context.config.session_id)
+        configured_parent = context.state.parent_session_id
+        session_exists = view.snapshot is not None or bool(view.raw_tail)
+        if configured_parent is not None and session_exists and view.parent_session_id != configured_parent:
+            raise ValueError("Stored session belongs to a different parent session")
+        context.state.parent_session_id = view.parent_session_id or configured_parent
         # Instructions are supplied by the current application configuration;
         # persisted context contributes dialogue and checkpoints only.
         instructions = [message for message in context.state.messages if isinstance(message, SystemMessage)]
@@ -201,6 +260,9 @@ class SessionPersistenceExtension(AgentExtension):
                     request.request_id,
                     message,
                     timing,
+                    parent_session_id=context.state.parent_session_id,
+                    metadata=context.metadata,
+                    tags=context.tags,
                 )
                 request.context_sequences.append(sequence)
             case CompactionEvent() as compaction:
@@ -233,3 +295,12 @@ class SessionPersistenceExtension(AgentExtension):
     async def on_error(self, context: AgentContext, error: Exception) -> None:
         """Release bookkeeping; append-only Raw Log history remains available."""
         self._requests.pop(context, None)
+
+
+class SessionPersistenceExtension(BaseSessionPersistenceExtension[SessionStorage]):
+    """Ready-to-use lifecycle adapter for any SessionStorage implementation.
+
+    Use this directly when the application already owns a storage instance.
+    Subclass BaseSessionPersistenceExtension only when the extension itself must
+    construct or own storage resources.
+    """

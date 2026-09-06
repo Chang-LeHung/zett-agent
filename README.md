@@ -421,6 +421,34 @@ returns the final `AssistantMessage`.
 
 Tool errors are returned to the model. Model errors propagate to the application.
 
+## Todo-write extension
+
+`TodoWriteExtension` registers a session-scoped `todo_write` tool for ordered,
+observable task progress:
+
+```python
+todo_extension = TodoWriteExtension()
+agent = await Agent.create(
+    model,
+    config=AgentConfig(session_id="coding"),
+    extensions=[todo_extension, ToolGuidelinesExtension()],
+)
+```
+
+The model submits the complete list on every call. The first task starts as
+`processing`, later tasks remain `pending`, and completing the current task
+advances `processing` to exactly the next position. After the final update,
+every task is `completed` and no task is processing. Existing task content and
+order cannot change, and invalid updates fail atomically without replacing the
+last valid state.
+
+The Tool result contains the complete validated list, its zero-based
+`processing_index`, the current `processing` item, and a final `completed`
+flag. Applications can call `todo_extension.todos(session_id)` while the
+request is active. The extension clears request-local state after success,
+failure, or cancellation so a finished request cannot leak stale todos into a
+later run.
+
 ## Ask-user extension
 
 `AskUserExtension` registers an `ask_user` tool and pauses its tool step while a

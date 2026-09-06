@@ -55,6 +55,7 @@ from .extensions import (
 from .external_events import ExternalEvent, ExternalEventExtension
 from .ids import new_uuid7
 from .json_types import JsonValue
+from .mcp import McpClient, McpClientFactory, McpExtension, McpHttpServer, McpServer, McpStdioServer
 from .messages import (
     AnyMessage,
     AssistantMessage,
@@ -125,6 +126,14 @@ from .providers import (
     ProviderError,
     ProviderResponseError,
 )
+from .skills import (
+    DEFAULT_SKILL_ROOTS,
+    READ_SKILL_TOOL_NAME,
+    SKILL_FILE_NAME,
+    SkillDefinition,
+    SkillExtension,
+    SkillFileParser,
+)
 from .storage import SQLiteSessionExtension, SQLiteSessionStorage
 from .subagents import (
     TASK_TOOL_NAME,
@@ -161,6 +170,18 @@ from .tools import (
 
 __all__ = [
     "Agent",
+    "McpClient",
+    "McpClientFactory",
+    "McpExtension",
+    "McpHttpServer",
+    "McpServer",
+    "McpStdioServer",
+    "DEFAULT_SKILL_ROOTS",
+    "READ_SKILL_TOOL_NAME",
+    "SKILL_FILE_NAME",
+    "SkillDefinition",
+    "SkillExtension",
+    "SkillFileParser",
     "ASK_USER_TOOL_NAME",
     "ASK_USER_EVENT_NAME",
     "ASK_USER_RESPONSE_EVENT_NAME",

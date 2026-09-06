@@ -388,6 +388,51 @@ matter; the full saved output is necessary when the root cause lies in between.
 `ToolGuidelinesExtension` groups all snippets before all guidelines and appends
 both sections to the system instructions.
 
+## Skills and MCP
+
+`SkillExtension` discovers `SKILL.md` files recursively below its roots. With
+no arguments it searches `.zett`, `.agent`, `.claude`, and `.cursor` relative
+to the current working directory. Explicit roots replace these defaults. Skill
+names and resolved files are deduplicated; the first configured root has
+precedence. `SkillFileParser` validates UTF-8 content, closed front matter,
+required `name` and `description` fields, a normalized lowercase skill name,
+and a non-empty Markdown body. Invalid files are skipped without stopping
+discovery. The extension injects a small system catalog containing each skill
+name, description, and path, then
+registers `read_skill`. The complete file enters context only after the model
+loads a relevant skill by its advertised name; arbitrary paths are rejected.
+
+```python
+from pathlib import Path
+
+from zett_agent import SkillExtension, ToolGuidelinesExtension
+
+extensions = [
+    SkillExtension([Path(".agent/skills"), Path.home() / ".agent" / "skills"]),
+    ToolGuidelinesExtension(),
+]
+```
+
+`McpExtension` connects configured Streamable HTTP or stdio servers for one
+request, discovers every page of their tool list, and closes all transports on
+success, failure, or cancellation. Tool names are namespaced as
+`server__tool` by default so different servers cannot silently shadow each
+other.
+
+```python
+from zett_agent import McpExtension, McpHttpServer, McpStdioServer
+
+mcp = McpExtension(
+    [
+        McpHttpServer(name="docs", url="http://127.0.0.1:8000/mcp"),
+        McpStdioServer(name="local", command="python", args=("mcp_server.py",)),
+    ]
+)
+```
+
+Both extensions are optional. They are not installed in a concrete application
+agent unless that application includes them in its explicit extension list.
+
 Tool code is organized under `zett_agent/tools/`: `base.py` defines `AgentTool`,
 the `@tool` decorator, schema generation, and prompt guidance; `coding.py`
 contains the local coding tools; `output.py` owns bounded preview behavior.

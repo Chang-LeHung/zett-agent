@@ -203,6 +203,44 @@ class SQLiteSessionStorage:
         """Release the connection pool without deleting stored data."""
         self.engine.dispose()
 
+    def create_session(
+        self,
+        *,
+        session_id: str | None = None,
+        parent_session_id: str | None = None,
+        title: str | None = None,
+        agent_name: str | None = None,
+    ) -> SessionSummary:
+        """Create an empty session before its first Raw Log message is appended."""
+        resolved_id = session_id or new_uuid7()
+        if not resolved_id.strip():
+            raise ValueError("session_id cannot be empty")
+        if parent_session_id is not None and not parent_session_id.strip():
+            raise ValueError("parent_session_id cannot be empty")
+        if parent_session_id == resolved_id:
+            raise ValueError("parent_session_id must differ from session_id")
+        normalized_title = title.strip() if title is not None else None
+        normalized_agent_name = agent_name.strip() if agent_name is not None else None
+        if normalized_title is not None and (not normalized_title or len(normalized_title) > 200):
+            raise ValueError("Session title must contain between 1 and 200 characters")
+        if normalized_agent_name is not None and (not normalized_agent_name or len(normalized_agent_name) > 64):
+            raise ValueError("Agent name must contain between 1 and 64 characters")
+        now = datetime.now(UTC)
+        with self._session_scope() as session:
+            if session.get(AgentSessionModel, resolved_id) is not None:
+                raise ValueError(f"Session already exists: {resolved_id}")
+            row = AgentSessionModel(
+                id=resolved_id,
+                parent_session_id=parent_session_id,
+                title=normalized_title,
+                agent_name=normalized_agent_name,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(row)
+            session.flush()
+            return self._summary(session, row)
+
     def list_raw_messages(
         self,
         session_id: str,
@@ -577,6 +615,22 @@ class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorag
             through_sequence=through_sequence,
             limit=limit,
             offset=offset,
+        )
+
+    def create_session(
+        self,
+        *,
+        session_id: str | None = None,
+        parent_session_id: str | None = None,
+        title: str | None = None,
+        agent_name: str | None = None,
+    ) -> SessionSummary:
+        """Create an empty session in the owned storage."""
+        return self.storage.create_session(
+            session_id=session_id,
+            parent_session_id=parent_session_id,
+            title=title,
+            agent_name=agent_name,
         )
 
     def list_sessions(self, *, limit: int = 100, offset: int = 0) -> list[SessionSummary]:

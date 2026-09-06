@@ -486,6 +486,19 @@ def test_list_sessions_rejects_invalid_query_options(storage, options, error):
         storage.list_sessions(**options)
 
 
+def test_create_session_persists_an_empty_conversation(storage):
+    created = storage.create_session(session_id="empty-session", title="Empty", agent_name="Zett Agent")
+
+    assert created.session_id == "empty-session"
+    assert created.title == "Empty"
+    assert created.agent_name == "Zett Agent"
+    assert created.message_count == 0
+    assert storage.get_session("empty-session") == created
+    assert storage.list_raw_messages("empty-session") == []
+    with pytest.raises(ValueError, match="already exists"):
+        storage.create_session(session_id="empty-session")
+
+
 async def test_storage_rejects_invalid_checkpoint_writes(storage):
     await storage.append("session", "request", UserMessage(content="One"))
 

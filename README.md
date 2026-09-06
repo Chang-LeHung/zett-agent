@@ -12,8 +12,9 @@ Read these files in order:
 
 1. `messages.py`: four message classes with direct fields.
 2. `model.py`: a model receives messages and streams its response.
-3. `tools.py`: a named function with a Pydantic-generated input schema.
-4. `agent.py`: call the model, execute its tools, repeat until it answers.
+3. `tools/base.py`: typed tool definitions and Pydantic-generated input schemas.
+4. `tools/coding.py`: working-directory file, search, and shell tools.
+5. `agent.py`: call the model, execute its tools, repeat until it answers.
 
 ```text
 user message -> model -> assistant answer
@@ -336,6 +337,11 @@ matter; the full saved output is necessary when the root cause lies in between.
 
 `ToolGuidelinesExtension` groups all snippets before all guidelines and appends
 both sections to the system instructions.
+
+Tool code is organized under `kcs_agent/tools/`: `base.py` defines `AgentTool`,
+the `@tool` decorator, schema generation, and prompt guidance; `coding.py`
+contains the local coding tools; `output.py` owns bounded preview behavior.
+The package `__init__.py` exposes the stable public tool API.
 
 ## Streaming
 

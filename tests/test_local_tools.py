@@ -33,7 +33,7 @@ async def test_file_tools_write_read_and_replace_text(tmp_path, monkeypatch):
 
 async def test_file_tools_reject_unsafe_or_ambiguous_operations(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tool_module = importlib.import_module("kcs_agent.tools")
+    tool_module = importlib.import_module("kcs_agent.tools.coding")
     monkeypatch.setattr(tool_module, "MAX_FILE_BYTES", 16)
     await write_file({"path": "existing.txt", "content": "same same"})
     (tmp_path / "directory").mkdir()
@@ -129,7 +129,7 @@ async def test_grep_searches_text_files_and_reports_locations(tmp_path, monkeypa
     with pytest.raises(ValueError, match="escape"):
         await grep({"pattern": "Agent", "file_pattern": "../**/*"})
 
-    tool_module = importlib.import_module("kcs_agent.tools")
+    tool_module = importlib.import_module("kcs_agent.tools.coding")
     monkeypatch.setattr(tool_module, "MAX_FILE_BYTES", 4)
     oversized = await grep({"pattern": "Agent", "file_pattern": "src/first.py"})
     assert oversized.files_searched == 0
@@ -138,7 +138,7 @@ async def test_grep_searches_text_files_and_reports_locations(tmp_path, monkeypa
 
 async def test_shell_tool_captures_status_output_and_truncation(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    output_module = importlib.import_module("kcs_agent.tool_output")
+    output_module = importlib.import_module("kcs_agent.tools.output")
     monkeypatch.setattr(output_module, "MAX_OUTPUT_BYTES", 100)
     result = await run_shell({"command": "printf START; printf '%0200d' 0; printf END; printf 'error' >&2; exit 3"})
 

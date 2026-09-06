@@ -56,7 +56,10 @@ async def test_hooks_run_for_each_call_in_order_before_tool_execution():
             assert context.state.phase == AgentPhase.READY
             order.append((call.id, self.name, "events"))
             yield AgentEvent(
-                AgentEventType.CUSTOM, context.config.session_id, data={"name": self.name, "call": call.id}
+                AgentEventType.CUSTOM,
+                context.config.session_id,
+                name=self.name,
+                payload={"call": call.id},
             )
 
     agent = await Agent.create(
@@ -91,6 +94,7 @@ async def test_pre_tool_interruption_closes_hook_without_executing_tool(mode):
                 yield AgentEvent(
                     AgentEventType.MODEL_STARTED if mode == "invalid" else AgentEventType.CUSTOM,
                     context.config.session_id,
+                    name="preparation" if mode != "invalid" else None,
                 )
             finally:
                 closed.append(True)

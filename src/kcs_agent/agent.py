@@ -198,7 +198,8 @@ class AgentExtension:
             yield AgentEvent(
                 AgentEventType.CUSTOM,
                 session_id=context.config.session_id,
-                data={"name": "retrieval_progress", "completed": 3, "total": 10},
+                name="retrieval_progress",
+                payload={"completed": 3, "total": 10},
             )
 
         CUSTOM events are forwarded unchanged except for the runtime phase;
@@ -228,11 +229,12 @@ class AgentExtension:
             yield AgentEvent(
                 AgentEventType.CUSTOM,
                 session_id=context.config.session_id,
-                data={"name": "tool_preparation", "tool_call_id": call.id},
+                name="tool_preparation",
+                payload={"tool_call_id": call.id},
             )
         """
         if False:
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
+            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="example")
 
     async def after_tool(
         self,

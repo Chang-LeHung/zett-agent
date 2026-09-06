@@ -318,7 +318,13 @@ class AgentEvent:
     compaction: CompactionEvent | None = None
     # Whether a completed compaction replaced context; null for other events.
     applied: bool | None = None
-    # Extension-owned payload for CUSTOM events; None when no data is supplied.
-    # Use a stable "name" key to distinguish custom event kinds. Extensions
-    # targeting JSON/SSE clients must supply JSON-serializable values.
-    data: dict[str, Any] | None = None
+    # Stable event name used by consumers to match one kind of CUSTOM event.
+    # This field is required and must be non-empty when type is CUSTOM.
+    name: str | None = None
+    # Extension-owned data for CUSTOM events. Extensions targeting JSON/SSE
+    # clients must supply JSON-serializable keys and values.
+    payload: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.type == AgentEventType.CUSTOM and (self.name is None or not self.name.strip()):
+            raise ValueError("A custom AgentEvent requires a non-empty name")

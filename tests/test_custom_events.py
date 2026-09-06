@@ -15,10 +15,10 @@ from kcs_agent import (
 )
 
 
-@pytest.mark.parametrize("data", [None, {}, {"name": "progress", "items": [1, 2], "done": False}])
+@pytest.mark.parametrize("payload", [None, {}, {"items": [1, 2], "done": False}])
 @pytest.mark.parametrize("compacting", [False, True])
-async def test_custom_events_preserve_payload_order_and_phase(data, compacting):
-    custom = AgentEvent(AgentEventType.CUSTOM, "session", data=data)
+async def test_custom_events_preserve_name_payload_order_and_phase(payload, compacting):
+    custom = AgentEvent(AgentEventType.CUSTOM, "session", name="progress", payload=payload)
 
     class Extension(AgentExtension):
         async def before_model_events(self, context):
@@ -35,11 +35,20 @@ async def test_custom_events_preserve_payload_order_and_phase(data, compacting):
     agent = await Agent.create(Model(), config=AgentConfig("session"), extensions=[Extension()])
     events = [event async for event in agent.stream("hello")]
     assert events[1 if compacting else 0] is custom
-    assert custom.data is data
+    assert custom.name == "progress"
+    assert custom.payload is payload
     assert custom.phase == (AgentPhase.COMPACTING if compacting else AgentPhase.READY)
     assert events[-1].type == AgentEventType.RUN_COMPLETED
     assert agent.state.phase == AgentPhase.COMPLETED
 
 
-def test_builtin_events_have_no_custom_payload_by_default():
-    assert AgentEvent(AgentEventType.MODEL_STARTED, "session").data is None
+def test_builtin_events_have_no_custom_name_or_payload_by_default():
+    event = AgentEvent(AgentEventType.MODEL_STARTED, "session")
+    assert event.name is None
+    assert event.payload is None
+
+
+@pytest.mark.parametrize("name", [None, "", "   "])
+def test_custom_events_require_a_non_empty_name(name):
+    with pytest.raises(ValueError, match="requires a non-empty name"):
+        AgentEvent(AgentEventType.CUSTOM, "session", name=name)

@@ -1,10 +1,34 @@
-"""Built-in extensions for in-memory history and tool prompt guidance."""
+"""Built-in extensions for history, tool guidance, and filesystem access."""
 
 from .agent import AgentContext
 from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent
 from .extension_hooks import AgentExtension
 from .messages import AnyMessage, SystemMessage
-from .tools import render_tool_guidance
+from .tools import glob, grep, read_file, render_tool_guidance, replace_in_file, run_shell, write_file
+
+
+class CodingExtension(AgentExtension):
+    """Register local coding tools using the process working directory.
+
+    Provides read_file, write_file, replace_in_file, glob, grep, and run_shell.
+    File tools retain their existing schemas and path validation. Shell commands
+    execute with the host process permissions; the working directory is not a
+    sandbox. Add ToolGuidelinesExtension to include
+    their snippets and guidelines in the model's system instructions.
+
+    Example:
+        agent = await Agent.create(
+            model,
+            config=AgentConfig(session_id="coding"),
+            extensions=[CodingExtension(), ToolGuidelinesExtension()],
+        )
+        await agent.run("Read README.md and find Python files.")
+    """
+
+    async def on_tool(self, context: AgentContext) -> None:
+        """Register file tools for this request using the shared name checks."""
+        for registered in (read_file, write_file, replace_in_file, glob, grep, run_shell):
+            context.register_tool(registered)
 
 
 class ToolGuidelinesExtension(AgentExtension):

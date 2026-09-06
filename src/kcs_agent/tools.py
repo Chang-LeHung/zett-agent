@@ -3,6 +3,7 @@ import inspect
 import json
 import os
 import re
+import signal
 import tempfile
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from typing import Annotated, Any, get_type_hints
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
 
 from .model import ToolDefinition
+from .tool_output import MAX_MATCH_BYTES, MAX_OUTPUT_BYTES, shell_preview, utf8_prefix
 
 
 @dataclass(slots=True)
@@ -195,6 +197,11 @@ class ReadFileResult(BaseModel):
     end_line: int
     total_lines: int
     has_more: bool
+    # Resume at this one-based line/character column; None means EOF.
+    next_line: int | None = None
+    next_column: int | None = None
+    # True when the byte budget, rather than the requested range, stopped output.
+    truncated: bool = False
 
 
 class WriteFileResult(BaseModel):
@@ -228,6 +235,9 @@ class GrepMatch(BaseModel):
     line_number: int
     column: int
     text: str
+    # Original one-based column where the returned text window begins.
+    text_start_column: int = 1
+    text_truncated: bool = False
 
 
 class GrepResult(BaseModel):
@@ -248,6 +258,9 @@ class ShellResult(BaseModel):
     stderr: str
     timed_out: bool = False
     output_truncated: bool = False
+    # Relative paths to full byte streams, retained only when previews truncate.
+    stdout_path: str | None = None
+    stderr_path: str | None = None
 
 
 FilePath = Annotated[
@@ -261,7 +274,6 @@ MaxResults = Annotated[int, Field(ge=1, le=5_000)]
 
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
-MAX_OUTPUT_CHARACTERS = 100_000
 
 
 def _resolve_working_path(path: str) -> tuple[Path, Path]:
@@ -308,12 +320,6 @@ def _write_working_text(path: Path, content: str) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
-def _truncate_output(output: str) -> tuple[str, bool]:
-    if len(output) <= MAX_OUTPUT_CHARACTERS:
-        return output, False
-    return output[:MAX_OUTPUT_CHARACTERS], True
-
-
 @tool
 def glob(pattern: Annotated[str, Field(min_length=1)], max_results: MaxResults = 200) -> GlobResult:
     """Find paths matching a glob pattern in the current working directory.
@@ -332,15 +338,19 @@ def glob(pattern: Annotated[str, Field(min_length=1)], max_results: MaxResults =
     working_directory = Path.cwd().resolve()
     validated_pattern = _validate_working_pattern(pattern)
     paths: list[str] = []
+    output_bytes = 0
     truncated = False
     for candidate in sorted(working_directory.glob(validated_pattern.as_posix())):
         resolved = candidate.resolve()
         if not resolved.is_relative_to(working_directory):
             continue
-        if len(paths) == max_results:
+        relative = candidate.relative_to(working_directory).as_posix()
+        size = len(relative.encode("utf-8"))
+        if len(paths) == max_results or output_bytes + size > MAX_OUTPUT_BYTES:
             truncated = True
             break
-        paths.append(candidate.relative_to(working_directory).as_posix())
+        paths.append(relative)
+        output_bytes += size
     return GlobResult(pattern=pattern, paths=paths, truncated=truncated)
 
 
@@ -376,6 +386,7 @@ def grep(
         raise ValueError(f"Invalid regular expression: {error}") from error
 
     matches: list[GrepMatch] = []
+    output_bytes = 0
     files_searched = 0
     truncated = False
     for candidate in sorted(working_directory.glob(validated_file_pattern.as_posix())):
@@ -396,27 +407,38 @@ def grep(
             if len(matches) == max_results:
                 truncated = True
                 break
-            matches.append(
-                GrepMatch(
-                    path=candidate.relative_to(working_directory).as_posix(),
-                    line_number=line_number,
-                    column=match.start() + 1,
-                    text=line,
-                )
+            text_start = max(0, match.start() - 100) if len(line.encode("utf-8")) > MAX_MATCH_BYTES else 0
+            preview = utf8_prefix(line[text_start:], MAX_MATCH_BYTES)
+            item = GrepMatch(
+                path=candidate.relative_to(working_directory).as_posix(),
+                line_number=line_number,
+                column=match.start() + 1,
+                text=preview,
+                text_start_column=text_start + 1,
+                text_truncated=text_start > 0 or len(preview) < len(line),
             )
+            size = len(item.model_dump_json().encode("utf-8"))
+            if output_bytes + size > MAX_OUTPUT_BYTES:
+                truncated = True
+                break
+            matches.append(item)
+            output_bytes += size
         if truncated:
             break
     return GrepResult(pattern=pattern, matches=matches, files_searched=files_searched, truncated=truncated)
 
 
 @tool
-def read_file(path: FilePath, start_line: StartLine = 1, line_count: LineCount = 200) -> ReadFileResult:
+def read_file(
+    path: FilePath, start_line: StartLine = 1, line_count: LineCount = 200, start_column: StartLine = 1
+) -> ReadFileResult:
     """Read a line range from a UTF-8 text file in the current working directory.
 
     Args:
         path: Relative path inside the current working directory.
         start_line: One-based first line to return.
         line_count: Maximum number of lines to return.
+        start_column: One-based character column on start_line, used to resume a long line.
 
     Snippet:
         read_file(path="src/app.py", start_line=1, line_count=200)
@@ -424,21 +446,47 @@ def read_file(path: FilePath, start_line: StartLine = 1, line_count: LineCount =
     Guidelines:
         - Use line ranges for large files.
         - Inspect the current content before editing a file.
+        - Continue with next_line and next_column when has_more is true.
     """
     working_directory, target = _resolve_working_path(path)
     if not target.is_file():
         raise ValueError(f"File does not exist: {path}")
-    lines = _read_working_text(target).splitlines(keepends=True)
-    start_index = min(start_line - 1, len(lines))
-    selected = lines[start_index : start_index + line_count]
-    end_line = start_index + len(selected)
+    selected: list[str] = []
+    line_number, column, total_lines = 1, 1, 0
+    used, end_line = 0, 0
+    next_line = next_column = None
+    truncated = False
+    with target.open(encoding="utf-8") as source:
+        while fragment := source.readline(4096):
+            total_lines = line_number
+            if line_number >= start_line and next_line is None:
+                offset = max(0, start_column - column) if line_number == start_line else 0
+                available = fragment[offset:]
+                if line_number >= start_line + line_count:
+                    next_line, next_column = line_number, column
+                elif available:
+                    part = utf8_prefix(available, MAX_OUTPUT_BYTES - used)
+                    selected.append(part)
+                    used += len(part.encode("utf-8"))
+                    if part:
+                        end_line = line_number
+                    if len(part) < len(available):
+                        next_line, next_column = line_number, column + offset + len(part)
+                        truncated = True
+            if fragment.endswith("\n"):
+                line_number, column = line_number + 1, 1
+            else:
+                column += len(fragment)
     return ReadFileResult(
         path=target.relative_to(working_directory).as_posix(),
         content="".join(selected),
         start_line=start_line,
         end_line=end_line,
-        total_lines=len(lines),
-        has_more=end_line < len(lines),
+        total_lines=total_lines,
+        has_more=next_line is not None,
+        next_line=next_line,
+        next_column=next_column,
+        truncated=truncated,
     )
 
 
@@ -530,34 +578,59 @@ async def run_shell(
     Guidelines:
         - Use only for bounded commands in a trusted working directory.
         - Inspect exit_code and stderr before assuming the command succeeded.
+        - Output previews keep startup and final results within byte and line limits.
+        - When output_truncated is true, use read_file on stdout_path or stderr_path for omitted content.
     """
     if not command.strip():
         raise ValueError("Shell command cannot be blank")
-    process = await asyncio.create_subprocess_shell(
-        command,
-        cwd=Path.cwd(),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    working_directory, output_root = _resolve_working_path(".kcs-tool-output")
+    output_root.mkdir(parents=True, exist_ok=True)
+    directory = Path(tempfile.mkdtemp(prefix="shell-", dir=output_root))
+    stdout_file, stderr_file = directory / "stdout.txt", directory / "stderr.txt"
     timed_out = False
-    try:
-        async with asyncio.timeout(timeout_seconds):
-            stdout_bytes, stderr_bytes = await process.communicate()
-    except TimeoutError:
-        timed_out = True
-        process.kill()
-        stdout_bytes, stderr_bytes = await process.communicate()
-    except asyncio.CancelledError:
-        process.kill()
-        await process.communicate()
-        raise
-    stdout, stdout_truncated = _truncate_output(stdout_bytes.decode("utf-8", errors="replace"))
-    stderr, stderr_truncated = _truncate_output(stderr_bytes.decode("utf-8", errors="replace"))
-    return ShellResult(
+    # Direct file descriptors keep memory bounded regardless of output volume.
+    # The two streams remain separate; their cross-stream ordering is not retained.
+    with stdout_file.open("wb") as stdout_target, stderr_file.open("wb") as stderr_target:
+        process = await asyncio.create_subprocess_shell(
+            command,
+            cwd=working_directory,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=stdout_target,
+            stderr=stderr_target,
+            start_new_session=os.name == "posix",
+        )
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                await process.wait()
+        except (TimeoutError, asyncio.CancelledError) as error:
+            # On POSIX stop the entire process group, including child commands.
+            try:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    process.kill()
+            except ProcessLookupError:
+                pass
+            await process.wait()
+            if isinstance(error, asyncio.CancelledError):
+                raise
+            timed_out = True
+    stdout, stdout_truncated = shell_preview(stdout_file)
+    stderr, stderr_truncated = shell_preview(stderr_file)
+    # Keep both original streams when either preview is incomplete.
+    truncated = stdout_truncated or stderr_truncated
+    result = ShellResult(
         command=command,
         exit_code=process.returncode if process.returncode is not None else -1,
         stdout=stdout,
         stderr=stderr,
         timed_out=timed_out,
-        output_truncated=stdout_truncated or stderr_truncated,
+        output_truncated=truncated,
+        stdout_path=stdout_file.relative_to(working_directory).as_posix() if truncated else None,
+        stderr_path=stderr_file.relative_to(working_directory).as_posix() if truncated else None,
     )
+    if not truncated:
+        stdout_file.unlink()
+        stderr_file.unlink()
+        directory.rmdir()
+    return result

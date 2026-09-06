@@ -303,10 +303,55 @@ requires a unique match unless `replace_all=True`. Shell output includes
 executes arbitrary host commands and is not a security sandbox; register it only
 for trusted agents.
 
+Tool output uses bounded previews:
+
+- `read_file` returns at most 50 KiB of UTF-8 content and the requested line
+  count. `next_line` and `next_column` are one-based resume coordinates; pass
+  them as `start_line` and `start_column`. Even a single very long line can be
+  read without losing characters. Reads scan incrementally, including files
+  larger than 2 MiB; counting `total_lines` still requires scanning the file.
+- `grep` caps serialized match records at 50 KiB and each text window at 2,000
+  bytes. A long-line window includes the first match, with `text_start_column`
+  and `text_truncated` explaining its position. `truncated` means additional
+  results were omitted. Files over 2 MiB remain excluded from grep scans.
+- `glob` caps returned path text at 50 KiB as well as `max_results`.
+- `run_shell` redirects stdout and stderr to separate files, avoiding an
+  unbounded in-memory capture. Each preview is at most 50 KiB and 2,000 lines,
+  including an explicit omission marker. Approximately one quarter of the byte
+  budget shows startup context and three quarters shows final diagnostics.
+  These are byte/line limits, not token limits, and JSON encoding adds overhead.
+
+If either shell preview truncates, both original streams are retained under
+`.kcs-tool-output/shell-*/` in the working directory. Use `read_file` with
+`stdout_path` or `stderr_path` to inspect omitted content. Untruncated command
+files are removed; retained logs require manual cleanup and have no disk quota.
+Stdout/stderr ordering across streams is not reconstructed. On POSIX, timeout
+and cancellation kill the process group; on other platforms only the direct
+process is killed. Commands should remain foreground, bounded operations.
+
+Continuous ranges suit file reads because they preserve source order. Match
+windows suit grep because they keep the relevant location visible. Head/tail
+previews suit shell commands because startup details and final errors can both
+matter; the full saved output is necessary when the root cause lies in between.
+
 `ToolGuidelinesExtension` groups all snippets before all guidelines and appends
 both sections to the system instructions.
 
 ## Streaming
+
+`CodingExtension()` registers `read_file`, `write_file`, `replace_in_file`,
+`glob`, `grep`, and `run_shell` for each request, using the current working directory:
+
+```python
+agent = await Agent.create(
+    model,
+    config=AgentConfig(session_id="coding"),
+    extensions=[CodingExtension(), ToolGuidelinesExtension()],
+)
+```
+
+Include `InMemoryMessageAccumulator()` or a persistence extension when history
+is needed. Shell execution is included and uses the host process permissions.
 
 Configure the default reasoning level with `Agent(..., reasoning_effort=...)` or
 `Agent.create(..., reasoning_effort=...)`. Both `run()` and `stream()` inherit

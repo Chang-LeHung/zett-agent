@@ -38,6 +38,7 @@ from .extension_hooks import (
     AgentToolHooksMixin,
 )
 from .extensions import (
+    CodingExtension,
     InMemoryMessageAccumulator,
     ToolGuidelinesExtension,
 )
@@ -149,6 +150,7 @@ __all__ = [
     "AgentProtocolError",
     "AgentIterationLimitError",
     "InMemoryMessageAccumulator",
+    "CodingExtension",
     "ToolGuidelinesExtension",
     "AnyMessage",
     "Message",

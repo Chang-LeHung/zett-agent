@@ -22,6 +22,7 @@ from kcs_agent import (
     AgentEventType,
     AnyMessage,
     AssistantMessage,
+    CodingExtension,
     CompactionExtension,
     DeepSeekProvider,
     ReasoningEffort,
@@ -31,16 +32,9 @@ from kcs_agent import (
     ToolGuidelinesExtension,
     ToolMessage,
     UserMessage,
-    glob,
-    grep,
     new_uuid7,
-    read_file,
-    replace_in_file,
-    run_shell,
-    write_file,
 )
 
-TOOLS = [glob, grep, read_file, write_file, replace_in_file, run_shell]
 SLASH_COMMANDS = ("/sessions", "/history", "/new", "/use", "/help", "/quit", "/exit")
 
 
@@ -284,8 +278,8 @@ async def main() -> None:
     agent = await Agent.create(
         provider,
         system_prompt=build_system_prompt(),
-        tools=TOOLS,
         extensions=[
+            CodingExtension(),
             persistence,
             ToolGuidelinesExtension(),
             CompactionExtension(

@@ -58,8 +58,7 @@ async def test_file_tools_reject_unsafe_or_ambiguous_operations(tmp_path, monkey
         await write_file({"path": "large.txt", "content": "x" * 17})
 
     (tmp_path / "oversized.txt").write_text("x" * 17)
-    with pytest.raises(ValueError, match="byte limit"):
-        await read_file({"path": "oversized.txt"})
+    assert (await read_file({"path": "oversized.txt"})).content == "x" * 17
 
 
 async def test_local_tools_export_typed_schemas():
@@ -74,6 +73,7 @@ async def test_local_tools_export_typed_schemas():
     assert tools["read_file"].guidelines == (
         "Use line ranges for large files.",
         "Inspect the current content before editing a file.",
+        "Continue with next_line and next_column when has_more is true.",
     )
 
     with pytest.raises(ValidationError):
@@ -138,13 +138,16 @@ async def test_grep_searches_text_files_and_reports_locations(tmp_path, monkeypa
 
 async def test_shell_tool_captures_status_output_and_truncation(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    tool_module = importlib.import_module("kcs_agent.tools")
-    monkeypatch.setattr(tool_module, "MAX_OUTPUT_CHARACTERS", 4)
-    result = await run_shell({"command": "printf 'abcdef'; printf 'error' >&2; exit 3"})
+    output_module = importlib.import_module("kcs_agent.tool_output")
+    monkeypatch.setattr(output_module, "MAX_OUTPUT_BYTES", 100)
+    result = await run_shell({"command": "printf START; printf '%0200d' 0; printf END; printf 'error' >&2; exit 3"})
 
     assert result.exit_code == 3
-    assert result.stdout == "abcd"
-    assert result.stderr == "erro"
+    assert result.stdout.startswith("START")
+    assert result.stdout.endswith("END")
+    assert len(result.stdout.encode()) <= 100
+    assert result.stderr == "error"
+    assert (tmp_path / result.stdout_path).read_text().endswith("END")
     assert result.output_truncated is True
     assert result.timed_out is False
 

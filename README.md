@@ -295,6 +295,11 @@ both sections to the system instructions.
 
 ## Streaming
 
+Configure the default reasoning level with `Agent(..., reasoning_effort=...)` or
+`Agent.create(..., reasoning_effort=...)`. Both `run()` and `stream()` inherit
+that default when their `reasoning_effort` argument is omitted; passing an
+explicit value overrides it for that request only.
+
 `agent.stream(message, config=..., reasoning_effort=...)` yields
 `AgentEvent` objects in order. Events expose compaction progress, text/reasoning
 deltas, model responses, tool calls, tool results, and the final answer. `run()` collects that stream and

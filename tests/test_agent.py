@@ -419,6 +419,30 @@ async def test_run_returns_a_plain_assistant_message():
     assert model.requests[0].reasoning_effort == ReasoningEffort.LOW
 
 
+async def test_requests_inherit_agent_reasoning_effort_and_allow_per_run_override():
+    model = ScriptedModel(
+        AssistantMessage(content="Default"),
+        AssistantMessage(content="Override"),
+        AssistantMessage(content="Default again"),
+    )
+    agent = await Agent.create(
+        model,
+        config=CONFIG,
+        reasoning_effort=ReasoningEffort.HIGH,
+    )
+
+    await agent.run("First")
+    _ = [event async for event in agent.stream("Second", reasoning_effort=ReasoningEffort.LOW)]
+    await agent.run("Third", reasoning_effort=None)
+
+    assert [request.reasoning_effort for request in model.requests] == [
+        ReasoningEffort.HIGH,
+        ReasoningEffort.LOW,
+        ReasoningEffort.HIGH,
+    ]
+    assert agent.reasoning_effort == ReasoningEffort.HIGH
+
+
 @pytest.mark.parametrize(
     "call",
     [

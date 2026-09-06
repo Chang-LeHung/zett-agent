@@ -278,6 +278,7 @@ class Agent(AgentPhaseTransitionMixin):
         system_prompt: str = "You are a helpful assistant.",
         tools: Sequence[AgentTool] = (),
         extensions: Sequence[AgentExtension] | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
         max_iterations: int = 36,
     ) -> None:
         """Create an agent with its own default extensions.
@@ -287,7 +288,12 @@ class Agent(AgentPhaseTransitionMixin):
         pass an empty sequence to disable all extensions.
 
         Example:
-            agent = await Agent.create(model, config=config, tools=[read_file])
+            agent = await Agent.create(
+                model,
+                config=config,
+                tools=[read_file],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
         """
         from .extensions import InMemoryMessageAccumulator, ToolGuidelinesExtension
 
@@ -301,6 +307,7 @@ class Agent(AgentPhaseTransitionMixin):
             (InMemoryMessageAccumulator(), ToolGuidelinesExtension()) if extensions is None else tuple(extensions)
         )
         self.system_prompt = system_prompt
+        self.reasoning_effort = reasoning_effort
         self.state = AgentState()
         self._initialized_config: AgentConfig | None = None
         self._request_active = False
@@ -329,6 +336,7 @@ class Agent(AgentPhaseTransitionMixin):
         system_prompt: str = "You are a helpful assistant.",
         tools: Sequence[AgentTool] = (),
         extensions: Sequence[AgentExtension] | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
         max_iterations: int = 36,
     ) -> Self:
         """Construct and initialize an Agent before returning it.
@@ -342,6 +350,7 @@ class Agent(AgentPhaseTransitionMixin):
             system_prompt=system_prompt,
             tools=tools,
             extensions=extensions,
+            reasoning_effort=reasoning_effort,
             max_iterations=max_iterations,
         )
         await agent.initialize(config=config)
@@ -353,7 +362,7 @@ class Agent(AgentPhaseTransitionMixin):
         message: UserMessage,
         *,
         config: AgentConfig | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> AssistantMessage: ...
 
     @overload
@@ -362,7 +371,7 @@ class Agent(AgentPhaseTransitionMixin):
         message: str,
         *,
         config: AgentConfig | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> AssistantMessage: ...
 
     async def run(
@@ -370,9 +379,11 @@ class Agent(AgentPhaseTransitionMixin):
         message: UserMessage | str,
         *,
         config: AgentConfig | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> AssistantMessage:
         """Collect one run and return its final answer.
+
+        Omit reasoning_effort to use the default configured on this Agent.
 
         Example:
             agent = await Agent.create(model, config=AgentConfig(session_id="session-42"))
@@ -396,7 +407,7 @@ class Agent(AgentPhaseTransitionMixin):
         message: UserMessage,
         *,
         config: AgentConfig | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> AsyncIterator[AgentEvent]: ...
 
     @overload
@@ -405,7 +416,7 @@ class Agent(AgentPhaseTransitionMixin):
         message: str,
         *,
         config: AgentConfig | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> AsyncIterator[AgentEvent]: ...
 
     async def stream(
@@ -413,12 +424,13 @@ class Agent(AgentPhaseTransitionMixin):
         message: UserMessage | str,
         *,
         config: AgentConfig | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> AsyncIterator[AgentEvent]:
         """Stream one run while retaining messages in the agent state.
 
         Extensions receive the same mutable state and may add, remove, or replace
-        messages at each lifecycle hook.
+        messages at each lifecycle hook. Omit reasoning_effort to use the Agent's
+        configured default; an explicit value overrides it for this request only.
 
         Example:
             agent = await Agent.create(model, config=config, extensions=[history_extension])
@@ -438,6 +450,7 @@ class Agent(AgentPhaseTransitionMixin):
                 f"Agent cannot start a new request while its current phase is {self.state.phase.value!r}"
             )
         config = config or self._initialized_config
+        request_reasoning_effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
         messages = [SystemMessage(content=self.system_prompt)] if self.system_prompt else []
         # State and dynamic tools are request-scoped. Constructor tools are copied
         # so extension registrations cannot leak into later requests or sessions.
@@ -465,7 +478,7 @@ class Agent(AgentPhaseTransitionMixin):
                 request = ModelRequest(
                     messages=tuple(state.messages),
                     tools=tuple(tool.definition for tool in context.tools.values()),
-                    reasoning_effort=reasoning_effort,
+                    reasoning_effort=request_reasoning_effort,
                 )
                 model_started = await self._start_model_generation(context)
                 output_tracker = ModelOutputTracker()

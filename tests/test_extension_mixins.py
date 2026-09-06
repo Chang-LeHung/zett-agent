@@ -20,6 +20,12 @@ def test_agent_extension_composes_each_hook_group_once() -> None:
     )
 
 
+def test_agent_extension_default_priority_is_one_hundred() -> None:
+    extension = AgentExtension()
+
+    assert extension.priority == 100
+
+
 def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
     groups = {
         AgentSetupHooksMixin: {"on_tool", "on_message"},

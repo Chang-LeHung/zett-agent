@@ -364,6 +364,33 @@ async def test_default_extensions_keep_agent_histories_isolated():
     assert (await Agent.create(ScriptedModel(), extensions=[], config=CONFIG)).extensions == ()
 
 
+async def test_extensions_run_by_stable_ascending_priority():
+    calls: list[str] = []
+
+    class RecordingExtension(AgentExtension):
+        def __init__(self, name: str, priority: int) -> None:
+            self.name = name
+            self.priority = priority
+
+        async def on_message(self, context):
+            calls.append(self.name)
+
+    late = RecordingExtension("late", 200)
+    equal_first = RecordingExtension("equal-first", 100)
+    early = RecordingExtension("early", 10)
+    equal_second = RecordingExtension("equal-second", 100)
+    agent = await Agent.create(
+        ScriptedModel(AssistantMessage(content="Done")),
+        extensions=[late, equal_first, early, equal_second],
+        config=CONFIG,
+    )
+
+    await agent.run("Hello")
+
+    assert agent.extensions == (early, equal_first, equal_second, late)
+    assert calls == ["early", "equal-first", "equal-second", "late"]
+
+
 @tool(guidelines="Use for exact addition.")
 def add(left: int, right: int) -> int:
     """Add two integers."""

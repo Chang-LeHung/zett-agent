@@ -61,7 +61,7 @@ class AgentContext:
     state: AgentState
     # Live registry used for model schemas and tool execution.
     tools: dict[str, AgentTool]
-    # Fixed subscriber order for this run; no event history is retained.
+    # Fixed priority order for this run; no event history is retained.
     extensions: tuple["AgentExtension", ...] = ()
     # Model owned by the current Agent; setup extensions may inspect it when
     # constructing request-scoped capabilities such as default subagents.
@@ -142,9 +142,12 @@ class Agent(AgentPhaseTransitionMixin):
         self.tools = {tool.name: tool for tool in tools}
         if len(self.tools) != len(tools):
             raise ValueError("Tool names must be unique")
-        self.extensions = (
+        configured_extensions = (
             (InMemoryMessageAccumulator(), ToolGuidelinesExtension()) if extensions is None else tuple(extensions)
         )
+        # Python's sort is stable, so extensions sharing a priority preserve the
+        # caller's registration order. Every lifecycle path uses this tuple.
+        self.extensions = tuple(sorted(configured_extensions, key=lambda extension: extension.priority))
         self.system_prompt = system_prompt
         self.reasoning_effort = reasoning_effort
         self.state = AgentState()
@@ -169,7 +172,7 @@ class Agent(AgentPhaseTransitionMixin):
     def emit_external_event(self, event: ExternalEvent) -> bool:
         """Broadcast external input and report whether any extension accepted it.
 
-        Every registered extension receives the event in registration order,
+        Every registered extension receives the event in priority order,
         including extensions after the first one that accepts it. This keeps the
         caller independent from the extension that owns a protocol.
 
@@ -548,12 +551,12 @@ class Agent(AgentPhaseTransitionMixin):
                     yield event
 
     async def _notify_on_tool(self, context: AgentContext) -> None:
-        """Let every extension register request-scoped tools in order."""
+        """Let every extension register request-scoped tools in priority order."""
         for extension in self.extensions:
             await extension.on_tool(context)
 
     async def _notify_on_message(self, context: AgentContext) -> None:
-        """Let every extension populate the fresh request state in order."""
+        """Let every extension populate the request state in priority order."""
         for extension in self.extensions:
             await extension.on_message(context)
 

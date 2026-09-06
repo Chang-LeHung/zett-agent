@@ -115,9 +115,10 @@ class AgentEventHooksMixin:
     async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         """Stream CUSTOM events after before_tool and before each tool starts.
 
-        Hooks run in registration order while the request remains READY. Hook
-        failures abort the request before tool execution. Closing the consumer
-        closes this iterator so its finally blocks can release resources.
+        Hooks run in priority order while the request remains READY. Equal
+        priorities retain registration order. Hook failures abort the request
+        before tool execution. Closing the consumer closes this iterator so its
+        finally blocks can release resources.
 
         Example:
             yield AgentEvent(
@@ -142,6 +143,17 @@ class AgentExtension(
     AgentEventHooksMixin,
 ):
     """Combine all optional hooks for the model-tool request lifecycle.
+
+    ``priority`` controls the order in which the Agent invokes extensions.
+    Lower numbers run first; extensions with the same priority retain their
+    registration order. Override the class attribute for one extension type or
+    assign it on an instance when one registration needs a different order::
+
+        class RestoreHistory(AgentExtension):
+            priority = 10
+
+        metrics = MetricsExtension()
+        metrics.priority = 200
 
     Complete lifecycle; read each box from top to bottom. The scope branch
     applies to every active operation, including hooks and event subscribers::
@@ -201,7 +213,7 @@ class AgentExtension(
 
 
               +-------------------------------------------------------------------------------------------+
-              | [E] context.publish(event) -> on_event() for every extension, in registration order.      |
+              | [E] context.publish(event) -> on_event() for every extension, in priority order.          |
               | Phase changes and message appends publish events; output timing publishes boundaries.     |
               +-------------------------------------------------------------------------------------------+
 
@@ -210,8 +222,9 @@ class AgentExtension(
               +-------------------------------------------------------------------------------------------+
 
     All on_tool() hooks finish before any on_message() hook starts. Each hook
-    runs in extension registration order. The left return line runs only after
-    every tool in the model response has been processed.
+    runs by ascending priority; equal priorities retain registration order. The
+    left return line runs only after every tool in the model response has been
+    processed.
 
     before_model_events() can stream CUSTOM or compaction events; compaction
     enters COMPACTING and returns to READY. before_tool_events() streams CUSTOM
@@ -228,3 +241,5 @@ class AgentExtension(
     External events are independent from a request's internal [E] notifications:
     callers emit them through the Agent instead of addressing an extension.
     """
+
+    priority: int = 100

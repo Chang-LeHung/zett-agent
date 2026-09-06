@@ -133,8 +133,8 @@ extensions; `extension_events.py` defines internal notification events.
 Available hooks are `on_message`, `before_run`, `before_model`,
 `before_model_events`, `after_model`, `before_tool`, `after_tool`, `after_run`,
 `on_success`, `on_error`, and `on_event`. Hooks run sequentially in extension
-registration order. `before_model_events` is an async event stream for visible
-pre-model work such as compaction.
+priority order, with registration order breaking ties. `before_model_events` is
+an async event stream for visible pre-model work such as compaction.
 
 `on_success(context, result)` runs once per successful request, after all
 `after_run` hooks and before `RUN_COMPLETED` is emitted. It does not run for
@@ -219,6 +219,12 @@ The persistence extension captures the current context values beside every
 appended Raw Log message in dedicated JSON columns. `RawMessageRecord` exposes
 the decoded values to a UI or another storage consumer.
 
+Every `AgentExtension` has a `priority` of `100`. Lower values run first across
+all lifecycle hooks, internal event subscribers, and external-event handlers.
+Sorting is stable, so extensions with equal priorities retain the order in
+which they were registered. An extension can declare `priority = 10` on its
+class or override `extension.priority` for one instance.
+
 Tool lifecycle events expose `tool_calls: list[ToolCall]`. Sequential execution
 currently emits one call in each `TOOL_STARTED`, `TOOL_COMPLETED`, or
 `TOOL_FAILED` event; using a list keeps the event protocol ready for a future
@@ -275,11 +281,11 @@ class Observer(AgentExtension):
                 print(event.compressed_from, event.compressed_to)
 ```
 
-Publishing awaits each registered extension in order. Handler errors stop
-delivery and propagate; completed compaction is not rolled back. Context does
-not retain events or compaction flags. Subscribers own any history they need.
-Consumers that stop iterating early must close the stream, for example with
-`contextlib.aclosing`.
+Publishing awaits each registered extension in priority order. Handler errors
+stop delivery and propagate; completed compaction is not rolled back. Context
+does not retain events or compaction flags. Subscribers own any history they
+need. Consumers that stop iterating early must close the stream, for example
+with `contextlib.aclosing`.
 
 `@tool` reads its prompt metadata from the function docstring. The first
 paragraph becomes the description; `Args`, `Snippet`, and `Guidelines` provide

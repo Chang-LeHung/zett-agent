@@ -371,6 +371,38 @@ returns the final `AssistantMessage`.
 
 Tool errors are returned to the model. Model errors propagate to the application.
 
+## Ask-user extension
+
+`AskUserExtension` registers an `ask_user` tool and pauses its tool step while a
+streaming UI collects input. Add the extension to the Agent, forward its
+`AskUserEvent` to the client, then route the response back through the Agent's
+`emit_external_event()` boundary:
+
+```python
+ask_user_extension = AskUserExtension()
+agent = await Agent.create(model, config=config, extensions=[ask_user_extension])
+
+async def stream_to_ui():
+    async for event in agent.stream("Prepare my document"):
+        if isinstance(event, AskUserEvent):
+            send_to_ui(event.name, event.payload)
+
+# Called independently by the UI response endpoint while stream_to_ui waits.
+def accept_from_ui(name: str, payload: dict[str, object]) -> bool:
+    return agent.emit_external_event(ExternalEvent(name=name, payload=payload))
+```
+
+The outbound payload includes `session_id`, `tool_call_id`, question, ordered options,
+`allow_multiple`, and the expected response event name. The inbound envelope
+always contains only `name` and `payload`; `session_id` plus `tool_call_id`
+inside the payload route concurrent questions safely. Other response fields are
+application-defined and are returned unchanged to the model. Once the response
+is accepted, the stream proceeds directly to `TOOL_STARTED`; `TOOL_COMPLETED`
+confirms that the answer has been returned to the model.
+`emit_external_event()` broadcasts to every extension and returns `True` when at
+least one accepts the event. It returns `False` when no extension recognizes it,
+including malformed, duplicated, stale, or cancelled ask-user responses.
+
 ## Persistent coding-agent example
 
 Run the minimal terminal coding agent from the directory it should work in:

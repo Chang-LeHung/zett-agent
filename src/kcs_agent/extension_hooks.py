@@ -10,6 +10,7 @@ from .events import AgentEvent, AgentEventType
 if TYPE_CHECKING:
     from .agent import AgentContext
     from .extension_events import ExtensionEvent
+    from .external_events import ExternalEvent
     from .messages import AssistantMessage, ToolCall, ToolMessage
     from .model import ModelResponse
 
@@ -83,7 +84,16 @@ class AgentToolHooksMixin:
 
 
 class AgentEventHooksMixin:
-    """Hooks that stream UI events or subscribe to internal runtime events."""
+    """Hooks for streaming, internal notifications, and external input."""
+
+    def accept(self, event: ExternalEvent) -> bool:
+        """Handle one external event and report whether it was accepted.
+
+        The Agent broadcasts each event to every registered extension. Override
+        this synchronous hook when an extension waits for input from another
+        thread, HTTP request, TUI, or Web UI. The default ignores the event.
+        """
+        return False
 
     async def before_model_events(self, context: AgentContext) -> AsyncIterator[AgentEvent]:
         """Stream extension-owned events before a primary model request.
@@ -195,6 +205,10 @@ class AgentExtension(
               | Phase changes and message appends publish events; output timing publishes boundaries.     |
               +-------------------------------------------------------------------------------------------+
 
+              +-------------------------------------------------------------------------------------------+
+              | ExternalEvent -> Agent.emit_external_event() -> accept() on every registered extension.   |
+              +-------------------------------------------------------------------------------------------+
+
     All on_tool() hooks finish before any on_message() hook starts. Each hook
     runs in extension registration order. The left return line runs only after
     every tool in the model response has been processed.
@@ -211,4 +225,6 @@ class AgentExtension(
 
     Setup, run, model, tool, and event hooks are supplied by their corresponding
     Mixins. Subclasses override only the hooks they need; defaults are no-ops.
+    External events are independent from a request's internal [E] notifications:
+    callers emit them through the Agent instead of addressing an extension.
     """

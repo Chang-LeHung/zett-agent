@@ -9,6 +9,7 @@ from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransition
 from .exceptions import AgentIterationLimitError, AgentProtocolError
 from .extension_events import ExtensionEvent, MessageAppendedEvent, MessageTiming
 from .extension_hooks import AgentExtension
+from .external_events import ExternalEvent
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
 from .tools import AgentTool
@@ -148,6 +149,27 @@ class Agent(AgentPhaseTransitionMixin):
                 raise AgentProtocolError("Agent is already initialized for another session")
             return
         self._initialized_config = config
+
+    def emit_external_event(self, event: ExternalEvent) -> bool:
+        """Broadcast external input and report whether any extension accepted it.
+
+        Every registered extension receives the event in registration order,
+        including extensions after the first one that accepts it. This keeps the
+        caller independent from the extension that owns a protocol.
+
+        Example:
+            accepted = agent.emit_external_event(
+                ExternalEvent(
+                    name="ask_user_response",
+                    payload={"session_id": "session-42", "tool_call_id": "call-1", "answer": "Yes"},
+                )
+            )
+        """
+        accepted = False
+        for extension in self.extensions:
+            if extension.accept(event):
+                accepted = True
+        return accepted
 
     @classmethod
     async def create(

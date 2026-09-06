@@ -4,6 +4,15 @@ from .agent import (
     AgentContext,
     AgentState,
 )
+from .ask_user import (
+    ASK_USER_EVENT_NAME,
+    ASK_USER_RESPONSE_EVENT_NAME,
+    ASK_USER_TOOL_NAME,
+    AskUserEvent,
+    AskUserExtension,
+    AskUserRequest,
+    AskUserResult,
+)
 from .compaction import CompactionExtension
 from .events import (
     AgentEvent,
@@ -42,6 +51,7 @@ from .extensions import (
     InMemoryMessageAccumulator,
     ToolGuidelinesExtension,
 )
+from .external_events import ExternalEvent, ExternalEventExtension
 from .ids import new_uuid7
 from .messages import (
     AnyMessage,
@@ -112,6 +122,15 @@ from .tools import (
 
 __all__ = [
     "Agent",
+    "ASK_USER_TOOL_NAME",
+    "ASK_USER_EVENT_NAME",
+    "ASK_USER_RESPONSE_EVENT_NAME",
+    "AskUserEvent",
+    "AskUserExtension",
+    "AskUserRequest",
+    "AskUserResult",
+    "ExternalEvent",
+    "ExternalEventExtension",
     "MessageAppendedEvent",
     "PhaseTransitionEvent",
     "RunCancelledEvent",

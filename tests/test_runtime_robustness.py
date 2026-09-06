@@ -21,13 +21,61 @@ from kcs_agent import (
     ModelEventType,
     ModelOutputTracker,
     ModelResponse,
+    PhaseTransitionEvent,
     ReasoningCompletedEvent,
     ReasoningStartedEvent,
+    RunCancelledEvent,
     ToolCall,
     ToolCallDelta,
 )
 
 CONFIG = AgentConfig("robustness-session")
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [
+        AgentPhase.LOADING_CONTEXT,
+        AgentPhase.READY,
+        AgentPhase.COMPACTING,
+        AgentPhase.GENERATING,
+        AgentPhase.RUNNING_TOOL,
+    ],
+)
+async def test_cancellation_publishes_a_dedicated_event_once(phase):
+    received = []
+
+    class Observer(AgentExtension):
+        async def on_event(self, context, event):
+            assert context.state.phase == AgentPhase.CANCELLED
+            received.append(event)
+
+    context = AgentContext(CONFIG, AgentState(phase=phase), {}, (Observer(),))
+    machine = AgentPhaseTransitionMixin()
+    await machine._cancel_request(context)
+    await machine._cancel_request(context)
+    assert [type(event) for event in received] == [PhaseTransitionEvent, RunCancelledEvent]
+    transition, cancelled = received
+    assert cancelled.previous_phase == phase
+    assert cancelled.occurred_at == transition.occurred_at
+    assert cancelled.monotonic_ns == transition.monotonic_ns
+
+
+async def test_closing_agent_stream_publishes_cancellation():
+    received = []
+
+    class Observer(AgentExtension):
+        async def on_event(self, context, event):
+            if isinstance(event, RunCancelledEvent):
+                received.append(event)
+
+    agent = await Agent.create(EventModel(), config=CONFIG, extensions=[Observer()])
+    stream = agent.stream("Hello")
+    assert (await anext(stream)).type == AgentEventType.MODEL_STARTED
+    await stream.aclose()
+    assert agent.state.phase == AgentPhase.CANCELLED
+    assert len(received) == 1
+    assert received[0].previous_phase == AgentPhase.GENERATING
 
 
 class EventModel:

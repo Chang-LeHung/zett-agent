@@ -112,6 +112,22 @@ class PhaseTransitionEvent(ExtensionEvent):
 
 
 @dataclass(frozen=True, slots=True)
+class RunCancelledEvent(ExtensionEvent):
+    """A request entered CANCELLED; delivered after its PhaseTransitionEvent.
+
+    This internal notification also works when the stream consumer has closed.
+    It does not suppress CancelledError or GeneratorExit.
+    """
+
+    # Active operation interrupted by cancellation.
+    previous_phase: AgentPhase
+    # UTC cancellation time, shared with the corresponding phase transition.
+    occurred_at: datetime
+    # Monotonic cancellation boundary for measuring elapsed time.
+    monotonic_ns: int
+
+
+@dataclass(frozen=True, slots=True)
 class ModelOutputLifecycleEvent(ExtensionEvent):
     """A precise boundary within one streamed model response."""
 

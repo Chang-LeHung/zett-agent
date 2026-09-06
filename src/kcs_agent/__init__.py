@@ -28,6 +28,7 @@ from .extension_events import (
     PhaseTransitionEvent,
     ReasoningCompletedEvent,
     ReasoningStartedEvent,
+    RunCancelledEvent,
 )
 from .extensions import (
     InMemoryMessageAccumulator,
@@ -105,6 +106,7 @@ __all__ = [
     "Agent",
     "MessageAppendedEvent",
     "PhaseTransitionEvent",
+    "RunCancelledEvent",
     "ReasoningStartedEvent",
     "ReasoningCompletedEvent",
     "ContentStartedEvent",

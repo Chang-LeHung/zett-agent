@@ -85,56 +85,56 @@ class AgentContext:
 class AgentExtension:
     """Observe or modify messages at each stage of the model-tool loop.
 
-    Arrow labels name lifecycle hooks in execution order. The left-hand path
-    is the tool loop; the right-hand path completes the request::
+    Complete request state machine. The enclosing ACTIVE REQUEST box gives
+    every active phase the same failure and cancellation exits. Bidirectional
+    arrows enter an operation to the right and return to READY on completion::
 
-                         +----------------------------+
-                         |          REQUEST           |
-                         +-------------+--------------+
-                                       |
-                                       | create fresh AgentState
-                                       | on_message(): restore context
-                                       | before_run()
-                                       | append UserMessage
-                                       v
-              +---------->+----------------------------+
-              |           |      PRE-MODEL HOOKS       |
-              |           +-------------+--------------+
-              |                         |
-              |                         | before_model()
-              |                         | before_model_events()
-              |                         v
-              |           +----------------------------+     +------------------------+
-              |           |    OPTIONAL COMPACTION     |---->|  COMPACTION EVENTS     |
-              |           | started -> model deltas    |     | started                |
-              |           |         -> completed       |     | text/reasoning deltas  |
-              |           +-------------+--------------+     | completed              |
-              |                         |                    +------------------------+
-              |                         v
-              |           +----------------------------+
-              |           |       PRIMARY MODEL        |
-              |           +-------------+--------------+
-              |                         |
-              |                         | stream model events
-              |                         | append AssistantMessage
-              |                         | after_model()
-              |                         v
-              |           +----------------------------+
-              |           |      HAS TOOL CALLS?       |
-              |           +---------+------------+-----+
-              |                     | yes        | no
-              |                     v            v
-              |           +----------------+  +----------------+
-              |           |     TOOLS      |  |     RESULT     |
-              |           +-------+--------+  +----------------+
-              |                   |           after_run()
-              |                   |           on_success()
-              |                   |
-              |                   | before_tool()
-              |                   | append ToolMessage
-              |                   | after_tool()
-              +-------------------+
-                        next model step after all tools
+                +-----------------+
+                |     CREATED     |
+                +-----------------+
+                         |
+        +----------------+-----------------------------------------------+
+        | ACTIVE REQUEST v                                               |
+        |       +-----------------+                                      |
+        |       | LOADING_CONTEXT |                                      |
+        |       +-----------------+                                      |
+        |                | on_message(): restore context                 |
+        |                v                                               |
+        |       +-----------------+ compact / done  +-----------------+  |
+        |       |                 |<--------------->|   COMPACTING    |  |
+        |       |                 |                 +-----------------+  |
+        |       |                 |                                      |
+        |       |                 | generate / done +-----------------+  |
+        |       |      READY      |<--------------->|   GENERATING    |  |
+        |       |                 |                 +-----------------+  |
+        |       |                 |                                      |
+        |       |                 | tool / done     +-----------------+  |
+        |       |                 |<--------------->|  RUNNING_TOOL   |  |
+        |       +-----------------+                 +-----------------+  |
+        |                | final answer: after_run(), on_success()       |
+        |                |                                               |
+        +----------------+-----------------------------------+-----------+
+                         v                                   | any active phase
+                +-----------------+              +-----------+-----------+
+                |    COMPLETED    |              | exception             | cancellation
+                +-----------------+              v                       v
+                                           +-----------+           +-------------+
+                                           |  FAILED   |           |  CANCELLED  |
+                                           +-----------+           +-------------+
+                                           on_error()              RunCancelledEvent
+                                                                  re-raise cancellation
+                                           re-raise error
+
+    READY runs before_run() and append_message(UserMessage) once, then
+    before_model() and before_model_events() before each model call. Optional
+    compaction streams started, reasoning/text deltas, and completed events.
+    GENERATING streams model output; append_message(AssistantMessage) and
+    after_model() run after returning to READY. Each tool runs before_tool(),
+    enters RUNNING_TOOL, returns to READY, then appends its ToolMessage through
+    append_message() and runs after_tool(). All tools finish before the loop
+    calls the model again. after_run() and on_success() precede COMPLETED.
+    Every phase change publishes PhaseTransitionEvent. Cancellation propagates
+    CancelledError or GeneratorExit without invoking on_error().
 
     Internal message updates:
         - Every request starts with a new AgentState containing the system prompt.
@@ -173,6 +173,16 @@ class AgentExtension:
         This hook is intended for visible preprocessing operations such as
         context compaction. Yield typed AgentEvents so Web and TUI clients can
         represent the operation as its own state instead of model generation.
+
+        Example:
+            yield AgentEvent(
+                AgentEventType.CUSTOM,
+                session_id=context.config.session_id,
+                data={"name": "retrieval_progress", "completed": 3, "total": 10},
+            )
+
+        CUSTOM events are forwarded unchanged except for the runtime phase;
+        they do not trigger a state transition.
         """
         if False:
             yield AgentEvent(AgentEventType.MODEL_STARTED, context.config.session_id)
@@ -186,6 +196,23 @@ class AgentExtension:
 
     async def before_tool(self, context: AgentContext, call: ToolCall) -> None:
         """Run before one requested tool is invoked."""
+
+    async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+        """Stream CUSTOM events after before_tool and before each tool starts.
+
+        Hooks run in registration order while the request remains READY.
+        Hook failures abort the request before invoking the tool. Closing the
+        consumer closes this iterator so its finally blocks can release resources.
+
+        Example:
+            yield AgentEvent(
+                AgentEventType.CUSTOM,
+                session_id=context.config.session_id,
+                data={"name": "tool_preparation", "tool_call_id": call.id},
+            )
+        """
+        if False:
+            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
 
     async def after_tool(
         self,
@@ -256,6 +283,7 @@ class Agent(AgentPhaseTransitionMixin):
         self.system_prompt = system_prompt
         self.state = AgentState()
         self._initialized_config: AgentConfig | None = None
+        self._request_active = False
         self.max_iterations = max_iterations
 
     async def initialize(self, *, config: AgentConfig) -> None:
@@ -385,16 +413,18 @@ class Agent(AgentPhaseTransitionMixin):
             raise AgentProtocolError(
                 "Agent is not initialized; await agent.initialize(config=...) or Agent.create(...)"
             )
-        if not self.state.phase.accepts_new_request:
+        if self._request_active or not self.state.phase.accepts_new_request:
             raise AgentProtocolError(
                 f"Agent cannot start a new request while its current phase is {self.state.phase.value!r}"
             )
         config = config or self._initialized_config
         messages = [SystemMessage(content=self.system_prompt)] if self.system_prompt else []
+        # agent state is reset for each run, but extensions may restore history in on_message()
         state = AgentState(messages=messages)
         self.state = state
         context = AgentContext(config=config, state=state, tools=self.tools, extensions=self.extensions)
         user_message = UserMessage(content=message) if isinstance(message, str) else message
+        self._request_active = True
         try:
             await self._start_context_loading(context)
             for extension in self.extensions:
@@ -406,9 +436,10 @@ class Agent(AgentPhaseTransitionMixin):
             for _ in range(self.max_iterations):
                 await self._notify_before_model(context)
 
-                async for event in self._before_model_events(context):
-                    await self._apply_extension_event_phase(context, event)
-                    yield event
+                async with aclosing(self._before_model_events(context)) as preprocessing:
+                    async for event in preprocessing:
+                        await self._apply_extension_event_phase(context, event)
+                        yield event
 
                 request = ModelRequest(
                     messages=tuple(state.messages),
@@ -484,16 +515,32 @@ class Agent(AgentPhaseTransitionMixin):
                     )
                     return
 
-                async for event in self._execute_tools(context, response.message.tool_calls):
-                    yield event
+                async with aclosing(self._execute_tools(context, response.message.tool_calls)) as tool_events:
+                    async for event in tool_events:
+                        yield event
             raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
-        except (asyncio.CancelledError, GeneratorExit):
-            await self._cancel_request(context)
+        except (asyncio.CancelledError, GeneratorExit) as cancellation:
+            try:
+                await self._cancel_request(context)
+            except Exception as notification_error:
+                cancellation.add_note(f"Cancellation notification failed: {notification_error!r}")
             raise
         except Exception as error:
-            await self._fail_request(context)
-            await self._notify_error(context, error)
+            # A terminal transition is already committed before subscribers run.
+            # Never replace the original error with an illegal terminal transition
+            # or a secondary failure in an error-reporting hook.
+            if state.phase in self._ACTIVE_PHASES:
+                try:
+                    await self._fail_request(context)
+                except Exception as notification_error:
+                    error.add_note(f"Failure notification failed: {notification_error!r}")
+            try:
+                await self._notify_error(context, error)
+            except Exception as notification_error:
+                error.add_note(f"Error hook failed: {notification_error!r}")
             raise
+        finally:
+            self._request_active = False
 
     async def _execute_tools(
         self,
@@ -502,6 +549,9 @@ class Agent(AgentPhaseTransitionMixin):
     ) -> AsyncIterator[AgentEvent]:
         for call in calls:
             await self._notify_before_tool(context, call)
+            async with aclosing(self._before_tool_events(context, call)) as preprocessing:
+                async for event in preprocessing:
+                    yield event
             tool_started = await self._start_tool_execution(context)
             yield AgentEvent(
                 AgentEventType.TOOL_STARTED,
@@ -553,9 +603,21 @@ class Agent(AgentPhaseTransitionMixin):
                 self._require_phase(context.state, AgentPhase.COMPACTING)
             case AgentEventType.COMPACTION_COMPLETED:
                 await self._finish_compaction(context)
+            case AgentEventType.CUSTOM:
+                pass
             case _:
                 raise AgentProtocolError(f"Extension emitted unsupported pre-model event: {event.type.value!r}")
         event.phase = context.state.phase
+
+    async def _before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+        """Forward custom events and close each extension iterator on exit."""
+        for extension in self.extensions:
+            async with aclosing(extension.before_tool_events(context, call)) as events:
+                async for event in events:
+                    if event.type != AgentEventType.CUSTOM:
+                        raise AgentProtocolError(f"Extension emitted unsupported pre-tool event: {event.type.value!r}")
+                    event.phase = context.state.phase
+                    yield event
 
     async def _notify_before_run(self, context: AgentContext) -> None:
         for extension in self.extensions:
@@ -567,8 +629,9 @@ class Agent(AgentPhaseTransitionMixin):
 
     async def _before_model_events(self, context: AgentContext) -> AsyncIterator[AgentEvent]:
         for extension in self.extensions:
-            async for event in extension.before_model_events(context):
-                yield event
+            async with aclosing(extension.before_model_events(context)) as events:
+                async for event in events:
+                    yield event
 
     async def _notify_after_model(self, context: AgentContext, response: ModelResponse) -> None:
         for extension in self.extensions:

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from time import monotonic_ns
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .exceptions import AgentProtocolError
 from .messages import AssistantMessage, ToolCall, ToolMessage
@@ -40,41 +40,51 @@ class AgentEventType(StrEnum):
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"
     RUN_COMPLETED = "run_completed"
+    CUSTOM = "custom"
 
 
 class AgentPhase(StrEnum):
     """Exclusive execution phase of one request-scoped AgentState.
 
-    Complete transition diagram::
+    Complete request state machine. The enclosing ACTIVE REQUEST box gives
+    every active phase the same failure and cancellation exits. Bidirectional
+    arrows enter an operation to the right and return to READY on completion::
 
-        +---------+     +-----------------+     +-------+   final answer   +-----------+
-        | CREATED | --> | LOADING_CONTEXT | --> | READY | --------------> | COMPLETED |
-        +---------+     +-----------------+     +---+---+                 +-----------+
-                                                   |
-                         +-------------------------+-------------------------+
-                         | compact                 | generate                | tool call
-                         v                         v                         v
-                  +------------+            +------------+           +--------------+
-                  | COMPACTING |            | GENERATING |           | RUNNING_TOOL |
-                  +------+-----+            +------+-----+           +-------+------+
-                         |                         |                         |
-                         +-------------------------+-------------------------+
-                                                   |
-                                                   | operation completed
-                                                   v
-                                               +-------+
-                                               | READY |
-                                               +-------+
-
-                                         +------------------+
-                                         | ANY ACTIVE PHASE |
-                                         +----+--------+----+
-                                              |        |
-                                    exception |        | cancellation
-                                              v        v
-                                         +--------+  +-----------+
-                                         | FAILED |  | CANCELLED |
-                                         +--------+  +-----------+
+                +-----------------+
+                |     CREATED     |
+                +-----------------+
+                         |
+        +----------------+-----------------------------------------------+
+        | ACTIVE REQUEST v                                               |
+        |       +-----------------+                                      |
+        |       | LOADING_CONTEXT |                                      |
+        |       +-----------------+                                      |
+        |                | on_message(): restore context                 |
+        |                v                                               |
+        |       +-----------------+ compact / done  +-----------------+  |
+        |       |                 |<--------------->|   COMPACTING    |  |
+        |       |                 |                 +-----------------+  |
+        |       |                 |                                      |
+        |       |                 | generate / done +-----------------+  |
+        |       |      READY      |<--------------->|   GENERATING    |  |
+        |       |                 |                 +-----------------+  |
+        |       |                 |                                      |
+        |       |                 | tool / done     +-----------------+  |
+        |       |                 |<--------------->|  RUNNING_TOOL   |  |
+        |       +-----------------+                 +-----------------+  |
+        |                | final answer: after_run(), on_success()       |
+        |                |                                               |
+        +----------------+-----------------------------------+-----------+
+                         v                                   | any active phase
+                +-----------------+              +-----------+-----------+
+                |    COMPLETED    |              | exception             | cancellation
+                +-----------------+              v                       v
+                                           +-----------+           +-------------+
+                                           |  FAILED   |           |  CANCELLED  |
+                                           +-----------+           +-------------+
+                                           on_error()              RunCancelledEvent
+                                                                  re-raise cancellation
+                                           re-raise error
 
     Active phases are LOADING_CONTEXT, READY, COMPACTING, GENERATING, and
     RUNNING_TOOL. COMPLETED, FAILED, and CANCELLED are terminal for the current
@@ -188,11 +198,20 @@ class AgentPhaseTransitionMixin:
         await self._transition_phase(context, AgentPhase.FAILED, expected=self._ACTIVE_PHASES)
 
     async def _cancel_request(self, context: PhaseContext) -> None:
-        """Cancel an active request while preserving an already completed state."""
+        """Enter CANCELLED and broadcast its dedicated notification once."""
+        from .extension_events import RunCancelledEvent
+
         state = context.state
-        if state.phase == AgentPhase.COMPLETED:
+        if state.phase in (AgentPhase.COMPLETED, AgentPhase.CANCELLED):
             return
-        await self._transition_phase(context, AgentPhase.CANCELLED, expected=self._ACTIVE_PHASES)
+        transition = await self._transition_phase(context, AgentPhase.CANCELLED, expected=self._ACTIVE_PHASES)
+        await context.publish(
+            RunCancelledEvent(
+                previous_phase=transition.previous_phase,
+                occurred_at=transition.occurred_at,
+                monotonic_ns=transition.monotonic_ns,
+            )
+        )
 
     @staticmethod
     def _require_phase(state: PhaseState, expected: AgentPhase) -> None:
@@ -298,3 +317,7 @@ class AgentEvent:
     compaction: CompactionEvent | None = None
     # Whether a completed compaction replaced context; null for other events.
     applied: bool | None = None
+    # Extension-owned payload for CUSTOM events; None when no data is supplied.
+    # Use a stable "name" key to distinguish custom event kinds. Extensions
+    # targeting JSON/SSE clients must supply JSON-serializable values.
+    data: dict[str, Any] | None = None

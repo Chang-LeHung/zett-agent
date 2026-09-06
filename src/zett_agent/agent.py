@@ -12,7 +12,7 @@ from .extensions.events import ExtensionEvent, MessageAppendedEvent, MessageTimi
 from .extensions.external import ExternalEvent
 from .json_types import JsonValue, json_object
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
-from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
+from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ModelUsage, ReasoningEffort
 from .tools import AgentTool
 
 
@@ -92,7 +92,12 @@ class AgentContext:
         for extension in self.extensions:
             await extension.on_event(self, event)
 
-    async def append_message(self, message: AnyMessage, timing: MessageTiming) -> None:
+    async def append_message(
+        self,
+        message: AnyMessage,
+        timing: MessageTiming,
+        usage: ModelUsage | None = None,
+    ) -> None:
         """Append one newly produced message and publish its Raw Log event.
 
         Runtime code must use this method for user, assistant, and tool messages
@@ -104,7 +109,7 @@ class AgentContext:
         Subscriber failures propagate and do not roll back the in-memory append.
         """
         self.state.messages.append(message)
-        await self.publish(MessageAppendedEvent(message, timing))
+        await self.publish(MessageAppendedEvent(message, timing, usage))
 
 
 class Agent(AgentPhaseTransitionMixin):
@@ -427,6 +432,7 @@ class Agent(AgentPhaseTransitionMixin):
                 await context.append_message(
                     response.message,
                     output_tracker.message_timing(model_started, model_completed),
+                    response.usage,
                 )
                 await self._notify_after_model(context, response)
                 yield AgentEvent(

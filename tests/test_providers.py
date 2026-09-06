@@ -20,6 +20,7 @@ from zett_agent import (
     ImageContent,
     ImageUrlSource,
     ModelEventType,
+    ModelUsage,
     ReasoningEffort,
     SystemMessage,
     TextContent,
@@ -201,6 +202,19 @@ def test_usage_from_mapping_normalizes_openai_token_details() -> None:
     assert usage.cache_write_tokens == 0
     assert usage.reasoning_tokens == 30
     assert usage.total_tokens == 165
+    assert usage.cache_hit_rate == pytest.approx(80 / 120)
+
+
+def test_model_usage_rejects_negative_counters_and_handles_empty_input() -> None:
+    with pytest.raises(ValueError, match="cannot be negative"):
+        ModelUsage(input_tokens=-1)
+    with pytest.raises(ValueError, match="cache_read_tokens cannot exceed"):
+        ModelUsage(input_tokens=1, cache_read_tokens=2)
+    with pytest.raises(ValueError, match="cache_write_tokens cannot exceed"):
+        ModelUsage(input_tokens=1, cache_write_tokens=2)
+    with pytest.raises(ValueError, match="reasoning_tokens cannot exceed"):
+        ModelUsage(output_tokens=1, reasoning_tokens=2)
+    assert ModelUsage().cache_hit_rate is None
 
 
 def test_usage_from_mapping_normalizes_deepseek_cache_counters() -> None:
@@ -241,7 +255,12 @@ async def test_openai_provider_streams_text_and_usage() -> None:
                 {"choices": [{"delta": {"content": " world"}}]},
                 {
                     "choices": [{"finish_reason": "stop"}],
-                    "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+                    "usage": {
+                        "prompt_tokens": 5,
+                        "completion_tokens": 2,
+                        "prompt_tokens_details": {"cached_tokens": 3},
+                        "completion_tokens_details": {"reasoning_tokens": 1},
+                    },
                 },
             ]
         )
@@ -270,6 +289,8 @@ async def test_openai_provider_streams_text_and_usage() -> None:
     assert response.message.content == "Hello world"
     assert response.usage.input_tokens == 5
     assert response.usage.output_tokens == 2
+    assert response.usage.cache_read_tokens == 3
+    assert response.usage.reasoning_tokens == 1
     assert response.message.provider == "openai"
 
 
@@ -462,7 +483,12 @@ async def test_anthropic_provider_streams_text_and_tool_use() -> None:
                         "model": "claude-3-5-sonnet",
                         "stop_reason": None,
                         "stop_sequence": None,
-                        "usage": {"input_tokens": 10, "output_tokens": 0},
+                        "usage": {
+                            "input_tokens": 2,
+                            "cache_read_input_tokens": 6,
+                            "cache_creation_input_tokens": 2,
+                            "output_tokens": 0,
+                        },
                     },
                 },
                 {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
@@ -516,6 +542,8 @@ async def test_anthropic_provider_streams_text_and_tool_use() -> None:
     assert response.finish_reason == "tool_use"
     assert response.usage.input_tokens == 10
     assert response.usage.output_tokens == 18
+    assert response.usage.cache_read_tokens == 6
+    assert response.usage.cache_write_tokens == 2
     assert response.message.provider == "anthropic"
 
 
@@ -671,6 +699,7 @@ async def test_google_provider_streams_text_and_function_call() -> None:
                         "promptTokenCount": 7,
                         "candidatesTokenCount": 4,
                         "thoughtsTokenCount": 12,
+                        "cachedContentTokenCount": 3,
                     },
                 },
             ]
@@ -697,6 +726,7 @@ async def test_google_provider_streams_text_and_function_call() -> None:
     assert response.usage.input_tokens == 7
     assert response.usage.output_tokens == 16
     assert response.usage.reasoning_tokens == 12
+    assert response.usage.cache_read_tokens == 3
     assert response.message.provider == "google"
 
 
@@ -757,4 +787,6 @@ async def test_ollama_provider_streams_text_and_tool_calls() -> None:
     assert response.finish_reason == "stop"
     assert response.usage.input_tokens == 6
     assert response.usage.output_tokens == 9
+    assert response.usage.cache_read_tokens == 0
+    assert response.usage.cache_write_tokens == 0
     assert response.message.provider == "ollama"

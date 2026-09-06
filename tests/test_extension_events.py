@@ -11,6 +11,7 @@ from zett_agent import (
     InMemoryMessageAccumulator,
     MessageAppendedEvent,
     MessageTiming,
+    ModelUsage,
     SystemMessage,
     UserMessage,
 )
@@ -38,6 +39,11 @@ async def test_context_appends_message_before_publishing_its_event():
 
     assert context.state.messages == [message]
     assert observed == [MessageAppendedEvent(message, timing)]
+
+
+def test_message_event_rejects_usage_for_non_assistant_messages():
+    with pytest.raises(ValueError, match="only to assistant"):
+        MessageAppendedEvent(UserMessage(content="Invalid"), MessageTiming.instant(), ModelUsage(input_tokens=1))
 
 
 async def test_publish_preserves_order_and_stops_on_handler_failure():

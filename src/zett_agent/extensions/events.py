@@ -4,7 +4,8 @@ from time import monotonic_ns
 from typing import Self
 
 from ..events import AgentPhase
-from ..messages import AnyMessage
+from ..messages import AnyMessage, AssistantMessage
+from ..model import ModelUsage
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +94,13 @@ class MessageAppendedEvent(ExtensionEvent):
 
     message: AnyMessage
     timing: MessageTiming
+    # Provider-reported usage for an assistant model response. User, system,
+    # tool, and directly imported messages do not consume a model response.
+    usage: ModelUsage | None = None
+
+    def __post_init__(self) -> None:
+        if self.usage is not None and not isinstance(self.message, AssistantMessage):
+            raise ValueError("Model usage belongs only to assistant messages")
 
 
 @dataclass(frozen=True, slots=True)

@@ -15,6 +15,7 @@ from zett_agent import (
     ImageContent,
     ModelEvent,
     ModelResponse,
+    ModelUsage,
     SessionPersistenceExtension,
     SQLiteSessionExtension,
     SystemMessage,
@@ -117,6 +118,62 @@ async def test_storage_persists_parent_identity_and_message_metadata(storage):
     assert storage.delete_session("parent") is True
     assert (await storage.load("child")).parent_session_id == "parent"
     assert storage.count_messages("child") == 1
+
+
+async def test_agent_persists_provider_usage_on_each_assistant_raw_message(storage):
+    class UsageModel:
+        async def stream(self, request):
+            yield ModelEvent.completed(
+                ModelResponse(
+                    AssistantMessage(content="Measured", provider="test"),
+                    usage=ModelUsage(
+                        input_tokens=100,
+                        output_tokens=25,
+                        cache_read_tokens=80,
+                        cache_write_tokens=5,
+                        reasoning_tokens=10,
+                    ),
+                )
+            )
+
+    agent = await Agent.create(
+        UsageModel(),
+        config=AgentConfig("usage-session"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("Measure this request")
+
+    records = storage.list_raw_messages("usage-session")
+    user, assistant = records
+    assert user.input_tokens is None
+    assert user.total_tokens is None
+    assert user.cache_hit_rate is None
+    assert assistant.input_tokens == 100
+    assert assistant.output_tokens == 25
+    assert assistant.cache_read_tokens == 80
+    assert assistant.cache_write_tokens == 5
+    assert assistant.reasoning_tokens == 10
+    assert assistant.total_tokens == 125
+    assert assistant.cache_hit_rate == pytest.approx(0.8)
+
+    columns = {column["name"] for column in inspect(storage.engine).get_columns("raw_messages")}
+    assert {
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "reasoning_tokens",
+    } <= columns
+
+
+async def test_storage_rejects_model_usage_on_non_assistant_messages(storage):
+    with pytest.raises(ValueError, match="only to assistant"):
+        await storage.append(
+            "invalid-usage",
+            "request",
+            UserMessage(content="Not a model response"),
+            usage=ModelUsage(input_tokens=1),
+        )
 
 
 async def test_storage_updates_mutable_session_identity_without_copying_it_to_raw_log(storage):

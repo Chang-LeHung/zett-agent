@@ -10,6 +10,7 @@ from ..agent import AgentContext
 from ..ids import new_uuid7
 from ..json_types import JsonValue
 from ..messages import AnyMessage, AssistantMessage, SystemMessage
+from ..model import ModelUsage
 from .base import AgentExtension
 from .compaction import CompactedMessage
 from .events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, MessageTiming
@@ -47,8 +48,32 @@ class RawMessageRecord:
     content_completed_at: datetime | None
     # Monotonic elapsed content-streaming time in nanoseconds; None if absent.
     content_duration_ns: int | None
+    # Provider-reported prompt tokens for an assistant model response.
+    input_tokens: int | None
+    # Provider-reported completion tokens, including reasoning when applicable.
+    output_tokens: int | None
+    # Input tokens served from a provider cache.
+    cache_read_tokens: int | None
+    # Input tokens written into a provider cache when separately reported.
+    cache_write_tokens: int | None
+    # Reasoning tokens included within output_tokens when separately reported.
+    reasoning_tokens: int | None
     created_at: datetime
     updated_at: datetime
+
+    @property
+    def total_tokens(self) -> int | None:
+        """Return input plus output tokens when provider usage was recorded."""
+        if self.input_tokens is None or self.output_tokens is None:
+            return None
+        return self.input_tokens + self.output_tokens
+
+    @property
+    def cache_hit_rate(self) -> float | None:
+        """Return a zero-to-one input cache ratio, or None without input usage."""
+        if not self.input_tokens or self.cache_read_tokens is None:
+            return None
+        return self.cache_read_tokens / self.input_tokens
 
 
 class SessionSummary(BaseModel):
@@ -163,13 +188,15 @@ class SessionStorage(Protocol):
         agent_name: str | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
+        usage: ModelUsage | None = None,
     ) -> int:
         """Append one immutable Raw Log message and return its allocated sequence.
 
         A direct storage caller may omit timing for an instantaneous imported
         message. The Agent runtime always supplies measured timing. The optional
         Session attributes initialize the session record on its first append and
-        are not copied into each Raw Log row. The parent ID is immutable.
+        are not copied into each Raw Log row. Usage belongs only to assistant
+        model responses. The parent ID is immutable.
         """
         ...
 
@@ -254,7 +281,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         if request is None:
             return
         match event:
-            case MessageAppendedEvent(message=message, timing=timing):
+            case MessageAppendedEvent(message=message, timing=timing, usage=usage):
                 sequence = await self.storage.append(
                     context.config.session_id,
                     request.request_id,
@@ -263,6 +290,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
                     parent_session_id=context.state.parent_session_id,
                     metadata=context.metadata,
                     tags=context.tags,
+                    usage=usage,
                 )
                 request.context_sequences.append(sequence)
             case CompactionEvent() as compaction:

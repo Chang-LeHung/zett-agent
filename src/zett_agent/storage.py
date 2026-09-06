@@ -18,6 +18,7 @@ from .extensions.persistence import ContextSnapshot, RawMessageRecord, SessionSu
 from .ids import new_uuid7
 from .json_types import JsonValue, json_object
 from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolMessage, UserMessage
+from .model import ModelUsage
 
 
 class Base(DeclarativeBase):
@@ -71,6 +72,12 @@ class RawLogMessageModel(Base):
     content_completed_at: Mapped[datetime | None] = mapped_column()
     # Monotonic content-streaming duration in nanoseconds; null when absent.
     content_duration_ns: Mapped[int | None] = mapped_column(Integer)
+    # Provider token counters exist only for assistant model responses.
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_read_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_write_tokens: Mapped[int | None] = mapped_column(Integer)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
     # UTC timestamps; immutable records have identical creation/modification times.
     created_at: Mapped[datetime] = mapped_column()
     updated_at: Mapped[datetime] = mapped_column()
@@ -421,6 +428,11 @@ class SQLiteSessionStorage:
                 row.content_completed_at.replace(tzinfo=UTC) if row.content_completed_at is not None else None
             ),
             content_duration_ns=row.content_duration_ns,
+            input_tokens=row.input_tokens,
+            output_tokens=row.output_tokens,
+            cache_read_tokens=row.cache_read_tokens,
+            cache_write_tokens=row.cache_write_tokens,
+            reasoning_tokens=row.reasoning_tokens,
             created_at=row.created_at.replace(tzinfo=UTC),
             updated_at=row.updated_at.replace(tzinfo=UTC),
         )
@@ -492,11 +504,14 @@ class SQLiteSessionStorage:
         agent_name: str | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
+        usage: ModelUsage | None = None,
     ) -> int:
         if title is not None and (not title.strip() or len(title) > 200):
             raise ValueError("Session title must contain between 1 and 200 characters")
         if agent_name is not None and (not agent_name.strip() or len(agent_name) > 64):
             raise ValueError("Agent name must contain between 1 and 64 characters")
+        if usage is not None and not isinstance(message, AssistantMessage):
+            raise ValueError("Model usage belongs only to assistant messages")
         encoded_metadata = _encode_context_data(metadata, field_name="Message metadata")
         encoded_tags = _encode_context_data(tags, field_name="Message tags", nonempty_keys=True)
         with self._session_scope() as session:
@@ -546,6 +561,11 @@ class SQLiteSessionStorage:
                     content_started_at=timing.content_started_at,
                     content_completed_at=timing.content_completed_at,
                     content_duration_ns=timing.content_duration_ns,
+                    input_tokens=usage.input_tokens if usage is not None else None,
+                    output_tokens=usage.output_tokens if usage is not None else None,
+                    cache_read_tokens=usage.cache_read_tokens if usage is not None else None,
+                    cache_write_tokens=usage.cache_write_tokens if usage is not None else None,
+                    reasoning_tokens=usage.reasoning_tokens if usage is not None else None,
                     created_at=now,
                     updated_at=now,
                 )

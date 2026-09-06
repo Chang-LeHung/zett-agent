@@ -42,7 +42,12 @@ class ModelRequest:
 
 @dataclass(frozen=True, slots=True)
 class ModelUsage:
-    """Normalized token and cache measurements reported by a provider adapter."""
+    """Normalized token and cache measurements reported by a provider adapter.
+
+    ``input_tokens`` is the complete model input, including cache reads and
+    cache writes. ``output_tokens`` includes reasoning tokens. This invariant
+    makes totals and cache-hit ratios comparable across provider schemas.
+    """
 
     input_tokens: int = 0
     output_tokens: int = 0
@@ -50,9 +55,33 @@ class ModelUsage:
     cache_write_tokens: int = 0
     reasoning_tokens: int = 0
 
+    def __post_init__(self) -> None:
+        values = (
+            self.input_tokens,
+            self.output_tokens,
+            self.cache_read_tokens,
+            self.cache_write_tokens,
+            self.reasoning_tokens,
+        )
+        if any(value < 0 for value in values):
+            raise ValueError("Model usage counters cannot be negative")
+        if self.cache_read_tokens > self.input_tokens:
+            raise ValueError("cache_read_tokens cannot exceed input_tokens")
+        if self.cache_write_tokens > self.input_tokens:
+            raise ValueError("cache_write_tokens cannot exceed input_tokens")
+        if self.reasoning_tokens > self.output_tokens:
+            raise ValueError("reasoning_tokens cannot exceed output_tokens")
+
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
+
+    @property
+    def cache_hit_rate(self) -> float | None:
+        """Return cached input divided by total input, or None without input."""
+        if self.input_tokens == 0:
+            return None
+        return self.cache_read_tokens / self.input_tokens
 
 
 @dataclass(frozen=True, slots=True)

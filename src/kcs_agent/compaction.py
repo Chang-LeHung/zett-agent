@@ -4,10 +4,11 @@ from dataclasses import dataclass
 
 import tiktoken
 
-from .agent import AgentContext, AgentExtension
+from .agent import AgentContext
 from .events import AgentEvent, AgentEventType
 from .exceptions import AgentProtocolError
 from .extension_events import CompactionEvent
+from .extension_hooks import AgentExtension
 from .messages import AnyMessage, SystemMessage, UserMessage
 from .model import AgentModel, ModelEventType, ModelRequest, ReasoningEffort
 

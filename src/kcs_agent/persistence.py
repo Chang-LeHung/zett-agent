@@ -5,9 +5,10 @@ from weakref import WeakKeyDictionary
 
 from pydantic import BaseModel, Field
 
-from .agent import AgentContext, AgentExtension
+from .agent import AgentContext
 from .compaction import CompactedMessage
 from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, MessageTiming
+from .extension_hooks import AgentExtension
 from .ids import new_uuid7
 from .messages import AnyMessage, AssistantMessage, SystemMessage
 

@@ -2,7 +2,6 @@ from .agent import (
     Agent,
     AgentConfig,
     AgentContext,
-    AgentExtension,
     AgentState,
 )
 from .compaction import CompactionExtension
@@ -29,6 +28,14 @@ from .extension_events import (
     ReasoningCompletedEvent,
     ReasoningStartedEvent,
     RunCancelledEvent,
+)
+from .extension_hooks import (
+    AgentEventHooksMixin,
+    AgentExtension,
+    AgentModelHooksMixin,
+    AgentRunHooksMixin,
+    AgentSetupHooksMixin,
+    AgentToolHooksMixin,
 )
 from .extensions import (
     InMemoryMessageAccumulator,
@@ -125,6 +132,11 @@ __all__ = [
     "AgentConfig",
     "AgentContext",
     "AgentExtension",
+    "AgentSetupHooksMixin",
+    "AgentRunHooksMixin",
+    "AgentModelHooksMixin",
+    "AgentToolHooksMixin",
+    "AgentEventHooksMixin",
     "AgentState",
     "CompactionEvent",
     "ExtensionEvent",

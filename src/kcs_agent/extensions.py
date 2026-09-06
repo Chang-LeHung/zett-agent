@@ -1,5 +1,8 @@
-from .agent import AgentContext, AgentExtension
+"""Built-in extensions for in-memory history and tool prompt guidance."""
+
+from .agent import AgentContext
 from .extension_events import CompactionEvent, ExtensionEvent, MessageAppendedEvent
+from .extension_hooks import AgentExtension
 from .messages import AnyMessage, SystemMessage
 from .tools import render_tool_guidance
 

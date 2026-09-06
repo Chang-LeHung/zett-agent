@@ -116,6 +116,19 @@ the new state before the incoming user message is appended.
 ## Extensions
 
 Subclass `AgentExtension` to observe lifecycle steps or modify `state.messages`.
+Its hooks are grouped in `extension_hooks.py` by responsibility:
+
+- `AgentSetupHooksMixin` prepares request tools and messages.
+- `AgentRunHooksMixin` observes the complete request and terminal outcome.
+- `AgentModelHooksMixin` wraps primary model calls.
+- `AgentToolHooksMixin` wraps tool calls.
+- `AgentEventHooksMixin` emits streaming events and receives published events.
+
+`AgentExtension` combines these groups and provides no-op defaults, so an
+extension only overrides the hooks it needs.
+
+`extensions.py` contains the concrete in-memory history and tool guidance
+extensions; `extension_events.py` defines internal notification events.
 Available hooks are `on_message`, `before_run`, `before_model`,
 `before_model_events`, `after_model`, `before_tool`, `after_tool`, `after_run`,
 `on_success`, `on_error`, and `on_event`. Hooks run sequentially in extension

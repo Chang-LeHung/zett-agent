@@ -59,6 +59,7 @@ class AgentPhase(StrEnum):
         |       +-----------------+                                      |
         |       | LOADING_CONTEXT |                                      |
         |       +-----------------+                                      |
+        |                | on_tool(): register request tools            |
         |                | on_message(): restore context                 |
         |                v                                               |
         |       +-----------------+ compact / done  +-----------------+  |

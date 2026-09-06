@@ -170,12 +170,18 @@ async def test_success_callback_failures_prevent_completion(failure_hook):
     assert all(event.type != AgentEventType.RUN_COMPLETED for event in events)
 
 
-async def test_context_shares_injected_tools_and_is_new_for_each_run():
+async def test_context_registers_request_scoped_tools_before_messages_load():
     contexts: list[AgentContext] = []
+    calls: list[str] = []
 
     class RegisterTools(AgentExtension):
+        async def on_tool(self, context: AgentContext) -> None:
+            calls.append("on_tool")
+            context.register_tool(add)
+
         async def on_message(self, context: AgentContext) -> None:
-            context.tools[add.name] = add
+            calls.append("on_message")
+            assert add.name in context.tools
 
         async def before_run(self, context: AgentContext) -> None:
             contexts.append(context)
@@ -196,10 +202,62 @@ async def test_context_shares_injected_tools_and_is_new_for_each_run():
     assert contexts[1].config is next_config
     assert contexts[0].state is not contexts[1].state
     assert contexts[1].state is agent.state
-    assert contexts[0].tools is contexts[1].tools is agent.tools
+    assert contexts[0].tools is not contexts[1].tools
+    assert contexts[0].tools is not agent.tools
+    assert contexts[1].tools is not agent.tools
+    assert agent.tools == {}
+    assert calls == ["on_tool", "on_message", "on_tool", "on_message"]
     assert model.requests[0].tools == (add.definition,)
     assert any("## add\n- Use for exact addition." in message.content for message in model.requests[0].messages)
     assert model.requests[1].messages[-1].content == "5"
+
+
+async def test_all_tool_hooks_finish_before_any_message_hook() -> None:
+    calls: list[str] = []
+
+    class GuidanceFirst(ToolGuidelinesExtension):
+        async def on_message(self, context: AgentContext) -> None:
+            calls.append("guidance:on_message")
+            await super().on_message(context)
+
+    class RegisterLast(AgentExtension):
+        async def on_tool(self, context: AgentContext) -> None:
+            calls.append("register:on_tool")
+            context.register_tool(add)
+
+        async def on_message(self, context: AgentContext) -> None:
+            calls.append("register:on_message")
+
+    model = ScriptedModel(AssistantMessage(content="Done"))
+    agent = await Agent.create(
+        model,
+        extensions=[GuidanceFirst(), RegisterLast()],
+        config=CONFIG,
+    )
+
+    await agent.run("Describe your tools")
+
+    assert calls == ["register:on_tool", "guidance:on_message", "register:on_message"]
+    assert model.requests[0].tools == (add.definition,)
+    assert any("## add\n- Use for exact addition." in message.content for message in model.requests[0].messages)
+
+
+async def test_context_rejects_duplicate_tool_registration() -> None:
+    class DuplicateRegistration(AgentExtension):
+        async def on_tool(self, context: AgentContext) -> None:
+            context.register_tool(add)
+
+    agent = await Agent.create(
+        ScriptedModel(AssistantMessage(content="unused")),
+        tools=[add],
+        extensions=[DuplicateRegistration()],
+        config=CONFIG,
+    )
+
+    with pytest.raises(ValueError, match="already registered"):
+        await agent.run("Hello")
+
+    assert agent.state.phase == AgentPhase.FAILED
 
 
 async def test_extension_can_stream_typed_events_before_the_primary_model():
@@ -514,6 +572,9 @@ async def test_extensions_receive_all_success_hooks_and_can_modify_messages():
     calls: list[str] = []
 
     class RecordingExtension(AgentExtension):
+        async def on_tool(self, context):
+            calls.append("on_tool")
+
         async def on_message(self, context):
             calls.append("on_message")
 
@@ -548,6 +609,7 @@ async def test_extensions_receive_all_success_hooks_and_can_modify_messages():
     await agent.run("Add", config=CONFIG)
 
     assert calls == [
+        "on_tool",
         "on_message",
         "before_run",
         "before_model",

@@ -39,8 +39,9 @@ class AgentState:
 class AgentContext:
     """Per-run references shared by all lifecycle hooks.
 
-    Register tools during on_message, before ToolGuidelinesExtension runs.
-    Mutate state.messages and tools in place to update the agent runtime.
+    Register request-scoped tools during on_tool(). Mutate state.messages and
+    tools in place to update the current request without leaking registrations
+    into another request or session.
     """
 
     # Configuration for this invocation.
@@ -51,6 +52,12 @@ class AgentContext:
     tools: dict[str, AgentTool]
     # Fixed subscriber order for this run; no event history is retained.
     extensions: tuple["AgentExtension", ...] = ()
+
+    def register_tool(self, tool: AgentTool) -> None:
+        """Register one request-scoped tool while rejecting ambiguous names."""
+        if tool.name in self.tools:
+            raise ValueError(f"Tool {tool.name!r} is already registered")
+        self.tools[tool.name] = tool
 
     async def publish(self, event: ExtensionEvent) -> None:
         """Deliver an event sequentially to all registered extensions.
@@ -98,6 +105,7 @@ class AgentExtension:
         |       +-----------------+                                      |
         |       | LOADING_CONTEXT |                                      |
         |       +-----------------+                                      |
+        |                | on_tool(): register request tools            |
         |                | on_message(): restore context                 |
         |                v                                               |
         |       +-----------------+ compact / done  +-----------------+  |
@@ -138,6 +146,7 @@ class AgentExtension:
 
     Internal message updates:
         - Every request starts with a new AgentState containing the system prompt.
+        - on_tool builds the request-scoped tool registry before messages load.
         - on_message fills that state on every request before user input is appended.
         - The user message is appended after before_run and before before_model.
         - The complete assistant message is appended before after_model.
@@ -152,6 +161,17 @@ class AgentExtension:
     to the caller. Tool execution errors become failed ToolMessages and follow
     after_tool instead. Task cancellation does not trigger on_error.
     """
+
+    async def on_tool(self, context: AgentContext) -> None:
+        """Register tools before any extension restores or injects messages.
+
+        All extensions finish this hook before the first on_message() call, so
+        prompt extensions can reliably inspect the complete request tool set.
+
+        Example:
+            async def on_tool(self, context):
+                context.register_tool(read_file)
+        """
 
     async def on_message(self, context: AgentContext) -> None:
         """Fill a fresh state before every request's user input is appended.
@@ -419,16 +439,17 @@ class Agent(AgentPhaseTransitionMixin):
             )
         config = config or self._initialized_config
         messages = [SystemMessage(content=self.system_prompt)] if self.system_prompt else []
-        # agent state is reset for each run, but extensions may restore history in on_message()
+        # State and dynamic tools are request-scoped. Constructor tools are copied
+        # so extension registrations cannot leak into later requests or sessions.
         state = AgentState(messages=messages)
         self.state = state
-        context = AgentContext(config=config, state=state, tools=self.tools, extensions=self.extensions)
+        context = AgentContext(config=config, state=state, tools=dict(self.tools), extensions=self.extensions)
         user_message = UserMessage(content=message) if isinstance(message, str) else message
         self._request_active = True
         try:
             await self._start_context_loading(context)
-            for extension in self.extensions:
-                await extension.on_message(context)
+            await self._notify_on_tool(context)
+            await self._notify_on_message(context)
             await self._finish_context_loading(context)
             await self._notify_before_run(context)
             await context.append_message(user_message, MessageTiming.instant())
@@ -443,7 +464,7 @@ class Agent(AgentPhaseTransitionMixin):
 
                 request = ModelRequest(
                     messages=tuple(state.messages),
-                    tools=tuple(tool.definition for tool in self.tools.values()),
+                    tools=tuple(tool.definition for tool in context.tools.values()),
                     reasoning_effort=reasoning_effort,
                 )
                 model_started = await self._start_model_generation(context)
@@ -504,8 +525,7 @@ class Agent(AgentPhaseTransitionMixin):
                 )
                 if not response.message.tool_calls:
                     await self._notify_after_run(context, response.message)
-                    for extension in self.extensions:
-                        await extension.on_success(context, response.message)
+                    await self._notify_on_success(context, response.message)
                     await self._complete_request(context)
                     yield AgentEvent(
                         AgentEventType.RUN_COMPLETED,
@@ -561,7 +581,7 @@ class Agent(AgentPhaseTransitionMixin):
             )
             error = None
             try:
-                registered = self.tools.get(call.name)
+                registered = context.tools.get(call.name)
                 if registered is None:
                     raise ValueError(f"Unknown tool: {call.name}")
                 output = await registered(call.arguments)
@@ -619,6 +639,16 @@ class Agent(AgentPhaseTransitionMixin):
                     event.phase = context.state.phase
                     yield event
 
+    async def _notify_on_tool(self, context: AgentContext) -> None:
+        """Let every extension register request-scoped tools in order."""
+        for extension in self.extensions:
+            await extension.on_tool(context)
+
+    async def _notify_on_message(self, context: AgentContext) -> None:
+        """Let every extension populate the fresh request state in order."""
+        for extension in self.extensions:
+            await extension.on_message(context)
+
     async def _notify_before_run(self, context: AgentContext) -> None:
         for extension in self.extensions:
             await extension.before_run(context)
@@ -653,6 +683,11 @@ class Agent(AgentPhaseTransitionMixin):
     async def _notify_after_run(self, context: AgentContext, result: AssistantMessage) -> None:
         for extension in self.extensions:
             await extension.after_run(context, result)
+
+    async def _notify_on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+        """Notify extensions after successful post-run processing."""
+        for extension in self.extensions:
+            await extension.on_success(context, result)
 
     async def _notify_error(self, context: AgentContext, error: Exception) -> None:
         for extension in self.extensions:

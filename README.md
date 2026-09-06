@@ -455,6 +455,59 @@ confirms that the answer has been returned to the model.
 least one accepts the event. It returns `False` when no extension recognizes it,
 including malformed, duplicated, stale, or cancelled ask-user responses.
 
+## Plan Mode extension
+
+`PlanModeExtension` lets the model propose a session-scoped planning mode, but
+requires explicit user confirmation before activating it:
+
+```python
+plan_mode = PlanModeExtension()
+agent = await Agent.create(
+    model,
+    config=AgentConfig(session_id="coding-session"),
+    extensions=[
+        CodingExtension(),
+        ToolGuidelinesExtension(),
+        plan_mode,
+    ],
+)
+
+async for event in agent.stream("Design the authentication refactor"):
+    if event.name == ENTER_PLAN_MODE_EVENT_NAME:
+        approved = await confirm_in_ui(event.payload["reason"])
+        agent.emit_external_event(
+            ExternalEvent(
+                name=ENTER_PLAN_MODE_RESPONSE_EVENT_NAME,
+                payload={
+                    "session_id": event.session_id,
+                    "tool_call_id": event.tool_calls[0].id,
+                    "approved": approved,
+                },
+            )
+        )
+```
+
+Outside Plan Mode, the model receives an `enter_plan_mode` Tool. A valid Tool
+Call emits the `enter_plan_mode` Custom Event and waits before `TOOL_STARTED`.
+The extension enters Plan Mode only after receiving a correlated
+`enter_plan_mode_response` External Event with a strict boolean `approved`
+field. A response without a pending Tool Call is rejected, so the user cannot
+proactively activate the mode. Rejection returns a normal declined Tool result
+to the model.
+
+After approval, the stream emits `plan_mode_entered`, replaces all system
+instructions with the Plan Mode prompt, and exposes `read_file`, `write_file`,
+`replace_in_file`, `glob`, `grep`, `run_shell`, and `exit_plan_mode`. Any other
+Tool Call is rejected before execution.
+
+When the plan is ready, the model calls `exit_plan_mode` with the complete
+Markdown plan. The extension emits an `exit_plan_mode` Custom Event and waits
+for a correlated `exit_plan_mode_response` External Event. Approval emits
+`plan_mode_exited` and restores the original system instructions and tools for
+the next model step; rejection keeps the session in Plan Mode so the model can
+revise the plan. As with entry, a response without a pending Tool Call is
+rejected, so neither transition can be triggered out of band.
+
 ## Subagent extension
 
 `SubAgentExtension` registers a foreground `task` tool with built-in

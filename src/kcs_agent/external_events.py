@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Collection
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from threading import Lock
@@ -36,6 +36,7 @@ class _PendingExternalEvent:
 
     context: AgentContext
     future: asyncio.Future[ExternalEvent]
+    response_event_names: frozenset[str]
     accepted: bool = False
 
 
@@ -65,12 +66,13 @@ class ExternalEventExtension(AgentExtension):
     protocol behavior.
     """
 
-    def __init__(self, *, response_event_name: str, correlation_field: str) -> None:
-        if not response_event_name.strip():
+    def __init__(self, *, response_event_name: str | Collection[str], correlation_field: str) -> None:
+        names = (response_event_name,) if isinstance(response_event_name, str) else tuple(response_event_name)
+        if not names or any(not isinstance(name, str) or not name.strip() for name in names):
             raise ValueError("response_event_name cannot be empty")
         if not correlation_field.strip():
             raise ValueError("correlation_field cannot be empty")
-        self._response_event_name = response_event_name
+        self._response_event_names = frozenset(names)
         self._correlation_field = correlation_field
         self._pending: dict[tuple[str, str], _PendingExternalEvent] = {}
         self._accepted: dict[AgentContext, ExternalEvent] = {}
@@ -81,12 +83,19 @@ class ExternalEventExtension(AgentExtension):
         self,
         context: AgentContext,
         correlation_id: str,
+        *,
+        response_event_name: str | None = None,
     ) -> AsyncGenerator[None]:
         """Register before yielding UI output, then await and stage its response."""
         if not correlation_id.strip():
             raise ValueError("correlation_id cannot be empty")
+        response_names = self._response_event_names
+        if response_event_name is not None:
+            if response_event_name not in response_names:
+                raise ValueError(f"Unsupported response event name: {response_event_name!r}")
+            response_names = frozenset((response_event_name,))
         key = (context.config.session_id, correlation_id)
-        pending = _PendingExternalEvent(context, asyncio.get_running_loop().create_future())
+        pending = _PendingExternalEvent(context, asyncio.get_running_loop().create_future(), response_names)
         with self._pending_lock:
             if key in self._pending:
                 raise RuntimeError(f"External event is already pending: {correlation_id}")
@@ -110,7 +119,7 @@ class ExternalEventExtension(AgentExtension):
 
     def accept(self, event: ExternalEvent) -> bool:
         """Route one matching external response to its waiting Future."""
-        if event.name != self._response_event_name:
+        if event.name not in self._response_event_names:
             return False
         session_id = event.payload.get("session_id")
         correlation_id = event.payload.get(self._correlation_field)
@@ -120,7 +129,12 @@ class ExternalEventExtension(AgentExtension):
             return False
         with self._pending_lock:
             pending = self._pending.get((session_id, correlation_id))
-            if pending is None or pending.accepted or pending.future.done():
+            if (
+                pending is None
+                or event.name not in pending.response_event_names
+                or pending.accepted
+                or pending.future.done()
+            ):
                 return False
             pending.accepted = True
 

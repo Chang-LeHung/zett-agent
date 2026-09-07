@@ -16,6 +16,20 @@ from zett_agent import (
 )
 
 
+def test_message_attributes_are_independent_and_available_to_every_role():
+    first = UserMessage(content="first")
+    second = UserMessage(content="second")
+    first.attributes["source"] = "clipboard"
+
+    assert first.attributes == {"source": "clipboard"}
+    assert second.attributes == {}
+    assert SystemMessage(content="system", attributes={"scope": "request"}).attributes == {"scope": "request"}
+    assert AssistantMessage(content="answer", attributes={"trace_id": "trace"}).attributes == {"trace_id": "trace"}
+    assert ToolMessage(tool_call_id="call", name="tool", content="result", attributes={"cached": True}).attributes == {
+        "cached": True
+    }
+
+
 def test_message_fields_are_direct_and_role_specific():
     call = ToolCall("c1", "lookup", {"query": "agents"})
     messages = [

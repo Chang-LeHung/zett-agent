@@ -131,7 +131,7 @@ async def test_compaction_event_delivered_after_context_update(fail):
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Done")))
 
     class Restore(AgentExtension):
-        async def on_message(self, context):
+        async def on_state(self, context):
             context.state.messages.extend([UserMessage(content="Old " * 500), AssistantMessage(content="Answer")])
 
     agent = await Agent.create(

@@ -319,7 +319,7 @@ async def test_custom_subagent_extensions_run_inside_the_child_lifecycle(storage
     observed_sessions: list[str] = []
 
     class ChildExtension(AgentExtension):
-        async def on_message(self, context):
+        async def on_state(self, context):
             observed_sessions.append(context.config.session_id)
             context.state.messages.append(SystemMessage(content="Injected by child extension"))
 

@@ -4,7 +4,7 @@ import importlib
 import pytest
 from pydantic import ValidationError
 
-from zett_agent import glob, grep, read_file, replace_in_file, run_shell, write_file
+from zett_agent import delete_file, glob, grep, read_file, replace_in_file, run_shell, write_file
 
 
 async def test_file_tools_write_read_and_replace_text(tmp_path, monkeypatch):
@@ -30,6 +30,11 @@ async def test_file_tools_write_read_and_replace_text(tmp_path, monkeypatch):
     assert replaced_all.replacements == 2
     assert (tmp_path / "notes/example.txt").read_text() == "changed\nchanged\n"
 
+    deleted = await delete_file({"path": "notes/example.txt"})
+    assert deleted.path == "notes/example.txt"
+    assert deleted.deleted is True
+    assert not (tmp_path / "notes/example.txt").exists()
+
 
 async def test_file_tools_reject_unsafe_or_ambiguous_operations(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -46,6 +51,12 @@ async def test_file_tools_reject_unsafe_or_ambiguous_operations(tmp_path, monkey
         await read_file({"path": "missing.txt"})
     with pytest.raises(ValueError, match="does not exist"):
         await replace_in_file({"path": "missing.txt", "old_text": "old", "new_text": "new"})
+    with pytest.raises(ValueError, match="does not exist"):
+        await delete_file({"path": "missing.txt"})
+    with pytest.raises(ValueError, match="does not exist"):
+        await delete_file({"path": "directory"})
+    with pytest.raises(ValueError, match="escapes"):
+        await delete_file({"path": "../outside.txt"})
     with pytest.raises(ValueError, match="not a file"):
         await write_file({"path": "directory", "content": "text"})
     with pytest.raises(ValueError, match="already exists"):
@@ -63,9 +74,10 @@ async def test_file_tools_reject_unsafe_or_ambiguous_operations(tmp_path, monkey
 
 async def test_local_tools_export_typed_schemas():
     tools = {
-        registered.name: registered for registered in (glob, grep, read_file, write_file, replace_in_file, run_shell)
+        registered.name: registered
+        for registered in (glob, grep, read_file, write_file, replace_in_file, delete_file, run_shell)
     }
-    assert set(tools) == {"glob", "grep", "read_file", "write_file", "replace_in_file", "run_shell"}
+    assert set(tools) == {"glob", "grep", "read_file", "write_file", "replace_in_file", "delete_file", "run_shell"}
     assert tools["read_file"].parameters["properties"]["start_line"]["minimum"] == 1
     assert tools["read_file"].parameters["properties"]["line_count"]["maximum"] == 2_000
     assert tools["read_file"].parameters["properties"]["path"]["description"].startswith("Relative path")

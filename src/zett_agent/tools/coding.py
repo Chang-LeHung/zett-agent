@@ -46,6 +46,13 @@ class ReplaceFileResult(BaseModel):
     bytes_written: int
 
 
+class DeleteFileResult(BaseModel):
+    """Result of deleting one existing regular file."""
+
+    path: str
+    deleted: bool
+
+
 class GlobResult(BaseModel):
     """Paths matched by one working-directory-relative glob pattern."""
 
@@ -385,6 +392,29 @@ def replace_in_file(
         replacements=replacements,
         bytes_written=len(updated.encode("utf-8")),
     )
+
+
+@tool
+def delete_file(path: FilePath) -> DeleteFileResult:
+    """Delete one file inside the current working directory.
+
+    Args:
+        path: Relative path of the existing regular file to delete.
+
+    Snippet:
+        delete_file(path="notes/obsolete.md")
+
+    Guidelines:
+        - Delete a file only when the task explicitly requires its removal.
+        - Inspect or confirm the exact path before deleting it.
+        - This tool never deletes directories or recursively expands patterns.
+    """
+    working_directory, target = _resolve_working_path(path)
+    if not target.is_file():
+        raise ValueError(f"File does not exist: {path}")
+    relative = target.relative_to(working_directory).as_posix()
+    target.unlink()
+    return DeleteFileResult(path=relative, deleted=True)
 
 
 @tool

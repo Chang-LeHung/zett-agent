@@ -120,7 +120,7 @@ Every request receives a fresh `AgentState`. Restore history through an extensio
 
 ```python
 class RestoreHistory(AgentExtension):
-    async def on_message(self, context):
+    async def on_state(self, context):
         context.state.messages.extend(await load_messages(context.config.session_id))
 
 
@@ -136,7 +136,7 @@ reply = await agent.run(
 ```
 
 `AgentConfig.session_id` identifies the conversation that owns a run and is
-included in every streamed event. `on_message` runs for every request and fills
+included in every streamed event. `on_state` runs for every request and fills
 the new state before the incoming user message is appended.
 
 ## Extensions
@@ -155,7 +155,7 @@ extension only overrides the hooks it needs.
 
 `extensions/` keeps each concrete extension in its own module;
 `extensions/events.py` defines internal notification events.
-Available hooks are `on_message`, `before_run`, `before_model`,
+Available hooks are `on_tool`, `on_state`, `on_message`, `before_run`, `before_model`,
 `before_model_events`, `after_model`, `before_tool`, `after_tool`, `after_run`,
 `on_success`, `on_error`, and `on_event`. Hooks run sequentially in extension
 priority order, with registration order breaking ties. `before_model_events` is
@@ -171,11 +171,22 @@ Each hook receives an `AgentContext` containing this run's `config`, fresh
 each run; only the tools registry remains shared with the Agent. Responses, tool calls, and tool
 results remain separate arguments on their respective hooks.
 
-Register additional tools through `context.tools[tool.name] = tool` in
-`on_message`. Place that extension before `ToolGuidelinesExtension()` so guidance
-includes the injected tools. Model schemas and execution use the same registry.
+Register additional tools through `context.register_tool(tool)` in `on_tool`.
+All tool hooks finish before state hooks, so tool guidance includes the complete
+registry. Model schemas and execution use the same registry.
 
-The system prompt enters each fresh `state.messages` before `on_message` runs.
+Request setup runs in this order:
+
+```text
+on_tool -> on_state -> on_message -> append_message -> before_run -> model
+```
+
+`on_state` restores history and injects system instructions. `on_message` may
+replace `context.input_message` to expand commands such as `/goal` before the
+input is appended. The runtime publishes the transformed message once through
+`MessageAppendedEvent`; `before_run` sees the finalized input in state.messages.
+
+The system prompt enters each fresh `state.messages` before `on_state` runs.
 Model requests read the state messages directly.
 
 By default, each Agent creates its own `InMemoryMessageAccumulator` and
@@ -203,7 +214,7 @@ await next_agent.run("Now add 4", config=AgentConfig(session_id="math"))
 ```
 
 `ToolGuidelinesExtension` injects guidance into every fresh state through
-`on_message`, after the other system instructions and before dialogue.
+`on_state`, after the other system instructions and before dialogue.
 `InMemoryMessageAccumulator` stores one mutable message list per session and
 offers `messages(session_id)` and `clear(session_id)` for inspection and cleanup.
 

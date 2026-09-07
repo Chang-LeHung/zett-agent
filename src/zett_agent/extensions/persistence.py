@@ -263,7 +263,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         context.state.messages[:] = [*instructions, *view.messages]
         return view
 
-    async def on_message(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentContext) -> None:
         """Restore context and map every dialogue position to its Raw Log boundary."""
         view = await self._restore(context)
         sequences = []

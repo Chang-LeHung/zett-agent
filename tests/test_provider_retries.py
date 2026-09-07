@@ -98,6 +98,7 @@ async def test_transient_http_errors_retry_exactly_once_then_succeed(cls, status
         events = [event async for event in provider.stream(ModelRequest([UserMessage(content="hi")]))]
         assert calls == 2
         assert events[-1].response.message.content == "ok"
+        assert events[-1].response.message.model == "test"
         assert sum(event.delta == "ok" for event in events) == 1
     finally:
         await provider.aclose()

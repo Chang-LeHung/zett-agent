@@ -69,7 +69,7 @@ def test_provider_data_normalization_supports_sdk_and_fallback_shapes():
     assert _to_model_data({"kind": "mapping"}) == {"kind": "mapping"}
     assert _to_model_data(ModernSDKValue()) == {"kind": "modern"}
     assert _to_model_data(LegacySDKValue()) == {"kind": "legacy"}
-    assert _to_model_data(SystemMessage(content="instruction")) == {
+    assert _to_model_data(SystemMessage(content="instruction", attributes={"private": True})) == {
         "role": "system",
         "content": "instruction",
     }
@@ -244,7 +244,7 @@ async def test_google_serializes_multimodal_replay_and_tool_history():
                 tool_calls=(ToolCall("call-1", "read", {"path": "a.txt"}),),
             ),
             ToolMessage(tool_call_id="call-1", name="read", content="contents"),
-            AssistantMessage(provider="google", replay_blocks=({"text": "signed replay"},)),
+            AssistantMessage(provider="google", model="gemini", replay_blocks=({"text": "signed replay"},)),
         ),
         tools=(ToolDefinition("read", "Read a file", {"type": "object"}),),
         tool_choice="read",

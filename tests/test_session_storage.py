@@ -101,7 +101,7 @@ async def test_storage_persists_parent_identity_and_message_metadata(storage):
         raw = session.scalar(select(RawLogMessageModel).where(RawLogMessageModel.session_id == "child"))
         assert json.loads(raw.metadata_json) == {"subagent_type": "explore", "depth": 1}
         assert json.loads(raw.tags_json) == {"domain": "code", "read_only": True}
-        assert set(json.loads(raw.message_json)[0]["data"]) == {"content"}
+        assert set(json.loads(raw.message_json)[0]["data"]) == {"attributes", "content"}
 
     with pytest.raises(ValueError, match="parent cannot change"):
         await storage.append(
@@ -465,7 +465,9 @@ def test_message_codec_preserves_multimodal_and_tool_replay():
         AssistantMessage(
             content="Looking",
             reasoning="Reasoning",
+            attributes={"trace": "model-step-1", "attempt": 1},
             provider="anthropic",
+            model="claude-test",
             replay_blocks=({"type": "thinking", "signature": "signed"},),
             tool_calls=(ToolCall("id", "read", {"path": "notes.md"}),),
         ),

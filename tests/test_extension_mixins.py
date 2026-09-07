@@ -28,7 +28,7 @@ def test_agent_extension_default_priority_is_one_hundred() -> None:
 
 def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
     groups = {
-        AgentSetupHooksMixin: {"on_tool", "on_message"},
+        AgentSetupHooksMixin: {"on_tool", "on_state", "on_message"},
         AgentRunHooksMixin: {"before_run", "after_run", "on_success", "on_error"},
         AgentModelHooksMixin: {"before_model", "after_model"},
         AgentToolHooksMixin: {"before_tool", "after_tool"},
@@ -51,6 +51,7 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
 
     assert observed == {
         "on_tool",
+        "on_state",
         "on_message",
         "before_run",
         "after_run",

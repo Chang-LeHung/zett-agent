@@ -49,6 +49,7 @@ def echo() -> str:
 
 HOOKS = [
     "on_tool",
+    "on_state",
     "on_message",
     "before_run",
     "before_model",

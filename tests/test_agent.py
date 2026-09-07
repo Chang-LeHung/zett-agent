@@ -182,7 +182,7 @@ async def test_run_rejects_invalid_extension_context(kwargs, error):
 
 async def test_failed_initialization_does_not_enable_requests():
     class Failure(AgentExtension):
-        async def on_message(self, context):
+        async def on_state(self, context):
             raise RuntimeError("Restore failed")
 
     agent = Agent(ScriptedModel(), extensions=[Failure()])
@@ -193,7 +193,7 @@ async def test_failed_initialization_does_not_enable_requests():
 
 async def test_create_preserves_subclass_and_restores_when_a_request_starts():
     class Restore(AgentExtension):
-        async def on_message(self, context):
+        async def on_state(self, context):
             await asyncio.sleep(0)
             context.state.messages.append(UserMessage(content="Restored"))
 
@@ -243,8 +243,8 @@ async def test_context_registers_request_scoped_tools_before_messages_load():
             calls.append("on_tool")
             context.register_tool(add)
 
-        async def on_message(self, context: AgentContext) -> None:
-            calls.append("on_message")
+        async def on_state(self, context: AgentContext) -> None:
+            calls.append("on_state")
             assert add.name in context.tools
 
         async def before_run(self, context: AgentContext) -> None:
@@ -270,7 +270,7 @@ async def test_context_registers_request_scoped_tools_before_messages_load():
     assert contexts[0].tools is not agent.tools
     assert contexts[1].tools is not agent.tools
     assert agent.tools == {}
-    assert calls == ["on_tool", "on_message", "on_tool", "on_message"]
+    assert calls == ["on_tool", "on_state", "on_tool", "on_state"]
     assert model.requests[0].tools == (add.definition,)
     assert any("## add\n- Use for exact addition." in message.content for message in model.requests[0].messages)
     assert model.requests[1].messages[-1].content == "5"
@@ -280,17 +280,17 @@ async def test_all_tool_hooks_finish_before_any_message_hook() -> None:
     calls: list[str] = []
 
     class GuidanceFirst(ToolGuidelinesExtension):
-        async def on_message(self, context: AgentContext) -> None:
-            calls.append("guidance:on_message")
-            await super().on_message(context)
+        async def on_state(self, context: AgentContext) -> None:
+            calls.append("guidance:on_state")
+            await super().on_state(context)
 
     class RegisterLast(AgentExtension):
         async def on_tool(self, context: AgentContext) -> None:
             calls.append("register:on_tool")
             context.register_tool(add)
 
-        async def on_message(self, context: AgentContext) -> None:
-            calls.append("register:on_message")
+        async def on_state(self, context: AgentContext) -> None:
+            calls.append("register:on_state")
 
     model = ScriptedModel(AssistantMessage(content="Done"))
     agent = await Agent.create(
@@ -301,7 +301,7 @@ async def test_all_tool_hooks_finish_before_any_message_hook() -> None:
 
     await agent.run("Describe your tools")
 
-    assert calls == ["register:on_tool", "guidance:on_message", "register:on_message"]
+    assert calls == ["register:on_tool", "guidance:on_state", "register:on_state"]
     assert model.requests[0].tools == (add.definition,)
     assert any("## add\n- Use for exact addition." in message.content for message in model.requests[0].messages)
 
@@ -382,7 +382,7 @@ async def test_extensions_run_by_stable_ascending_priority():
             self.name = name
             self.priority = priority
 
-        async def on_message(self, context):
+        async def on_state(self, context):
             calls.append(self.name)
 
     late = RecordingExtension("late", 200)
@@ -573,7 +573,7 @@ async def test_agent_state_retains_messages_between_runs():
     model = ScriptedModel(AssistantMessage(content="New reply"), AssistantMessage(content="Other reply"))
 
     class Restore(AgentExtension):
-        async def on_message(self, context):
+        async def on_state(self, context):
             context.state.messages.extend(history)
 
     accumulator = InMemoryMessageAccumulator()
@@ -598,7 +598,7 @@ async def test_tool_guidance_follows_all_instructions_without_duplication():
     )
 
     class Restore(AgentExtension):
-        async def on_message(self, context):
+        async def on_state(self, context):
             context.state.messages.append(SystemMessage(content="Snapshot"))
 
     agent = await Agent.create(
@@ -707,12 +707,16 @@ async def test_extensions_receive_all_success_hooks_and_can_modify_messages():
         async def on_tool(self, context):
             calls.append("on_tool")
 
+        async def on_state(self, context):
+            calls.append("on_state")
+            context.state.messages.append(SystemMessage(content=f"Loaded {context.config.session_id}"))
+
         async def on_message(self, context):
             calls.append("on_message")
 
         async def before_run(self, context):
             calls.append("before_run")
-            context.state.messages.append(SystemMessage(content=f"Loaded {context.config.session_id}"))
+            assert context.state.messages[-1].content == "Add"
 
         async def before_model(self, context):
             calls.append("before_model")
@@ -742,6 +746,7 @@ async def test_extensions_receive_all_success_hooks_and_can_modify_messages():
 
     assert calls == [
         "on_tool",
+        "on_state",
         "on_message",
         "before_run",
         "before_model",
@@ -763,7 +768,7 @@ async def test_message_injection_runs_for_each_fresh_request_state():
     class Instructions(AgentExtension):
         calls = 0
 
-        async def on_message(self, context):
+        async def on_state(self, context):
             self.calls += 1
             context.state.messages.insert(1, SystemMessage(content="Extra instructions"))
 

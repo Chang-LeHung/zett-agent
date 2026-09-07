@@ -17,7 +17,7 @@ class InMemoryMessageAccumulator(AgentExtension):
     def __init__(self) -> None:
         self._sessions: dict[str, list[AnyMessage]] = {}
 
-    async def on_message(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentContext) -> None:
         """Combine current instructions with an independent copy of remembered dialogue."""
         state = context.state
         instructions = [message for message in state.messages if isinstance(message, SystemMessage)]

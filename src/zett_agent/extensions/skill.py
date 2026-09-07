@@ -133,7 +133,7 @@ class SkillExtension(AgentExtension):
         if self._skills:
             context.register_tool(self._read_skill_tool)
 
-    async def on_message(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentContext) -> None:
         """Place the compact skill catalog with the request's system messages."""
         if not self._skills:
             return

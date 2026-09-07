@@ -76,6 +76,9 @@ class AgentContext:
     metadata: dict[str, JsonValue] = field(default_factory=dict)
     # Request classifications available to extensions and Raw Log persistence.
     tags: dict[str, JsonValue] = field(default_factory=dict)
+    # New input before it is appended. Setup hooks may replace this message to
+    # implement explicit command modes while preserving its raw form in attributes.
+    input_message: UserMessage | None = None
 
     def register_tool(self, tool: AgentTool) -> None:
         """Register one request-scoped tool while rejecting ambiguous names."""
@@ -406,10 +409,10 @@ class Agent(AgentPhaseTransitionMixin):
                 print(event.type, event.session_id)
         """
         user_message = message if isinstance(message, UserMessage) else UserMessage(content=message)
-        context = self._prepare_request_context(config, metadata, tags)
+        context = self._prepare_request_context(config, metadata, tags, user_message)
         effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
         try:
-            await self._open_request(context, user_message)
+            await self._open_request(context)
             async with aclosing(self._stream_loop(context, effort)) as events:
                 async for event in events:
                     yield event
@@ -427,6 +430,7 @@ class Agent(AgentPhaseTransitionMixin):
         config: AgentConfig | None,
         metadata: Mapping[str, JsonValue] | None,
         tags: Mapping[str, JsonValue] | None,
+        input_message: UserMessage,
     ) -> AgentContext:
         """Validate input, create isolated state/tools, and claim the session."""
         if self._initialized_config is None:
@@ -449,6 +453,7 @@ class Agent(AgentPhaseTransitionMixin):
             model=self.model,
             metadata=json_object(metadata, field_name="Context metadata"),
             tags=json_object(tags, field_name="Context tags", nonempty_keys=True),
+            input_message=input_message,
         )
         for registered in self.tools.values():
             context.register_tool(registered)
@@ -462,7 +467,7 @@ class Agent(AgentPhaseTransitionMixin):
             self.state = state
         return context
 
-    async def _open_request(self, context: AgentContext, user_message: UserMessage) -> None:
+    async def _open_request(self, context: AgentContext) -> None:
         """Open inboxes, restore history through hooks, then append the new input."""
         from .extensions.events import MessageTiming
 
@@ -470,10 +475,13 @@ class Agent(AgentPhaseTransitionMixin):
         self._steering_extension.open(context)
         await self._start_context_loading(context)
         await self._notify_on_tool(context)
+        await self._notify_on_state(context)
         await self._notify_on_message(context)
         await self._finish_context_loading(context)
+        if not isinstance(context.input_message, UserMessage):
+            raise AgentProtocolError("Request setup must produce a UserMessage")
+        await context.append_message(context.input_message, MessageTiming.instant())
         await self._notify_before_run(context)
-        await context.append_message(user_message, MessageTiming.instant())
 
     async def _stream_loop(self, context: AgentContext, reasoning_effort: ReasoningEffort) -> AsyncIterator[AgentEvent]:
         """Alternate model and tool steps, processing queued inputs before completion."""
@@ -849,8 +857,13 @@ class Agent(AgentPhaseTransitionMixin):
         if event.session_id != context.config.session_id:
             raise AgentProtocolError("Post-operation event belongs to another session")
 
+    async def _notify_on_state(self, context: AgentContext) -> None:
+        """Restore history and system instructions before input conversion."""
+        for extension in self.extensions:
+            await extension.on_state(context)
+
     async def _notify_on_message(self, context: AgentContext) -> None:
-        """Let every extension populate the request state in priority order."""
+        """Let extensions transform current input before append and persistence."""
         for extension in self.extensions:
             await extension.on_message(context)
 

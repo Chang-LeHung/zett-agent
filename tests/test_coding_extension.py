@@ -28,7 +28,7 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
 
     expected = {
         True: {"read_file", "glob", "grep"},
-        False: {"read_file", "glob", "grep", "write_file", "replace_in_file"},
+        False: {"read_file", "glob", "grep", "write_file", "replace_in_file", "delete_file"},
     }
     for read_only, tool_names in expected.items():
         model = Model()
@@ -49,6 +49,7 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
         if read_only:
             assert "## write_file" not in guidance
             assert "## replace_in_file" not in guidance
+            assert "## delete_file" not in guidance
 
 
 async def test_coding_extension_executes_tools_and_registers_again(tmp_path, monkeypatch):
@@ -60,6 +61,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
         ToolCall("glob", "glob", {"pattern": "*.txt"}),
         ToolCall("grep", "grep", {"pattern": "world"}),
         ToolCall("shell", "run_shell", {"command": "printf coding-extension"}),
+        ToolCall("delete", "delete_file", {"path": "note.txt"}),
     )
 
     class Model:
@@ -91,7 +93,8 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
     assert results["replace_in_file"]["replacements"] == 1
     assert results["glob"]["paths"] == ["note.txt"]
     assert len(results["grep"]["matches"]) == 1
-    assert (tmp_path / "note.txt").read_text() == "world"
+    assert results["delete_file"] == {"path": "note.txt", "deleted": True}
+    assert not (tmp_path / "note.txt").exists()
     assert all(message.success for message in model.requests[1].messages if isinstance(message, ToolMessage))
 
     await agent.run("Another request", config=AgentConfig("other-files"))

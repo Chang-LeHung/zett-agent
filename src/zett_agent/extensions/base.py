@@ -21,7 +21,7 @@ class AgentSetupHooksMixin:
     async def on_tool(self, context: AgentContext) -> None:
         """Register tools before any extension restores or injects messages.
 
-        All extensions finish this hook before the first on_message() call, so
+        All extensions finish this hook before the first on_state() call, so
         prompt extensions can reliably inspect the complete request tool set.
 
         Example:
@@ -29,12 +29,21 @@ class AgentSetupHooksMixin:
                 context.register_tool(read_file)
         """
 
-    async def on_message(self, context: AgentContext) -> None:
-        """Fill a fresh state before every request's user input is appended.
+    async def on_state(self, context: AgentContext) -> None:
+        """Restore history and initialize state before any input conversion.
 
         Example:
-            async def on_message(self, context):
+            async def on_state(self, context):
                 context.state.messages.insert(0, SystemMessage(content="Use concise answers."))
+        """
+
+    async def on_message(self, context: AgentContext) -> None:
+        """Transform context.input_message after state restoration, before append.
+
+        Replace the pending UserMessage to implement commands such as /goal.
+        Do not append or persist it here: the runtime appends the final message
+        exactly once after all input hooks finish. before_run sees that message
+        in state.messages and persistence subscribers have already received it.
         """
 
 
@@ -42,7 +51,7 @@ class AgentRunHooksMixin:
     """Hooks around one complete request and its terminal outcome."""
 
     async def before_run(self, context: AgentContext) -> None:
-        """Run before the new user message is appended."""
+        """Run after the transformed user input is appended and published."""
 
     async def after_run(self, context: AgentContext, result: AssistantMessage) -> None:
         """Run after a successful final answer is appended."""
@@ -194,10 +203,11 @@ class AgentExtension(
               | SETUP                                        |         | Exception:                       |
               | LOADING_CONTEXT [E]                          |         |   FAILED [E]                     |
               | on_tool()                                    |         |   on_error()                     |
-              | on_message()                                 |         |   re-raise error                 |
-              | READY [E]                                    |         |                                  |
-              | before_run()                                 |         | Cancellation:                    |
+              | on_state(): restore history                  |         |   re-raise error                 |
+              | on_message(): transform input                |         |                                  |
+              | READY [E]                                    |         | Cancellation:                    |
               | append UserMessage [E]                       |         |   CANCELLED [E]                  |
+              | before_run()                                 |         |                                  |
               +----------------------------------------------+         |   RunCancelledEvent [E]          |
                                       |                                |   re-raise cancellation          |
                                       |                                +----------------------------------+
@@ -253,7 +263,10 @@ class AgentExtension(
               | ExternalEvent -> Agent.emit_external_event() -> accept() on every registered extension.   |
               +-------------------------------------------------------------------------------------------+
 
-    All on_tool() hooks finish before any on_message() hook starts. Each hook
+    All on_tool() hooks finish before on_state() restores history and system
+    instructions. All on_state() hooks finish before on_message() transforms
+    context.input_message. The runtime then appends and publishes the transformed
+    UserMessage exactly once, followed by before_run(). Each hook
     runs by ascending priority; equal priorities retain registration order. The
     left return line runs after every tool in the response has been processed,
     or after one AgentMessage is appended with a fresh iteration budget.

@@ -2,6 +2,7 @@
 
 from .base import AgentTool, render_tool_guidance, tool
 from .coding import (
+    DeleteFileResult,
     GlobResult,
     GrepMatch,
     GrepResult,
@@ -9,6 +10,7 @@ from .coding import (
     ReplaceFileResult,
     ShellResult,
     WriteFileResult,
+    delete_file,
     glob,
     grep,
     read_file,
@@ -19,6 +21,7 @@ from .coding import (
 
 __all__ = [
     "AgentTool",
+    "DeleteFileResult",
     "GlobResult",
     "GrepMatch",
     "GrepResult",
@@ -26,6 +29,7 @@ __all__ = [
     "ReplaceFileResult",
     "ShellResult",
     "WriteFileResult",
+    "delete_file",
     "glob",
     "grep",
     "read_file",

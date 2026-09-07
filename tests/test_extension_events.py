@@ -81,7 +81,7 @@ async def test_memory_accumulator_ignores_system_events_and_tracks_compaction():
         {},
         (accumulator,),
     )
-    await accumulator.on_message(context)
+    await accumulator.on_state(context)
     await accumulator.on_event(
         context,
         MessageAppendedEvent(SystemMessage(content="Transient"), MessageTiming.instant()),

@@ -1,7 +1,7 @@
 """Working-directory file tools exposed as an Agent extension."""
 
 from ..agent import AgentContext
-from ..tools import AgentTool, glob, grep, read_file, replace_in_file, write_file
+from ..tools import AgentTool, delete_file, glob, grep, read_file, replace_in_file, write_file
 from .base import AgentExtension
 
 
@@ -25,7 +25,7 @@ class FileSystemExtension(AgentExtension):
     def tools(self) -> tuple[AgentTool, ...]:
         """Return the exact immutable registration set for the configured mode."""
         read_tools = (read_file, glob, grep)
-        return read_tools if self.read_only else (*read_tools, write_file, replace_in_file)
+        return read_tools if self.read_only else (*read_tools, write_file, replace_in_file, delete_file)
 
     async def on_tool(self, context: AgentContext) -> None:
         """Register the selected filesystem tools for this request."""

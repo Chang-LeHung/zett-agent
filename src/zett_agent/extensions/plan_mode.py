@@ -256,7 +256,7 @@ class PlanModeExtension(ExternalEventExtension):
         else:
             context.register_tool(baseline.enter_tool)
 
-    async def on_message(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentContext) -> None:
         """Replace system instructions only after Plan Mode was approved."""
         baseline = self._baseline(context)
         baseline.system_messages = self._normal_system_messages(context, baseline)

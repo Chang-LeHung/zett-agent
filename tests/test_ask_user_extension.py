@@ -73,7 +73,7 @@ class ContextRecorder(AgentExtension):
     def __init__(self) -> None:
         self.context = None
 
-    async def on_message(self, context) -> None:
+    async def on_state(self, context) -> None:
         self.context = context
 
 

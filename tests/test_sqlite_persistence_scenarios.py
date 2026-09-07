@@ -80,7 +80,7 @@ def sqlite_extension(tmp_path: Path):
 
 async def test_successful_turn_writes_valid_session_and_raw_log_rows(sqlite_extension):
     class Classifier(AgentExtension):
-        async def before_run(self, context):
+        async def on_message(self, context):
             context.metadata["classified_by"] = "extension"
             context.tags["reviewed"] = True
 

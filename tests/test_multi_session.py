@@ -124,7 +124,7 @@ async def test_todo_cleanup_and_plan_baselines_are_session_local():
     for context in contexts:
         await todo.on_tool(context)
         await plan.on_tool(context)
-        await plan.on_message(context)
+        await plan.on_state(context)
         await context.tools["todo_write"]({"todos": [{"content": context.config.session_id, "status": "processing"}]})
     await todo.on_error(contexts[0], RuntimeError("a failed"))
     await plan.on_error(contexts[0], RuntimeError("a failed"))

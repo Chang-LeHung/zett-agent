@@ -44,8 +44,11 @@ def test_anthropic_signed_thinking_and_redacted_blocks_round_trip() -> None:
         {"type": "redacted_thinking", "data": "opaque-data"},
         {"type": "tool_use", "id": "call-1", "name": "add", "input": {}},
     )
-    message = AssistantMessage(tool_calls=(ToolCall("call-1", "add"),), provider="anthropic", replay_blocks=blocks)
-    assert _to_anthropic_content_blocks(message) == list(blocks)
+    message = AssistantMessage(
+        tool_calls=(ToolCall("call-1", "add"),), provider="anthropic", model="claude", replay_blocks=blocks
+    )
+    assert _to_anthropic_content_blocks(message, model="claude") == list(blocks)
+    assert _to_anthropic_content_blocks(message, model="other")[0]["type"] == "tool_use"
     result = ToolMessage(content="failed", tool_call_id="call-1", name="add", success=False)
     assert _to_anthropic_content_blocks(result)[0]["is_error"] is True
 

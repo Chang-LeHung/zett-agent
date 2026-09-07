@@ -37,6 +37,13 @@ from .events import (
 )
 from .external import ExternalEvent, ExternalEventExtension
 from .file_system import FileSystemExtension
+from .goal import (
+    GOAL_COMMAND_PREFIX,
+    GOAL_EVALUATION_TOOL_NAME,
+    GoalEvaluation,
+    GoalExtension,
+    default_goal_subagent,
+)
 from .internal_message import INTERNAL_MESSAGE_EVENT_NAME, InternalMessageExtension
 from .mcp import McpClient, McpClientFactory, McpExtension, McpHttpServer, McpServer, McpStdioServer
 from .memory import InMemoryMessageAccumulator

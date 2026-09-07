@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 from ..agent import AgentContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
-from ..messages import AssistantMessage, SystemMessage, ToolCall
+from ..messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage
 from ..tools import AgentTool, render_tool_guidance, run_shell, tool
 from .events import ExtensionEvent, RunCancelledEvent
 from .external import ExternalEventExtension
@@ -274,8 +274,17 @@ class PlanModeExtension(ExternalEventExtension):
             self._restore_normal_mode(context, baseline)
             baseline.plan_applied = False
 
-    async def before_model_events(self, context: AgentContext) -> AsyncIterator[AgentEvent]:
-        """Notify the UI after approved transitions are applied."""
+    async def after_tool_events(
+        self, context: AgentContext, call: ToolCall, result: ToolMessage
+    ) -> AsyncIterator[AgentEvent]:
+        """Apply approved transitions and notify the UI after the tool completes.
+
+        Confirmation requests still precede execution so the UI can approve or
+        decline. These completion events report the resulting mode, not a request.
+        """
+        if not result.success or call.name not in (ENTER_PLAN_MODE_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME):
+            return
+        await self.before_model(context)
         session_id = context.config.session_id
         if session_id in self._entered_events:
             self._entered_events.remove(session_id)
@@ -287,7 +296,6 @@ class PlanModeExtension(ExternalEventExtension):
     async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         """Pause valid transition Tool Calls until their responses arrive."""
 
-        # TODO: exit plan mode event should be emitted after the tool call is completed, not before it starts.
         match call.name:
             case name if name == ENTER_PLAN_MODE_TOOL_NAME:
                 try:

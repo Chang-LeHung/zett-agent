@@ -22,7 +22,7 @@ from ..model import (
     ToolDefinition,
     validate_retry,
 )
-from .base import ProviderResponseError, RetryingProvider
+from .base import ProviderResponseError, RetryingProvider, retry_model_stream
 
 
 def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
@@ -68,7 +68,8 @@ class OllamaProvider(RetryingProvider):
         """Close the SDK-owned HTTP connection pool."""
         await self._client._client.aclose()
 
-    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    @retry_model_stream
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         messages: list[dict[str, Any]] = []
         for message in request.messages:
             match message.role:

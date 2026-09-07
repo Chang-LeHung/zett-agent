@@ -4,9 +4,10 @@ import asyncio
 import base64
 import json
 import ssl
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import asdict, dataclass
+from functools import wraps
 from json import JSONDecodeError
 from typing import Any
 
@@ -264,38 +265,19 @@ def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:
 
 
 class RetryingProvider:
-    """Shared stream retry boundary with SDK retries disabled by each adapter.
+    """Shared retry configuration and transient-error classification.
 
     retry.max_retries counts additional attempts (2 means at most 3 requests). Only transport
     failures and HTTP 408/409/429/5xx are retried. Once any model event is yielded,
     propagate failures instead of replaying already-visible text or tool deltas.
     Cancellation also propagates immediately, including during backoff.
+
+    Concrete providers expose their normal ``stream()`` method and apply
+    ``@retry_model_stream`` to it. SDK retries remain disabled by each adapter,
+    preventing nested retry multiplication.
     """
 
-    retry: RetryOptions = RetryOptions()
-
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        retry = self.retry
-        validate_retry(retry)
-        delay = min(retry.base_delay, retry.max_delay)
-        emitted = False
-        for attempt in range(retry.max_retries + 1):
-            try:
-                async with aclosing(self._stream_once(request)) as events:
-                    async for event in events:
-                        emitted = True
-                        yield event
-                return
-            except Exception as error:
-                if emitted or attempt == retry.max_retries or not self._retryable(error):
-                    raise
-                await asyncio.sleep(delay)
-                # Saturate before doubling to avoid overflow for large delays.
-                delay = retry.max_delay if delay >= retry.max_delay / 2 else delay * 2
-
-    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        raise NotImplementedError
-        yield  # pragma: no cover
+    retry: RetryOptions = DEFAULT_RETRY_OPTIONS
 
     @staticmethod
     def _retryable(error: BaseException) -> bool:
@@ -312,6 +294,38 @@ class RetryingProvider:
                 return False
             error = error.__cause__
         return False
+
+
+def retry_model_stream[ProviderT: RetryingProvider](
+    stream: Callable[[ProviderT, ModelRequest], AsyncIterator[ModelEvent]],
+) -> Callable[[ProviderT, ModelRequest], AsyncIterator[ModelEvent]]:
+    """Apply model-owned exponential backoff to a provider stream method.
+
+    The decorated provider method remains publicly named ``stream``. A failed
+    attempt is restarted only before its first event reaches the caller.
+    """
+
+    @wraps(stream)
+    async def retrying_stream(self: ProviderT, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        retry = self.retry
+        validate_retry(retry)
+        delay = min(retry.base_delay, retry.max_delay)
+        emitted = False
+        for attempt in range(retry.max_retries + 1):
+            try:
+                async with aclosing(stream(self, request)) as events:
+                    async for event in events:
+                        emitted = True
+                        yield event
+                return
+            except Exception as error:
+                if emitted or attempt == retry.max_retries or not self._retryable(error):
+                    raise
+                await asyncio.sleep(delay)
+                # Saturate before doubling to avoid overflow for large delays.
+                delay = retry.max_delay if delay >= retry.max_delay / 2 else delay * 2
+
+    return retrying_stream
 
 
 class _OpenAIStyleProvider(RetryingProvider):
@@ -391,7 +405,8 @@ class _OpenAIStyleProvider(RetryingProvider):
     def _provider_specific_request_extra_fields(self, request: ModelRequest) -> dict[str, Any]:
         return {}
 
-    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    @retry_model_stream
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         text = ""
         reasoning = ""
         streams: dict[int, _ToolCallAccumulator] = {}

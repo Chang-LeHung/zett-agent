@@ -1,6 +1,7 @@
 """Count real SDK HTTP attempts through isolated mock transports."""
 
 import asyncio
+import inspect
 import json
 
 import httpx
@@ -19,9 +20,15 @@ from zett_agent import (
     RetryOptions,
     UserMessage,
 )
-from zett_agent.providers.base import ProviderError, RetryingProvider
+from zett_agent.providers.base import ProviderError, RetryingProvider, retry_model_stream
 
 PROVIDERS = [OpenAIProvider, DeepSeekProvider, AnthropicProvider, GoogleProvider, OllamaProvider]
+
+
+@pytest.mark.parametrize("cls", PROVIDERS)
+def test_provider_exposes_an_async_generator_named_stream(cls):
+    assert cls.stream.__name__ == "stream"
+    assert inspect.isasyncgenfunction(cls.stream)
 
 
 def make_provider(cls, handler, retry=2):
@@ -253,7 +260,8 @@ async def test_cancellation_during_backoff_stops_retry(monkeypatch):
     class Failing(RetryingProvider):
         calls = 0
 
-        async def _stream_once(self, request):
+        @retry_model_stream
+        async def stream(self, request):
             self.calls += 1
             raise httpx.ConnectError("offline")
             yield ModelEvent.text("unused")

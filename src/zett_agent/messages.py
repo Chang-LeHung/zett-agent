@@ -128,9 +128,13 @@ class AssistantMessage(Message):
     reasoning: str | None = None
     tool_calls: tuple[ToolCall, ...] = ()
 
-    # Identify the provider that owns signed replay blocks.
+    # TODO: Consider adding the model name
+    # Provider namespace for opaque replay data; prevents cross-provider reuse.
     provider: str | None = None
-    # Signed thinking blocks must be returned unchanged during tool round trips.
+    # Opaque provider-authenticated reasoning/tool blocks that must be persisted
+    # and returned structurally unchanged in the next same-provider tool round
+    # trip; adapters may still decode and encode their transport representation.
+    # They are transport state, not user-visible reasoning or portable content.
     replay_blocks: tuple[Mapping[str, Any], ...] = ()
 
 

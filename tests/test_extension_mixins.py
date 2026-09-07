@@ -32,7 +32,14 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
         AgentRunHooksMixin: {"before_run", "after_run", "on_success", "on_error"},
         AgentModelHooksMixin: {"before_model", "after_model"},
         AgentToolHooksMixin: {"before_tool", "after_tool"},
-        AgentEventHooksMixin: {"accept", "before_model_events", "before_tool_events", "on_event"},
+        AgentEventHooksMixin: {
+            "accept",
+            "before_model_events",
+            "before_tool_events",
+            "after_model_events",
+            "after_tool_events",
+            "on_event",
+        },
     }
 
     observed: set[str] = set()
@@ -55,6 +62,8 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
         "after_tool",
         "before_model_events",
         "before_tool_events",
+        "after_model_events",
+        "after_tool_events",
         "on_event",
         "accept",
     }

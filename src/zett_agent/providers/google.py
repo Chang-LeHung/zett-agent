@@ -27,7 +27,7 @@ from ..model import (
     ToolCallDelta,
     validate_retry,
 )
-from .base import ProviderResponseError, RetryingProvider, _reasoning_effort_to_budget
+from .base import ProviderResponseError, RetryingProvider, _reasoning_effort_to_budget, retry_model_stream
 
 
 class GoogleProvider(RetryingProvider):
@@ -67,7 +67,8 @@ class GoogleProvider(RetryingProvider):
         self._client.close()
         await self._http_client.aclose()
 
-    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    @retry_model_stream
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         from google.genai import types
 
         system: list[str] = []

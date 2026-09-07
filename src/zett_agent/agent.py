@@ -637,6 +637,10 @@ class Agent(AgentPhaseTransitionMixin):
             response=response,
         )
 
+        async with aclosing(self._after_model_events(context, response)) as events:
+            async for event in events:
+                yield event
+
     def _select_pending_input(self, context: AgentContext) -> tuple[UserMessage | None, AgentMessage | None]:
         """Reserve steering first, or internal input, without a queue-closing race."""
         internal: AgentMessage | None = None
@@ -732,6 +736,9 @@ class Agent(AgentPhaseTransitionMixin):
                 message=result,
                 error=error,
             )
+            async with aclosing(self._after_tool_events(context, call, result)) as events:
+                async for event in events:
+                    yield event
             steering = self._steering_extension.take(context)
             if steering is not None:
                 async with aclosing(
@@ -817,6 +824,30 @@ class Agent(AgentPhaseTransitionMixin):
         """Let every extension register request-scoped tools in priority order."""
         for extension in self.extensions:
             await extension.on_tool(context)
+
+    async def _after_model_events(self, context: AgentContext, response: ModelResponse) -> AsyncIterator[AgentEvent]:
+        for extension in self.extensions:
+            async with aclosing(extension.after_model_events(context, response)) as events:
+                async for event in events:
+                    self._validate_post_operation_event(context, event)
+                    yield event
+
+    async def _after_tool_events(
+        self, context: AgentContext, call: ToolCall, result: ToolMessage
+    ) -> AsyncIterator[AgentEvent]:
+        for extension in self.extensions:
+            async with aclosing(extension.after_tool_events(context, call, result)) as events:
+                async for event in events:
+                    self._validate_post_operation_event(context, event)
+                    yield event
+
+    @staticmethod
+    def _validate_post_operation_event(context: AgentContext, event: AgentEvent) -> None:
+        """Do not let a post-operation hook impersonate runtime or other-session events."""
+        if event.type is not AgentEventType.CUSTOM:
+            raise AgentProtocolError("Post-operation hooks may emit only CUSTOM events")
+        if event.session_id != context.config.session_id:
+            raise AgentProtocolError("Post-operation event belongs to another session")
 
     async def _notify_on_message(self, context: AgentContext) -> None:
         """Let every extension populate the request state in priority order."""

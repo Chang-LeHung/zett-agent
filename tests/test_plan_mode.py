@@ -18,6 +18,7 @@ from zett_agent import (
     Agent,
     AgentConfig,
     AgentEventType,
+    AgentIterationLimitError,
     AgentProtocolError,
     AssistantMessage,
     CodingExtension,
@@ -40,6 +41,39 @@ class ScriptedModel:
     async def stream(self, request):
         self.requests.append(request)
         yield ModelEvent.completed(ModelResponse(self.responses.pop(0)))
+
+
+async def test_enter_completion_is_emitted_even_without_another_model_iteration():
+    plan_mode = PlanModeExtension()
+    agent = await Agent.create(
+        ScriptedModel(proposal()),
+        config=AgentConfig("last-step"),
+        extensions=[plan_mode],
+        max_iterations=1,
+    )
+    events = []
+    with pytest.raises(AgentIterationLimitError):
+        async for event in agent.stream("Plan this"):
+            events.append(event)
+            if event.name == ENTER_PLAN_MODE_EVENT_NAME:
+                assert agent.emit_external_event(
+                    ExternalEvent(
+                        ENTER_PLAN_MODE_RESPONSE_EVENT_NAME,
+                        {
+                            "session_id": "last-step",
+                            "tool_call_id": "enter-1",
+                            "approved": True,
+                        },
+                    ),
+                    config=AgentConfig("last-step"),
+                ) == ["PlanModeExtension"]
+    assert any(event.type is AgentEventType.TOOL_COMPLETED for event in events), [
+        (event.type, event.error) for event in events
+    ]
+    completed = next(i for i, event in enumerate(events) if event.type is AgentEventType.TOOL_COMPLETED)
+    assert events[completed + 1].name == PLAN_MODE_ENTERED_EVENT_NAME
+    assert sum(event.type is AgentEventType.MODEL_STARTED for event in events) == 1
+    assert plan_mode._entered_events == set()
 
 
 def proposal(call_id: str = "enter-1") -> AssistantMessage:

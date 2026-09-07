@@ -38,6 +38,7 @@ from .base import (
     _reasoning_effort_to_budget,
     _to_model_data,
     _ToolCallAccumulator,
+    retry_model_stream,
 )
 
 
@@ -147,7 +148,8 @@ class AnthropicProvider(RetryingProvider):
         """Close the owned SDK connection pool."""
         await self._client.close()
 
-    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    @retry_model_stream
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         messages: list[dict[str, Any]] = []
         system: list[str] = []
         for message in request.messages:

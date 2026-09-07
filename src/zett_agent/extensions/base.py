@@ -116,6 +116,28 @@ class AgentEventHooksMixin:
         if False:
             yield AgentEvent(AgentEventType.MODEL_STARTED, context.config.session_id)
 
+    async def after_model_events(self, context: AgentContext, response: ModelResponse) -> AsyncIterator[AgentEvent]:
+        """Stream CUSTOM events after after_model and MODEL_COMPLETED.
+
+        The response is already appended. Hooks run in priority order in READY,
+        before tool dispatch or final-answer handling. Errors fail the request;
+        closing the stream closes the hook iterator and runs its finally block.
+        """
+        if False:
+            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
+
+    async def after_tool_events(
+        self, context: AgentContext, call: ToolCall, result: ToolMessage
+    ) -> AsyncIterator[AgentEvent]:
+        """Stream CUSTOM events after after_tool and TOOL_COMPLETED/TOOL_FAILED.
+
+        Inspect result.success to distinguish success from a reported tool error.
+        Skipped or cancelled tools do not call this hook. Events are emitted
+        before steering selection or the next tool; execution remains in READY.
+        """
+        if False:
+            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
+
     async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         """Stream CUSTOM events after before_tool and before each tool starts.
 
@@ -190,7 +212,8 @@ class AgentExtension(
          |    | READY [E]                                    |
          |    | append AssistantMessage [E]                  |
          |    | after_model()                                |
-         |    | emit MODEL_COMPLETED; check steering         |
+         |    | emit MODEL_COMPLETED                         |
+         |    | after_model_events(); check steering          |
          |    +----------------------------------------------+
          |                            |
          |                            |
@@ -209,7 +232,8 @@ class AgentExtension(
          |    | READY [E]                                    |                +---------------+---------------+
          |    | append ToolMessage [E]                       |                | available                     | empty
          |    | after_tool()                                 |                v                               v
-         |    | emit TOOL_*; check steering                   |         +----------------------+  +--------------------+
+         |    | emit TOOL_*                                  |         +----------------------+  +--------------------+
+         |    | after_tool_events(); check steering           |         |                      |  |                    |
          |    +----------------------------------------------+         | emit *_STARTED       |  | SUCCESS            |
          |                          |                                  | append typed input   |  | close inboxes      |
          |     all tools done       v                                  | reset budget         |  | after_run()        |

@@ -4,6 +4,8 @@ from .agent import (
     AgentContext,
     AgentState,
 )
+from .client import AgentClient, create_agent
+from .dispatcher import AgentEventDispatcher
 from .events import (
     AgentEvent,
     AgentEventType,
@@ -175,6 +177,9 @@ from .tools import (
 )
 
 __all__ = [
+    "AgentClient",
+    "create_agent",
+    "AgentEventDispatcher",
     "STEERING_MESSAGE_EVENT_NAME",
     "SteeringExtension",
     "SteeringMessageEvent",

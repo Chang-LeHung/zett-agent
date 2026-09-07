@@ -18,17 +18,19 @@ from ..messages import (
     ToolCall,
 )
 from ..model import (
-    AgentModel,
+    DEFAULT_RETRY_OPTIONS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
     ModelUsage,
+    RetryOptions,
     ToolCallDelta,
+    validate_retry,
 )
-from .base import ProviderResponseError, _reasoning_effort_to_budget
+from .base import ProviderResponseError, RetryingProvider, _reasoning_effort_to_budget
 
 
-class GoogleProvider(AgentModel):
+class GoogleProvider(RetryingProvider):
     """Map official Google GenAI SDK streams and preserve signed replay parts."""
 
     def __init__(
@@ -36,12 +38,16 @@ class GoogleProvider(AgentModel):
         model: str,
         api_key: str,
         transport: httpx.AsyncBaseTransport | None = None,
+        *,
+        retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
         from google import genai
         from google.genai import types
 
         if not api_key:
             raise ValueError("api_key is required")
+        validate_retry(retry)
+        self.retry = retry
         self.model = model
         self._http_client = httpx.AsyncClient(
             transport=transport,
@@ -50,7 +56,9 @@ class GoogleProvider(AgentModel):
         )
         self._client = genai.Client(
             api_key=api_key,
-            http_options=types.HttpOptions(httpx_async_client=self._http_client),
+            http_options=types.HttpOptions(
+                httpx_async_client=self._http_client, retry_options=types.HttpRetryOptions(attempts=1)
+            ),
         )
 
     async def aclose(self) -> None:
@@ -59,7 +67,7 @@ class GoogleProvider(AgentModel):
         self._client.close()
         await self._http_client.aclose()
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         from google.genai import types
 
         system: list[str] = []

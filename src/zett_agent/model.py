@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from math import isfinite
 from typing import Any, Protocol, runtime_checkable
 
 from .messages import AnyMessage, AssistantMessage
@@ -38,6 +39,44 @@ class ModelRequest:
 
     # Optional name of the single tool the provider must call for schema-bound output.
     tool_choice: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RetryOptions:
+    """Model-owned exponential backoff, without jitter.
+
+    Wait base_delay seconds before the first retry, then double the delay
+    until max_delay. max_retries counts additional attempts, not the initial
+    request; zero disables retries. No sleep occurs after the final failure.
+
+    Example:
+        RetryOptions(base_delay=1.0, max_delay=5.0, max_retries=4)
+        # At most five requests, separated by 1, 2, 4, and 5 seconds.
+    """
+
+    # Initial retry delay in seconds; zero allows immediate retries.
+    base_delay: float = 0.25
+    # Hard upper bound in seconds, including the first retry delay.
+    max_delay: float = 8.0
+    # Maximum additional requests after transient failures.
+    max_retries: int = 3
+
+    def __post_init__(self) -> None:
+        for name in ("base_delay", "max_delay"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value) or value < 0:
+                raise ValueError(f"{name} must be a finite non-negative number")
+        if isinstance(self.max_retries, bool) or not isinstance(self.max_retries, int) or self.max_retries < 0:
+            raise ValueError("max_retries must be a non-negative integer")
+
+
+DEFAULT_RETRY_OPTIONS = RetryOptions()
+
+
+def validate_retry(retry: RetryOptions) -> None:
+    """Reject invalid model configuration before opening network clients."""
+    if not isinstance(retry, RetryOptions):
+        raise ValueError("retry must be a RetryOptions instance")
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +187,14 @@ class ModelEvent:
 class AgentModel(Protocol):
     """Model adapter boundary required by the core agent loop."""
 
+    # Model-owned backoff policy; max_retries=0 disables retries.
+    # This configuration never belongs to ModelRequest.
+    retry: RetryOptions = RetryOptions()
+
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        """Stream deltas and finish with exactly one response event."""
+        """Stream deltas and finish with exactly one response event.
+
+        The model owns and applies its retry configuration for every request.
+        Transient failures may be retried only before the first emitted event.
+        """
         ...

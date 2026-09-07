@@ -19,18 +19,21 @@ from ..messages import (
     TextContent,
 )
 from ..model import (
-    AgentModel,
+    DEFAULT_RETRY_OPTIONS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
     ModelUsage,
     ReasoningEffort,
+    RetryOptions,
     ToolCallDelta,
     ToolDefinition,
+    validate_retry,
 )
 from .base import (
     ProviderAuthError,
     ProviderResponseError,
+    RetryingProvider,
     _parse_tool_calls,
     _reasoning_effort_to_budget,
     _to_model_data,
@@ -116,7 +119,7 @@ def _to_anthropic_image_block(source: Any) -> dict[str, Any]:
             raise ProviderResponseError(f"Unsupported image content source: {source!r}")
 
 
-class AnthropicProvider(AgentModel):
+class AnthropicProvider(RetryingProvider):
     """Anthropic provider adapter with raw SDK stream-to-event mapping."""
 
     def __init__(
@@ -125,22 +128,26 @@ class AnthropicProvider(AgentModel):
         api_key: str,
         base_url: str = "https://api.anthropic.com",
         transport: httpx.AsyncBaseTransport | None = None,
+        *,
+        retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
         if not api_key:
             raise ValueError("api_key is required")
+        validate_retry(retry)
+        self.retry = retry
         self.model = model
         self._http_client = httpx.AsyncClient(
             transport=transport,
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
             trust_env=True,
         )
-        self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, http_client=self._http_client)
+        self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, http_client=self._http_client, max_retries=0)
 
     async def aclose(self) -> None:
         """Close the owned SDK connection pool."""
         await self._client.close()
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         messages: list[dict[str, Any]] = []
         system: list[str] = []
         for message in request.messages:

@@ -11,16 +11,18 @@ import truststore
 
 from ..messages import AssistantMessage, ImageBytesSource, ImageContent, ImageUrlSource, ToolCall
 from ..model import (
-    AgentModel,
+    DEFAULT_RETRY_OPTIONS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
     ModelUsage,
     ReasoningEffort,
+    RetryOptions,
     ToolCallDelta,
     ToolDefinition,
+    validate_retry,
 )
-from .base import ProviderResponseError
+from .base import ProviderResponseError, RetryingProvider
 
 
 def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
@@ -39,7 +41,7 @@ def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, 
     return rendered
 
 
-class OllamaProvider(AgentModel):
+class OllamaProvider(RetryingProvider):
     """Stream official Ollama SDK events without buffering the entire HTTP response."""
 
     def __init__(
@@ -48,9 +50,12 @@ class OllamaProvider(AgentModel):
         transport: httpx.AsyncBaseTransport | None = None,
         *,
         base_url: str = "http://localhost:11434",
+        retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
         from ollama import AsyncClient
 
+        validate_retry(retry)
+        self.retry = retry
         self.model = model
         self._client = AsyncClient(
             host=base_url,
@@ -63,7 +68,7 @@ class OllamaProvider(AgentModel):
         """Close the SDK-owned HTTP connection pool."""
         await self._client._client.aclose()
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         messages: list[dict[str, Any]] = []
         for message in request.messages:
             match message.role:

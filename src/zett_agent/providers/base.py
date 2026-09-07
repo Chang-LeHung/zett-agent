@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import ssl
 from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import aclosing
 from dataclasses import asdict, dataclass
 from json import JSONDecodeError
 from typing import Any
@@ -28,13 +30,16 @@ from ..messages import (
     UserMessage,
 )
 from ..model import (
+    DEFAULT_RETRY_OPTIONS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
     ModelUsage,
     ReasoningEffort,
+    RetryOptions,
     ToolCallDelta,
     ToolDefinition,
+    validate_retry,
 )
 
 
@@ -258,7 +263,58 @@ def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:
     )
 
 
-class _OpenAIStyleProvider:
+class RetryingProvider:
+    """Shared stream retry boundary with SDK retries disabled by each adapter.
+
+    retry.max_retries counts additional attempts (2 means at most 3 requests). Only transport
+    failures and HTTP 408/409/429/5xx are retried. Once any model event is yielded,
+    propagate failures instead of replaying already-visible text or tool deltas.
+    Cancellation also propagates immediately, including during backoff.
+    """
+
+    retry: RetryOptions = RetryOptions()
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        retry = self.retry
+        validate_retry(retry)
+        delay = min(retry.base_delay, retry.max_delay)
+        emitted = False
+        for attempt in range(retry.max_retries + 1):
+            try:
+                async with aclosing(self._stream_once(request)) as events:
+                    async for event in events:
+                        emitted = True
+                        yield event
+                return
+            except Exception as error:
+                if emitted or attempt == retry.max_retries or not self._retryable(error):
+                    raise
+                await asyncio.sleep(delay)
+                # Saturate before doubling to avoid overflow for large delays.
+                delay = retry.max_delay if delay >= retry.max_delay / 2 else delay * 2
+
+    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        raise NotImplementedError
+        yield  # pragma: no cover
+
+    @staticmethod
+    def _retryable(error: BaseException) -> bool:
+        """Inspect SDK status codes and wrapped transport causes without optional imports."""
+        seen: set[int] = set()
+        while id(error) not in seen:
+            seen.add(id(error))
+            status = getattr(error, "status_code", None) or getattr(error, "code", None)
+            if isinstance(status, int):
+                return status in (408, 409, 429) or 500 <= status < 600
+            if isinstance(error, (httpx.TransportError, ConnectionError, TimeoutError)):
+                return True
+            if error.__cause__ is None:
+                return False
+            error = error.__cause__
+        return False
+
+
+class _OpenAIStyleProvider(RetryingProvider):
     """Shared implementation for providers exposing OpenAI-style streaming chunks."""
 
     provider_name: str = "openai"
@@ -271,7 +327,10 @@ class _OpenAIStyleProvider:
         base_url: str,
         transport: httpx.AsyncBaseTransport | None = None,
         temperature: float | None = None,
+        retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
+        validate_retry(retry)
+        self.retry = retry
         if not api_key:
             raise ValueError("api_key is required")
         self.model = model
@@ -281,7 +340,7 @@ class _OpenAIStyleProvider:
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
             trust_env=True,
         )
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=self._http_client)
+        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=self._http_client, max_retries=0)
 
     async def _request(self, request: ModelRequest) -> Any:
         messages = [_message_to_openai_payload(message) for message in request.messages]
@@ -332,7 +391,7 @@ class _OpenAIStyleProvider:
     def _provider_specific_request_extra_fields(self, request: ModelRequest) -> dict[str, Any]:
         return {}
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    async def _stream_once(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         text = ""
         reasoning = ""
         streams: dict[int, _ToolCallAccumulator] = {}

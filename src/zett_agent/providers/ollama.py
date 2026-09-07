@@ -152,7 +152,13 @@ class OllamaProvider(RetryingProvider):
             raise ProviderResponseError("Ollama stream ended without a terminal response")
         yield ModelEvent.completed(
             ModelResponse(
-                AssistantMessage(content=text, reasoning=reasoning or None, tool_calls=tuple(calls), provider="ollama"),
+                AssistantMessage(
+                    content=text,
+                    reasoning=reasoning or None,
+                    tool_calls=tuple(calls),
+                    provider="ollama",
+                    model=self.model,
+                ),
                 finish_reason=finish_reason,
                 usage=usage,
             )

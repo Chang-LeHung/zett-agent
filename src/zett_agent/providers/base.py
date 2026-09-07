@@ -81,7 +81,9 @@ def _to_model_data(payload: Any) -> dict[str, Any]:
     if hasattr(payload, "dict"):
         return payload.dict()  # type: ignore[operator]
     if isinstance(payload, Message):
-        return {"role": payload.role, **asdict(payload)}
+        data = asdict(payload)
+        data.pop("attributes", None)
+        return {"role": payload.role, **data}
     normalized = json.loads(json.dumps(payload, default=str))
     if not isinstance(normalized, dict):
         raise ProviderResponseError(f"Provider SDK value did not normalize to an object: {payload!r}")
@@ -465,7 +467,11 @@ class _OpenAIStyleProvider(RetryingProvider):
 
         tool_calls = _parse_tool_calls(streams)
         response_message = AssistantMessage(
-            content=text, reasoning=reasoning or None, tool_calls=tool_calls, provider=self.provider_name
+            content=text,
+            reasoning=reasoning or None,
+            tool_calls=tool_calls,
+            provider=self.provider_name,
+            model=self.model,
         )
         yield ModelEvent.completed(
             ModelResponse(

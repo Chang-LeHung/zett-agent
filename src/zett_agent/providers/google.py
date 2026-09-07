@@ -100,7 +100,7 @@ class GoogleProvider(RetryingProvider):
                                 else:
                                     parts.append(types.Part.from_uri(file_uri=url))
                 case "assistant":
-                    if message.provider == "google" and message.replay_blocks:
+                    if message.provider == "google" and message.model == self.model and message.replay_blocks:
                         parts = [types.Part.model_validate(dict(block)) for block in message.replay_blocks]
                     else:
                         parts = [types.Part.from_text(text=message.content)] if message.content else []
@@ -206,6 +206,7 @@ class GoogleProvider(RetryingProvider):
                     reasoning=reasoning or None,
                     tool_calls=tuple(calls),
                     provider="google",
+                    model=self.model,
                     replay_blocks=tuple(replay),
                 ),
                 finish_reason=finish_reason,

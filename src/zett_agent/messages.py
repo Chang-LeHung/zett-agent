@@ -91,6 +91,9 @@ class Message:
     """Common base for user, internal agent, assistant, system, and tool roles."""
 
     role: ClassVar[MessageRole]
+    # Application-owned per-message information. Provider adapters do not send
+    # these values to model APIs unless an adapter explicitly defines a mapping.
+    attributes: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True, kw_only=True)
@@ -128,9 +131,11 @@ class AssistantMessage(Message):
     reasoning: str | None = None
     tool_calls: tuple[ToolCall, ...] = ()
 
-    # TODO: Consider adding the model name
     # Provider namespace for opaque replay data; prevents cross-provider reuse.
     provider: str | None = None
+    # Provider model identifier that produced this response. Together with
+    # provider, it prevents signed replay data from crossing model boundaries.
+    model: str | None = None
     # Opaque provider-authenticated reasoning/tool blocks that must be persisted
     # and returned structurally unchanged in the next same-provider tool round
     # trip; adapters may still decode and encode their transport representation.

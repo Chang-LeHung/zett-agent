@@ -55,7 +55,7 @@ def _tools_to_anthropic_payload(tools: Sequence[ToolDefinition]) -> list[dict[st
     return rendered
 
 
-def _to_anthropic_content_blocks(message: Any) -> list[dict[str, Any]]:
+def _to_anthropic_content_blocks(message: Any, *, model: str | None = None) -> list[dict[str, Any]]:
     """Convert a domain message into Anthropic content blocks."""
     role = message.role
     match role:
@@ -72,7 +72,7 @@ def _to_anthropic_content_blocks(message: Any) -> list[dict[str, Any]]:
                         blocks.append(_to_anthropic_image_block(source))
             return blocks
         case "assistant":
-            if message.provider == "anthropic" and message.replay_blocks:
+            if message.provider == "anthropic" and message.model == model and message.replay_blocks:
                 return [dict(block) for block in message.replay_blocks]
             blocks: list[dict[str, Any]] = []
             if message.content:
@@ -157,15 +157,15 @@ class AnthropicProvider(RetryingProvider):
                 case "system":
                     system.append(message.content)
                 case "user" | "agent":
-                    content = _to_anthropic_content_blocks(message)
+                    content = _to_anthropic_content_blocks(message, model=self.model)
                     if content:
                         messages.append({"role": "user", "content": content})
                 case "assistant":
-                    content = _to_anthropic_content_blocks(message)
+                    content = _to_anthropic_content_blocks(message, model=self.model)
                     if content:
                         messages.append({"role": "assistant", "content": content})
                 case "tool":
-                    content = _to_anthropic_content_blocks(message)
+                    content = _to_anthropic_content_blocks(message, model=self.model)
                     if content:
                         messages.append({"role": "user", "content": content})
 
@@ -291,6 +291,7 @@ class AnthropicProvider(RetryingProvider):
                     reasoning=reasoning or None,
                     tool_calls=tool_calls,
                     provider="anthropic",
+                    model=self.model,
                     replay_blocks=tuple(replay[index] for index in sorted(replay)),
                 ),
                 finish_reason=finish_reason,

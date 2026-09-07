@@ -64,7 +64,7 @@ class ExternalEventRecorder(AgentExtension):
         self.accepts = accepts
         self.events: list[ExternalEvent] = []
 
-    def accept(self, event: ExternalEvent) -> bool:
+    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
         self.events.append(event)
         return self.accepts
 
@@ -172,7 +172,8 @@ async def test_ask_user_ignores_other_tool_calls() -> None:
 async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():
     extension = AskUserExtension()
     model = AskModel()
-    agent = await Agent.create(model, config=AgentConfig("session-1"), extensions=[extension])
+    config = AgentConfig("session-1", request_id="request-1")
+    agent = await Agent.create(model, config=config, extensions=[extension])
     events, ready = [], asyncio.Event()
     task = asyncio.create_task(_wait_for_ask(events, ready, agent))
 
@@ -196,10 +197,13 @@ async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():
 
     response = ExternalEvent(
         ASK_USER_RESPONSE_EVENT_NAME,
-        {"session_id": "session-1", "tool_call_id": "question-1", "answer": "Markdown"},
+        {"tool_call_id": "question-1", "answer": "Markdown"},
     )
-    assert agent.emit_external_event(response)
-    assert not agent.emit_external_event(response)
+    assert agent.emit_external_event(response, config=AgentConfig("other-session")) == []
+    assert agent.emit_external_event(response, config=AgentConfig("session-1", request_id="stale")) == []
+    assert not task.done()
+    assert agent.emit_external_event(response, config=config) == ["AskUserExtension"]
+    assert agent.emit_external_event(response, config=config) == []
     await asyncio.wait_for(task, timeout=1)
 
     assert agent.state.phase == AgentPhase.COMPLETED
@@ -221,7 +225,7 @@ async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():
     ],
 )
 def test_accept_rejects_unrelated_or_malformed_events(event):
-    assert not AskUserExtension().accept(event)
+    assert not AskUserExtension().accept(AgentConfig("missing"), event)
 
 
 def test_external_event_rejects_an_empty_name():

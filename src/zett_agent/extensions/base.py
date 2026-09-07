@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from ..events import AgentEvent, AgentEventType
 
 if TYPE_CHECKING:
-    from ..agent import AgentContext
+    from ..agent import AgentConfig, AgentContext
     from ..messages import AssistantMessage, ToolCall, ToolMessage
     from ..model import ModelResponse
     from .events import ExtensionEvent
@@ -86,12 +86,16 @@ class AgentToolHooksMixin:
 class AgentEventHooksMixin:
     """Hooks for streaming, internal notifications, and external input."""
 
-    def accept(self, event: ExternalEvent) -> bool:
+    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
         """Handle one external event and report whether it was accepted.
 
         The Agent broadcasts each event to every registered extension. Override
         this synchronous hook when an extension waits for input from another
         thread, HTTP request, TUI, or Web UI. The default ignores the event.
+        Config is passed separately and can be None before initialization.
+        Each extension decides whether the supplied identity and payload match
+        its protocol. Return True to include this extension's name in the
+        broadcast result; returning False does not stop later receivers.
         """
         return False
 
@@ -186,6 +190,7 @@ class AgentExtension(
          |    | READY [E]                                    |
          |    | append AssistantMessage [E]                  |
          |    | after_model()                                |
+         |    | emit MODEL_COMPLETED; check steering         |
          |    +----------------------------------------------+
          |                            |
          |                            |
@@ -198,13 +203,13 @@ class AgentExtension(
          |    +----------------------------------------------+                                |
          |    | FOR EACH TOOL CALL                           |                                v
          |    | before_tool()                                |         +----------------------------------------------+
-         |    | before_tool_events()                         |         | TAKE NEXT INTERNAL MESSAGE                   |
+         |    | before_tool_events()                         |         | TAKE STEERING FIRST, THEN INTERNAL           |
          |    | RUNNING_TOOL [E]                             |         +----------------------+-----------------------+
          |    | execute tool                                 |                                |
          |    | READY [E]                                    |                +---------------+---------------+
          |    | append ToolMessage [E]                       |                | available                     | empty
          |    | after_tool()                                 |                v                               v
-         |    | emit TOOL_COMPLETED / TOOL_FAILED            |         +----------------------+  +--------------------+
+         |    | emit TOOL_*; check steering                   |         +----------------------+  +--------------------+
          |    +----------------------------------------------+         | emit *_STARTED       |  | SUCCESS            |
          |                          |                                  | append typed input   |  | close inboxes      |
          |     all tools done       v                                  | reset budget         |  | after_run()        |
@@ -229,7 +234,13 @@ class AgentExtension(
     left return line runs after every tool in the response has been processed,
     or after one AgentMessage is appended with a fresh iteration budget.
     Internal messages have a per-request count limit. Their processing starts
-    after the current model/tool loop completes. Each user input starts a new run.
+    after the current model/tool loop completes. SteeringExtension is checked
+    after MODEL_COMPLETED and every TOOL_COMPLETED/TOOL_FAILED, in READY. Urgent
+    user input takes priority over internal input and the remaining tool calls.
+    Those calls receive skipped ToolMessages [E] and TOOL_SKIPPED events before
+    the steering UserMessage [E] and STEERING_STARTED event. The loop then returns
+    to MODEL STEP with a fresh iteration budget. An active internal/steering input
+    emits *_INTERRUPTED when superseded, or *_COMPLETED after a final answer.
 
     before_model_events() can stream CUSTOM or compaction events; compaction
     enters COMPACTING and returns to READY. before_tool_events() streams CUSTOM

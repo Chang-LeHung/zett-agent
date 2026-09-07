@@ -275,7 +275,8 @@ async def test_builtin_internal_inboxes_are_isolated_between_agents() -> None:
         ExternalEvent(INTERNAL_MESSAGE_EVENT_NAME, {"session_id": "same", "content": "first only"})
     )
     assert not first.emit_external_event(
-        ExternalEvent(INTERNAL_MESSAGE_EVENT_NAME, {"session_id": "same", "request_id": 7, "content": "bad"})
+        ExternalEvent(INTERNAL_MESSAGE_EVENT_NAME, {"content": "bad"}),
+        config=AgentConfig("same", request_id="wrong-request"),
     )
     first_model.release_first_request.set()
     second_model.release_first_request.set()

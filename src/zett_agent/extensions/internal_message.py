@@ -14,7 +14,7 @@ from .events import ExtensionEvent, InternalMessageEvent
 from .external import ExternalEvent
 
 if TYPE_CHECKING:
-    from ..agent import AgentContext
+    from ..agent import AgentConfig, AgentContext
 
 INTERNAL_MESSAGE_EVENT_NAME = "internal_message"
 
@@ -53,12 +53,14 @@ class InternalMessageExtension(AgentExtension):
         with self._lock:
             self._inboxes.pop(context, None)
 
-    def accept(self, event: ExternalEvent) -> bool:
+    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
         """Accept internal text for an unambiguously identified active request."""
         if event.name != INTERNAL_MESSAGE_EVENT_NAME:
             return False
-        session_id = event.payload.get("session_id")
-        request_id = event.payload.get("request_id")
+        if config is None:
+            return False
+        session_id = config.session_id
+        request_id = config.request_id
         content = event.payload.get("content")
         if not isinstance(session_id, str) or not session_id.strip():
             return False

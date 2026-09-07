@@ -27,6 +27,7 @@ from zett_agent import (
     ReasoningCompletedEvent,
     ReasoningEffort,
     ReasoningStartedEvent,
+    SteeringExtension,
     SystemMessage,
     ToolCall,
     ToolGuidelinesExtension,
@@ -368,8 +369,9 @@ async def test_default_extensions_keep_agent_histories_isolated():
         "Second reply",
     ]
     builtins = (await Agent.create(ScriptedModel(), extensions=[], config=CONFIG)).extensions
-    assert len(builtins) == 1
+    assert len(builtins) == 2
     assert isinstance(builtins[0], InternalMessageExtension)
+    assert isinstance(builtins[1], SteeringExtension)
 
 
 async def test_extensions_run_by_stable_ascending_priority():
@@ -396,7 +398,9 @@ async def test_extensions_run_by_stable_ascending_priority():
     await agent.run("Hello")
 
     assert tuple(
-        extension for extension in agent.extensions if not isinstance(extension, InternalMessageExtension)
+        extension
+        for extension in agent.extensions
+        if not isinstance(extension, (InternalMessageExtension, SteeringExtension))
     ) == (
         early,
         equal_first,

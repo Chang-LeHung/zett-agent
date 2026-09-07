@@ -33,6 +33,7 @@ from .events import (
     ReasoningCompletedEvent,
     ReasoningStartedEvent,
     RunCancelledEvent,
+    SteeringMessageEvent,
 )
 from .external import ExternalEvent, ExternalEventExtension
 from .file_system import FileSystemExtension
@@ -79,6 +80,7 @@ from .skill import (
     SkillFileParser,
 )
 from .sqlite import SQLiteSessionExtension
+from .steering import STEERING_MESSAGE_EVENT_NAME, SteeringExtension
 from .subagent import TASK_TOOL_NAME, SubAgentDefinition, SubAgentExtension, SubAgentResult, default_subagents
 from .todo import TODO_WRITE_TOOL_NAME, TodoItem, TodoStatus, TodoWriteExtension, TodoWriteResult
 from .tool_guidelines import ToolGuidelinesExtension

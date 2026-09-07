@@ -286,6 +286,8 @@ class PlanModeExtension(ExternalEventExtension):
 
     async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         """Pause valid transition Tool Calls until their responses arrive."""
+
+        # TODO: exit plan mode event should be emitted after the tool call is completed, not before it starts.
         match call.name:
             case name if name == ENTER_PLAN_MODE_TOOL_NAME:
                 try:
@@ -327,6 +329,8 @@ class PlanModeExtension(ExternalEventExtension):
     async def on_error(self, context: AgentContext, error: Exception) -> None:
         """Wake external waits and release restoration state after failure."""
         self._requests.pop(context, None)
+        self._entered_events.discard(context.config.session_id)
+        self._exited_events.discard(context.config.session_id)
         await super().on_error(context, error)
 
     async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
@@ -334,6 +338,8 @@ class PlanModeExtension(ExternalEventExtension):
         await super().on_event(context, event)
         if isinstance(event, RunCancelledEvent):
             self._requests.pop(context, None)
+            self._entered_events.discard(context.config.session_id)
+            self._exited_events.discard(context.config.session_id)
 
     def _build_enter_tool(self, context: AgentContext) -> AgentTool:
         """Create the request-bound Tool that consumes one approved decision."""

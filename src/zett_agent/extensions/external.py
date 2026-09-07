@@ -13,7 +13,7 @@ from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
 
 if TYPE_CHECKING:
-    from ..agent import AgentContext
+    from ..agent import AgentConfig, AgentContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,27 +43,123 @@ class _PendingExternalEvent:
 class ExternalEventExtension(AgentExtension):
     """Base class for extensions that suspend until an external response arrives.
 
-    Subclasses define one response event name and one payload field used to
-    correlate that response with a pending operation. This base owns routing,
-    thread synchronization, Future completion, cancellation, error propagation,
-    and temporary delivery storage::
+    Use this base for tools that need a UI decision before execution can finish.
+    The subclass owns the tool, outbound UI event, and business validation. The
+    base owns pending Futures, routing, duplicate rejection, thread-safe wake-up,
+    and cleanup. It does not send HTTP responses or render UI components.
 
-        subclass                         ExternalEventExtension
-           |                                      |
-           | await _wait_for_external_event()     | create and await Future
-           |------------------------------------->|
-           |                                      |<-- accept() from any thread
-           |                                      |    set_result on owner loop
-           |<-------------------------------------|
-           |
-           | _take_external_event() -> response
+    Routing:
+        response_event_name: Accepted inbound name, or a collection of names.
+        correlation_field: Payload key identifying the operation, usually
+            tool_call_id. Its value must equal the ID passed to the wait helper.
+        config: Passed separately to accept(config, event). Its session_id and
+            optional request_id select the waiting request. Routing identifiers
+            are not injected into the event payload by Agent.
 
-        RunCancelledEvent -> future.cancel()
-        on_error(error)   -> future.set_exception(error)
+    Lifecycle::
 
-    The Agent broadcasts external events to accept(). Concrete extensions do
-    not override accept(), on_event(), or on_error() unless they need additional
-    protocol behavior.
+        +---------------------------+     +---------------------------+
+        | before_tool_events()      |     | UI / external caller      |
+        +---------------------------+     +---------------------------+
+        | enter async with:         |     |                           |
+        | register pending Future   |     |                           |
+        | yield CUSTOM event        |---->| display question          |
+        | leave body: await Future  |     | emit_external_event(      |
+        |                           |<----|     event, config=config) |
+        | accept(): claim response, |     +---------------------------+
+        | schedule Future completion|
+        | stage response by context |
+        +-------------+-------------+
+                      |
+                      v
+        +---------------------------+
+        | tool executes             |
+        | _take_external_event()    |
+        | validate and return result|
+        +---------------------------+
+
+    Entering the async context registers the wait BEFORE the UI event is yielded,
+    so even an immediate response is safe. The await happens when leaving the
+    async-with body, not on entry. It suspends this task without blocking other
+    sessions. The tool executes only after the response has been staged.
+
+    Example::
+
+        from collections.abc import AsyncIterator
+
+        from zett_agent import (
+            AgentContext, AgentEvent, AgentEventType, ExternalEventExtension,
+            ToolCall, tool,
+        )
+
+        class ConfirmationExtension(ExternalEventExtension):
+            def __init__(self) -> None:
+                super().__init__(
+                    response_event_name="confirmation_response",
+                    correlation_field="tool_call_id",
+                )
+
+            async def on_tool(self, context: AgentContext) -> None:
+                @tool
+                async def confirm() -> bool:
+                    '''Ask the user whether to proceed.
+
+                    Snippet:
+                        confirm()
+
+                    Guidelines:
+                        - Use when proceeding requires an explicit user decision.
+                    '''
+                    response = self._take_external_event(context)
+                    approved = response.payload.get("approved")
+                    if not isinstance(approved, bool):
+                        raise ValueError("approved must be a boolean")
+                    return approved
+
+                context.register_tool(confirm)
+
+            async def before_tool_events(
+                self, context: AgentContext, call: ToolCall
+            ) -> AsyncIterator[AgentEvent]:
+                if call.name != "confirm":
+                    return
+                async with self._wait_for_external_event(context, call.id):
+                    yield AgentEvent(
+                        AgentEventType.CUSTOM,
+                        session_id=context.config.session_id,
+                        name="confirmation_requested",
+                        payload={"tool_call_id": call.id, "question": "Proceed?"},
+                    )
+
+    Usage::
+
+        from zett_agent import Agent, AgentConfig, ExternalEvent
+
+        config = AgentConfig(session_id="session-42", request_id="request-1")
+        agent = await Agent.create(model, config=config, extensions=[ConfirmationExtension()])
+
+        # Consume agent.stream(...) and forward confirmation_requested to the UI.
+        # A separate UI callback returns the exact tool_call_id from that event.
+        accepted_by = agent.emit_external_event(
+            ExternalEvent(
+                name="confirmation_response",
+                payload={"tool_call_id": "call-7", "approved": True},
+            ),
+            config=config,
+        )
+        # ["ConfirmationExtension"] if accepted; [] for a stale/duplicate response.
+
+    Acceptance means delivery was claimed, not that tool execution succeeded.
+    Payload business validation belongs to the subclass. A missing config,
+    mismatched request, unknown correlation ID, or duplicate response is rejected.
+    Different sessions may reuse the same tool_call_id without sharing responses.
+
+    Cancellation clears staged responses and cancels pending Futures; on_error
+    wakes pending waits with the error. Overrides of on_event/on_error must call
+    super() to preserve cleanup. Future mutation is scheduled on its owning loop
+    when accept is called from another thread. Keep that loop alive until request
+    cleanup has finished. This base supports sequential tools: one staged response
+    per AgentContext, not concurrent external-response tools in the same request.
     """
 
     def __init__(self, *, response_event_name: str | Collection[str], correlation_field: str) -> None:
@@ -86,7 +182,12 @@ class ExternalEventExtension(AgentExtension):
         *,
         response_event_name: str | None = None,
     ) -> AsyncGenerator[None]:
-        """Register before yielding UI output, then await and stage its response."""
+        """Register on entry; await and stage the response when the body exits.
+
+        Yield the outbound AgentEvent inside this async-with body. Optionally
+        restrict response_event_name to one of the configured inbound names.
+        The pending entry is removed on every exit, including cancellation.
+        """
         if not correlation_id.strip():
             raise ValueError("correlation_id cannot be empty")
         response_names = self._response_event_names
@@ -111,17 +212,28 @@ class ExternalEventExtension(AgentExtension):
                 pending.future.cancel()
 
     def _take_external_event(self, context: AgentContext) -> ExternalEvent:
-        """Consume the oldest response staged for the current request."""
+        """Pop this context's single staged response exactly once inside its tool.
+
+        Call only after _wait_for_external_event has finished successfully.
+        Raises RuntimeError if no response is staged or it was already consumed.
+        """
         response = self._accepted.pop(context, None)
         if response is None:
             raise RuntimeError("Tool executed without an accepted external response")
         return response
 
-    def accept(self, event: ExternalEvent) -> bool:
-        """Route one matching external response to its waiting Future."""
+    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
+        """Claim a matching response and wake its waiter on the Future's loop.
+
+        Usually called by Agent.emit_external_event, not directly by the UI.
+        True means this extension accepted delivery; False leaves other
+        extensions free to recognize the event. Neither argument is modified.
+        """
         if event.name not in self._response_event_names:
             return False
-        session_id = event.payload.get("session_id")
+        if config is None:
+            return False
+        session_id = config.session_id
         correlation_id = event.payload.get(self._correlation_field)
         if not isinstance(session_id, str) or not session_id.strip():
             return False
@@ -135,6 +247,9 @@ class ExternalEventExtension(AgentExtension):
                 or pending.accepted
                 or pending.future.done()
             ):
+                return False
+            request_id = config.request_id
+            if request_id is not None and request_id != pending.context.config.request_id:
                 return False
             pending.accepted = True
 

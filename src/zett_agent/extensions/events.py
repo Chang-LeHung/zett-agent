@@ -4,7 +4,7 @@ from time import monotonic_ns
 from typing import Self
 
 from ..events import AgentPhase
-from ..messages import AgentMessage, AnyMessage, AssistantMessage
+from ..messages import AgentMessage, AnyMessage, AssistantMessage, UserMessage
 from ..model import ModelUsage
 
 
@@ -117,6 +117,17 @@ class InternalMessageEvent(ExtensionEvent):
     def __post_init__(self) -> None:
         if not isinstance(self.message, AgentMessage):
             raise TypeError("InternalMessageEvent requires an AgentMessage")
+
+
+@dataclass(frozen=True, slots=True)
+class SteeringMessageEvent(ExtensionEvent):
+    """Urgent user input replacing continuation at the next model/tool boundary."""
+
+    message: UserMessage
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.message, UserMessage):
+            raise TypeError("SteeringMessageEvent requires a UserMessage")
 
 
 @dataclass(frozen=True, slots=True)

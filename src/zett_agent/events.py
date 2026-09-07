@@ -8,7 +8,7 @@ from time import monotonic_ns
 from typing import TYPE_CHECKING, Any, Protocol
 
 from .exceptions import AgentProtocolError
-from .messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage
+from .messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage, UserMessage
 from .model import ModelEvent, ModelEventType, ModelResponse, ToolCallDelta
 
 if TYPE_CHECKING:
@@ -39,8 +39,14 @@ class AgentEventType(StrEnum):
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"
+    # An unexecuted call has a persisted skipped result because steering took over.
+    TOOL_SKIPPED = "tool_skipped"
+    STEERING_STARTED = "steering_started"
+    STEERING_COMPLETED = "steering_completed"
+    STEERING_INTERRUPTED = "steering_interrupted"
     INTERNAL_MESSAGE_STARTED = "internal_message_started"
     INTERNAL_MESSAGE_COMPLETED = "internal_message_completed"
+    INTERNAL_MESSAGE_INTERRUPTED = "internal_message_interrupted"
     RUN_COMPLETED = "run_completed"
     CUSTOM = "custom"
 
@@ -317,7 +323,10 @@ class AgentEvent:
     message: AssistantMessage | ToolMessage | None = None
     # Internal instruction associated with INTERNAL_MESSAGE_STARTED/COMPLETED.
     internal_message: AgentMessage | None = None
-    # Tool failure; model and cancellation exceptions propagate to the caller.
+    # User input associated with STEERING_STARTED/COMPLETED/INTERRUPTED.
+    steering_message: UserMessage | None = None
+    # Tool failure; skipped calls have success=False but no execution exception.
+    # Model and cancellation exceptions propagate to the caller.
     error: Exception | None = None
     # Applied compaction details, populated only by COMPACTION_COMPLETED.
     compaction: CompactionEvent | None = None

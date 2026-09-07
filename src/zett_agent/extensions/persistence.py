@@ -13,7 +13,7 @@ from ..messages import AnyMessage, AssistantMessage, SystemMessage
 from ..model import ModelUsage
 from .base import AgentExtension
 from .compaction import CompactedMessage
-from .events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, MessageTiming
+from .events import CompactionEvent, ExtensionEvent, MessageAppendedEvent, MessageTiming, RunCancelledEvent
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +277,9 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         )
 
     async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+        if isinstance(event, RunCancelledEvent):
+            self._requests.pop(context, None)
+            return
         request = self._requests.get(context)
         if request is None:
             return

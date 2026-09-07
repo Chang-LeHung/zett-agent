@@ -89,7 +89,7 @@ async def run_with_decision(agent: Agent, *, approved: bool):
             },
         )
     )
-    assert accepted is True
+    assert accepted == ["PlanModeExtension"]
     await asyncio.wait_for(task, timeout=1)
     return events
 
@@ -211,7 +211,7 @@ def test_external_response_cannot_proactively_enter_plan_mode():
         )
     )
 
-    assert accepted is False
+    assert accepted == []
     assert plan_mode.is_plan_mode("session") is False
 
 
@@ -306,7 +306,7 @@ async def test_cancelling_confirmation_wait_rejects_late_response():
                 payload={"session_id": "cancelled", "tool_call_id": "enter-1", "approved": True},
             )
         )
-        is False
+        == []
     )
     assert plan_mode.is_plan_mode("cancelled") is False
 
@@ -514,7 +514,7 @@ async def test_wrong_response_event_cannot_wake_an_enter_confirmation():
                 payload={"session_id": "wrong-event", "tool_call_id": "enter-1", "approved": True},
             )
         )
-        is False
+        == []
     )
     assert agent.emit_external_event(
         ExternalEvent(
@@ -530,7 +530,7 @@ async def test_wrong_response_event_cannot_wake_an_enter_confirmation():
     "payload",
     [
         {},
-        {"session_id": "", "tool_call_id": "enter-1", "approved": True},
+        {"tool_call_id": None, "approved": True},
         {"session_id": "empty-response", "tool_call_id": "", "approved": True},
     ],
 )
@@ -547,7 +547,7 @@ async def test_empty_external_response_does_not_wake_pending_confirmation(payloa
 
     task = asyncio.create_task(consume())
     await asyncio.wait_for(ready.wait(), timeout=1)
-    assert agent.emit_external_event(ExternalEvent(name=ENTER_PLAN_MODE_RESPONSE_EVENT_NAME, payload=payload)) is False
+    assert agent.emit_external_event(ExternalEvent(name=ENTER_PLAN_MODE_RESPONSE_EVENT_NAME, payload=payload)) == []
     assert task.done() is False
     assert agent.emit_external_event(
         ExternalEvent(

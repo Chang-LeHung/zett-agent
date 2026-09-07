@@ -22,6 +22,31 @@ user message -> model -> assistant answer
                   +-> tool calls -> tool results -> model
 ```
 
+## Multiple sessions on one Agent
+
+An initialized Agent can run different sessions concurrently on one event loop.
+Each request owns its state, tool metadata, queues, and extension context.
+Overlapping requests for the same session are rejected until cleanup finishes.
+
+```python
+replies = await asyncio.gather(
+    agent.run("Explain indexing", config=AgentConfig("session-a")),
+    agent.run("Review my plan", config=AgentConfig("session-b")),
+)
+state_a = agent.get_state("session-a")
+```
+
+Use `get_state(session_id)` for session-specific reads. `agent.state` is only
+the most recently started request's convenience view. External events require
+explicit config when multiple sessions are active. History requires an
+accumulator or persistence extension; extensions=[] does not remember dialogue.
+
+This is conversation isolation, not a security sandbox: filesystem and shell
+tools still share the configured working directory and process permissions.
+Model clients and custom tool handlers must support concurrent calls; custom
+extensions must keep mutable request data under AgentContext or session IDs.
+Do not mutate shared Agent configuration while requests are running.
+
 ## A complete example without an API key
 
 ```bash
@@ -513,20 +538,25 @@ async def stream_to_ui():
 
 
 # Called independently by the UI response endpoint while stream_to_ui waits.
-def accept_from_ui(name: str, payload: dict[str, object]) -> bool:
-    return agent.emit_external_event(ExternalEvent(name=name, payload=payload))
+def accept_from_ui(name: str, payload: dict[str, object]) -> list[str]:
+    return agent.emit_external_event(ExternalEvent(name=name, payload=payload), config=config)
 ```
 
 The outbound payload includes `session_id`, `tool_call_id`, question, ordered options,
 `allow_multiple`, and the expected response event name. The inbound envelope
-always contains only `name` and `payload`; `session_id` plus `tool_call_id`
-inside the payload route concurrent questions safely. Other response fields are
+always contains only `name` and `payload`. Routing identity is passed separately
+as `AgentConfig`; the payload's `tool_call_id` identifies the pending question.
+Other response fields are
 application-defined and are returned unchanged to the model. Once the response
 is accepted, the stream proceeds directly to `TOOL_STARTED`; `TOOL_COMPLETED`
 confirms that the answer has been returned to the model.
-`emit_external_event()` broadcasts to every extension and returns `True` when at
-least one accepts the event. It returns `False` when no extension recognizes it,
-including malformed, duplicated, stale, or cancelled ask-user responses.
+`emit_external_event()` calls `accept(config, event)` on every extension in
+priority order and returns the names of all accepting extensions. An empty list
+means no extension accepted the event, including malformed, duplicated, stale,
+or cancelled ask-user responses. The event and payload are forwarded unchanged;
+extensions decide whether to accept them. If config is omitted, the Agent uses
+the active request's config, then the initialized config, or None before
+initialization. Custom extensions may accept events even without a config.
 
 ## Plan Mode extension
 

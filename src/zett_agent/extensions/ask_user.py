@@ -104,18 +104,17 @@ class AskUserExtension(ExternalEventExtension):
 
     Inbound protocol::
 
-        agent.emit_external_event(ExternalEvent(
-            name="ask_user_response",
-            payload={
-                "session_id": "session-42",
-                "tool_call_id": "call-7",
-                "answer": "Markdown",
-            },
-        ))
+        agent.emit_external_event(
+            ExternalEvent(
+                name="ask_user_response",
+                payload={"tool_call_id": "call-7", "answer": "Markdown"},
+            ),
+            config=AgentConfig(session_id="session-42"),
+        )
 
     ExternalEventExtension owns routing, synchronization, wake-up, and cleanup.
     The response payload is application-defined and returned unchanged to the
-    model. Agent.emit_external_event() returns False when no extension accepts
+    model. Agent.emit_external_event() returns an empty list when no extension accepts
     an unrelated, malformed, duplicate, stale, or cancelled event.
     """
 

@@ -33,6 +33,7 @@ from .extensions import (
     PLAN_MODE_SYSTEM_PROMPT,
     READ_SKILL_TOOL_NAME,
     SKILL_FILE_NAME,
+    STEERING_MESSAGE_EVENT_NAME,
     TASK_TOOL_NAME,
     TODO_WRITE_TOOL_NAME,
     AgentEventHooksMixin,
@@ -91,6 +92,8 @@ from .extensions import (
     SkillExtension,
     SkillFileParser,
     SQLiteSessionExtension,
+    SteeringExtension,
+    SteeringMessageEvent,
     SubAgentDefinition,
     SubAgentExtension,
     SubAgentResult,
@@ -165,6 +168,9 @@ from .tools import (
 )
 
 __all__ = [
+    "STEERING_MESSAGE_EVENT_NAME",
+    "SteeringExtension",
+    "SteeringMessageEvent",
     "AgentMessage",
     "Agent",
     "McpClient",

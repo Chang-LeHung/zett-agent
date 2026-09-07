@@ -66,6 +66,8 @@ class GoogleProvider(AgentModel):
         contents: list[types.Content] = []
         for message in request.messages:
             match message.role:
+                case "agent":
+                    parts = [types.Part.from_text(text=message.content)]
                 case "system":
                     system.append(message.content)
                     continue

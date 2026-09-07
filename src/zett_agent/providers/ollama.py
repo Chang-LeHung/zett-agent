@@ -67,6 +67,8 @@ class OllamaProvider(AgentModel):
         messages: list[dict[str, Any]] = []
         for message in request.messages:
             match message.role:
+                case "agent":
+                    messages.append({"role": "user", "content": message.content})
                 case "system":
                     messages.append({"role": "system", "content": message.content})
                 case "user":

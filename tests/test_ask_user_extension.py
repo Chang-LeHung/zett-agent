@@ -91,6 +91,8 @@ async def _wait_for_ask(events: list, ready: asyncio.Event, agent: Agent) -> Non
 def test_agent_broadcasts_external_events_to_every_extension() -> None:
     first = ExternalEventRecorder(accepts=True)
     second = ExternalEventRecorder(accepts=False)
+    first.name = "first-recorder"
+    second.name = "second-recorder"
     agent = Agent(AskModel(), extensions=[first, second])
     event = ExternalEvent("ui_action", {"value": 1})
 

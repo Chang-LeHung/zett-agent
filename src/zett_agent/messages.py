@@ -11,6 +11,7 @@ class MessageRole(StrEnum):
     USER = "user"
     ASSISTANT = "assistant"
     TOOL = "tool"
+    AGENT = "agent"
 
 
 class ImageDetail(StrEnum):
@@ -87,7 +88,7 @@ class ToolCall:
 
 @dataclass(slots=True, kw_only=True)
 class Message:
-    """Common base for the four message roles."""
+    """Common base for user, internal agent, assistant, system, and tool roles."""
 
     role: ClassVar[MessageRole]
 
@@ -144,4 +145,16 @@ class ToolMessage(Message):
     success: bool = True
 
 
-type AnyMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
+@dataclass(slots=True, kw_only=True)
+class AgentMessage(Message):
+    """Internal extension input, persisted as agent and sent as user to providers.
+
+    This is an instruction to the running agent, not model-generated output.
+    Provider APIs have no agent role; adapters map it to user at the API boundary.
+    """
+
+    role: ClassVar[MessageRole] = MessageRole.AGENT
+    content: str
+
+
+type AnyMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage | AgentMessage

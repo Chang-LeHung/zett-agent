@@ -55,7 +55,7 @@ def _to_anthropic_content_blocks(message: Any) -> list[dict[str, Any]]:
     """Convert a domain message into Anthropic content blocks."""
     role = message.role
     match role:
-        case "user":
+        case "user" | "agent":
             content = message.content
             if isinstance(content, str):
                 return [{"type": "text", "text": content}] if content else []
@@ -147,7 +147,7 @@ class AnthropicProvider(AgentModel):
             match message.role:
                 case "system":
                     system.append(message.content)
-                case "user":
+                case "user" | "agent":
                     content = _to_anthropic_content_blocks(message)
                     if content:
                         messages.append({"role": "user", "content": content})

@@ -1,6 +1,7 @@
 import pytest
 
 from zett_agent import (
+    AgentMessage,
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
@@ -22,6 +23,7 @@ def test_message_fields_are_direct_and_role_specific():
         UserMessage(content="Question"),
         AssistantMessage(reasoning="Checking", tool_calls=(call,)),
         ToolMessage(content="Result", tool_call_id=call.id, name=call.name),
+        AgentMessage(content="Check the result"),
     ]
     assert [message.role for message in messages] == list(MessageRole)
     assert messages[1].content == "Question"

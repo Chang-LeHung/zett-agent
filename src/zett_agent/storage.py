@@ -17,7 +17,7 @@ from .extensions.events import MessageTiming
 from .extensions.persistence import ContextSnapshot, RawMessageRecord, SessionSummary, SessionView
 from .ids import new_uuid7
 from .json_types import JsonValue, json_object
-from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolMessage, UserMessage
+from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolMessage, UserMessage
 from .model import ModelUsage
 
 
@@ -106,9 +106,11 @@ class MessageKind(IntEnum):
     ASSISTANT = 3
     TOOL = 4
     CHECKPOINT = 5
+    AGENT = 6
 
 
 MESSAGE_TYPES = {
+    MessageKind.AGENT: AgentMessage,
     MessageKind.SYSTEM: SystemMessage,
     MessageKind.USER: UserMessage,
     MessageKind.ASSISTANT: AssistantMessage,

@@ -7,7 +7,7 @@ import tiktoken
 from ..agent import AgentContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
-from ..messages import AnyMessage, SystemMessage, UserMessage
+from ..messages import AgentMessage, AnyMessage, SystemMessage, UserMessage
 from ..model import AgentModel, ModelEventType, ModelRequest, ReasoningEffort
 from .base import AgentExtension
 from .events import CompactionEvent
@@ -99,7 +99,9 @@ class CompactionExtension(AgentExtension):
         while cutoff > 0 and self.count_tokens(dialogue[cutoff:]) < self.keep_recent_tokens:
             cutoff -= 1
         while cutoff > 0:
-            if isinstance(dialogue[cutoff], UserMessage) and not isinstance(dialogue[cutoff], CompactedMessage):
+            if isinstance(dialogue[cutoff], (UserMessage, AgentMessage)) and not isinstance(
+                dialogue[cutoff], CompactedMessage
+            ):
                 break
             cutoff -= 1
         if cutoff <= 0:

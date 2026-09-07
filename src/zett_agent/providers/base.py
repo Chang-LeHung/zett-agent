@@ -102,6 +102,8 @@ def _normalize_image_source(
 def _message_to_openai_payload(message: AnyMessage) -> dict[str, Any]:
     role = message.role
     match role:
+        case "agent":
+            return {"role": "user", "content": message.content}
         case "system":
             if not isinstance(message, SystemMessage):
                 raise ProviderResponseError(f"Invalid system message data type: {type(message)!r}")

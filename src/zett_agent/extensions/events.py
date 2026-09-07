@@ -4,7 +4,7 @@ from time import monotonic_ns
 from typing import Self
 
 from ..events import AgentPhase
-from ..messages import AnyMessage, AssistantMessage
+from ..messages import AgentMessage, AnyMessage, AssistantMessage
 from ..model import ModelUsage
 
 
@@ -101,6 +101,22 @@ class MessageAppendedEvent(ExtensionEvent):
     def __post_init__(self) -> None:
         if self.usage is not None and not isinstance(self.message, AssistantMessage):
             raise ValueError("Model usage belongs only to assistant messages")
+
+
+@dataclass(frozen=True, slots=True)
+class InternalMessageEvent(ExtensionEvent):
+    """Request that the active Agent process one internal instruction.
+
+    Extensions publish this event through ``AgentContext.publish()``. The
+    built-in InternalMessageExtension receives it and queues the message without
+    coupling the producing extension to the Agent loop.
+    """
+
+    message: AgentMessage
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.message, AgentMessage):
+            raise TypeError("InternalMessageEvent requires an AgentMessage")
 
 
 @dataclass(frozen=True, slots=True)

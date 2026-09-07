@@ -18,6 +18,7 @@ from zett_agent import (
     ContentCompletedEvent,
     ContentStartedEvent,
     InMemoryMessageAccumulator,
+    InternalMessageExtension,
     MessageAppendedEvent,
     ModelEvent,
     ModelRequest,
@@ -348,8 +349,13 @@ async def test_default_extensions_keep_agent_histories_isolated():
     second = await Agent.create(ScriptedModel(AssistantMessage(content="Second reply")), config=CONFIG)
     await first.run("First", config=CONFIG)
     await second.run("Second", config=CONFIG)
-    first_memory, guidance = first.extensions
-    second_memory, _ = second.extensions
+    first_memory = next(
+        extension for extension in first.extensions if isinstance(extension, InMemoryMessageAccumulator)
+    )
+    second_memory = next(
+        extension for extension in second.extensions if isinstance(extension, InMemoryMessageAccumulator)
+    )
+    guidance = next(extension for extension in first.extensions if isinstance(extension, ToolGuidelinesExtension))
     assert isinstance(first_memory, InMemoryMessageAccumulator)
     assert isinstance(guidance, ToolGuidelinesExtension)
     assert first_memory is not second_memory
@@ -361,7 +367,9 @@ async def test_default_extensions_keep_agent_histories_isolated():
         "Second",
         "Second reply",
     ]
-    assert (await Agent.create(ScriptedModel(), extensions=[], config=CONFIG)).extensions == ()
+    builtins = (await Agent.create(ScriptedModel(), extensions=[], config=CONFIG)).extensions
+    assert len(builtins) == 1
+    assert isinstance(builtins[0], InternalMessageExtension)
 
 
 async def test_extensions_run_by_stable_ascending_priority():
@@ -387,7 +395,14 @@ async def test_extensions_run_by_stable_ascending_priority():
 
     await agent.run("Hello")
 
-    assert agent.extensions == (early, equal_first, equal_second, late)
+    assert tuple(
+        extension for extension in agent.extensions if not isinstance(extension, InternalMessageExtension)
+    ) == (
+        early,
+        equal_first,
+        equal_second,
+        late,
+    )
     assert calls == ["early", "equal-first", "equal-second", "late"]
 
 

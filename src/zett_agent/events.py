@@ -8,7 +8,7 @@ from time import monotonic_ns
 from typing import TYPE_CHECKING, Any, Protocol
 
 from .exceptions import AgentProtocolError
-from .messages import AssistantMessage, ToolCall, ToolMessage
+from .messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage
 from .model import ModelEvent, ModelEventType, ModelResponse, ToolCallDelta
 
 if TYPE_CHECKING:
@@ -39,6 +39,8 @@ class AgentEventType(StrEnum):
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"
+    INTERNAL_MESSAGE_STARTED = "internal_message_started"
+    INTERNAL_MESSAGE_COMPLETED = "internal_message_completed"
     RUN_COMPLETED = "run_completed"
     CUSTOM = "custom"
 
@@ -313,6 +315,8 @@ class AgentEvent:
     response: ModelResponse | None = None
     # Tool result or final assistant answer.
     message: AssistantMessage | ToolMessage | None = None
+    # Internal instruction associated with INTERNAL_MESSAGE_STARTED/COMPLETED.
+    internal_message: AgentMessage | None = None
     # Tool failure; model and cancellation exceptions propagate to the caller.
     error: Exception | None = None
     # Applied compaction details, populated only by COMPACTION_COMPLETED.

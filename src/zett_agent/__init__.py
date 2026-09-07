@@ -16,7 +16,7 @@ from .exceptions import (
     AgentIterationLimitError,
     AgentProtocolError,
 )
-from .extensions.exports import (
+from .extensions import (
     ASK_USER_EVENT_NAME,
     ASK_USER_RESPONSE_EVENT_NAME,
     ASK_USER_TOOL_NAME,
@@ -27,6 +27,7 @@ from .extensions.exports import (
     EXIT_PLAN_MODE_EVENT_NAME,
     EXIT_PLAN_MODE_RESPONSE_EVENT_NAME,
     EXIT_PLAN_MODE_TOOL_NAME,
+    INTERNAL_MESSAGE_EVENT_NAME,
     PLAN_MODE_ENTERED_EVENT_NAME,
     PLAN_MODE_EXITED_EVENT_NAME,
     PLAN_MODE_SYSTEM_PROMPT,
@@ -64,6 +65,8 @@ from .extensions.exports import (
     ExternalEventExtension,
     FileSystemExtension,
     InMemoryMessageAccumulator,
+    InternalMessageEvent,
+    InternalMessageExtension,
     McpClient,
     McpClientFactory,
     McpExtension,
@@ -101,6 +104,7 @@ from .extensions.exports import (
 from .ids import new_uuid7
 from .json_types import JsonValue
 from .messages import (
+    AgentMessage,
     AnyMessage,
     AssistantMessage,
     ImageBytesSource,
@@ -160,6 +164,7 @@ from .tools import (
 )
 
 __all__ = [
+    "AgentMessage",
     "Agent",
     "McpClient",
     "McpClientFactory",
@@ -182,6 +187,9 @@ __all__ = [
     "AskUserResult",
     "ExternalEvent",
     "ExternalEventExtension",
+    "INTERNAL_MESSAGE_EVENT_NAME",
+    "InternalMessageExtension",
+    "InternalMessageEvent",
     "MessageAppendedEvent",
     "PhaseTransitionEvent",
     "RunCancelledEvent",

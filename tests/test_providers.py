@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from zett_agent import (
+    AgentMessage,
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
@@ -67,6 +68,7 @@ def _request_with_text_and_tools() -> ModelRequest:
         messages=(
             SystemMessage(content="Be concise."),
             UserMessage(content="What is 2+2?"),
+            AgentMessage(content="Verify the arithmetic."),
         ),
         tools=(
             ToolDefinition(
@@ -280,6 +282,7 @@ async def test_openai_provider_streams_text_and_usage() -> None:
     assert captured["body"]["stream_options"] == {"include_usage": True}
     assert captured["body"]["messages"][0] == {"role": "system", "content": "Be concise."}
     assert captured["body"]["messages"][1] == {"role": "user", "content": "What is 2+2?"}
+    assert captured["body"]["messages"][2] == {"role": "user", "content": "Verify the arithmetic."}
     assert captured["body"]["tools"][0]["function"]["name"] == "add"
     assert captured["body"]["reasoning_effort"] == "medium"
 
@@ -429,6 +432,7 @@ async def test_deepseek_provider_streams_reasoning_content() -> None:
     events = await _collect(provider.stream(_request_with_text_and_tools()))
 
     assert captured["body"]["model"] == "deepseek-reasoner"
+    assert captured["body"]["messages"][2] == {"role": "user", "content": "Verify the arithmetic."}
     assert "reasoning_effort" not in captured["body"]
     assert captured["body"]["thinking"] == {"type": "enabled"}
     reasoning = [event.delta for event in events if event.type == ModelEventType.REASONING_DELTA]
@@ -529,6 +533,10 @@ async def test_anthropic_provider_streams_text_and_tool_use() -> None:
     assert captured["headers"]["x-api-key"] == "sk-ant"
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
     assert captured["body"]["system"] == "Be concise."
+    assert captured["body"]["messages"][1] == {
+        "role": "user",
+        "content": [{"type": "text", "text": "Verify the arithmetic."}],
+    }
     assert captured["body"]["messages"][0]["role"] == "user"
     assert captured["body"]["tools"][0]["name"] == "add"
     assert "input_schema" in captured["body"]["tools"][0]
@@ -714,6 +722,7 @@ async def test_google_provider_streams_text_and_function_call() -> None:
     assert system_instruction["parts"] == [{"text": "Be concise."}]
     assert captured["body"]["contents"][0]["role"] == "user"
     assert captured["body"]["contents"][0]["parts"] == [{"text": "What is 2+2?"}]
+    assert captured["body"]["contents"][1] == {"role": "user", "parts": [{"text": "Verify the arithmetic."}]}
     assert captured["body"]["tools"][0]["functionDeclarations"][0]["name"] == "add"
     assert captured["body"]["generationConfig"]["thinkingConfig"] == {"thinking_budget": 8192, "include_thoughts": True}
 
@@ -775,6 +784,7 @@ async def test_ollama_provider_streams_text_and_tool_calls() -> None:
 
     assert captured["url"] == "http://localhost:11434/api/chat"
     assert captured["body"]["model"] == "llama3.1"
+    assert captured["body"]["messages"][2] == {"role": "user", "content": "Verify the arithmetic."}
     assert captured["body"]["messages"][0] == {"role": "system", "content": "Be concise."}
     assert captured["body"]["messages"][1] == {"role": "user", "content": "What is 2+2?"}
     assert captured["body"]["tools"][0]["function"]["name"] == "add"

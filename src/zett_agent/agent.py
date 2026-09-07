@@ -1,19 +1,23 @@
+from __future__ import annotations
+
 import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from typing import Self, overload
+from typing import TYPE_CHECKING, Self, overload
 
 from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
 from .exceptions import AgentIterationLimitError, AgentProtocolError
-from .extensions.base import AgentExtension
-from .extensions.events import ExtensionEvent, MessageAppendedEvent, MessageTiming
-from .extensions.external import ExternalEvent
 from .json_types import JsonValue, json_object
-from .messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
+from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ModelUsage, ReasoningEffort
 from .tools import AgentTool
+
+if TYPE_CHECKING:
+    from .extensions.base import AgentExtension
+    from .extensions.events import ExtensionEvent, MessageTiming
+    from .extensions.external import ExternalEvent
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +66,7 @@ class AgentContext:
     # Live registry used for model schemas and tool execution.
     tools: dict[str, AgentTool]
     # Fixed priority order for this run; no event history is retained.
-    extensions: tuple["AgentExtension", ...] = ()
+    extensions: tuple[AgentExtension, ...] = ()
     # Model owned by the current Agent; setup extensions may inspect it when
     # constructing request-scoped capabilities such as default subagents.
     model: AgentModel | None = None
@@ -108,6 +112,8 @@ class AgentContext:
         The message is visible in ``state.messages`` before subscribers run.
         Subscriber failures propagate and do not roll back the in-memory append.
         """
+        from .extensions.events import MessageAppendedEvent
+
         self.state.messages.append(message)
         await self.publish(MessageAppendedEvent(message, timing, usage))
 
@@ -124,12 +130,21 @@ class Agent(AgentPhaseTransitionMixin):
         extensions: Sequence[AgentExtension] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
         max_iterations: int = 36,
+        max_internal_messages: int = 8,
     ) -> None:
         """Create an agent with its own default extensions.
 
         Omit extensions to enable InMemoryMessageAccumulator and
-        ToolGuidelinesExtension. An explicit sequence replaces those defaults;
-        pass an empty sequence to disable all extensions.
+        ToolGuidelinesExtension. An explicit sequence replaces those defaults.
+        InternalMessageExtension is an Agent built-in and remains enabled even when an
+        empty extension sequence is supplied.
+
+        Extension names must be unique, including built-ins. max_iterations
+        limits model calls for each UserMessage or AgentMessage;
+        tool round trips consume that message's budget. max_internal_messages
+        separately limits internal inputs per run/stream. Zero disables internal
+        processing. Exceeding either limit raises
+        AgentIterationLimitError; pending messages are discarded on failure.
 
         Example:
             agent = await Agent.create(
@@ -139,18 +154,35 @@ class Agent(AgentPhaseTransitionMixin):
                 reasoning_effort=ReasoningEffort.HIGH,
             )
         """
+        from .extensions.internal_message import InternalMessageExtension
         from .extensions.memory import InMemoryMessageAccumulator
         from .extensions.tool_guidelines import ToolGuidelinesExtension
 
         if max_iterations < 1:
             raise ValueError("max_iterations must be positive")
+        if isinstance(max_internal_messages, bool) or not isinstance(max_internal_messages, int):
+            raise ValueError("max_internal_messages must be a non-negative integer")
+        if max_internal_messages < 0:
+            raise ValueError("max_internal_messages must be a non-negative integer")
         self.model = model
         self.tools = {tool.name: tool for tool in tools}
         if len(self.tools) != len(tools):
             raise ValueError("Tool names must be unique")
-        configured_extensions = (
+        configured_extensions = list(
             (InMemoryMessageAccumulator(), ToolGuidelinesExtension()) if extensions is None else tuple(extensions)
         )
+        if any(isinstance(extension, InternalMessageExtension) for extension in configured_extensions):
+            raise ValueError("InternalMessageExtension is an Agent built-in and cannot be supplied in extensions")
+        self._internal_message_extension = InternalMessageExtension()
+        configured_extensions.append(self._internal_message_extension)
+        names: set[str] = set()
+        for extension in configured_extensions:
+            name = extension.name
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("Extension name must be a non-empty string")
+            if name in names:
+                raise ValueError(f"Duplicate extension name: {name!r}")
+            names.add(name)
         # Python's sort is stable, so extensions sharing a priority preserve the
         # caller's registration order. Every lifecycle path uses this tuple.
         self.extensions = tuple(sorted(configured_extensions, key=lambda extension: extension.priority))
@@ -160,6 +192,7 @@ class Agent(AgentPhaseTransitionMixin):
         self._initialized_config: AgentConfig | None = None
         self._request_active = False
         self.max_iterations = max_iterations
+        self.max_internal_messages = max_internal_messages
 
     async def initialize(self, *, config: AgentConfig) -> None:
         """Bind the default session used when a request omits config.
@@ -207,6 +240,7 @@ class Agent(AgentPhaseTransitionMixin):
         extensions: Sequence[AgentExtension] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
         max_iterations: int = 36,
+        max_internal_messages: int = 8,
     ) -> Self:
         """Construct and initialize an Agent before returning it.
 
@@ -221,6 +255,7 @@ class Agent(AgentPhaseTransitionMixin):
             extensions=extensions,
             reasoning_effort=reasoning_effort,
             max_iterations=max_iterations,
+            max_internal_messages=max_internal_messages,
         )
         await agent.initialize(config=config)
         return agent
@@ -334,6 +369,8 @@ class Agent(AgentPhaseTransitionMixin):
             ):
                 print(event.type, event.session_id)
         """
+        from .extensions.events import MessageTiming
+
         if self._initialized_config is None:
             raise AgentProtocolError(
                 "Agent is not initialized; await agent.initialize(config=...) or Agent.create(...)"
@@ -364,6 +401,7 @@ class Agent(AgentPhaseTransitionMixin):
         user_message = message if isinstance(message, UserMessage) else UserMessage(content=message)
         self._request_active = True
         try:
+            self._internal_message_extension.open(context)
             await self._start_context_loading(context)
             await self._notify_on_tool(context)
             await self._notify_on_message(context)
@@ -371,7 +409,13 @@ class Agent(AgentPhaseTransitionMixin):
             await self._notify_before_run(context)
             await context.append_message(user_message, MessageTiming.instant())
 
-            for _ in range(self.max_iterations):
+            active_input: AgentMessage | None = None
+            message_iterations = 0
+            processed_internal_messages = 0
+            while True:
+                if message_iterations >= self.max_iterations:
+                    raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
+                message_iterations += 1
                 await self._notify_before_model(context)
 
                 async with aclosing(self._before_model_events(context)) as preprocessing:
@@ -442,6 +486,34 @@ class Agent(AgentPhaseTransitionMixin):
                     response=response,
                 )
                 if not response.message.tool_calls:
+                    if active_input is not None:
+                        yield AgentEvent(
+                            AgentEventType.INTERNAL_MESSAGE_COMPLETED,
+                            session_id=config.session_id,
+                            phase=state.phase,
+                            message=response.message,
+                            internal_message=active_input,
+                        )
+                        active_input = None
+
+                    next_input = self._internal_message_extension.next_message(context)
+                    if next_input is not None:
+                        if processed_internal_messages >= self.max_internal_messages:
+                            raise AgentIterationLimitError(
+                                f"Agent exceeded {self.max_internal_messages} internal messages in one request"
+                            )
+                        processed_internal_messages += 1
+                        message_iterations = 0
+                        yield AgentEvent(
+                            AgentEventType.INTERNAL_MESSAGE_STARTED,
+                            session_id=config.session_id,
+                            phase=state.phase,
+                            internal_message=next_input,
+                        )
+                        await context.append_message(next_input, MessageTiming.instant())
+                        active_input = next_input
+                        continue
+
                     await self._notify_after_run(context, response.message)
                     await self._notify_on_success(context, response.message)
                     await self._complete_request(context)
@@ -456,7 +528,6 @@ class Agent(AgentPhaseTransitionMixin):
                 async with aclosing(self._execute_tools(context, response.message.tool_calls)) as tool_events:
                     async for event in tool_events:
                         yield event
-            raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
         except (asyncio.CancelledError, GeneratorExit) as cancellation:
             try:
                 await self._cancel_request(context)
@@ -478,6 +549,7 @@ class Agent(AgentPhaseTransitionMixin):
                 error.add_note(f"Error hook failed: {notification_error!r}")
             raise
         finally:
+            self._internal_message_extension.close(context)
             self._request_active = False
 
     async def _execute_tools(
@@ -485,6 +557,8 @@ class Agent(AgentPhaseTransitionMixin):
         context: AgentContext,
         calls: Sequence[ToolCall],
     ) -> AsyncIterator[AgentEvent]:
+        from .extensions.events import MessageTiming
+
         for call in calls:
             await self._notify_before_tool(context, call)
             async with aclosing(self._before_tool_events(context, call)) as preprocessing:

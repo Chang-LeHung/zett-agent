@@ -190,27 +190,30 @@ class AgentExtension(
          |                            |
          |                            |
          |                            v
-         |    +----------------------------------------------+         +----------------------------------+
-         |    | HAS TOOL CALLS?                              |-- no -->| SUCCESS                          |
-         |    +----------------------------------------------+         | after_run()                      |
-         |                            | yes                            | on_success()                     |
-         |                            |                                | COMPLETED [E]                    |
-         |                            v                                | emit RUN_COMPLETED               |
-         |    +----------------------------------------------+         +----------------------------------+
-         |    | FOR EACH TOOL CALL                           |
-         |    | before_tool()                                |
-         |    | before_tool_events()                         |
-         |    | RUNNING_TOOL [E]                             |
-         |    | execute tool                                 |
-         |    | READY [E]                                    |
-         |    | append ToolMessage [E]                       |
-         |    | after_tool()                                 |
-         |    | emit TOOL_COMPLETED / TOOL_FAILED            |
-         |    +----------------------------------------------+
-         |                            |
-         |    all tools done          v
-         +----------------------------+
-
+         |    +----------------------------------------------+         +----------------------------------------------+
+         |    | HAS TOOL CALLS?                              |-- no -->| FINAL ANSWER                                 |
+         |    +----------------------------------------------+         | complete active internal/user input          |
+         |                          | yes                              | emit its *_COMPLETED event                   |
+         |                          v                                  +----------------------+-----------------------+
+         |    +----------------------------------------------+                                |
+         |    | FOR EACH TOOL CALL                           |                                v
+         |    | before_tool()                                |         +----------------------------------------------+
+         |    | before_tool_events()                         |         | TAKE NEXT INTERNAL MESSAGE                   |
+         |    | RUNNING_TOOL [E]                             |         +----------------------+-----------------------+
+         |    | execute tool                                 |                                |
+         |    | READY [E]                                    |                +---------------+---------------+
+         |    | append ToolMessage [E]                       |                | available                     | empty
+         |    | after_tool()                                 |                v                               v
+         |    | emit TOOL_COMPLETED / TOOL_FAILED            |         +----------------------+  +--------------------+
+         |    +----------------------------------------------+         | emit *_STARTED       |  | SUCCESS            |
+         |                          |                                  | append typed input   |  | close inboxes      |
+         |     all tools done       v                                  | reset budget         |  | after_run()        |
+         +--------------------------+                                  +----------+-----------+  | on_success()       |
+         |                                                                        |              | COMPLETED [E]      |
+         |                                                                        |              | RUN_COMPLETED     |
+         |                                                                        |              +--------------------+
+         |                                                                        |
+         +------------------------ next model step -------------------------------+
 
               +-------------------------------------------------------------------------------------------+
               | [E] context.publish(event) -> on_event() for every extension, in priority order.          |
@@ -223,8 +226,10 @@ class AgentExtension(
 
     All on_tool() hooks finish before any on_message() hook starts. Each hook
     runs by ascending priority; equal priorities retain registration order. The
-    left return line runs only after every tool in the model response has been
-    processed.
+    left return line runs after every tool in the response has been processed,
+    or after one AgentMessage is appended with a fresh iteration budget.
+    Internal messages have a per-request count limit. Their processing starts
+    after the current model/tool loop completes. Each user input starts a new run.
 
     before_model_events() can stream CUSTOM or compaction events; compaction
     enters COMPACTING and returns to READY. before_tool_events() streams CUSTOM
@@ -243,3 +248,16 @@ class AgentExtension(
     """
 
     priority: int = 100
+
+    @property
+    def name(self) -> str:
+        """Unique registration identity, defaulting to the concrete class name.
+
+        Override with a class attribute or assign an instance name to register
+        independently configured instances of the same extension type.
+        """
+        return getattr(self, "_extension_name", type(self).__name__)
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self._extension_name = value

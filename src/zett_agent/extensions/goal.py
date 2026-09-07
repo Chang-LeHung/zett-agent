@@ -19,6 +19,7 @@ from ..tools import tool
 from .base import AgentExtension
 from .coding import CodingExtension
 from .events import ExtensionEvent, InternalMessageEvent, RunCancelledEvent
+from .memory import InMemoryMessageAccumulator
 from .subagent import SubAgentDefinition
 from .tool_guidelines import ToolGuidelinesExtension
 
@@ -108,7 +109,7 @@ class GoalExtension(AgentExtension):
     it defaults to eight. The parent Agent's ``max_internal_messages`` remains a
     global limit across all extensions and may stop processing earlier. When an
     evaluator returns normally without calling the decision tool,
-    ``max_decision_retries`` starts a fresh evaluator Agent. Its default of three
+    ``max_decision_retries`` continues the same evaluator with its history. Its default of three
     means one initial attempt plus three retries.
 
     Example:
@@ -254,28 +255,12 @@ class GoalExtension(AgentExtension):
         run: _GoalRun,
         result: AssistantMessage,
     ) -> GoalEvaluation:
-        """Retry fresh child Agents that finish without submitting a decision."""
+        """Continue one child session when it finishes without submitting a decision."""
         definition = self._definition
         if definition is None:
             if context.model is None:
                 raise AgentProtocolError("GoalExtension requires a model")
             definition = default_goal_subagent(context.model)
-        attempts = self.max_decision_retries + 1
-        for attempt in range(1, attempts + 1):
-            decision = await self._evaluate_once(context, run, result, definition, attempt)
-            if decision is not None:
-                return decision
-        raise AgentProtocolError(f"Goal evaluator completed without reporting a decision after {attempts} attempts")
-
-    @staticmethod
-    async def _evaluate_once(
-        context: AgentContext,
-        run: _GoalRun,
-        result: AssistantMessage,
-        definition: SubAgentDefinition,
-        attempt: int,
-    ) -> GoalEvaluation | None:
-        """Run one normal child Agent and capture its schema-validated report."""
         decision: GoalEvaluation | None = None
 
         @tool(name=GOAL_EVALUATION_TOOL_NAME)
@@ -312,6 +297,7 @@ class GoalExtension(AgentExtension):
             )
             return decision
 
+        # Keep retry history in memory for this evaluator's lifetime.
         evaluator = await Agent.create(
             definition.model,
             config=AgentConfig(
@@ -320,22 +306,26 @@ class GoalExtension(AgentExtension):
             ),
             system_prompt=definition.system_prompt,
             tools=(*definition.tools, report_goal_evaluation),
-            extensions=definition.extensions,
+            extensions=(*definition.extensions, InMemoryMessageAccumulator()),
             reasoning_effort=definition.reasoning_effort,
             max_iterations=definition.max_iterations,
         )
-        await evaluator.run(
+        prompt = (
             f"Original goal:\n{run.goal}\n\n"
             f"Parent Agent's current answer:\n{result.content}\n\n"
             "Inspect the workspace and relevant evidence as needed, then report your decision."
-            + (
-                "\n\nA previous evaluator completed without submitting the required decision. "
-                "You must call report_goal_evaluation in this attempt."
-                if attempt > 1
-                else ""
-            )
         )
-        return decision
+        attempts = self.max_decision_retries + 1
+        for _ in range(attempts):
+            await evaluator.run(prompt)
+            if decision is not None:
+                return decision
+            prompt = (
+                "You completed without submitting the required decision. "
+                "Continue from your existing findings and tool results; "
+                "call report_goal_evaluation to submit your decision."
+            )
+        raise AgentProtocolError(f"Goal evaluator completed without reporting a decision after {attempts} attempts")
 
     async def on_success(self, context: AgentContext, result: AssistantMessage) -> None:
         """Release request-local goal state after verified success."""

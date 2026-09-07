@@ -10,6 +10,7 @@ from zett_agent import (
     Agent,
     AgentConfig,
     AgentEventType,
+    AgentExtension,
     AgentIterationLimitError,
     AgentMessage,
     AgentProtocolError,
@@ -23,6 +24,7 @@ from zett_agent import (
     ModelEvent,
     ModelResponse,
     ReasoningEffort,
+    SQLiteSessionExtension,
     SubAgentDefinition,
     TextContent,
     ToolCall,
@@ -30,6 +32,7 @@ from zett_agent import (
     ToolMessage,
     UserMessage,
     default_goal_subagent,
+    tool,
 )
 
 
@@ -359,8 +362,11 @@ async def test_child_agent_without_report_is_rejected() -> None:
         await agent.run("/goal Verify this")
 
     assert len(evaluator.requests) == 4
-    assert "previous evaluator completed" not in evaluator.requests[0].messages[-1].text.lower()
-    assert "previous evaluator completed" in evaluator.requests[1].messages[-1].text.lower()
+    assert "You completed without submitting" not in evaluator.requests[0].messages[-1].text
+    assert "You completed without submitting" in evaluator.requests[1].messages[-1].text
+    for index, request in enumerate(evaluator.requests):
+        assert sum(isinstance(message, UserMessage) for message in request.messages) == index + 1
+        assert sum(isinstance(message, AssistantMessage) for message in request.messages) == index
     assert extension._runs == {}
 
 
@@ -395,6 +401,82 @@ async def test_missing_decisions_are_retried_until_one_is_reported() -> None:
     assert result.content == "Parent result"
     assert evaluator.runs == 3
     assert len(evaluator.requests) == 4
+
+
+@pytest.mark.parametrize("history", ["memory", "sqlite"])
+async def test_decision_retry_preserves_session_and_tool_evidence(history, tmp_path) -> None:
+    class ObserveSession(AgentExtension):
+        def __init__(self):
+            self.sessions = []
+
+        async def on_state(self, context):
+            self.sessions.append(context.config.session_id)
+
+    @tool
+    def inspect_evidence() -> str:
+        """Read verification evidence.
+
+        Snippet:
+            inspect_evidence()
+
+        Guidelines:
+            - Inspect evidence before reporting a decision.
+        """
+        return "Tests passed: 42"
+
+    class EvidenceModel:
+        def __init__(self):
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            match len(self.requests):
+                case 1:
+                    message = AssistantMessage(tool_calls=(ToolCall("inspect", "inspect_evidence", {}),))
+                case 2:
+                    message = AssistantMessage(content="Evidence collected, but forgot the report")
+                case 3:
+                    message = AssistantMessage(
+                        tool_calls=(ToolCall("report", GOAL_EVALUATION_TOOL_NAME, decision(True)),)
+                    )
+                case _:
+                    message = AssistantMessage(content="Submitted")
+            yield ModelEvent.completed(ModelResponse(message))
+
+    observer = ObserveSession()
+    storage = SQLiteSessionExtension(tmp_path / "evaluator.sqlite") if history == "sqlite" else None
+    extensions = [observer]
+    if storage is not None:
+        extensions.append(storage)
+    evaluator = EvidenceModel()
+    child = SubAgentDefinition(
+        name="goal",
+        description="Verify evidence",
+        system_prompt="Inspect evidence and report a decision",
+        model=evaluator,
+        tools=(inspect_evidence,),
+        extensions=tuple(extensions),
+    )
+    try:
+        agent = await Agent.create(
+            PrimaryModel("Done"),
+            extensions=[GoalExtension(child)],
+            config=AgentConfig(session_id="parent"),
+        )
+        assert (await agent.run("/goal Verify tests")).content == "Done"
+        assert len(observer.sessions) == 2
+        assert len(set(observer.sessions)) == 1
+        dialogue = [message for message in evaluator.requests[2].messages if not message.role == "system"]
+        assert [message.role for message in dialogue] == ["user", "assistant", "tool", "assistant", "user"]
+        assert dialogue[2].content == '"Tests passed: 42"'
+        assert "Original goal:" in dialogue[0].text
+        assert "Continue from your existing findings" in dialogue[-1].text
+        if storage is not None:
+            assert len(storage.list_sessions()) == 1
+            assert len(storage.list_raw_messages(observer.sessions[0])) == 8
+    finally:
+        if storage is not None:
+            storage.close()
 
 
 async def test_zero_decision_retries_runs_only_initial_attempt() -> None:

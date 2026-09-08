@@ -19,6 +19,7 @@ from .ids import new_uuid7
 from .json_types import JsonValue, json_object
 from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolMessage, UserMessage
 from .model import ModelUsage
+from .sync_runtime import SyncMethodsMixin
 
 
 class Base(DeclarativeBase):
@@ -177,7 +178,7 @@ def _decode_context_data(payload: str, *, field_name: str, nonempty_keys: bool =
     return json_object(value, field_name=f"Stored {field_name}", nonempty_keys=nonempty_keys)
 
 
-class SQLiteSessionStorage:
+class SQLiteSessionStorage(SyncMethodsMixin):
     """Standalone SQLite session storage shipped with zett-agent.
 
     The first append creates session identity and history. Root sessions store

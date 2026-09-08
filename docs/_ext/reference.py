@@ -6,6 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 import zett_agent
+from zett_agent.sync_runtime import SyncMethodsMixin
 
 GROUPS = {
     "client": "Application client",
@@ -81,6 +82,9 @@ def reference_page(name):
         if name.endswith("Provider"):
             members.update(("stream", "aclose"))
         is_extension = issubclass(obj, zett_agent.AgentExtension)
+        has_sync_view = issubclass(obj, SyncMethodsMixin)
+        if has_sync_view:
+            members.add("sync")
         if is_extension:
             for base in obj.__mro__:
                 if base.__module__.startswith("zett_agent"):
@@ -88,7 +92,7 @@ def reference_page(name):
         members = sorted(key for key in members if not key.startswith("_"))
         if members:
             lines += ["   :members: " + ", ".join(members)]
-            if name.endswith("Provider") or is_extension:
+            if name.endswith("Provider") or is_extension or has_sync_view:
                 lines += ["   :inherited-members:"]
         if name == "ExternalEventExtension":
             lines += ["   :private-members: _wait_for_external_event, _take_external_event"]

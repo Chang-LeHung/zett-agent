@@ -73,6 +73,32 @@ def output(cls, complete=True):
     ).encode()
 
 
+@pytest.mark.parametrize("cls", PROVIDERS)
+def test_sync_provider_stream_reuses_transport_and_retries(cls):
+    """Exercise every official SDK through the blocking facade, without network."""
+    calls = 0
+
+    def handler(request):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(503, json={"error": {"code": 503, "message": "temporary"}})
+        return httpx.Response(200, content=output(cls), headers={"content-type": "text/event-stream"})
+
+    provider = make_provider(cls, handler, retry=1)
+    provider.retry = RetryOptions(max_retries=1, base_delay=0, max_delay=0)
+    with provider.sync() as blocking:
+        try:
+            request = ModelRequest([UserMessage(content="hello")])
+            for _ in range(2):
+                with blocking.stream(request) as stream:
+                    events = list(stream)
+                assert events[-1].response.message.content == "ok"
+            assert calls == 3
+        finally:
+            blocking.aclose()
+
+
 @pytest.fixture
 def no_backoff(monkeypatch):
     async def sleep(seconds):

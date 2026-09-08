@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from .exceptions import AgentProtocolError
 from .messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage, UserMessage
 from .model import ModelEvent, ModelEventType, ModelResponse, ToolCallDelta
+from .sync_runtime import SyncMethodsMixin
 
 if TYPE_CHECKING:
     from .extensions.events import (
@@ -234,7 +235,7 @@ class AgentPhaseTransitionMixin:
 
 
 @dataclass(slots=True)
-class ModelOutputTracker:
+class ModelOutputTracker(SyncMethodsMixin):
     """Publish and retain the reasoning/content boundaries of one model call."""
 
     reasoning_started: ReasoningStartedEvent | None = None

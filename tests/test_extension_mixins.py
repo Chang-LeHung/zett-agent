@@ -8,6 +8,7 @@ from zett_agent import (
     AgentSetupHooksMixin,
     AgentToolHooksMixin,
 )
+from zett_agent.sync_runtime import SyncMethodsMixin
 
 
 def test_agent_extension_composes_each_hook_group_once() -> None:
@@ -17,6 +18,7 @@ def test_agent_extension_composes_each_hook_group_once() -> None:
         AgentModelHooksMixin,
         AgentToolHooksMixin,
         AgentEventHooksMixin,
+        SyncMethodsMixin,
     )
 
 

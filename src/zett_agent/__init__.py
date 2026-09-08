@@ -155,6 +155,8 @@ from .providers import (
     ProviderResponseError,
 )
 from .storage import SQLiteSessionStorage
+from .sync import SyncAgent, SyncModelAdapter, create_agent_sync
+from .sync_runtime import SyncContext, SyncObject, SyncRuntime, SyncStream
 from .tools import (
     AgentTool,
     DeleteFileResult,
@@ -177,6 +179,13 @@ from .tools import (
 )
 
 __all__ = [
+    "SyncAgent",
+    "SyncModelAdapter",
+    "SyncContext",
+    "SyncObject",
+    "SyncRuntime",
+    "SyncStream",
+    "create_agent_sync",
     "AgentClient",
     "create_agent",
     "AgentEventDispatcher",

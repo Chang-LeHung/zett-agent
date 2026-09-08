@@ -9,6 +9,7 @@ You do not need to learn the extension system before running your first agent.
 
    installation
    first-agent
+   synchronous
    providers
    streaming
    tools

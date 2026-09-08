@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
 from ..events import AgentEvent, AgentEventType
+from ..sync_runtime import SyncMethodsMixin, sync_hook
 
 if TYPE_CHECKING:
     from ..agent import AgentConfig, AgentContext
@@ -186,6 +187,7 @@ class AgentExtension(
     AgentModelHooksMixin,
     AgentToolHooksMixin,
     AgentEventHooksMixin,
+    SyncMethodsMixin,
 ):
     """Combine all optional hooks for the model-tool request lifecycle.
 
@@ -319,6 +321,37 @@ class AgentExtension(
     """
 
     priority: int = 100
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """Adapt synchronous lifecycle overrides, preserving async overrides.
+
+        Plain def hooks run in a worker and receive a blocking context view.
+        Generator hooks may yield AgentEvents with ordinary yield. The accept
+        method remains synchronous because external callers already use it
+        directly. A hook may call context.publish(event) without await.
+        """
+        super().__init_subclass__(**kwargs)
+        hooks = {
+            "on_tool",
+            "on_state",
+            "on_message",
+            "before_run",
+            "after_run",
+            "on_success",
+            "on_error",
+            "before_model",
+            "after_model",
+            "before_tool",
+            "after_tool",
+            "before_model_events",
+            "after_model_events",
+            "before_tool_events",
+            "after_tool_events",
+            "on_event",
+        }
+        for name, value in tuple(vars(cls).items()):
+            if name in hooks and callable(value):
+                setattr(cls, name, sync_hook(value, context=True, streaming=name.endswith("_events")))
 
     @property
     def name(self) -> str:

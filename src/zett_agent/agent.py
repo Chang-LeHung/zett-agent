@@ -14,6 +14,7 @@ from .exceptions import AgentIterationLimitError, AgentProtocolError
 from .json_types import JsonValue, json_object
 from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ModelUsage, ReasoningEffort
+from .sync_runtime import SyncMethodsMixin
 from .tools import AgentTool
 
 if TYPE_CHECKING:
@@ -118,7 +119,7 @@ class AgentState:
 
 
 @dataclass(slots=True, weakref_slot=True, eq=False)
-class AgentContext:
+class AgentContext(SyncMethodsMixin):
     """Per-run references shared by all lifecycle hooks.
 
     Register request-scoped tools during on_tool(). Mutate state.messages and
@@ -211,7 +212,7 @@ class AgentContext:
         await self.publish(MessageAppendedEvent(message, timing, usage))
 
 
-class Agent(AgentPhaseTransitionMixin):
+class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
     """Run a model, execute requested tools, and repeat until an answer is ready.
 
     ``Agent`` is the low-level runtime. Most applications can use

@@ -1,9 +1,10 @@
 """Application-side callbacks for events emitted by Agent.stream()."""
 
 from .events import AgentEvent, AgentEventType
+from .sync_runtime import SyncMethodsMixin, sync_hook
 
 
-class AgentEventDispatcher:
+class AgentEventDispatcher(SyncMethodsMixin):
     """Dispatch streamed events to optional asynchronous callbacks.
 
     Override only the callbacks your UI or application needs. Each callback
@@ -40,6 +41,13 @@ class AgentEventDispatcher:
         :meth:`~zett_agent.AgentClient.stream` dispatches events automatically;
         :class:`~zett_agent.AgentEvent` documents type-specific fields.
     """
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """Accept ordinary def callbacks alongside async def callbacks."""
+        super().__init_subclass__(**kwargs)
+        for name, value in tuple(vars(cls).items()):
+            if name.startswith("on_") and name.endswith("_event") and callable(value):
+                setattr(cls, name, sync_hook(value))
 
     async def dispatch(self, event: AgentEvent) -> None:
         """Await the callback named on_<event type>_event exactly once.

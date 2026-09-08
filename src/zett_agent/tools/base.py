@@ -10,10 +10,11 @@ from typing import Any, get_type_hints
 from pydantic import ConfigDict, TypeAdapter, create_model
 
 from ..model import ToolDefinition
+from ..sync_runtime import SyncMethodsMixin
 
 
 @dataclass(slots=True)
-class AgentTool:
+class AgentTool(SyncMethodsMixin):
     """A tool is a name, an input schema, and an async callable."""
 
     name: str

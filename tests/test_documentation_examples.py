@@ -11,6 +11,7 @@ import pytest
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "docs" / "_examples"
 EXPECTED = {
+    "synchronous": "Synchronous history persisted",
     "first_agent": "Turn 2: Remember this conversation",
     "streaming_tools": "Answer: 42",
     "custom_extension": "Request state cleared",

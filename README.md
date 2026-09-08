@@ -22,6 +22,31 @@ user message -> model -> assistant answer
                   +-> tool calls -> tool results -> model
 ```
 
+## Synchronous calls
+
+Use the same runtime from ordinary functions, without an async entry point:
+
+```python
+from zett_agent import create_agent_sync
+
+with create_agent_sync(model) as agent:
+    print(agent.run("Hello").content)
+    with agent.stream("Continue") as events:
+        for event in events:
+            print(event.type, event.delta)
+```
+
+Existing objects expose `.sync()` views: `with provider.sync() as provider_sync`,
+`with read_file.sync() as read`, or `with storage.sync() as storage_sync`.
+Use `SyncRuntime.call()` for any other async function and share a runtime when
+reusing SDK resources. Supplied models and storage remain caller-owned.
+Extensions and event dispatchers also accept plain `def` hooks and callbacks.
+For a blocking custom model, use `SyncModelAdapter`.
+
+Run the complete offline example with
+`uv run python docs/_examples/synchronous.py`. See the **Synchronous Python**
+guide in the generated documentation for cleanup, concurrency, and cancellation.
+
 ## Multiple sessions on one Agent
 
 An initialized Agent can run different sessions concurrently on one event loop.

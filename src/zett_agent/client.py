@@ -12,10 +12,11 @@ from .ids import new_uuid7
 from .json_types import JsonValue
 from .messages import AssistantMessage, UserMessage
 from .model import AgentModel, ReasoningEffort
+from .sync_runtime import SyncMethodsMixin
 from .tools import AgentTool
 
 
-class AgentClient:
+class AgentClient(SyncMethodsMixin):
     """Compose an initialized Agent with optional application event callbacks.
 
     The public agent attribute exposes the original runtime for advanced APIs,

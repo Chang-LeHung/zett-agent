@@ -42,6 +42,7 @@ from ..model import (
     ToolDefinition,
     validate_retry,
 )
+from ..sync_runtime import SyncMethodsMixin
 
 
 class ProviderError(AgentError):
@@ -266,7 +267,7 @@ def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:
     )
 
 
-class RetryingProvider:
+class RetryingProvider(SyncMethodsMixin):
     """Shared retry configuration and transient-error classification.
 
     retry.max_retries counts additional attempts (2 means at most 3 requests). Only transport

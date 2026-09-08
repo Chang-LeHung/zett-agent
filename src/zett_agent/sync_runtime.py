@@ -476,7 +476,7 @@ class SyncContext[T](AbstractContextManager):
 
 
 async def _worker(function: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    """Run a dispatcher callback or blocking model operation outside the loop.
+    """Run a blocking model operation outside the loop.
 
     Shield the worker from the initial cancellation and wait for it to finish
     before releasing resources it may still use. Python cannot forcibly stop
@@ -501,19 +501,3 @@ async def _worker(function: Callable[..., Any], *args: Any, **kwargs: Any) -> An
         except Exception:
             pass
         raise
-
-
-def _sync_callback(function: Callable[..., Any]) -> Callable[..., Any]:
-    """Adapt a synchronous dispatcher callback without blocking the event loop.
-
-    Extension lifecycle hooks remain asynchronous and never use this adapter.
-    """
-    if inspect.iscoroutinefunction(function) or inspect.isasyncgenfunction(function):
-        return function
-
-    @wraps(function)
-    async def invoke(*args: Any, **kwargs: Any) -> Any:
-        result = await _worker(function, *args, **kwargs)
-        return await result if inspect.isawaitable(result) else result
-
-    return invoke

@@ -102,7 +102,7 @@ their external-event ``accept`` method remains synchronous.
 AgentContext and the internal ModelOutputTracker also remain async-only;
 they are runtime implementation objects, not independent synchronous entry points.
 
-Application-side dispatcher callbacks can still use ordinary ``def``:
+Application-side dispatcher callbacks also use ``async def``:
 
 .. code-block:: python
 
@@ -111,18 +111,17 @@ Application-side dispatcher callbacks can still use ordinary ``def``:
            context.input_message = UserMessage(content="Explain: " + context.input_message.text)
 
    class Console(AgentEventDispatcher):
-       def on_text_delta_event(self, event):
+       async def on_text_delta_event(self, event):
            print(event.delta, end="", flush=True)
 
-Callbacks are completed in stream order. They execute in workers, not on the UI
+Callbacks are completed in stream order. They execute on the Agent event loop, not on the UI
 thread; GUI applications must schedule visual changes through their own UI
 dispatcher. Existing ``@tool`` functions already accept both synchronous and
 asynchronous implementations. Use :class:`~zett_agent.SyncModelAdapter` for a
 custom model that returns a normal iterator from ``def stream(request)``.
 
-A running synchronous callback cannot be forcibly killed by Python. Cancellation
-waits for that callback to return before disposing its context. Configure timeouts
-on blocking I/O and avoid callbacks that wait forever.
+Await asynchronous I/O inside callbacks; offload blocking work explicitly when
+needed so it does not stall the Agent event loop.
 Closing the owning runtime or stream inside its own callback is rejected; let
 the callback return and close it from the consuming thread instead.
 

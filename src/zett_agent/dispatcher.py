@@ -1,7 +1,7 @@
 """Application-side callbacks for events emitted by Agent.stream()."""
 
 from .events import AgentEvent, AgentEventType
-from .sync_runtime import SyncMethodsMixin, _sync_callback
+from .sync_runtime import SyncMethodsMixin
 
 
 class AgentEventDispatcher(SyncMethodsMixin):
@@ -13,11 +13,10 @@ class AgentEventDispatcher(SyncMethodsMixin):
     backpressure; callback failures and cancellation propagate to the caller.
     This class does not change the Agent lifecycle or consume its stream.
 
-    Async callbacks run on the Agent's event loop. Ordinary def callbacks are
-    adapted to worker-thread calls and awaited in the same stream order. They
-    receive the original AgentEvent, not a context proxy. GUI callbacks must
-    schedule visual updates on their UI thread. This adaptation is specific to
-    application dispatchers; Extension lifecycle hooks remain async-only.
+    Callbacks must use async def and run on the Agent's event loop, including
+    when called through SyncAgent. No subclass methods are wrapped or moved to
+    worker threads. Offload blocking I/O explicitly; GUI callbacks must schedule
+    visual updates on their UI thread.
 
     Examples:
         Usage::
@@ -47,13 +46,6 @@ class AgentEventDispatcher(SyncMethodsMixin):
         :meth:`~zett_agent.AgentClient.stream` dispatches events automatically;
         :class:`~zett_agent.AgentEvent` documents type-specific fields.
     """
-
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        """Accept ordinary def callbacks alongside async def callbacks."""
-        super().__init_subclass__(**kwargs)
-        for name, value in tuple(vars(cls).items()):
-            if name.startswith("on_") and name.endswith("_event") and callable(value):
-                setattr(cls, name, _sync_callback(value))
 
     async def dispatch(self, event: AgentEvent) -> None:
         """Await the callback named on_<event type>_event exactly once.

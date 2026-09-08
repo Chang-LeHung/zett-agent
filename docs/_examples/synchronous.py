@@ -28,7 +28,7 @@ class Echo:
 
 
 class Console(AgentEventDispatcher):
-    def on_text_delta_event(self, event):
+    async def on_text_delta_event(self, event):
         print(event.delta)
 
 

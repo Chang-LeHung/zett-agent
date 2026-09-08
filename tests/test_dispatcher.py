@@ -48,6 +48,18 @@ async def test_custom_name_is_data_not_a_callback_name():
     assert received == [("dispatch", {"answer": [1, 2]})]
 
 
+async def test_callback_is_not_wrapped_and_runs_in_dispatch_task():
+    tasks = []
+
+    async def callback(self, event):
+        tasks.append(asyncio.current_task())
+
+    handler_type = type("Handler", (AgentEventDispatcher,), {"on_text_delta_event": callback})
+    assert handler_type.on_text_delta_event is callback
+    await handler_type().dispatch(AgentEvent(AgentEventType.TEXT_DELTA, session_id="test", delta="hello"))
+    assert tasks == [asyncio.current_task()]
+
+
 @pytest.mark.parametrize("exception", [RuntimeError("handler failed"), asyncio.CancelledError()])
 async def test_callback_failures_propagate(exception):
     class Handler(AgentEventDispatcher):

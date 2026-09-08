@@ -285,11 +285,11 @@ def test_sync_views_have_independent_identity_and_forward_attributes():
         assert source.value == second.value == 2
 
 
-def test_def_dispatcher_receives_ordered_events_and_errors_propagate():
+def test_async_dispatcher_receives_events_from_sync_agent():
     seen = []
 
     class Handler(AgentEventDispatcher):
-        def on_text_delta_event(self, event):
+        async def on_text_delta_event(self, event):
             seen.append((event.delta, get_ident()))
 
     caller = get_ident()
@@ -414,7 +414,7 @@ def test_sync_agent_async_hook_can_publish_to_other_extensions():
 
 def test_callback_failure_closes_the_request():
     class Handler(AgentEventDispatcher):
-        def on_text_delta_event(self, event):
+        async def on_text_delta_event(self, event):
             raise ValueError("handler error")
 
     with SyncAgent(EchoModel(), config=AgentConfig("callback"), event_dispatcher=Handler()) as agent:
@@ -566,10 +566,10 @@ def test_abandoned_async_context_is_closed_during_runtime_shutdown():
 
 def test_callback_cannot_deadlock_by_closing_its_own_runtime():
     class Handler(AgentEventDispatcher):
-        def on_text_delta_event(self, event):
+        async def on_text_delta_event(self, event):
             runtime.close()
 
     with SyncRuntime() as runtime:
         with SyncAgent(EchoModel(), runtime=runtime, event_dispatcher=Handler()) as agent:
-            with pytest.raises(RuntimeError, match="cannot close its own"):
+            with pytest.raises(RuntimeError, match="cannot block its own event loop"):
                 agent.run("hello")

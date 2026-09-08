@@ -1,5 +1,10 @@
 /* A persistent global directory, not a current-section-only sidebar. */
-html { --pst-font-size-base: 16px; }
+html {
+  --pst-font-size-base: 16px;
+  --pst-font-family-monospace-system: "SFMono-Regular", "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --pst-font-family-monospace: var(--pst-font-family-monospace-system);
+  --bs-font-monospace: var(--pst-font-family-monospace-system);
+}
 .bd-main .bd-content .bd-article-container { max-width: 58rem; }
 .bd-sidebar-primary { width: 19rem; flex: 0 0 19rem; }
 .zett-navigation { font-size: .9rem; line-height: 1.5; padding: .5rem 0 2rem; }
@@ -22,6 +27,9 @@ pre { font-size: .86rem; }
 div.highlight { border-radius: .4rem; }
 dl.py > dt { overflow-wrap: anywhere; }
 table { font-size: .92rem; }
+.mermaid-container { margin: 1.25rem 0 1.75rem; }
+pre.mermaid { background: transparent; border: 1px solid var(--pst-color-border); border-radius: .55rem; padding: 1rem; }
+pre.mermaid > svg { height: auto !important; min-height: 12rem; }
 @media (max-width: 600px) {
   .zett-paths { grid-template-columns: 1fr; }
   .zett-hero { font-size: 1.05rem; }

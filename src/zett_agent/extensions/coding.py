@@ -11,6 +11,24 @@ class CodingExtension(FileSystemExtension):
     The tools operate with host process permissions in the current working
     directory. Add ToolGuidelinesExtension separately when their prompt
     guidance should be included in model instructions.
+
+    Examples:
+        Combine coding tools with their model-facing guidance::
+
+            agent = await Agent.create(
+                model,
+                config=AgentConfig(session_id="coding-session"),
+                extensions=[CodingExtension(), ToolGuidelinesExtension()],
+            )
+
+    .. warning::
+        ``run_shell`` and writable filesystem tools execute with the host
+        process's permissions. This extension is a capability bundle, not a
+        sandbox.
+
+    .. seealso::
+        :class:`~zett_agent.FileSystemExtension` supports read-only operation;
+        :class:`~zett_agent.ToolGuidelinesExtension` adds prompt guidance.
     """
 
     def __init__(self) -> None:

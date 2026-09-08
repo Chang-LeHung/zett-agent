@@ -62,6 +62,25 @@ class TodoWriteExtension(AgentExtension):
         [completed,  processing, pending]
         [completed,  completed,  processing]
         [completed,  completed,  completed]
+
+    Examples:
+        Inspect progress from application code while a request is active::
+
+            extension = TodoWriteExtension()
+            client = await create_agent(model, extensions=[extension])
+            async for event in client.stream("Implement and test the change"):
+                if event.type is AgentEventType.TOOL_COMPLETED:
+                    progress = extension.todos(event.session_id)
+                    if progress is not None and progress.processing is not None:
+                        print(progress.processing.content)
+
+    .. note::
+        The list is request-working state, not durable task storage. It is
+        cleared after success, failure, or cancellation.
+
+    .. seealso::
+        :class:`~zett_agent.TodoItem` and :class:`~zett_agent.TodoWriteResult`
+        expose validated progress to application code.
     """
 
     def __init__(self) -> None:

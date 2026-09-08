@@ -86,7 +86,20 @@ def _validate_image_media_type(media_type: str) -> None:
 
 @dataclass(slots=True)
 class ToolCall:
-    """A complete model request to invoke a named tool."""
+    """A complete model request to invoke a named tool.
+
+    Unlike :class:`ToolCallDelta`, ``arguments`` must already be a complete
+    mapping suitable for validation and execution.
+
+    Examples:
+        Construct the normalized result of a provider tool call::
+
+            call = ToolCall(
+                id="call-7",
+                name="read_file",
+                arguments={"path": "README.md", "start_line": 1},
+            )
+    """
 
     #: Invocation identifier used to correlate a ToolMessage result.
     id: str
@@ -98,7 +111,19 @@ class ToolCall:
 
 @dataclass(slots=True, kw_only=True)
 class Message:
-    """Common base for user, internal agent, assistant, system, and tool roles."""
+    """Common base for user, internal agent, assistant, system, and tool roles.
+
+    ``attributes`` carries application-owned information attached to one message.
+    Provider adapters ignore it unless they explicitly document another mapping.
+
+    .. note::
+        Request-level ``metadata`` and ``tags`` live on :class:`AgentContext` and
+        are persisted beside Raw Log records. They are intentionally different
+        from per-message ``attributes``.
+
+    .. seealso::
+        :class:`~zett_agent.RawMessageRecord` is the persisted message envelope.
+    """
 
     role: ClassVar[MessageRole]
     #: Application-owned per-message information. Provider adapters do not send
@@ -108,7 +133,16 @@ class Message:
 
 @dataclass(slots=True, kw_only=True)
 class SystemMessage(Message):
-    """Application instructions."""
+    """Application instructions placed before conversational messages.
+
+    Examples:
+        Insert durable behavior during an extension's ``on_state`` hook::
+
+            context.state.messages.insert(
+                0,
+                SystemMessage(content="Answer with concise, verifiable steps."),
+            )
+    """
 
     role: ClassVar[MessageRole] = MessageRole.SYSTEM
     content: str
@@ -129,6 +163,10 @@ class UserMessage(Message):
     Note:
         Image support depends on the selected model. The text property excludes
         image payloads; parts preserves their original order.
+
+    .. seealso::
+        :class:`~zett_agent.TextContent`, :class:`~zett_agent.ImageContent`, and
+        :class:`~zett_agent.ImageSource` define supported content parts.
     """
 
     role: ClassVar[MessageRole] = MessageRole.USER
@@ -153,6 +191,24 @@ class AssistantMessage(Message):
         content: Final answer text; may be empty for tool-only responses.
         reasoning: Provider-reported reasoning, or None when unavailable.
         tool_calls: Complete invocations, separate from streamed argument deltas.
+
+    .. note::
+        ``replay_blocks`` are opaque transport state for the same provider and
+        model. They are not portable reasoning text and should not be displayed
+        as part of ``content``.
+
+    Examples:
+        A tool-only response may have no answer text::
+
+            message = AssistantMessage(
+                tool_calls=(ToolCall("call-1", "grep", {"pattern": "TODO"}),),
+                provider="anthropic",
+                model="claude-example",
+            )
+
+    .. seealso::
+        :class:`~zett_agent.ModelResponse` carries this message with normalized
+        usage, and :class:`~zett_agent.ToolMessage` returns tool observations.
     """
 
     role: ClassVar[MessageRole] = MessageRole.ASSISTANT
@@ -196,6 +252,18 @@ class AgentMessage(Message):
 
     This is an instruction to the running agent, not model-generated output.
     Provider APIs have no agent role; adapters map it to user at the API boundary.
+
+    Examples:
+        An extension can request another model iteration without impersonating
+        the user::
+
+            await context.publish(
+                InternalMessageEvent(AgentMessage(content="Run the failing test and continue."))
+            )
+
+    .. seealso::
+        :class:`~zett_agent.InternalMessageExtension` owns the request-local
+        queue and processing limit for these messages.
     """
 
     role: ClassVar[MessageRole] = MessageRole.AGENT

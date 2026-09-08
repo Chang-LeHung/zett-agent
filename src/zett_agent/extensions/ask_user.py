@@ -64,27 +64,51 @@ class AskUserEvent(AgentEvent):
 class AskUserExtension(ExternalEventExtension):
     """Register ask_user and suspend its execution until accept() receives a reply.
 
-    The normal tool lifecycle remains intact; waiting happens before TOOL_STARTED::
+    The normal tool lifecycle remains intact; waiting happens before TOOL_STARTED.
 
-        model emits ask_user ToolCall
-                    |
-                    v
-        before_tool_events()
-                    |
-                    +--> yield AskUserEvent --> UI
-                    |                           |
-                    |       WAITING             | ExternalEvent
-                    |                           v
-                    +<--------------------- accept()
-                    |
-                    v
-        TOOL_STARTED -> ask_user() -> ToolMessage -> next model step
+    .. zett-diagram:: ask-user
 
-        While WAITING, RunCancelledEvent cancels the Future and on_error()
-        completes it with that error. Both paths wake the suspended coroutine.
+        +---------------+              +---------------+              +---------------+              +---------------+
+        | Model         |              | Agent         |              | Extension     |              | UI            |
+        +---------------+              +---------------+              +---------------+              +---------------+
+
+                | ask_user ToolCall            |                              |                              |
+                +------------------------------>                              |                              |
+                |                              |                              |                              |
+                |                              | before_tool_events()         |                              |
+                |                              +------------------------------>                              |
+                |                              |                              |                              |
+                |                              |                              | AskUserEvent                 |
+                |                              |                              +------------------------------>
+                |                              |                              |                              |
+                |                              |                              | ExternalEvent / accept()     |
+                |                              |                              <------------------------------+
+                |                              |                              |                              |
+                |                              | resume                       |                              |
+                |                              <------------------------------+                              |
+                |                              |                              |                              |
+                |                              | TOOL_STARTED / ask_user()    |                              |
+                |                              +------------------------------>                              |
+                |                              |                              |                              |
+                | ToolMessage                  |                              |                              |
+                <-------------------------------------------------------------+                              |
+                |                              |                              |                              |
+
+    While waiting, RunCancelledEvent cancels the Future and on_error() completes
+    it with that error. Both paths wake the suspended coroutine.
 
     Closing or cancelling the stream removes the pending route, so a late UI
     response cannot resume an abandoned request.
+
+    Examples:
+        Register the extension and forward its custom event to a UI::
+
+            ask_user = AskUserExtension()
+            client = await create_agent(model, extensions=[ask_user])
+
+            async for event in client.stream("Help me choose a format"):
+                if event.name == "ask_user":
+                    show_question(event.payload)
 
     Outbound protocol::
 
@@ -116,6 +140,14 @@ class AskUserExtension(ExternalEventExtension):
     The response payload is application-defined and returned unchanged to the
     model. Agent.emit_external_event() returns an empty list when no extension accepts
     an unrelated, malformed, duplicate, stale, or cancelled event.
+
+    .. warning::
+        A UI must route the response with the matching session and tool-call ID.
+        Displaying a question is not equivalent to authorizing an action.
+
+    .. seealso::
+        :class:`~zett_agent.ExternalEventExtension` owns waiting and wake-up;
+        :doc:`/extending/events` contains a complete approval example.
     """
 
     def __init__(self) -> None:

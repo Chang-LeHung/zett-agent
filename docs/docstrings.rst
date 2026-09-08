@@ -43,6 +43,32 @@ Use literalinclude for tested examples so the website and downloadable program
 cannot silently diverge. Cross-reference roles resolve symbols and generate links;
 plain backticks alone do not create an API reference.
 
+Diagrams
+--------
+
+Use Mermaid for process, state, and sequence diagrams that benefit from real
+nodes and connecting lines. Hand-written documentation can use the directive
+directly, and Sphinx renders it as a sharp SVG at different viewport sizes::
+
+    .. mermaid::
+       :caption: The model-tool loop
+
+       flowchart LR
+          user[UserMessage] --> model[model]
+          model -- ToolCall --> tool[tool]
+          tool -- ToolMessage --> model
+          model --> assistant[AssistantMessage]
+
+Public API docstrings use ``.. zett-diagram:: name`` followed by an ASCII version.
+The source therefore remains useful in an editor, ``help()``, and a terminal;
+the local ``diagrams`` Sphinx extension replaces that block with the registered
+Mermaid diagram only while building the website. Update both representations
+when their behavior changes.
+
+Keep ``.. code-block:: text`` for output whose exact characters are the subject
+of the documentation, such as a terminal transcript, wire format, or ASCII
+table. Larger architectural diagrams belong in a hand-written guide.
+
 Google-style docstrings
 -----------------------
 

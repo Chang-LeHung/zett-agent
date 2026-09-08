@@ -16,6 +16,8 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
+    "sphinxcontrib.mermaid",
+    "diagrams",
 ]
 html_theme = "pydata_sphinx_theme"
 html_title = "Zett Agent"
@@ -35,6 +37,7 @@ html_css_files = ["docs.css"]
 html_sidebars = {"**": ["global-navigation.html"]}
 html_context = {"default_mode": "light"}
 copybutton_exclude = ".linenos, .gp, .go"
+mermaid_output_format = "raw"
 autodoc_typehints = "description"
 autodoc_member_order = "bysource"
 autoclass_content = "both"

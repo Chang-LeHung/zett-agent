@@ -53,6 +53,24 @@ class OllamaProvider(RetryingProvider):
     Note:
         This adapter does not install models or start the server. Reasoning,
         vision, and tool support depend on the selected model. Close with aclose().
+
+    Examples:
+        Connect to a locally running Ollama service::
+
+            model = OllamaProvider(model="qwen3", base_url="http://127.0.0.1:11434")
+            try:
+                client = await create_agent(model)
+                reply = await client.run("List the public classes")
+            finally:
+                await model.aclose()
+
+    .. note::
+        ``base_url`` selects an existing service. Constructing this adapter does
+        not download a model or launch the Ollama daemon.
+
+    .. seealso::
+        :doc:`/learn/providers` covers shared adapter ownership and retries;
+        :class:`~zett_agent.AgentModel` defines the normalized stream contract.
     """
 
     def __init__(

@@ -35,6 +35,27 @@ class AgentConfig:
 
     Raises:
         ValueError: If an identity is empty or a session references itself.
+
+    Examples:
+        A root conversation needs only a session ID::
+
+            config = AgentConfig(session_id="chat-42")
+
+        A delegated agent identifies its parent separately::
+
+            child = AgentConfig(
+                session_id="review-42",
+                request_id="request-7",
+                parent_session_id="chat-42",
+            )
+
+    .. note::
+        ``request_id`` is correlation data, not an idempotency key. Reusing it
+        does not suppress a second message or model call.
+
+    .. seealso::
+        :class:`~zett_agent.SQLiteSessionStorage` for persisted session identity,
+        and :class:`~zett_agent.SubAgentDefinition` for child-session setup.
     """
 
     session_id: str
@@ -55,7 +76,40 @@ class AgentConfig:
 
 @dataclass(slots=True)
 class AgentState:
-    """Mutable conversation state created independently for one request."""
+    """Mutable conversation state created independently for one request.
+
+    Extensions populate ``messages`` during :meth:`AgentSetupHooksMixin.on_state`.
+    The runtime owns ``phase`` and validates every transition; extensions should
+    observe phase events instead of assigning it directly.
+
+    .. zett-diagram:: agent-state
+
+        +---------------------+
+        | CREATED             |
+        +---------------------+
+                   |
+                   v
+        +---------------------+
+        | LOADING_CONTEXT     |
+        +---------------------+
+                   |
+                   v
+        +---------------------+
+        | READY               |<------------+
+        +---------------------+             |
+                   |                        |
+                   v                        |
+        +---------------------+             |
+        | GENERATING          |-------------+
+        +---------------------+
+
+    A later request for the same session receives a fresh ``AgentState``. History
+    survives only when a memory or persistence extension restores it.
+
+    .. seealso::
+        :class:`~zett_agent.AgentPhase` documents the state machine, while
+        :class:`~zett_agent.SessionView` describes restored persistent context.
+    """
 
     messages: list[AnyMessage] = field(default_factory=list)
     phase: AgentPhase = AgentPhase.CREATED
@@ -70,6 +124,25 @@ class AgentContext:
     Register request-scoped tools during on_tool(). Mutate state.messages and
     tools in place to update the current request without leaking registrations
     into another request or session.
+
+    .. note::
+        Context identity is request-scoped. It is safe to use a context as a key
+        for temporary extension state only when every success, error, and
+        cancellation path removes that entry.
+
+    Examples:
+        Register a tool for only the current request::
+
+            async def on_tool(self, context: AgentContext) -> None:
+                context.register_tool(read_file)
+
+        Publish an internal notification to every extension::
+
+            await context.publish(MyIndexReadyEvent(document_count=12))
+
+    .. seealso::
+        :class:`~zett_agent.AgentExtension` for lifecycle hooks and
+        :class:`~zett_agent.AgentTool` for request-scoped tool registration.
     """
 
     # Configuration for this invocation.
@@ -139,7 +212,63 @@ class AgentContext:
 
 
 class Agent(AgentPhaseTransitionMixin):
-    """A small stateful model/tool loop with optional lifecycle extensions."""
+    """Run a model, execute requested tools, and repeat until an answer is ready.
+
+    ``Agent`` is the low-level runtime. Most applications can use
+    :func:`create_agent`, which initializes it and optionally dispatches events.
+    Direct construction is useful when initialization must happen later.
+
+    .. zett-diagram:: agent-loop
+
+        +----------------------+
+        | UserMessage          |
+        +----------------------+
+                   |
+                   v
+        +----------------------+                     +----------------+
+        | model                |----- ToolCall ----->| tool           |
+        |                      |<--- ToolMessage ----|                |
+        +----------------------+                     +----------------+
+                   |
+                   v
+        +----------------------+
+        | AssistantMessage     |
+        +----------------------+
+
+    The loop is sequential today: complete tool calls are executed in model
+    order. Streaming deltas are display data; only the final
+    :class:`ModelResponse` is appended as an assistant message.
+
+    Examples:
+        Prefer the asynchronous factory when using the runtime directly::
+
+            agent = await Agent.create(
+                model,
+                config=AgentConfig(session_id="chat-42"),
+                tools=[read_file, grep],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+            answer = await agent.run("Find where retries are configured")
+            print(answer.content)
+
+        Stream visible events and always close an abandoned iterator::
+
+            from contextlib import aclosing
+
+            async with aclosing(agent.stream("Inspect the tests")) as events:
+                async for event in events:
+                    if event.type is AgentEventType.TEXT_DELTA:
+                        print(event.delta, end="", flush=True)
+
+    .. warning::
+        An ``Agent`` must be initialized before ``run`` or ``stream``. Use
+        :meth:`create` or await :meth:`initialize` after direct construction.
+
+    .. seealso::
+        :func:`~zett_agent.create_agent` is the convenient initialized entry
+        point. :class:`~zett_agent.AgentClient` adds application event dispatch,
+        and :doc:`/concepts/lifecycle` explains the complete loop.
+    """
 
     def __init__(
         self,

@@ -20,6 +20,28 @@ class DeepSeekProvider(_OpenAIStyleProvider):
     Note:
         Cache-hit counters are normalized into ModelUsage. Reasoning deltas
         are emitted only when returned by the provider. Close with aclose().
+
+    Examples:
+        Select the model explicitly rather than inferring it from the key::
+
+            model = DeepSeekProvider(
+                model="deepseek-chat",
+                api_key=os.environ["DEEPSEEK_API_KEY"],
+            )
+            try:
+                client = await create_agent(model)
+                print((await client.run("Explain this function")).content)
+            finally:
+                await model.aclose()
+
+    .. note::
+        Reasoning effort is mapped only for models whose endpoint supports the
+        corresponding request fields. A selected effort does not guarantee that
+        the server will return reasoning deltas.
+
+    .. seealso::
+        :class:`~zett_agent.ReasoningEffort` lists provider-neutral levels, and
+        :doc:`/learn/providers` covers shared provider lifecycle rules.
     """
 
     def __init__(

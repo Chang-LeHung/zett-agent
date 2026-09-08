@@ -134,6 +134,28 @@ class AnthropicProvider(RetryingProvider):
         Signed replay blocks belong to the originating provider and model.
         Persist them unchanged for tool round trips; do not render them as
         user-facing reasoning. Await aclose() to release client resources.
+
+    Examples:
+        Stream an Anthropic model through the provider-neutral client::
+
+            model = AnthropicProvider(
+                model=os.environ["ANTHROPIC_MODEL"],
+                api_key=os.environ["ANTHROPIC_API_KEY"],
+            )
+            try:
+                client = await create_agent(model)
+                reply = await client.run("Review the proposed API")
+            finally:
+                await model.aclose()
+
+    .. warning::
+        Signed thinking and tool replay blocks must be returned unchanged only
+        to the same provider and model. They are not interchangeable with plain
+        reasoning text.
+
+    .. seealso::
+        :class:`~zett_agent.AssistantMessage` documents ``replay_blocks``;
+        :doc:`/concepts/context` explains replay during tool round trips.
     """
 
     def __init__(

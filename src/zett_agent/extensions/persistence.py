@@ -123,7 +123,7 @@ class SessionView(BaseModel):
         +-----------------+------------------------------------------------------+
         | Snapshot        | One checkpoint replacing a compacted Raw Log prefix. |
         +-----------------+------------------------------------------------------+
-        | Session Context | Latest Snapshot plus the Raw Log tail after it.       |
+        | Session Context | Latest Snapshot plus the Raw Log tail after it.      |
         +-----------------+------------------------------------------------------+
 
     A Snapshot stores only one CompactedMessage. Recent messages remain solely

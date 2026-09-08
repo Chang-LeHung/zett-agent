@@ -58,43 +58,46 @@ class AgentPhase(StrEnum):
     every active phase the same failure and cancellation exits. Bidirectional
     arrows enter an operation to the right and return to READY on completion::
 
-                +-----------------+
-                |     CREATED     |
-                +-----------------+
-                         |
-        +----------------+-----------------------------------------------+
-        | ACTIVE REQUEST v                                               |
-        |       +-----------------+                                      |
-        |       | LOADING_CONTEXT |                                      |
-        |       +-----------------+                                      |
-        |                | on_tool(): register request tools             |
-        |                | on_state(): restore context                   |
-        |                | on_message(): transform current input         |
-        |                v                                               |
-        |       +-----------------+ compact / done  +-----------------+  |
-        |       |                 |<--------------->|   COMPACTING    |  |
-        |       |                 |                 +-----------------+  |
-        |       |                 |                                      |
-        |       |                 | generate / done +-----------------+  |
-        |       |      READY      |<--------------->|   GENERATING    |  |
-        |       |                 |                 +-----------------+  |
-        |       |                 |                                      |
-        |       |                 | tool / done     +-----------------+  |
-        |       |                 |<--------------->|  RUNNING_TOOL   |  |
-        |       +-----------------+                 +-----------------+  |
-        |                | final answer: after_run(), on_success()       |
-        |                |                                               |
-        +----------------+-----------------------------------+-----------+
-                         v                                   | any active phase
-                +-----------------+              +-----------+-----------+
-                |    COMPLETED    |              | exception             | cancellation
-                +-----------------+              v                       v
-                                           +-----------+           +-------------+
-                                           |  FAILED   |           |  CANCELLED  |
-                                           +-----------+           +-------------+
-                                           on_error()              RunCancelledEvent
-                                                                  re-raise cancellation
-                                           re-raise error
+            +-----------------------+
+            | CREATED               |
+            +-----------------------+
+                        |
+                        |
+        +---------------+-------------------------------------------------------------+
+        |               |                  ACTIVE REQUEST                             |
+        |               |                  shared error / cancellation exits          |
+        |               v                                                             |
+        |   +-----------------------+                                                 |
+        |   | LOADING_CONTEXT       |                                                 |
+        |   | on_tool()             |                                                 |
+        |   | on_state()            |                                                 |
+        |   | on_message()          |                                                 |
+        |   +-----------------------+                                                 |
+        |               |                                                             +---------------+
+        |               |                                                             |               |
+        |               v                                                             |               |
+        |   +-----------------------+                  +-----------------------+      |               |
+        |   | READY                 |<- compact/done ->| COMPACTING            |      |               |
+        |   |                       |                  +-----------------------+      |               |
+        |   |                       |                                                 |               |
+        |   |                       |                  +-----------------------+      |               |
+        |   |                       |<- generate/done >| GENERATING            |      |               |
+        |   |                       |                  +-----------------------+      |               |
+        |   |                       |                                                 |               |
+        |   |                       |                  +-----------------------+      |               |
+        |   +-----------------------+<- tool/done ---->| RUNNING_TOOL          |      |               |
+        |               |                              +-----------------------+      |               |
+        |               |                                                             |               |
+        |               |                                                             |               | cancellation
+        +---------------+-------------------------------------------------------------+               |
+                        |                                         +- exception -----------------------+
+                        |                                         |                                   |
+                        v                                         v                                   v
+            +-----------------------+                +------------------------+         +---------------------------+
+            | COMPLETED             |                | FAILED                 |         | CANCELLED                 |
+            | after_run()           |                | on_error()             |         | RunCancelledEvent         |
+            | on_success()          |                | re-raise error         |         | re-raise cancellation     |
+            +-----------------------+                +------------------------+         +---------------------------+
 
     Active phases are LOADING_CONTEXT, READY, COMPACTING, GENERATING, and
     RUNNING_TOOL. COMPLETED, FAILED, and CANCELLED are terminal for the current
@@ -304,7 +307,42 @@ class ModelOutputTracker:
 
 @dataclass(slots=True)
 class AgentEvent:
-    """One event; fields are populated only when relevant to its type."""
+    """One UI-facing event emitted by :meth:`Agent.stream`.
+
+    Optional fields are populated according to ``type``. Consumers should first
+    match the event type and only then read the corresponding payload.
+
+    .. code-block:: text
+
+        event type                 relevant fields
+        -------------------------  -------------------------------------------
+        TEXT_DELTA                 delta
+        TOOL_STARTED               tool_calls
+        TOOL_COMPLETED/FAILED      tool_calls, message, optional error
+        MODEL_COMPLETED            response
+        RUN_COMPLETED              message
+        CUSTOM                     name, payload
+
+    Examples:
+        Handle a mixed stream with structural pattern matching::
+
+            async for event in agent.stream("Inspect this project"):
+                match event.type:
+                    case AgentEventType.TEXT_DELTA:
+                        print(event.delta, end="", flush=True)
+                    case AgentEventType.TOOL_STARTED:
+                        print("tool:", event.tool_calls[0].name)
+                    case AgentEventType.CUSTOM:
+                        print(event.name, event.payload)
+
+    .. note::
+        Model failures and cancellation propagate as exceptions. They are not
+        converted into a synthetic terminal ``AgentEvent``.
+
+    .. seealso::
+        :class:`~zett_agent.AgentEventDispatcher` provides typed application
+        callbacks, and :doc:`/concepts/events` compares all event channels.
+    """
 
     type: AgentEventType
     #: Session that owns the run emitting this event.

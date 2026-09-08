@@ -19,6 +19,30 @@ class OpenAIProvider(_OpenAIStyleProvider):
         Await aclose() when finished. Model capabilities determine support for
         images, tool choice, and reasoning effort; this adapter does not infer
         unsupported features from the model name alone.
+
+    Examples:
+        Read credentials from the environment and close the client explicitly::
+
+            import os
+
+            model = OpenAIProvider(
+                model=os.environ.get("OPENAI_MODEL", "gpt-5-mini"),
+                api_key=os.environ["OPENAI_API_KEY"],
+                retry=RetryOptions(max_retries=3),
+            )
+            try:
+                client = await create_agent(model)
+                reply = await client.run("Summarize this module")
+            finally:
+                await model.aclose()
+
+    .. note::
+        The default HTTP client honors ``HTTP_PROXY``, ``HTTPS_PROXY``,
+        ``ALL_PROXY``, and ``NO_PROXY`` from the process environment.
+
+    .. seealso::
+        :doc:`/learn/providers` covers credentials and transport ownership;
+        :class:`~zett_agent.RetryOptions` controls retries before output starts.
     """
 
     def __init__(

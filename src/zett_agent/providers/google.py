@@ -42,6 +42,27 @@ class GoogleProvider(RetryingProvider):
     Note:
         ModelResponse retains model-scoped replay parts for subsequent calls.
         Await aclose() to release the SDK and injected HTTP client.
+
+    Examples:
+        Configure the SDK adapter without exposing the key in source::
+
+            model = GoogleProvider(
+                model=os.environ["GOOGLE_MODEL"],
+                api_key=os.environ["GOOGLE_API_KEY"],
+            )
+            try:
+                client = await create_agent(model)
+                reply = await client.run("Describe the attached image")
+            finally:
+                await model.aclose()
+
+    .. note::
+        Provider-specific signed parts are retained in ``replay_blocks`` and
+        reused only with the same Google model.
+
+    .. seealso::
+        :class:`~zett_agent.AssistantMessage` describes model-scoped replay data,
+        and :doc:`/learn/providers` shows the common provider workflow.
     """
 
     def __init__(

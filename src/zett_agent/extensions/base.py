@@ -189,6 +189,16 @@ class AgentExtension(
 ):
     """Combine all optional hooks for the model-tool request lifecycle.
 
+    .. note::
+        Override only the hooks needed by one concern. Hook groups are barriers:
+        every ``on_tool`` completes before any ``on_state`` starts, regardless
+        of extension priority.
+
+    .. seealso::
+        :doc:`/extending/first-extension` builds a complete extension,
+        :doc:`/extending/hooks` lists every hook boundary, and
+        :doc:`/extending/state` covers concurrency and cleanup.
+
     ``priority`` controls the order in which the Agent invokes extensions.
     Lower numbers run first; extensions with the same priority retain their
     registration order. Override the class attribute for one extension type or
@@ -200,85 +210,88 @@ class AgentExtension(
         metrics = MetricsExtension()
         metrics.priority = 200
 
-    Complete lifecycle; read each box from top to bottom. The scope branch
-    applies to every active operation, including hooks and event subscribers::
+    ``[E]`` marks an internal event published to every extension.
 
-              +----------------------------------------------+         +----------------------------------+
-              | NEW REQUEST: fresh state and tools           |--scope->| ANY ACTIVE STAGE                 |
-              +----------------------------------------------+         +----------------------------------+
-                                      |                                                 |
-                                      |                                                 |
-                                      v                                                 v
-              +----------------------------------------------+         +----------------------------------+
-              | SETUP                                        |         | Exception:                       |
-              | LOADING_CONTEXT [E]                          |         |   FAILED [E]                     |
-              | on_tool()                                    |         |   on_error()                     |
-              | on_state(): restore history                  |         |   re-raise error                 |
-              | on_message(): transform input                |         |                                  |
-              | READY [E]                                    |         | Cancellation:                    |
-              | append UserMessage [E]                       |         |   CANCELLED [E]                  |
-              | before_run()                                 |         |                                  |
-              +----------------------------------------------+         |   RunCancelledEvent [E]          |
-                                      |                                |   re-raise cancellation          |
-                                      |                                +----------------------------------+
-                                      v
-              +----------------------------------------------+
-         +--->| MODEL STEP                                   |
-         |    | before_model()                               |
-         |    | before_model_events()                        |
-         |    |   optional compaction [E]                    |
-         |    | GENERATING [E]                               |
-         |    | stream output / timing [E]                   |
-         |    | READY [E]                                    |
-         |    | append AssistantMessage [E]                  |
-         |    | after_model()                                |
-         |    | emit MODEL_COMPLETED                         |
-         |    | after_model_events(); check steering          |
-         |    +----------------------------------------------+
-         |                            |
-         |                            |
-         |                            v
-         |    +----------------------------------------------+         +----------------------------------------------+
-         |    | HAS TOOL CALLS?                              |-- no -->| FINAL ANSWER                                 |
-         |    +----------------------------------------------+         | complete active internal/user input          |
-         |                          | yes                              | emit its *_COMPLETED event                   |
-         |                          v                                  +----------------------+-----------------------+
-         |    +----------------------------------------------+                                |
-         |    | FOR EACH TOOL CALL                           |                                v
-         |    | before_tool()                                |         +----------------------------------------------+
-         |    | before_tool_events()                         |         | TAKE STEERING FIRST, THEN INTERNAL           |
-         |    | RUNNING_TOOL [E]                             |         +----------------------+-----------------------+
-         |    | execute tool                                 |                                |
-         |    | READY [E]                                    |                +---------------+---------------+
-         |    | append ToolMessage [E]                       |                | available                     | empty
-         |    | after_tool()                                 |                v                               v
-         |    | emit TOOL_*                                  |         +----------------------+  +--------------------+
-         |    | after_tool_events(); check steering           |         |                      |  |                   |
-         |    +----------------------------------------------+         | emit *_STARTED       |  | SUCCESS            |
-         |                          |                                  | append typed input   |  | close inboxes      |
-         |     all tools done       v                                  | reset budget         |  | after_run()        |
-         +--------------------------+                                  +----------+-----------+  | on_success()       |
-         |                                                                        |              | COMPLETED [E]      |
-         |                                                                        |              | RUN_COMPLETED      |
-         |                                                                        |              +--------------------+
-         |                                                                        |
-         +------------------------ next model step -------------------------------+
+    .. zett-diagram:: extension-lifecycle
 
-              +-------------------------------------------------------------------------------------------+
-              | [E] context.publish(event) -> on_event() for every extension, in priority order.          |
-              | Phase changes and message appends publish events; output timing publishes boundaries.     |
-              +-------------------------------------------------------------------------------------------+
+        +-----------------------------------------+
+        | NEW REQUEST                             |
+        +-----------------------------------------+
+                             |
+                             v
+        +-----------------------------------------+
+        | SETUP                                   |
+        | on_tool() -> on_state()                 |
+        | on_message() -> append UserMessage      |
+        | before_run()                            |
+        +-----------------------------------------+
+                             |
+                             v
+        +-----------------------------------------+
+        | PRE-MODEL                               |<------------------------------------------------------+
+        | before_model()                          |                                                       |
+        | before_model_events() / compaction      |                                                       |
+        +-----------------------------------------+                                                       |
+                             |                                                                            |
+                             v                                                                            |
+        +-----------------------------------------+                                                       |
+        | MODEL STEP                              |                                                       |
+        | append AssistantMessage                 |                                                       |
+        | after_model() / after_model_events()    |                                                       |
+        +-----------------------------------------+                                                       |
+                             |                                                                            |
+                             v                                                                            |
+        +-----------------------------------------+           +-------------------------------------+     |
+        | HAS TOOL CALLS?                         |-- yes --->| TOOL STEP                           |     |
+        +-----------------------------------------+           | before_tool()                       |     |
+                             |                                | before_tool_events()                |     |
+                             |                                | execute -> append ToolMessage       |-----+
+                             |                                | after_tool() / TOOL_*               |     |
+                             | no                             | after_tool_events()                 |     |
+                             |                                +-------------------------------------+     |
+                             |                                                                            |
+                             |                                                                            |
+                             v                                                                            |
+        +-----------------------------------------+           +-------------------------------------+     |
+        | STEERING OR INTERNAL INPUT?             |-- yes --->| SELECT INPUT                        |     |
+        +-----------------------------------------+           | append typed input                  |-----+
+                             |                                | reset iteration budget              |
+                             |                                +-------------------------------------+
+                             | empty
+                             |
+                             |
+                             v
+        +-----------------------------------------+
+        | SUCCESS                                 |
+        | after_run() -> on_success()             |
+        | COMPLETED [E] -> RUN_COMPLETED          |
+        +-----------------------------------------+
 
-              +-------------------------------------------------------------------------------------------+
-              | ExternalEvent -> Agent.emit_external_event() -> accept() on every registered extension.   |
-              +-------------------------------------------------------------------------------------------+
+
+
+        +-----------------------------+                       +-------------------------------------+
+        | ANY ACTIVE STAGE            |-- exception --------->| FAILED [E]                          |
+        +-----------------------------+                       | on_error() -> re-raise              |
+                       |                                      +-------------------------------------+
+                       |
+                       |
+                       |                                      +-------------------------------------+
+                       +- cancellation ---------------------->| CANCELLED [E]                       |
+                                                              | RunCancelledEvent -> re-raise       |
+                                                              +-------------------------------------+
+
+
+
+        +-----------------------------+                       +-------------------------------------+
+        | ExternalEvent               |-- emit_external_event | accept() on each extension          |
+        +-----------------------------+                       +-------------------------------------+
 
     All on_tool() hooks finish before on_state() restores history and system
     instructions. All on_state() hooks finish before on_message() transforms
     context.input_message. The runtime then appends and publishes the transformed
     UserMessage exactly once, followed by before_run(). Each hook
     runs by ascending priority; equal priorities retain registration order. The
-    left return line runs after every tool in the response has been processed,
+    right return line runs after every tool in the response has been processed,
     or after one AgentMessage is appended with a fresh iteration budget.
     Internal messages have a per-request count limit. Their processing starts
     after the current model/tool loop completes. SteeringExtension is checked

@@ -38,27 +38,24 @@ class CompactionExtension(AgentExtension):
 
     Visible state transitions::
 
-        +---------------+
-        | PRIMARY READY |
-        +-------+-------+
-                |
-                | threshold crossed?
-                |
-          +-----+-----+
-       no |           | yes
-          v           v
-        +---------+  +----------------------+
-        | PRIMARY |  | COMPACTING           |
-        | MODEL   |  | started              |
-        +---------+  | reasoning/text delta |
-                     | completed            |
-                     +----------+-----------+
-                                |
-                                v
-                           +---------+
-                           | PRIMARY |
-                           | MODEL   |
-                           +---------+
+        +-------------------------+
+        | PRIMARY READY           |
+        +-------------------------+
+                     |
+                     v
+        +-------------------------+            +--------------------------+
+        | THRESHOLD CROSSED?      |-- yes ---->| COMPACTING               |
+        +-------------------------+            | started                  |
+                     |                         | reasoning/text delta     |
+                     |                         | completed                |
+                     |                         +--------------------------+
+                     | no                                   |
+                     |                                      |
+                     |                                      |
+                     v                                      |
+        +-------------------------+                         |
+        | PRIMARY MODEL           |<------------------------+
+        +-------------------------+
 
     If the threshold is not crossed, no compaction event is emitted and the
     request moves directly from primary-ready to the primary model.

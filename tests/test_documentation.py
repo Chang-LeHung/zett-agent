@@ -60,6 +60,60 @@ def test_examples_parameters_and_inherited_callbacks_are_rendered(documentation)
     assert "content" in tool.get_text()
 
 
+@pytest.mark.parametrize(
+    ("name", "text", "admonition"),
+    [
+        ("Agent", "UserMessage", "warning"),
+        ("AgentModel", "EchoModel", "note"),
+        ("ModelEvent", "one terminal ModelResponse", "warning"),
+        ("AgentEvent", "TOOL_COMPLETED/FAILED", "note"),
+        ("SQLiteSessionStorage", "SessionView", "warning"),
+        ("OpenAIProvider", "OPENAI_API_KEY", "note"),
+        ("CodingExtension", "capability bundle", "warning"),
+    ],
+)
+def test_core_docstrings_render_examples_diagrams_and_admonitions(documentation, name, text, admonition):
+    """Guard rich source docstrings instead of accepting one-line API pages."""
+    _, output = documentation
+    soup = BeautifulSoup((output / f"_generated/{name}.html").read_text(), "html.parser")
+    assert text in soup.get_text()
+    assert soup.select_one(f".admonition.{admonition}") is not None
+    assert soup.select("div.highlight pre")
+
+
+@pytest.mark.parametrize("name", ["Agent", "AgentState", "AgentExtension", "ModelEvent", "SQLiteSessionStorage"])
+def test_mermaid_diagrams_are_embedded(documentation, name):
+    """Require semantic diagrams and the browser renderer on generated API pages."""
+    _, output = documentation
+    soup = BeautifulSoup((output / f"_generated/{name}.html").read_text(), "html.parser")
+    diagram = soup.select_one("pre.mermaid")
+    assert diagram is not None
+    assert any(
+        "mermaid" in script.get("src", "") or "import mermaid" in script.get_text() for script in soup.select("script")
+    )
+
+
+def test_runtime_source_keeps_ascii_diagrams():
+    """Keep Mermaid syntax out of runtime docstrings while rendering it in HTML."""
+    root = Path(__file__).resolve().parents[1] / "src" / "zett_agent"
+    sources = [path.read_text() for path in root.rglob("*.py")]
+    assert not any(".. mermaid::" in source for source in sources)
+    assert sum(source.count(".. zett-diagram::") for source in sources) == 7
+
+
+def test_state_diagram_return_path_stays_in_one_column():
+    """A return arrow must join the same column as every vertical segment."""
+    import inspect
+
+    lines = inspect.getdoc(zett_agent.AgentState).splitlines()
+    start = next(index for index, line in enumerate(lines) if "| READY " in line)
+    end = next(index for index, line in enumerate(lines) if "| GENERATING " in line)
+    column = lines[start].rindex("+")
+    assert lines[end].rindex("+") == column
+    for line in lines[start + 1 : end]:
+        assert len(line) > column and line[column] == "|", line
+
+
 def test_local_html_links_resolve(documentation):
     from urllib.parse import unquote, urlsplit
 
@@ -144,6 +198,14 @@ def test_desktop_mobile_navigation_and_search(documentation):
             page.locator("button.copybtn").first.click()
             page.wait_for_function("navigator.clipboard.readText().then(text => text.includes('async def on_tool'))")
             page.screenshot(path=str(output / "extension.png"), full_page=True)
+            page.goto(f"{base}/_generated/Agent.html", wait_until="networkidle")
+            diagram = page.locator("pre.mermaid svg").first
+            diagram.wait_for(timeout=20_000)
+            assert diagram.get_attribute("aria-roledescription") == "flowchart-v2"
+            code_font = page.locator("div.highlight pre").first.evaluate(
+                "element => getComputedStyle(element).fontFamily"
+            )
+            assert code_font.startswith('SFMono-Regular, "SF Mono"')
             page.goto(f"{base}/search.html?q=ExternalEventExtension", wait_until="networkidle")
             page.locator("#search-results li").first.wait_for()
             assert "ExternalEventExtension" in page.locator("#search-results").inner_text()

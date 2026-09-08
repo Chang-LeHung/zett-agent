@@ -22,45 +22,48 @@ def shell_preview(path: Path) -> tuple[str, bool]:
     Preview construction (the file on disk is never changed)::
 
         +------------------------------------------------------------+
-        | Full output file                                           |
-        | START ................................................ END |
-        +-----------------------------+------------------------------+
+        | FULL OUTPUT FILE                                           |
+        | START .............................................. END   |
+        +------------------------------------------------------------+
+                                      |
+                                      v
+        +------------------------------------------------------------+          +---------------------------+
+        | PROBE                                                      |-- yes -->| RETURN FULL TEXT          |
+        | Read at most MAX_OUTPUT_BYTES + 1 bytes                    |          | truncated = False         |
+        | Does all text fit BOTH byte and line limits?               |          +---------------------------+
+        +------------------------------------------------------------+
+                                      |
+                                      | no
+                                      v
+        +------------------------------------------------------------+
+        | RESERVE MARKER SPACE                                       |
+        | B = byte limit - marker size                               |
+        +------------------------------------------------------------+
+                                      |
                                       |
                                       v
         +------------------------------------------------------------+
-        | Probe: read at most MAX_OUTPUT_BYTES + 1 bytes              |
-        | Does the complete text fit BOTH byte and line limits?      |
-        +-----------------------------+------------------------------+
+        | READ BOUNDED BYTE WINDOWS                                  |
+        | Head: B // 4 bytes from START                              |
+        | Tail: remaining bytes by seeking to END                    |
+        | Middle: omitted from preview                               |
+        +------------------------------------------------------------+
                                       |
-                         +------------+------------+
-                         | yes                     | no
-                         v                         v
-              +--------------------+   +-----------------------------+
-              | Return full text   |   | Reserve bytes for marker    |
-              | truncated = False  |   | B = byte limit - marker size|
-              +--------------------+   +-------------+---------------+
-                                                     |
-                                                     v
+                                      |
+                                      v
         +------------------------------------------------------------+
-        | Read byte windows: head from START, tail by seeking to END  |
-        +--------------+------------------------------+--------------+
-        | Head: B // 4 | Middle: omitted from preview | Tail: rest   |
-        +--------------+------------------------------+--------------+
-                       |                              |
-                       +---------------+--------------+
-                                       |
-                                       v
-        +------------------------------------------------------------+
-        | Decode windows at valid UTF-8 character boundaries          |
+        | DECODE AND TRIM                                            |
+        | Drop partial UTF-8 characters at window boundaries         |
         | Reserve 4 lines for marker and boundary newlines           |
-        | Keep first ~1/4 of remaining lines from the head window     |
-        | Keep last  ~3/4 of remaining lines from the tail window     |
-        +-----------------------------+------------------------------+
+        | Keep first ~1/4 of remaining lines from head               |
+        | Keep last ~3/4 of remaining lines from tail                |
+        +------------------------------------------------------------+
+                                      |
                                       |
                                       v
-        +----------------+--------------------------+----------------+
-        | Head preview   | Explicit omission marker | Tail preview   |
-        +----------------+--------------------------+----------------+
+        +------------------------------------------------------------+
+        | ASSEMBLE PREVIEW                                           |
+        | Head preview + omission marker + tail preview              |
         | Return combined text, truncated = True                     |
         +------------------------------------------------------------+
 

@@ -195,11 +195,41 @@ class SQLiteSessionStorage:
         file and never use the default user database.
 
     Examples:
-        Usage::
+        Use a temporary database in tests::
 
-            storage = SQLiteSessionStorage(Path.home() / ".zett-agent" / "sessions.sqlite3")
-            # Register SessionPersistenceExtension(storage), then close when finished.
-            storage.close()
+            from pathlib import Path
+            from tempfile import TemporaryDirectory
+
+            with TemporaryDirectory() as directory:
+                storage = SQLiteSessionStorage(Path(directory) / "sessions.sqlite3")
+                try:
+                    session = storage.create_session(title="Documentation review")
+                    assert storage.get_session(session.id) == session
+                finally:
+                    storage.close()
+
+    .. zett-diagram:: session-view
+
+        +--------------------------------+          +---------------------------+
+        | Snapshot                       |--------->| SessionView               |
+        | compacted context + boundary   |          | active model context      |
+        +--------------------------------+          +---------------------------+
+                                                                  ^
+                                                                  |
+                                                                  |
+        +--------------------------------+          +---------------------------+
+        | Raw Log                        |--------->| Tail                      |
+        | immutable UI history           |          | messages after boundary   |
+        +--------------------------------+          +---------------------------+
+
+    .. warning::
+        The default path writes personal data. Libraries and tests should pass
+        an explicit path instead of silently using the default location.
+
+    .. seealso::
+        :class:`~zett_agent.SQLiteSessionExtension` integrates this storage with
+        lifecycle hooks, and :doc:`/extending/storage-adapter` explains the
+        generic storage boundary.
     """
 
     def __init__(self, path: str | Path | None = None) -> None:

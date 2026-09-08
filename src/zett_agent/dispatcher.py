@@ -31,6 +31,14 @@ class AgentEventDispatcher:
 
     Stream errors and cancellation are raised by the stream itself, not
     synthesized as callbacks. Internal extension events are a separate API.
+
+    .. note::
+        Dispatch uses ``AgentEventType``, not ``event.name``. Extension-defined
+        names are handled inside :meth:`on_custom_event`.
+
+    .. seealso::
+        :meth:`~zett_agent.AgentClient.stream` dispatches events automatically;
+        :class:`~zett_agent.AgentEvent` documents type-specific fields.
     """
 
     async def dispatch(self, event: AgentEvent) -> None:

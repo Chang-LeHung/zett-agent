@@ -191,27 +191,71 @@ class PlanModeExtension(ExternalEventExtension):
     Plan Mode. Its Tool Call pauses in ``before_tool_events()`` and emits an
     ``enter_plan_mode`` event. The extension activates the mode only after
     ``Agent.emit_external_event()`` delivers a matching
-    ``enter_plan_mode_response`` with ``approved=true``::
+    ``enter_plan_mode_response`` with ``approved=true``.
 
-        model ToolCall: enter_plan_mode(reason=...)
-                         |
-                         v
-        EnterPlanModeEvent -> UI confirmation
-                         |             |
-                         |             v
-                         +--- ExternalEvent(approved=...)
-                                       |
-                                       v
-        TOOL_STARTED -> enter_plan_mode() -> TOOL_COMPLETED
-                                       |
-                                       v
-        PlanModeEnteredEvent -> next model step with Plan Prompt
+    .. zett-diagram:: plan-mode
+
+        +---------------+              +---------------+              +---------------+              +---------------+
+        | Model         |              | Agent         |              | Extension     |              | UI            |
+        +---------------+              +---------------+              +---------------+              +---------------+
+
+                | enter_plan_mode(reason)      |                              |                              |
+                +------------------------------>                              |                              |
+                |                              |                              |                              |
+                |                              | before_tool_events()         |                              |
+                |                              +------------------------------>                              |
+                |                              |                              |                              |
+                |                              |                              | EnterPlanModeEvent           |
+                |                              |                              +------------------------------>
+                |                              |                              |                              |
+                |                              |                              | ExternalEvent(approved)      |
+                |                              |                              <------------------------------+
+                |                              |                              |                              |
+                |                              | resume                       |                              |
+                |                              <------------------------------+                              |
+                |                              |                              |                              |
+                |                              | enter_plan_mode()            |                              |
+                |                              +------------------------------>                              |
+                |                              |                              |                              |
+                |                              | PlanModeEnteredEvent         |                              |
+                |                              <------------------------------+                              |
+                |                              |                              |                              |
+                | next step with plan prompt   |                              |                              |
+                <------------------------------+                              |                              |
+                |                              |                              |                              |
 
     While active, the model sees ``exit_plan_mode(plan=...)``. That Tool follows
     the same pause-and-confirm protocol; approval restores normal mode, while
     rejection keeps planning active. A response without a pending Tool Call is
     rejected by the shared external event router, so a user cannot proactively
     change modes. Plan Mode exposes all filesystem tools plus ``run_shell``.
+
+    Examples:
+        Register Plan Mode and answer only a matching confirmation event::
+
+            plan_mode = PlanModeExtension()
+            client = await create_agent(model, extensions=[plan_mode])
+
+            async for event in client.stream("Plan the migration"):
+                if event.name == "enter_plan_mode":
+                    client.agent.emit_external_event(
+                        ExternalEvent(
+                            name="enter_plan_mode_response",
+                            payload={
+                                "tool_call_id": event.payload["tool_call_id"],
+                                "approved": True,
+                            },
+                        ),
+                        config=AgentConfig(session_id=event.session_id),
+                    )
+
+    .. note::
+        The model proposes entry and exit through tools. The extension changes
+        session mode only after the application returns an approved response.
+
+    .. seealso::
+        :class:`~zett_agent.AskUserExtension` uses the same external-event
+        routing pattern for ordinary questions.
     """
 
     # Extension priority is sorted in ascending numeric order. Plan Mode uses a

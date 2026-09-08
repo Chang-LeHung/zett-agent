@@ -34,7 +34,32 @@ class ToolDefinition:
 
 @dataclass(frozen=True, slots=True)
 class ModelRequest:
-    """Complete input for one model step in an agent run."""
+    """Complete provider-neutral input for one model step.
+
+    The runtime rebuilds this object before every model call. ``messages``
+    therefore includes the current system instructions, restored context, and
+    completed tool round trips in chronological order.
+
+    Examples:
+        Inspect the shape received by a custom adapter::
+
+            request = ModelRequest(
+                messages=[
+                    SystemMessage(content="Be concise."),
+                    UserMessage(content="What is 20 + 22?"),
+                ],
+                tools=[add.definition],
+                reasoning_effort=ReasoningEffort.LOW,
+            )
+
+    .. note::
+        Retry policy belongs to the model adapter, not to this request. One
+        ``ModelRequest`` describes intent; it does not control transport attempts.
+
+    .. seealso::
+        :class:`~zett_agent.AgentModel` defines the receiving adapter, and
+        :class:`~zett_agent.ToolDefinition` defines exposed model tools.
+    """
 
     #: Fully assembled context, including instructions and tool round trips.
     messages: Sequence[AnyMessage]
@@ -139,7 +164,24 @@ class ModelUsage:
 
 @dataclass(frozen=True, slots=True)
 class ModelResponse:
-    """Final normalized response for one model step."""
+    """Final normalized response for one model step.
+
+    Exactly one response terminates a successful model stream. Its message must
+    contain complete tool calls even if partial tool-call deltas were emitted.
+
+    Examples:
+        Complete a text-only stream::
+
+            response = ModelResponse(
+                message=AssistantMessage(content="The answer is 42."),
+                finish_reason="stop",
+                usage=ModelUsage(input_tokens=18, output_tokens=6),
+            )
+            yield ModelEvent.completed(response)
+
+    .. seealso::
+        :class:`~zett_agent.ModelUsage` normalizes provider token counters.
+    """
 
     #: Complete assistant output, including any tool calls and replay blocks.
     message: AssistantMessage
@@ -180,7 +222,41 @@ class ModelEventType(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ModelEvent:
-    """One provider-neutral model stream event."""
+    """One provider-neutral event emitted by an :class:`AgentModel`.
+
+    .. zett-diagram:: model-stream
+
+        +---------------------+
+        | Text deltas         |-------+
+        +---------------------+       |
+                                      |
+        +---------------------+       |       +------------------------------------+
+        | Reasoning deltas    |-------+------>| one terminal ModelResponse         |
+        +---------------------+       |       +------------------------------------+
+                                      |                         |
+        +---------------------+       |                         v
+        | Tool-call deltas    |-------+       +------------------------------------+
+        +---------------------+               | message + usage + finish reason    |
+                                              +------------------------------------+
+
+    Examples:
+        A minimal deterministic model can stream text and then return the same
+        complete text in its terminal message::
+
+            async def stream(self, request):
+                yield ModelEvent.text("Hello")
+                yield ModelEvent.completed(
+                    ModelResponse(AssistantMessage(content="Hello"))
+                )
+
+    .. warning::
+        Deltas are incremental display data. Do not append them as independent
+        conversation messages, and do not omit the terminal response.
+
+    .. seealso::
+        :class:`~zett_agent.AgentEvent` is the higher-level stream consumed by
+        applications after runtime lifecycle events are added.
+    """
 
     #: Discriminator indicating which optional event field is populated.
     type: ModelEventType
@@ -214,7 +290,37 @@ class ModelEvent:
 
 @runtime_checkable
 class AgentModel(Protocol):
-    """Model adapter boundary required by the core agent loop."""
+    """Protocol implemented by every provider or custom model adapter.
+
+    An adapter translates :class:`ModelRequest` into one provider request and
+    maps the provider stream back into :class:`ModelEvent` objects. The Agent
+    remains independent of SDK-specific chunks.
+
+    Examples:
+        Implement a complete offline adapter::
+
+            class EchoModel:
+                retry = RetryOptions(max_retries=0)
+
+                async def stream(self, request):
+                    text = request.messages[-1].text
+                    yield ModelEvent.text(text)
+                    yield ModelEvent.completed(
+                        ModelResponse(AssistantMessage(content=text))
+                    )
+
+            model: AgentModel = EchoModel()
+
+    .. note::
+        ``stream`` is declared as a regular protocol method returning an
+        ``AsyncIterator``. Implementations normally use ``async def`` with
+        ``yield``. Runtime protocol checks validate attribute presence, not the
+        implementation's async semantics; integration tests must consume it.
+
+    .. seealso::
+        :doc:`/extending/model-adapter` provides a complete adapter walkthrough;
+        :class:`~zett_agent.RetryOptions` defines the model-owned retry policy.
+    """
 
     #: Model-owned backoff policy; max_retries=0 disables retries.
     #: This configuration never belongs to ModelRequest.

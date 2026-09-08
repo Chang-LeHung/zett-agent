@@ -177,9 +177,121 @@ async def test_output_tracker_publishes_each_content_boundary_only_once():
     await tracker.observe(context, ModelEvent.text("two"))
     response = ModelEvent.completed(ModelResponse(AssistantMessage(content="onetwo")))
     await tracker.observe(context, response)
-    await tracker.observe(context, response)
+    with pytest.raises(AgentProtocolError, match="after its final response"):
+        await tracker.observe(context, response)
 
     assert [type(event) for event in published] == [ContentStartedEvent, ContentCompletedEvent]
+
+
+@pytest.mark.parametrize("segment", ["reasoning", "content"])
+async def test_output_completion_requires_an_open_segment(segment):
+    context = AgentContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
+    tracker = ModelOutputTracker()
+    complete = getattr(tracker, f"_complete_{segment}")
+    with pytest.raises(AgentProtocolError, match="requires an open"):
+        await complete(context)
+    delta = ModelEvent.reasoning("thinking") if segment == "reasoning" else ModelEvent.text("answer")
+    await tracker.observe(context, delta)
+    await complete(context)
+    with pytest.raises(AgentProtocolError, match="requires an open"):
+        await complete(context)
+
+
+@pytest.mark.parametrize("prefix", ["content", "tool", "reasoning-content", "reasoning-tool"])
+async def test_reasoning_cannot_resume_after_other_output(prefix):
+    context = AgentContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
+    tracker = ModelOutputTracker()
+    if prefix.startswith("reasoning-"):
+        await tracker.observe(context, ModelEvent.reasoning("thinking"))
+    delta = (
+        ModelEvent.text("answer")
+        if prefix.endswith("content")
+        else ModelEvent.tool_call(ToolCallDelta(index=0, id_delta="call-1", name_delta="read"))
+    )
+    await tracker.observe(context, delta)
+    with pytest.raises(AgentProtocolError, match="cannot start or resume"):
+        await tracker.observe(context, ModelEvent.reasoning("late thinking"))
+
+
+@pytest.mark.parametrize("phase", [phase for phase in AgentPhase if phase != AgentPhase.GENERATING])
+async def test_output_tracker_rejects_non_generating_phase(phase):
+    context = AgentContext(CONFIG, AgentState(phase=phase), {}, ())
+    tracker = ModelOutputTracker()
+    with pytest.raises(AgentProtocolError, match="must be 'generating'"):
+        await tracker.observe(context, ModelEvent.text("answer"))
+    assert tracker.content_started is None
+
+
+@pytest.mark.parametrize("kind", [ModelEventType.RESPONSE, ModelEventType.TOOL_CALL_DELTA])
+async def test_malformed_events_do_not_complete_reasoning(kind):
+    context = AgentContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
+    tracker = ModelOutputTracker()
+    await tracker.observe(context, ModelEvent.reasoning("thinking"))
+    with pytest.raises(AgentProtocolError, match="Missing"):
+        await tracker.observe(context, ModelEvent(kind))
+    assert tracker.reasoning_completed is None
+
+
+@pytest.mark.parametrize("output", ["empty", "reasoning", "content", "both"])
+async def test_stream_emits_paired_output_boundaries_in_order(output):
+    class Model:
+        async def stream(self, request):
+            yield ModelEvent.reasoning("")
+            yield ModelEvent.text("")
+            if output in ("reasoning", "both"):
+                yield ModelEvent.reasoning("think")
+                yield ModelEvent.reasoning(" more")
+            if output in ("content", "both"):
+                yield ModelEvent.text("answer")
+                yield ModelEvent.text(" more")
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="final")))
+
+    agent = await Agent.create(Model(), config=CONFIG)
+    events = [event async for event in agent.stream("hello")]
+    expected = [AgentEventType.MODEL_STARTED, AgentEventType.REASONING_DELTA, AgentEventType.TEXT_DELTA]
+    if output in ("reasoning", "both"):
+        expected += [
+            AgentEventType.REASONING_STARTED,
+            AgentEventType.REASONING_DELTA,
+            AgentEventType.REASONING_DELTA,
+            AgentEventType.REASONING_COMPLETED,
+        ]
+    if output in ("content", "both"):
+        expected += [
+            AgentEventType.CONTENT_STARTED,
+            AgentEventType.TEXT_DELTA,
+            AgentEventType.TEXT_DELTA,
+            AgentEventType.CONTENT_COMPLETED,
+        ]
+    expected += [AgentEventType.MODEL_COMPLETED, AgentEventType.RUN_COMPLETED]
+    assert [event.type for event in events] == expected
+
+
+@pytest.mark.parametrize("reasoning", [True, False])
+@pytest.mark.parametrize("cancel", [True, False])
+async def test_interrupted_stream_does_not_emit_successful_output_completion(reasoning, cancel):
+    from contextlib import aclosing
+
+    class Model:
+        async def stream(self, request):
+            yield ModelEvent.reasoning("think") if reasoning else ModelEvent.text("answer")
+            raise ValueError("stream disconnected")
+
+    agent = await Agent.create(Model(), config=CONFIG)
+    events = []
+    async with aclosing(agent.stream("hello")) as stream:
+        if cancel:
+            async for event in stream:
+                events.append(event)
+                if event.type in (AgentEventType.REASONING_DELTA, AgentEventType.TEXT_DELTA):
+                    break
+        else:
+            with pytest.raises(ValueError, match="disconnected"):
+                async for event in stream:
+                    events.append(event)
+    assert not any(
+        event.type in (AgentEventType.CONTENT_COMPLETED, AgentEventType.REASONING_COMPLETED) for event in events
+    )
 
 
 @pytest.mark.parametrize(

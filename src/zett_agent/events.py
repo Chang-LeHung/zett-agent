@@ -33,6 +33,10 @@ class AgentEventType(StrEnum):
     COMPACTION_REASONING_DELTA = "compaction_reasoning_delta"
     COMPACTION_COMPLETED = "compaction_completed"
     MODEL_STARTED = "model_started"
+    CONTENT_STARTED = "content_started"
+    CONTENT_COMPLETED = "content_completed"
+    REASONING_STARTED = "reasoning_started"
+    REASONING_COMPLETED = "reasoning_completed"
     TEXT_DELTA = "text_delta"
     REASONING_DELTA = "reasoning_delta"
     TOOL_CALL_DELTA = "tool_call_delta"
@@ -236,46 +240,89 @@ class AgentPhaseTransitionMixin:
 
 @dataclass(slots=True)
 class ModelOutputTracker(SyncMethodsMixin):
-    """Publish and retain the reasoning/content boundaries of one model call."""
+    """Validate and publish output boundaries for one model call.
+
+    Nonempty deltas open a segment once. Content or tool arguments close
+    reasoning; reasoning cannot resume afterwards. The final response closes
+    content and seals the tracker. Completion requires a matching open segment.
+    Failure and cancellation do not synthesize successful completion events.
+    """
 
     reasoning_started: ReasoningStartedEvent | None = None
     reasoning_completed: ReasoningCompletedEvent | None = None
     content_started: ContentStartedEvent | None = None
     content_completed: ContentCompletedEvent | None = None
+    _finished: bool = False
+    _tools_started: bool = False
 
-    async def observe(self, context: PhaseContext, event: ModelEvent) -> None:
-        """Translate provider-neutral stream deltas into extension events."""
+    async def observe(self, context: PhaseContext, event: ModelEvent) -> tuple[AgentEventType, ...]:
+        """Publish extension boundaries and return their ordered UI event types."""
         from .extensions.events import (
-            ContentCompletedEvent,
             ContentStartedEvent,
             ReasoningStartedEvent,
         )
 
+        AgentPhaseTransitionMixin._require_phase(context.state, AgentPhase.GENERATING)
+        if self._finished:
+            raise AgentProtocolError("Model emitted events after its final response")
+        boundaries: list[AgentEventType] = []
         match event.type:
-            case ModelEventType.REASONING_DELTA if event.delta and self.reasoning_started is None:
-                self.reasoning_started = ReasoningStartedEvent.now()
-                await context.publish(self.reasoning_started)
+            case ModelEventType.REASONING_DELTA if event.delta:
+                if self.reasoning_completed is not None or self.content_started is not None or self._tools_started:
+                    raise AgentProtocolError("Reasoning cannot start or resume after content or tool arguments")
+                if self.reasoning_started is None:
+                    self.reasoning_started = ReasoningStartedEvent.now()
+                    await context.publish(self.reasoning_started)
+                    boundaries.append(AgentEventType.REASONING_STARTED)
             case ModelEventType.TEXT_DELTA if event.delta:
-                await self._complete_reasoning(context)
+                if self.content_completed is not None:
+                    raise AgentProtocolError("Content cannot resume after completion")
+                if self.reasoning_started is not None and self.reasoning_completed is None:
+                    await self._complete_reasoning(context)
+                    boundaries.append(AgentEventType.REASONING_COMPLETED)
                 if self.content_started is None:
                     self.content_started = ContentStartedEvent.now()
                     await context.publish(self.content_started)
+                    boundaries.append(AgentEventType.CONTENT_STARTED)
             case ModelEventType.TOOL_CALL_DELTA:
-                await self._complete_reasoning(context)
+                if event.tool_call_delta is None:
+                    raise AgentProtocolError("Missing tool-call delta")
+                self._tools_started = True
+                if self.reasoning_started is not None and self.reasoning_completed is None:
+                    await self._complete_reasoning(context)
+                    boundaries.append(AgentEventType.REASONING_COMPLETED)
             case ModelEventType.RESPONSE:
-                await self._complete_reasoning(context)
+                if event.response is None:
+                    raise AgentProtocolError("Missing model response")
+                if self.reasoning_started is not None and self.reasoning_completed is None:
+                    await self._complete_reasoning(context)
+                    boundaries.append(AgentEventType.REASONING_COMPLETED)
                 if self.content_started is not None and self.content_completed is None:
-                    self.content_completed = ContentCompletedEvent.now()
-                    await context.publish(self.content_completed)
+                    await self._complete_content(context)
+                    boundaries.append(AgentEventType.CONTENT_COMPLETED)
+                self._finished = True
             case _:
-                return
+                pass
+        return tuple(boundaries)
 
     async def _complete_reasoning(self, context: PhaseContext) -> None:
         from .extensions.events import ReasoningCompletedEvent
 
-        if self.reasoning_started is not None and self.reasoning_completed is None:
-            self.reasoning_completed = ReasoningCompletedEvent.now()
-            await context.publish(self.reasoning_completed)
+        AgentPhaseTransitionMixin._require_phase(context.state, AgentPhase.GENERATING)
+        if self.reasoning_started is None or self.reasoning_completed is not None:
+            raise AgentProtocolError("Reasoning completion requires an open reasoning segment")
+        self.reasoning_completed = ReasoningCompletedEvent.now()
+        await context.publish(self.reasoning_completed)
+
+    async def _complete_content(self, context: PhaseContext) -> None:
+        """Close content only after its start and at most once."""
+        from .extensions.events import ContentCompletedEvent
+
+        AgentPhaseTransitionMixin._require_phase(context.state, AgentPhase.GENERATING)
+        if self.content_started is None or self.content_completed is not None:
+            raise AgentProtocolError("Content completion requires an open content segment")
+        self.content_completed = ContentCompletedEvent.now()
+        await context.publish(self.content_completed)
 
     def message_timing(
         self,

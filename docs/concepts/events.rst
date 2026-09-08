@@ -32,6 +32,38 @@ A CUSTOM AgentEvent has a non-empty ``name`` and an application-defined ``payloa
 It retains the session ID. The dispatcher calls ``on_custom_event``; the custom
 name is data, not a Python method to dynamically invoke.
 
+Output segment boundaries
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Primary model calls expose ``REASONING_STARTED``, ``REASONING_COMPLETED``,
+``CONTENT_STARTED``, and ``CONTENT_COMPLETED`` in both asynchronous and
+synchronous streams. A typical sequence is::
+
+    MODEL_STARTED
+        REASONING_STARTED
+        REASONING_DELTA ...
+        REASONING_COMPLETED
+        CONTENT_STARTED
+        TEXT_DELTA ...
+        CONTENT_COMPLETED
+    MODEL_COMPLETED
+
+The corresponding dispatcher methods are ``on_reasoning_started_event``,
+``on_reasoning_completed_event``, ``on_content_started_event``, and
+``on_content_completed_event``. Boundaries retain the current session ID and
+the GENERATING request phase. Extension subscribers still receive the typed
+output lifecycle notifications containing UTC and monotonic timestamps.
+
+An empty delta does not open a segment. A response without streamed content
+does not invent content boundaries. Tool arguments close any active reasoning
+segment; reasoning cannot start again after content or tool arguments. Each
+completion requires an open matching segment. Events after a final response
+and output outside GENERATING raise AgentProtocolError.
+
+Failure or cancellation leaves an interrupted segment without a successful
+completion event. Consumers should handle the stream exception and close their
+loading indicator in a finally block. Compaction retains its separate events.
+
 Internal notifications
 --------------------------
 

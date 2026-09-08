@@ -506,8 +506,12 @@ async def test_model_tool_model_loop_preserves_order_and_usage_response():
         AgentEventType.TOOL_STARTED,
         AgentEventType.TOOL_COMPLETED,
         AgentEventType.MODEL_STARTED,
+        AgentEventType.REASONING_STARTED,
         AgentEventType.REASONING_DELTA,
+        AgentEventType.REASONING_COMPLETED,
+        AgentEventType.CONTENT_STARTED,
         AgentEventType.TEXT_DELTA,
+        AgentEventType.CONTENT_COMPLETED,
         AgentEventType.MODEL_COMPLETED,
         AgentEventType.RUN_COMPLETED,
     ]

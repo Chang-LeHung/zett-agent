@@ -78,6 +78,18 @@ class AgentEventDispatcher(SyncMethodsMixin):
     async def on_text_delta_event(self, event: AgentEvent) -> None:
         """Handle an answer-content fragment in event.delta."""
 
+    async def on_content_started_event(self, event: AgentEvent) -> None:
+        """Handle the boundary immediately before the first nonempty text delta."""
+
+    async def on_content_completed_event(self, event: AgentEvent) -> None:
+        """Handle normal completion of an opened answer-content segment."""
+
+    async def on_reasoning_started_event(self, event: AgentEvent) -> None:
+        """Handle the boundary immediately before the first nonempty reasoning delta."""
+
+    async def on_reasoning_completed_event(self, event: AgentEvent) -> None:
+        """Handle reasoning ending before content, tool arguments, or the final response."""
+
     async def on_reasoning_delta_event(self, event: AgentEvent) -> None:
         """Handle a reasoning fragment in event.delta."""
 

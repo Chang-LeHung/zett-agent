@@ -150,11 +150,15 @@ async def test_external_internal_message_continues_loop_and_persists_complete_hi
 
     assert [event.type for event in events] == [
         AgentEventType.MODEL_STARTED,
+        AgentEventType.CONTENT_STARTED,
         AgentEventType.TEXT_DELTA,
+        AgentEventType.CONTENT_COMPLETED,
         AgentEventType.MODEL_COMPLETED,
         AgentEventType.INTERNAL_MESSAGE_STARTED,
         AgentEventType.MODEL_STARTED,
+        AgentEventType.CONTENT_STARTED,
         AgentEventType.TEXT_DELTA,
+        AgentEventType.CONTENT_COMPLETED,
         AgentEventType.MODEL_COMPLETED,
         AgentEventType.INTERNAL_MESSAGE_COMPLETED,
         AgentEventType.RUN_COMPLETED,

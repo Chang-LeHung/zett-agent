@@ -810,7 +810,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             async for event in events:
                 if response is not None:
                     raise AgentProtocolError("Model emitted events after its final response")
-                await output_tracker.observe(context, event)
+                for boundary in await output_tracker.observe(context, event):
+                    yield AgentEvent(boundary, session_id=config.session_id, phase=state.phase)
                 match event.type:
                     case ModelEventType.TEXT_DELTA:
                         yield AgentEvent(

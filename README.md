@@ -40,7 +40,7 @@ Existing objects expose `.sync()` views: `with provider.sync() as provider_sync`
 `with read_file.sync() as read`, or `with storage.sync() as storage_sync`.
 Use `SyncRuntime.call()` for any other async function and share a runtime when
 reusing SDK resources. Supplied models and storage remain caller-owned.
-Extensions and event dispatchers also accept plain `def` hooks and callbacks.
+Extension lifecycle hooks remain asynchronous; event dispatchers also accept plain `def` callbacks.
 For a blocking custom model, use `SyncModelAdapter`.
 
 Run the complete offline example with

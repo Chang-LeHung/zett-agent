@@ -71,6 +71,10 @@ class SyncAgent(SyncObject[Agent]):
     threads. The underlying Agent still rejects overlapping requests within one
     session. Provider and extension resources remain caller-owned.
 
+    The synchronous interface does not change Extension execution: lifecycle
+    hooks remain async and receive the original AgentContext on the background
+    loop. A supplied runtime is shared and is not closed when this view exits.
+
     Examples:
         Use a supplied model, persistence, and synchronous event handlers::
 
@@ -149,7 +153,12 @@ class SyncAgent(SyncObject[Agent]):
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> SyncStream[AgentEvent]:
-        """Yield events on demand; close the iterator when stopping before exhaustion."""
+        """Return a lazy event iterator; the request starts on the first next().
+
+        Use with agent.stream(...) as events when breaking early so cancellation
+        and cleanup finish immediately. A plain for loop does not close an
+        iterator on break. The same AgentEvent types as Agent.stream are yielded.
+        """
         return self.runtime.stream(
             self._client.stream, message, config=config, reasoning_effort=reasoning_effort, metadata=metadata, tags=tags
         )

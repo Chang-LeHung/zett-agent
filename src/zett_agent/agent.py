@@ -119,7 +119,7 @@ class AgentState:
 
 
 @dataclass(slots=True, weakref_slot=True, eq=False)
-class AgentContext(SyncMethodsMixin):
+class AgentContext:
     """Per-run references shared by all lifecycle hooks.
 
     Register request-scoped tools during on_tool(). Mutate state.messages and

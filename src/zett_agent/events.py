@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, Protocol
 from .exceptions import AgentProtocolError
 from .messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage, UserMessage
 from .model import ModelEvent, ModelEventType, ModelResponse, ToolCallDelta
-from .sync_runtime import SyncMethodsMixin
 
 if TYPE_CHECKING:
     from .extensions.events import (
@@ -239,7 +238,7 @@ class AgentPhaseTransitionMixin:
 
 
 @dataclass(slots=True)
-class ModelOutputTracker(SyncMethodsMixin):
+class ModelOutputTracker:
     """Validate and publish output boundaries for one model call.
 
     Nonempty deltas open a segment once. Content or tool arguments close

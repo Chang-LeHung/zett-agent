@@ -6,7 +6,6 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
 from ..events import AgentEvent, AgentEventType
-from ..sync_runtime import SyncMethodsMixin, sync_hook
 
 if TYPE_CHECKING:
     from ..agent import AgentConfig, AgentContext
@@ -187,14 +186,15 @@ class AgentExtension(
     AgentModelHooksMixin,
     AgentToolHooksMixin,
     AgentEventHooksMixin,
-    SyncMethodsMixin,
 ):
     """Combine all optional hooks for the model-tool request lifecycle.
 
     .. note::
         Override only the hooks needed by one concern. Hook groups are barriers:
         every ``on_tool`` completes before any ``on_state`` starts, regardless
-        of extension priority.
+        of extension priority. Lifecycle hooks use ``async def`` even with
+        SyncAgent; they receive the original AgentContext on the runtime loop.
+        External-event ``accept`` remains a synchronous method.
 
     .. seealso::
         :doc:`/extending/first-extension` builds a complete extension,
@@ -306,8 +306,9 @@ class AgentExtension(
 
     before_model_events() can stream CUSTOM or compaction events; compaction
     enters COMPACTING and returns to READY. before_tool_events() streams CUSTOM
-    events in READY. These AgentEvents reach the caller; [E] marks synchronous
-    notification through the separate on_event() hook.
+    events in READY. These AgentEvents reach the caller; [E] marks an awaited,
+    sequential broadcast through the separate async on_event() hook, not a
+    synchronous Python callback.
 
     Tool execution errors become failed ToolMessages and still run after_tool().
     Unhandled model or hook errors take the exception exit. Cancellation skips
@@ -321,37 +322,6 @@ class AgentExtension(
     """
 
     priority: int = 100
-
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        """Adapt synchronous lifecycle overrides, preserving async overrides.
-
-        Plain def hooks run in a worker and receive a blocking context view.
-        Generator hooks may yield AgentEvents with ordinary yield. The accept
-        method remains synchronous because external callers already use it
-        directly. A hook may call context.publish(event) without await.
-        """
-        super().__init_subclass__(**kwargs)
-        hooks = {
-            "on_tool",
-            "on_state",
-            "on_message",
-            "before_run",
-            "after_run",
-            "on_success",
-            "on_error",
-            "before_model",
-            "after_model",
-            "before_tool",
-            "after_tool",
-            "before_model_events",
-            "after_model_events",
-            "before_tool_events",
-            "after_tool_events",
-            "on_event",
-        }
-        for name, value in tuple(vars(cls).items()):
-            if name in hooks and callable(value):
-                setattr(cls, name, sync_hook(value, context=True, streaming=name.endswith("_events")))
 
     @property
     def name(self) -> str:

@@ -31,8 +31,8 @@ throughout, including MCP resource acquisition and release.
 All other asynchronous APIs
 ---------------------------
 
-Agent, AgentClient, providers, tools, storage, extensions, dispatchers, and Agent
-contexts offer ``.sync()``. Its context-managed view exposes their original
+Agent, AgentClient, providers, tools, storage, and dispatchers offer ``.sync()``.
+Its context-managed view exposes their original
 method names with blocking behavior:
 
 .. code-block:: python
@@ -89,20 +89,25 @@ joins its loop thread. Do not reuse already-active async resources from another
 loop. A synchronous call can be used in a notebook with an existing loop, but
 blocks that calling thread until it completes.
 
-Synchronous hooks, callbacks, and models
-----------------------------------------
+Extension hooks, callbacks, and models
+--------------------------------------------
 
-An extension hook can use ``def``; an event hook can use ordinary ``yield``.
-Such hooks run in worker threads. Their context is a :class:`~zett_agent.SyncObject`
-view, so ``context.publish(event)`` and ``context.append_message(...)`` block
-until their asynchronous counterparts finish. Attribute writes affect the
-original context. ``context.wrapped`` exposes that original object when needed.
-Async hooks still receive the original :class:`~zett_agent.AgentContext`.
+Extension lifecycle hooks use ``async def``, including async generators for
+event-producing hooks. SyncAgent runs them on its background event loop with
+the original :class:`~zett_agent.AgentContext`, without a proxy or automatic
+worker-thread adaptation. Await ``context.publish(event)`` and
+``context.append_message(...)`` as usual. Extensions do not expose ``.sync()``;
+their external-event ``accept`` method remains synchronous.
+
+AgentContext and the internal ModelOutputTracker also remain async-only;
+they are runtime implementation objects, not independent synchronous entry points.
+
+Application-side dispatcher callbacks can still use ordinary ``def``:
 
 .. code-block:: python
 
    class Instructions(AgentExtension):
-       def on_message(self, context):
+       async def on_message(self, context):
            context.input_message = UserMessage(content="Explain: " + context.input_message.text)
 
    class Console(AgentEventDispatcher):

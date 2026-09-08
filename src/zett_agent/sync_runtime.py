@@ -8,7 +8,7 @@ import sys
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterator
 from concurrent.futures import Future
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
-from contextvars import ContextVar, copy_context
+from contextvars import ContextVar
 from functools import wraps
 from queue import Queue
 from threading import Event, Lock, Thread, get_ident
@@ -20,11 +20,15 @@ _callback_loop: ContextVar[asyncio.AbstractEventLoop | None] = ContextVar("zett_
 class SyncRuntime(AbstractContextManager):
     """Own one background event loop for all blocking calls in a scope.
 
-    Reuse this scope when calling a provider, Agent, or extension repeatedly.
+    Reuse this scope when calling a provider, Agent, or service repeatedly.
     Calls preserve context variables and propagate original exceptions. Different
     calling threads may share a runtime. Closing cancels streams, awaits their
     cleanup, and shuts down the loop and its worker pool. Objects passed into
     this runtime remain caller-owned: close their SDK/database resources first.
+
+    Construction starts a dedicated thread immediately. A runtime is not a
+    process-wide singleton: multiple views may share one runtime, or independent
+    runtimes may own separate threads. Repeated calls reuse the same loop.
 
     Examples:
         Call any asynchronous function without writing an async entry point::
@@ -41,9 +45,12 @@ class SyncRuntime(AbstractContextManager):
         the runtime's own loop is rejected instead of deadlocking.
     """
 
+    # Persistent loop used for all operations submitted to this runtime.
     _loop: asyncio.AbstractEventLoop
+    # Loop-thread identity used to reject blocking calls from that same thread.
     _thread_id: int
-    _thread: Thread | None
+    # Owned background thread, joined only after async resource cleanup.
+    _thread: Thread
 
     def __init__(self) -> None:
         self._lock = Lock()
@@ -60,18 +67,6 @@ class SyncRuntime(AbstractContextManager):
             self._thread_id = get_ident()
             self._ready.set()
             self._loop.run_forever()
-
-    @classmethod
-    def _borrow(cls) -> SyncRuntime:
-        """Borrow the running loop for a synchronous hook executing in a worker."""
-        runtime = object.__new__(cls)
-        runtime._loop = asyncio.get_running_loop()
-        runtime._thread_id = get_ident()
-        runtime._lock = Lock()
-        runtime._closed = False
-        runtime._streams = set()
-        runtime._thread = None
-        return runtime
 
     def _check_thread(self) -> None:
         if get_ident() == self._thread_id:
@@ -99,9 +94,14 @@ class SyncRuntime(AbstractContextManager):
     def call[**P, T](self, function: Callable[P, T | Awaitable[T]], /, *args: P.args, **kwargs: P.kwargs) -> T:
         """Invoke a callable on the owned loop and wait for its final value.
 
-        Both ordinary functions and awaitables are accepted. Use :meth:`stream`
+        Accept a callable and its arguments, not an already-created coroutine.
+        If the callable returns an awaitable, await it before returning. Use :meth:`stream`
         for async iterators and :meth:`wrap` for a complete service object.
-        KeyboardInterrupt cancels the submitted operation.
+        KeyboardInterrupt requests cancellation of the submitted operation.
+
+        Ordinary callables execute directly on the loop thread, not in a worker.
+        Do not submit long-running blocking I/O here; use an async wrapper with
+        asyncio.to_thread when that operation must run outside the loop.
         """
 
         async def invoke() -> T:
@@ -120,8 +120,9 @@ class SyncRuntime(AbstractContextManager):
     ) -> SyncStream[T]:
         """Create a lazy, closeable iterator with one owner task for its lifetime.
 
-        Each next() requests exactly one event; no model output is eagerly
-        buffered. Use a with block when breaking early. Closing cancels an
+        Each next() requests exactly one item; this bridge does not prefetch.
+        Provider SDKs and transports may maintain their own buffers.
+        Use a with block when breaking early. Closing cancels an
         in-flight next() and waits for the producer's finally blocks.
         """
         self._check_thread()
@@ -137,7 +138,11 @@ class SyncRuntime(AbstractContextManager):
         return SyncObject(value, runtime=self)
 
     def context[T](self, value: AbstractAsyncContextManager[T]) -> SyncContext[T]:
-        """Enter and exit an async context manager in the same owner task."""
+        """Return a synchronous with adapter; enter and exit share one async task.
+
+        The value yielded by the source remains unchanged. Its asynchronous
+        methods still need runtime.call; they are not automatically wrapped.
+        """
         return SyncContext(self, value)
 
     def close(self) -> None:
@@ -156,9 +161,8 @@ class SyncRuntime(AbstractContextManager):
                 except BaseException as error:
                     errors.append(error)
         finally:
-            if self._thread is not None:
-                self._loop.call_soon_threadsafe(self._loop.stop)
-                self._thread.join()
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            self._thread.join()
         if errors:
             raise BaseExceptionGroup("Synchronous stream cleanup failed", errors)
 
@@ -284,26 +288,36 @@ class SyncStream[T](Iterator[T], AbstractContextManager):
 
 
 class SyncObject[T](AbstractContextManager):
-    """A blocking view of an existing Agent, provider, tool, context, or extension.
+    """A blocking view of an existing Agent, provider, tool, or storage object.
 
-    The original object remains available as ``wrapped``. Attributes retain
-    their original types; async method results are awaited and async iterators
+    The original object remains available as ``wrapped``. Attribute reads and
+    writes access the original object directly on the caller thread; they do
+    not provide synchronization. Async method results are awaited and async iterators
     become :class:`SyncStream`. Methods and tools can be called normally.
     Leaving this scope closes only a runtime created by this view. Explicitly
     call provider.aclose() on the view to release a caller-owned SDK client.
+
+    Dynamic method lookup is typed as Any; this view does not reproduce an
+    arbitrary object's static interface. Use SyncAgent for explicitly typed
+    Agent methods, or SyncRuntime.call for a typed callable boundary.
 
     Examples:
         Use any provider's ordinary API synchronously::
 
             with provider.sync() as blocking:
-                with blocking.stream(request) as events:
-                    for event in events:
-                        print(event)
-                blocking.aclose()
+                try:
+                    with blocking.stream(request) as events:
+                        for event in events:
+                            print(event)
+                finally:
+                    blocking.aclose()
     """
 
+    #: Original service object; its resources remain caller-owned.
     wrapped: T
+    #: Shared or privately owned bridge used to execute method calls.
     runtime: SyncRuntime
+    # True only when this view must close its runtime on context-manager exit.
     _owns_runtime: bool
 
     def __init__(self, wrapped: T, *, runtime: SyncRuntime | None = None) -> None:
@@ -384,12 +398,6 @@ class SyncObject[T](AbstractContextManager):
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._invoke(self.wrapped, *args, **kwargs)
 
-    def __hash__(self) -> int:
-        return hash(self.wrapped)
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, SyncObject) and self.wrapped is other.wrapped
-
     def __enter__(self) -> Self:
         self.runtime.__enter__()
         return self
@@ -407,6 +415,10 @@ class SyncMethodsMixin:
     def sync(self, *, runtime: SyncRuntime | None = None) -> SyncObject[Self]:
         """Return a context-managed synchronous view; optionally share a runtime.
 
+        Omitting runtime creates a new background thread for this view. Passing
+        an existing runtime reuses its loop and leaves its shutdown to the caller.
+        This API is for service entry points, not Extension lifecycle hooks.
+
         Examples:
             Use a model or tool from a plain function::
 
@@ -417,7 +429,24 @@ class SyncMethodsMixin:
 
 
 class SyncContext[T](AbstractContextManager):
-    """Preserve async context-manager task ownership and exception suppression."""
+    """Adapt async with to ordinary with without changing the yielded value.
+
+    One async task owns both __aenter__ and __aexit__. This matters for task
+    groups and cancellation scopes that must be exited by their entering task.
+    An exception from the synchronous with body is passed to __aexit__; its
+    truthy return suppresses the exception just as async with would.
+
+    The supplied runtime remains caller-owned. This is a resource-lifecycle
+    adapter, not an AgentContext and not a synchronous proxy for the yielded
+    resource's methods.
+
+    Examples:
+        Open a resource and invoke one of its asynchronous methods::
+
+            with SyncRuntime() as runtime:
+                with runtime.context(open_connection()) as connection:
+                    runtime.call(connection.send, "Hello")
+    """
 
     def __init__(self, runtime: SyncRuntime, source: AbstractAsyncContextManager[T]) -> None:
         self._source = source
@@ -425,6 +454,7 @@ class SyncContext[T](AbstractContextManager):
         self._events = runtime.stream(self._lifecycle)
 
     async def _lifecycle(self) -> AsyncIterator[Any]:
+        """Yield the resource, then the exit decision, from one owning task."""
         value = await self._source.__aenter__()
         try:
             yield value
@@ -446,7 +476,13 @@ class SyncContext[T](AbstractContextManager):
 
 
 async def _worker(function: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    """Wait for a running synchronous callback before releasing its context."""
+    """Run a dispatcher callback or blocking model operation outside the loop.
+
+    Shield the worker from the initial cancellation and wait for it to finish
+    before releasing resources it may still use. Python cannot forcibly stop
+    arbitrary thread work; blocking operations need their own I/O timeouts.
+    Extension lifecycle hooks do not use this helper.
+    """
 
     def invoke() -> Any:
         token = _callback_loop.set(loop)
@@ -467,43 +503,17 @@ async def _worker(function: Callable[..., Any], *args: Any, **kwargs: Any) -> An
         raise
 
 
-def sync_hook(function: Callable[..., Any], *, context: bool = False, streaming: bool = False) -> Callable[..., Any]:
-    """Adapt a synchronous override without blocking the Agent's event loop."""
+def _sync_callback(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Adapt a synchronous dispatcher callback without blocking the event loop.
+
+    Extension lifecycle hooks remain asynchronous and never use this adapter.
+    """
     if inspect.iscoroutinefunction(function) or inspect.isasyncgenfunction(function):
         return function
 
-    def arguments(args: tuple[Any, ...], runtime: SyncRuntime) -> tuple[Any, ...]:
-        if context and len(args) > 1:
-            return (args[0], runtime.wrap(args[1]), *args[2:])
-        return args
-
-    if inspect.isgeneratorfunction(function) or streaming:
-
-        @wraps(function)
-        async def events(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:
-            runtime = SyncRuntime._borrow()
-            sentinel = object()
-            worker_context = copy_context()
-            worker_context.run(_callback_loop.set, asyncio.get_running_loop())
-            source = await _worker(worker_context.run, function, *arguments(args, runtime), **kwargs)
-            source = iter(()) if source is None else iter(source)
-            try:
-                while True:
-                    item = await _worker(worker_context.run, next, source, sentinel)
-                    if item is sentinel:
-                        break
-                    yield item
-            finally:
-                close = getattr(source, "close", None)
-                if close is not None:
-                    await _worker(worker_context.run, close)
-
-        return events
-
     @wraps(function)
     async def invoke(*args: Any, **kwargs: Any) -> Any:
-        runtime = SyncRuntime._borrow()
-        result = await _worker(function, *arguments(args, runtime), **kwargs)
+        result = await _worker(function, *args, **kwargs)
         return await result if inspect.isawaitable(result) else result
 
     return invoke

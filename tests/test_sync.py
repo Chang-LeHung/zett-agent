@@ -11,6 +11,7 @@ import pytest
 from zett_agent import (
     Agent,
     AgentConfig,
+    AgentContext,
     AgentEvent,
     AgentEventDispatcher,
     AgentEventType,
@@ -22,6 +23,7 @@ from zett_agent import (
     AssistantMessage,
     ExternalEvent,
     ModelEvent,
+    ModelOutputTracker,
     ModelResponse,
     SQLiteSessionExtension,
     SyncAgent,
@@ -235,28 +237,52 @@ def test_sync_model_tool_and_sqlite_history(tmp_path):
         storage.close()
 
 
-def test_def_hooks_can_modify_context_publish_and_yield_events():
+def test_sync_agent_uses_async_hooks_with_original_context():
     identities = {}
 
     class Hooks(AgentExtension):
-        def on_message(self, context):
+        async def on_message(self, context):
+            assert isinstance(context, AgentContext)
+            assert not hasattr(context, "sync")
+            assert get_ident() != caller_thread
             context.input_message = UserMessage(content="transformed")
             identities[context] = "retained"
 
-        def before_model_events(self, context):
+        async def before_model_events(self, context):
             assert identities[context] == "retained"
             yield AgentEvent(
                 type=AgentEventType.CUSTOM, session_id=context.config.session_id, name="sync", payload={"ok": True}
             )
 
-        def on_success(self, context, result):
+        async def on_success(self, context, result):
             assert identities.pop(context) == "retained"
 
+    caller_thread = get_ident()
+    assert not hasattr(Hooks(), "sync")
     with SyncAgent(EchoModel(), extensions=[Hooks()]) as agent:
         events = list(agent.stream("raw"))
     assert any(e.name == "sync" for e in events)
     assert events[-1].message.content == "1:transformed"
     assert identities == {}
+
+
+def test_internal_output_tracker_has_no_synchronous_facade():
+    assert not hasattr(ModelOutputTracker(), "sync")
+
+
+def test_sync_views_have_independent_identity_and_forward_attributes():
+    class Service:
+        __hash__ = None
+        value = 1
+
+    source = Service()
+    with SyncRuntime() as runtime:
+        first = runtime.wrap(source)
+        second = runtime.wrap(source)
+        assert first != second
+        assert len({first, second}) == 2
+        first.value = 2
+        assert source.value == second.value == 2
 
 
 def test_def_dispatcher_receives_ordered_events_and_errors_propagate():
@@ -375,12 +401,12 @@ def test_mcp_scope_is_entered_and_exited_by_the_same_task():
     assert scopes == ["test", "test", "test"]
 
 
-def test_sync_hook_can_publish_to_other_extensions():
+def test_sync_agent_async_hook_can_publish_to_other_extensions():
     from zett_agent import InternalMessageEvent
 
     class Publisher(AgentExtension):
-        def on_message(self, context):
-            context.publish(InternalMessageEvent(message=AgentMessage(content="Check")))
+        async def on_message(self, context):
+            await context.publish(InternalMessageEvent(message=AgentMessage(content="Check")))
 
     with SyncAgent(EchoModel(), extensions=[Publisher()]) as agent:
         agent.run("hello")
@@ -488,16 +514,15 @@ def test_shutdown_closes_all_streams_even_when_one_cleanup_fails():
     assert not runtime._thread.is_alive()
 
 
-def test_cancelling_sync_generator_hook_waits_before_closing_generator():
+def test_sync_agent_cancellation_closes_async_generator_hook():
     started = Event()
-    release = Event()
     finished = Event()
 
     class SlowHook(AgentExtension):
-        def before_model_events(self, context):
+        async def before_model_events(self, context):
             try:
                 started.set()
-                assert release.wait(3)
+                await asyncio.Event().wait()
                 yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="slow")
             finally:
                 finished.set()
@@ -508,7 +533,6 @@ def test_cancelling_sync_generator_hook_waits_before_closing_generator():
             reader = pool.submit(next, stream, None)
             assert started.wait(3)
             closer = pool.submit(stream.close)
-            release.set()
             closer.result(timeout=5)
             reader.result(timeout=5)
         assert finished.is_set()
@@ -547,27 +571,5 @@ def test_callback_cannot_deadlock_by_closing_its_own_runtime():
 
     with SyncRuntime() as runtime:
         with SyncAgent(EchoModel(), runtime=runtime, event_dispatcher=Handler()) as agent:
-            with pytest.raises(RuntimeError, match="cannot close its own"):
-                agent.run("hello")
-
-
-@pytest.mark.parametrize("result", [None, [], ()])
-def test_plain_event_hook_can_return_empty_iterable_or_none(result):
-    class Hooks(AgentExtension):
-        def before_model_events(self, context):
-            return result
-
-    with SyncAgent(EchoModel(), extensions=[Hooks()]) as agent:
-        assert agent.run("hello").content == "1:hello"
-
-
-def test_generator_hook_cannot_close_its_own_runtime():
-    class Hooks(AgentExtension):
-        def before_model_events(self, context):
-            runtime.close()
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
-
-    with SyncRuntime() as runtime:
-        with SyncAgent(EchoModel(), extensions=[Hooks()], runtime=runtime) as agent:
             with pytest.raises(RuntimeError, match="cannot close its own"):
                 agent.run("hello")

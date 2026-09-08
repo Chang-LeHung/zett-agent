@@ -1,7 +1,7 @@
 """Application-side callbacks for events emitted by Agent.stream()."""
 
 from .events import AgentEvent, AgentEventType
-from .sync_runtime import SyncMethodsMixin, sync_hook
+from .sync_runtime import SyncMethodsMixin, _sync_callback
 
 
 class AgentEventDispatcher(SyncMethodsMixin):
@@ -12,6 +12,12 @@ class AgentEventDispatcher(SyncMethodsMixin):
     or custom payload. Awaiting dispatch preserves stream order and applies
     backpressure; callback failures and cancellation propagate to the caller.
     This class does not change the Agent lifecycle or consume its stream.
+
+    Async callbacks run on the Agent's event loop. Ordinary def callbacks are
+    adapted to worker-thread calls and awaited in the same stream order. They
+    receive the original AgentEvent, not a context proxy. GUI callbacks must
+    schedule visual updates on their UI thread. This adaptation is specific to
+    application dispatchers; Extension lifecycle hooks remain async-only.
 
     Examples:
         Usage::
@@ -47,7 +53,7 @@ class AgentEventDispatcher(SyncMethodsMixin):
         super().__init_subclass__(**kwargs)
         for name, value in tuple(vars(cls).items()):
             if name.startswith("on_") and name.endswith("_event") and callable(value):
-                setattr(cls, name, sync_hook(value))
+                setattr(cls, name, _sync_callback(value))
 
     async def dispatch(self, event: AgentEvent) -> None:
         """Await the callback named on_<event type>_event exactly once.

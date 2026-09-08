@@ -52,7 +52,7 @@ Model and tool hooks
    * - Hook
      - Boundary and constraints
    * - :meth:`~zett_agent.AgentExtension.before_model`
-     - Before prompt assembly; inspect or change context.state.messages and context.tools for this step.
+     - Receives context and ModelRequest; inspect the current request or change context.state.messages and context.tools.
    * - :meth:`~zett_agent.AgentExtension.after_model`
      - Complete AssistantMessage already appended; receives ModelResponse including usage.
    * - :meth:`~zett_agent.AgentExtension.before_tool`
@@ -69,7 +69,7 @@ Event-producing hooks
    * - Hook
      - Ordering
    * - :meth:`~zett_agent.AgentExtension.before_model_events`
-     - After before_model, before ModelRequest assembly. Supports CUSTOM and the compaction lifecycle.
+     - Receives context and an updated ModelRequest after before_model. Supports CUSTOM and the compaction lifecycle.
    * - :meth:`~zett_agent.AgentExtension.after_model_events`
      - After after_model and MODEL_COMPLETED, before tool dispatch or final-answer handling.
    * - :meth:`~zett_agent.AgentExtension.before_tool_events`
@@ -81,6 +81,12 @@ Skipped or cancelled tools do not trigger after_tool_events. Custom output is
 produced while the request is READY; it does not become a phase transition simply
 because its payload says "working". Do not synthesize MODEL_STARTED or completion
 events that are owned by the core loop.
+
+Both before-model hooks receive ``(context, request)``. The runtime refreshes
+request messages and tool definitions before each extension and again before
+the provider call. Request fields are frozen; edit ``context.state.messages``
+or ``context.tools`` to affect subsequent hooks and the provider. The supplied
+request is a shallow view at entry, not a live view of later list changes.
 
 Notification and input hooks
 --------------------------------

@@ -35,11 +35,13 @@ One model/tool cycle
 
 .. code-block:: text
 
-   before_model()
+   assemble initial ModelRequest
           |
-   before_model_events()     may yield CUSTOM / compaction events
+   before_model(context, request)
           |
-   assemble ModelRequest -> MODEL_STARTED -> deltas -> final ModelResponse
+   before_model_events(context, request)   may yield CUSTOM / compaction events
+          |
+   refresh ModelRequest -> MODEL_STARTED -> deltas -> final ModelResponse
           |
    append AssistantMessage -> after_model() -> MODEL_COMPLETED
           |

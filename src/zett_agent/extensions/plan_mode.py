@@ -10,6 +10,7 @@ from ..agent import AgentContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
 from ..messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage
+from ..model import ModelRequest
 from ..tools import AgentTool, render_tool_guidance, run_shell, tool
 from .events import ExtensionEvent, RunCancelledEvent
 from .external import ExternalEventExtension
@@ -307,8 +308,12 @@ class PlanModeExtension(ExternalEventExtension):
         if self.is_plan_mode(context.config.session_id):
             self._replace_plan_system_messages(context, baseline)
 
-    async def before_model(self, context: AgentContext) -> None:
+    async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
         """Apply an approved entry or exit before the next model step."""
+        self._apply_mode(context)
+
+    def _apply_mode(self, context: AgentContext) -> None:
+        """Apply session mode without invoking a model lifecycle hook manually."""
         baseline = self._baseline(context)
         if self.is_plan_mode(context.config.session_id):
             self._replace_plan_tools(context, baseline)
@@ -328,7 +333,7 @@ class PlanModeExtension(ExternalEventExtension):
         """
         if not result.success or call.name not in (ENTER_PLAN_MODE_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME):
             return
-        await self.before_model(context)
+        self._apply_mode(context)
         session_id = context.config.session_id
         if session_id in self._entered_events:
             self._entered_events.remove(session_id)

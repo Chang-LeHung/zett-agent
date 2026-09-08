@@ -326,7 +326,7 @@ async def test_context_rejects_duplicate_tool_registration() -> None:
 
 async def test_extension_can_stream_typed_events_before_the_primary_model():
     class VisiblePreprocessing(AgentExtension):
-        async def before_model_events(self, context):
+        async def before_model_events(self, context, request):
             yield AgentEvent(AgentEventType.COMPACTION_STARTED, context.config.session_id)
             yield AgentEvent(AgentEventType.COMPACTION_COMPLETED, context.config.session_id, applied=False)
 
@@ -722,7 +722,7 @@ async def test_extensions_receive_all_success_hooks_and_can_modify_messages():
             calls.append("before_run")
             assert context.state.messages[-1].content == "Add"
 
-        async def before_model(self, context):
+        async def before_model(self, context, request):
             calls.append("before_model")
 
         async def after_model(self, context, response):

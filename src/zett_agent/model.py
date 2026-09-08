@@ -40,6 +40,10 @@ class ModelRequest:
     therefore includes the current system instructions, restored context, and
     completed tool round trips in chronological order.
 
+    Before-model hooks also receive this type. Each hook receives a fresh
+    shallow view of context at entry; the provider receives a final rebuilt
+    request after preprocessing. Frozen fields do not freeze nested messages.
+
     Examples:
         Inspect the shape received by a custom adapter::
 

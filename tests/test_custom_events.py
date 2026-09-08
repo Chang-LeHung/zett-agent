@@ -21,7 +21,7 @@ async def test_custom_events_preserve_name_payload_order_and_phase(payload, comp
     custom = AgentEvent(AgentEventType.CUSTOM, "session", name="progress", payload=payload)
 
     class Extension(AgentExtension):
-        async def before_model_events(self, context):
+        async def before_model_events(self, context, request):
             if compacting:
                 yield AgentEvent(AgentEventType.COMPACTION_STARTED, "session")
             yield custom

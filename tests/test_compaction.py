@@ -14,6 +14,7 @@ from zett_agent import (
     CompactionExtension,
     ModelEvent,
     ModelEventType,
+    ModelRequest,
     ModelResponse,
     SystemMessage,
     ToolCall,
@@ -48,7 +49,8 @@ def context(messages):
 
 
 async def compact(extension, state):
-    return [event async for event in extension.before_model_events(state)]
+    request = ModelRequest(messages=tuple(state.state.messages))
+    return [event async for event in extension.before_model_events(state, request)]
 
 
 async def test_compaction_preserves_instructions_and_whole_tool_turn():
@@ -126,6 +128,8 @@ async def test_compaction_event_delivered_after_context_update(fail):
 
     class PrimaryModel:
         async def stream(self, request):
+            assert any(isinstance(message, CompactedMessage) for message in request.messages)
+            assert not any(message.content == "Old " * 500 for message in request.messages)
             if fail:
                 raise RuntimeError("Model failed")
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Done")))

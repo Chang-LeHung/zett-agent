@@ -248,7 +248,7 @@ def test_sync_agent_uses_async_hooks_with_original_context():
             context.input_message = UserMessage(content="transformed")
             identities[context] = "retained"
 
-        async def before_model_events(self, context):
+        async def before_model_events(self, context, request):
             assert identities[context] == "retained"
             yield AgentEvent(
                 type=AgentEventType.CUSTOM, session_id=context.config.session_id, name="sync", payload={"ok": True}
@@ -519,7 +519,7 @@ def test_sync_agent_cancellation_closes_async_generator_hook():
     finished = Event()
 
     class SlowHook(AgentExtension):
-        async def before_model_events(self, context):
+        async def before_model_events(self, context, request):
             try:
                 started.set()
                 await asyncio.Event().wait()

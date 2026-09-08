@@ -10,7 +10,7 @@ from ..events import AgentEvent, AgentEventType
 if TYPE_CHECKING:
     from ..agent import AgentConfig, AgentContext
     from ..messages import AssistantMessage, ToolCall, ToolMessage
-    from ..model import ModelResponse
+    from ..model import ModelRequest, ModelResponse
     from .events import ExtensionEvent
     from .external import ExternalEvent
 
@@ -81,8 +81,24 @@ class AgentRunHooksMixin:
 class AgentModelHooksMixin:
     """Hooks immediately before and after each primary model invocation."""
 
-    async def before_model(self, context: AgentContext) -> None:
-        """Run immediately before each model request is assembled."""
+    async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
+        """Inspect the current request before preprocessing a primary model call.
+
+        Request fields are frozen. Change messages through context.state.messages
+        and tools through context.tools; the runtime rebuilds these fields before
+        the next hook and before calling the provider. This is a shallow request
+        view, not an immutable copy of each message or tool definition.
+
+        Examples:
+            Inspect the tools offered in this iteration::
+
+                async def before_model(self, context, request):
+                    offered = {definition.name for definition in request.tools}
+                    if "write_file" in offered:
+                        context.state.messages.append(
+                            SystemMessage(content="Read existing files before editing.")
+                        )
+        """
 
     async def after_model(self, context: AgentContext, response: ModelResponse) -> None:
         """Run after the complete assistant message is appended."""
@@ -114,11 +130,15 @@ class AgentEventHooksMixin:
         """
         return False
 
-    async def before_model_events(self, context: AgentContext) -> AsyncIterator[AgentEvent]:
+    async def before_model_events(self, context: AgentContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
         """Stream extension-owned events before a primary model request.
 
         This hook is intended for visible preprocessing operations such as
         context compaction. CUSTOM events do not change the request phase.
+        Request contains the latest messages, tool definitions, and reasoning
+        effort at hook entry, including changes made by earlier hooks. After
+        changing context, use context itself for the updated values; the supplied
+        request is not a live view. The next hook receives a rebuilt request.
 
         Examples:
             Usage::

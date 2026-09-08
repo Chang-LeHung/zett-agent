@@ -95,8 +95,13 @@ class CompactionExtension(AgentExtension):
         encoding = tiktoken.get_encoding("o200k_base")
         return sum(len(encoding.encode_ordinary(repr(message))) for message in messages)
 
-    async def before_model_events(self, context: AgentContext) -> AsyncIterator[AgentEvent]:
-        """Stream compaction state while atomically replacing older context."""
+    async def before_model_events(self, context: AgentContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
+        """Stream compaction state while atomically replacing older context.
+
+        The incoming request describes the primary call. The summarizer uses
+        its own request and reasoning effort; context changes are reflected in
+        the primary request when the runtime rebuilds it after preprocessing.
+        """
         messages = context.state.messages
         if self.count_tokens(messages) <= self.max_tokens:
             return
@@ -121,7 +126,7 @@ class CompactionExtension(AgentExtension):
             AgentEventType.COMPACTION_STARTED,
             session_id=context.config.session_id,
         )
-        request = ModelRequest(
+        summary_request = ModelRequest(
             messages=(
                 SystemMessage(
                     content=(
@@ -139,7 +144,7 @@ class CompactionExtension(AgentExtension):
             reasoning_effort=self.reasoning_effort,
         )
         response = None
-        async with aclosing(self.model.stream(request)) as events:
+        async with aclosing(self.model.stream(summary_request)) as events:
             async for event in events:
                 if response is not None:
                     raise AgentProtocolError("Compaction model emitted events after its response")

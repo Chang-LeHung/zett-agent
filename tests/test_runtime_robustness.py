@@ -107,7 +107,7 @@ async def test_agent_rejects_incomplete_terminal_model_events(event, message):
 
 async def test_agent_rejects_extension_events_outside_the_pre_model_protocol():
     class InvalidExtension(AgentExtension):
-        async def before_model_events(self, context):
+        async def before_model_events(self, context, request):
             yield AgentEvent(AgentEventType.MODEL_STARTED, context.config.session_id)
 
     agent = await Agent.create(

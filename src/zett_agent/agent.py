@@ -786,18 +786,19 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
     ) -> AsyncIterator[AgentEvent]:
         """Run preprocessing and one model call, validate its stream, and persist output."""
         config, state = context.config, context.state
-        await self._notify_before_model(context)
-
-        async with aclosing(self._before_model_events(context)) as preprocessing:
-            async for event in preprocessing:
-                await self._apply_extension_event_phase(context, event)
-                yield event
-
         request = ModelRequest(
             messages=tuple(state.messages),
             tools=tuple(tool.definition for tool in context.tools.values()),
             reasoning_effort=reasoning_effort,
         )
+        await self._notify_before_model(context, request)
+
+        async with aclosing(self._before_model_events(context, request)) as preprocessing:
+            async for event in preprocessing:
+                await self._apply_extension_event_phase(context, event)
+                yield event
+
+        request = self._refresh_model_request(context, request)
         model_started = await self._start_model_generation(context)
         output_tracker = ModelOutputTracker()
         yield AgentEvent(
@@ -1083,13 +1084,28 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         for extension in self.extensions:
             await extension.before_run(context)
 
-    async def _notify_before_model(self, context: AgentContext) -> None:
-        for extension in self.extensions:
-            await extension.before_model(context)
+    @staticmethod
+    def _refresh_model_request(context: AgentContext, request: ModelRequest) -> ModelRequest:
+        """Capture current context while retaining per-call model options.
 
-    async def _before_model_events(self, context: AgentContext) -> AsyncIterator[AgentEvent]:
+        Preprocessing can replace history or tool registrations. Refresh before
+        each observer and the provider so neither sees stale pre-compaction input.
+        """
+        return replace(
+            request,
+            messages=tuple(context.state.messages),
+            tools=tuple(tool.definition for tool in context.tools.values()),
+        )
+
+    async def _notify_before_model(self, context: AgentContext, request: ModelRequest) -> None:
         for extension in self.extensions:
-            async with aclosing(extension.before_model_events(context)) as events:
+            await extension.before_model(context, self._refresh_model_request(context, request))
+
+    async def _before_model_events(self, context: AgentContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
+        for extension in self.extensions:
+            async with aclosing(
+                extension.before_model_events(context, self._refresh_model_request(context, request))
+            ) as events:
                 async for event in events:
                     yield event
 

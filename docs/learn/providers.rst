@@ -1,0 +1,71 @@
+Connect a model provider
+============================
+
+Choose an adapter
+---------------------
+
+.. list-table:: Built-in provider choices
+   :header-rows: 1
+   :widths: 26 36 38
+
+   * - Adapter
+     - Endpoint
+     - Application responsibility
+   * - :class:`~zett_agent.OpenAIProvider`
+     - OpenAI-compatible chat API
+     - Model name and API key; optional base URL
+   * - :class:`~zett_agent.DeepSeekProvider`
+     - DeepSeek OpenAI-style API
+     - Model name and API key
+   * - :class:`~zett_agent.AnthropicProvider`
+     - Anthropic-style API
+     - Model name, API key, optional base URL
+   * - :class:`~zett_agent.GoogleProvider`
+     - Google GenAI SDK
+     - Model name and API key
+   * - :class:`~zett_agent.OllamaProvider`
+     - Running Ollama server
+     - Installed model and reachable server URL
+
+Capabilities such as vision, reasoning, and tool choice depend on the model and
+endpoint. Selecting a reasoning enum does not guarantee reasoning text will be
+returned. No credentials are inferred by the Agent; your application supplies them.
+
+Complete network example
+----------------------------
+
+This program makes a real request and may incur charges. Set ``OPENAI_MODEL``
+and ``OPENAI_API_KEY`` securely in your terminal before running it. Do not paste
+keys into source, command output, or documentation.
+
+.. literalinclude:: ../_examples/real_provider.py
+   :language: python
+   :linenos:
+
+:download:`Download real_provider.py <../_examples/real_provider.py>`.
+
+.. code-block:: bash
+
+   uv run --directory backend/zett-agent python docs/_examples/real_provider.py
+
+Retries and proxies
+-----------------------
+
+``RetryOptions(base_delay=0.5, max_delay=8, max_retries=3)`` permits one initial
+attempt plus three retries, with delays of 0.5, 1, and 2 seconds. A longer series
+would stop growing at 8 seconds. The adapter retries only before any stream event
+has been emitted; failures halfway through output propagate to avoid replaying
+visible text or tool fragments.
+
+Default transports honor ``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, and
+``NO_PROXY``. A supplied custom transport controls its own routing.
+
+.. code-block:: bash
+
+   export HTTP_PROXY=http://127.0.0.1:8899
+   export HTTPS_PROXY=http://127.0.0.1:8899
+
+Always release the provider with ``await model.aclose()``. The client's lifetime
+does not imply ownership of an adapter shared with other clients.
+
+Implement your own adapter: :doc:`../extending/model-adapter`.

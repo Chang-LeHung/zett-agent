@@ -29,8 +29,10 @@ class _Inbox:
 class InternalMessageExtension(AgentExtension):
     """Receive internal instructions from publish() or external event delivery.
 
-    Example:
-        await context.publish(InternalMessageEvent(AgentMessage(content="Check the result.")))
+    Examples:
+        Usage::
+
+            await context.publish(InternalMessageEvent(AgentMessage(content="Check the result.")))
 
     External callers use name="internal_message" and a payload containing
     session_id, content, and optionally request_id. The Agent owns the per-run

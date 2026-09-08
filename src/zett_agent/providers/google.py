@@ -31,7 +31,18 @@ from .base import ProviderResponseError, RetryingProvider, _reasoning_effort_to_
 
 
 class GoogleProvider(RetryingProvider):
-    """Map official Google GenAI SDK streams and preserve signed replay parts."""
+    """Map official Google GenAI SDK streams and preserve signed replay parts.
+
+    Args:
+        model: Google model identifier used for content generation.
+        api_key: API credential supplied by the application.
+        transport: Optional HTTPX transport for test isolation or custom routing.
+        retry: Retry/backoff policy, applied before any model event is emitted.
+
+    Note:
+        ModelResponse retains model-scoped replay parts for subsequent calls.
+        Await aclose() to release the SDK and injected HTTP client.
+    """
 
     def __init__(
         self,

@@ -697,7 +697,7 @@ in SQLite and restored on later runs.
 Cancel the consuming asyncio task to interrupt generation. A running synchronous
 tool cannot be forcibly stopped by task cancellation.
 
-Native provider details stay in `providers.py`; they are not part of the core loop.
+Native provider details stay in `providers/`; they are not part of the core loop.
 Existing adapters: OpenAI, DeepSeek, Anthropic, Google, and Ollama.
 
 Provider HTTP clients trust the process environment by default. Standard terminal
@@ -712,6 +712,25 @@ uv run python examples/coding_agent.py
 
 An explicitly supplied custom HTTP transport takes precedence and does not use
 environment proxy mounts, which keeps mocked and embedded transports isolated.
+
+## Documentation
+
+From the repository root:
+
+```bash
+make docs                         # Build HTML from public source docstrings
+make docs-serve                   # Preview at http://127.0.0.1:8000
+make docs-serve DOCS_PORT=8080     # Choose a different local port
+make docs-check                   # Validate API coverage, examples, and links
+make docs-examples                # Run the 11 offline example programs
+make docs-ui-check                # Check desktop/mobile navigation and search
+```
+
+The reference includes every name exported by `zett_agent.__all__`, grouped
+into client, runtime, messages, events, models, providers, tools, storage,
+extensions, and constants. Edit Google-style source docstrings to update API
+descriptions; generated pages under `docs/_generated` are not checked in.
+Examples and model requests are not executed during documentation builds.
 
 ## Checks
 

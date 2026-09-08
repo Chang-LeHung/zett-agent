@@ -1,0 +1,28 @@
+/* A persistent global directory, not a current-section-only sidebar. */
+html { --pst-font-size-base: 16px; }
+.bd-main .bd-content .bd-article-container { max-width: 58rem; }
+.bd-sidebar-primary { width: 19rem; flex: 0 0 19rem; }
+.zett-navigation { font-size: .9rem; line-height: 1.5; padding: .5rem 0 2rem; }
+.zett-docs-home { display: block; font-size: 1rem; font-weight: 700; }
+.zett-version { color: var(--pst-color-text-muted); margin: .25rem 0 .8rem; }
+.zett-search-link { display: block; padding: .6rem .75rem; border: 1px solid var(--pst-color-border); border-radius: .4rem; margin-bottom: 1.1rem; }
+.zett-navigation ul { list-style: none; padding-left: .8rem; }
+.zett-navigation > ul { padding-left: 0; }
+.zett-navigation li { margin: .25rem 0; }
+.zett-navigation > ul > li > a { font-weight: 650; }
+.zett-navigation a { display: block; padding: .2rem .45rem; border-radius: .25rem; text-decoration: none; }
+.zett-navigation a:hover { background: var(--pst-color-surface); }
+.zett-navigation li.current > a { color: var(--pst-color-primary); background: var(--pst-color-surface); font-weight: 700; }
+.zett-hero { font-size: 1.15rem; line-height: 1.65; max-width: 48rem; }
+.zett-paths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0 2rem; }
+.bd-article .zett-path { padding: 1.15rem 1.3rem; border: 1px solid var(--pst-color-border); border-radius: .65rem; background: var(--pst-color-surface); }
+.zett-path p:last-child { margin-bottom: 0; }
+.zett-path strong { display: block; margin-bottom: .5rem; }
+pre { font-size: .86rem; }
+div.highlight { border-radius: .4rem; }
+dl.py > dt { overflow-wrap: anywhere; }
+table { font-size: .92rem; }
+@media (max-width: 600px) {
+  .zett-paths { grid-template-columns: 1fr; }
+  .zett-hero { font-size: 1.05rem; }
+}

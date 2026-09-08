@@ -27,10 +27,12 @@ class AgentClient:
     If a callback fails after completion, the request remains completed.
     Shared handlers must distinguish sessions using event.session_id.
 
-    Example:
-        agent = await Agent.create(model, config=AgentConfig(session_id="existing"))
-        client = AgentClient(agent, event_dispatcher=ConsoleEvents())
-        reply = await client.run("Continue")
+    Examples:
+        Usage::
+
+            agent = await Agent.create(model, config=AgentConfig(session_id="existing"))
+            client = AgentClient(agent, event_dispatcher=ConsoleEvents())
+            reply = await client.run("Continue")
     """
 
     def __init__(self, agent: Agent, *, event_dispatcher: AgentEventDispatcher | None = None) -> None:
@@ -50,6 +52,20 @@ class AgentClient:
 
         Use aclosing(client.stream(...)) when stopping consumption early. Do
         not dispatch yielded events manually if a handler is already bound.
+
+        Args:
+            message: User text or an explicit multimodal UserMessage.
+            config: Optional per-request session and request identity.
+            reasoning_effort: Per-request override of the model reasoning level.
+            metadata: Request-scoped JSON data supplied to extensions.
+            tags: Request-scoped classifications supplied to extensions.
+
+        Yields:
+            Original AgentEvent objects after the bound callback completes.
+
+        Note:
+            Closing early cancels unfinished work. Provider, callback, and
+            cancellation exceptions are not converted into synthetic events.
         """
         async with aclosing(
             self.agent.stream(message, config=config, reasoning_effort=reasoning_effort, metadata=metadata, tags=tags)
@@ -68,7 +84,22 @@ class AgentClient:
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage:
-        """Collect a complete stream with callbacks and return its final answer."""
+        """Collect a complete stream with callbacks and return its final answer.
+
+        Args:
+            message: User text or an explicit multimodal UserMessage.
+            config: Per-request identity; omitted to reuse the initialized session.
+            reasoning_effort: Override the runtime default for this request only.
+            metadata: JSON-compatible application data for persistence/extensions.
+            tags: JSON-compatible classifications for persistence/extensions.
+
+        Returns:
+            The final AssistantMessage after the stream closes successfully.
+
+        Raises:
+            AgentProtocolError: If no final answer is emitted or the runtime is
+                not initialized. Model and callback failures propagate unchanged.
+        """
         result: AssistantMessage | None = None
         async with aclosing(
             self.stream(message, config=config, reasoning_effort=reasoning_effort, metadata=metadata, tags=tags)
@@ -100,16 +131,36 @@ async def create_agent(
     options pass through unchanged; extensions=None keeps Agent defaults.
     The supplied model and extension resources remain caller-owned.
 
-    Example:
-        from zett_agent import AgentEvent, AgentEventDispatcher, create_agent
+    Args:
+        model: Provider adapter or custom implementation of AgentModel.
+        config: Stable session identity; omitted to generate a new UUIDv7 ID.
+        system_prompt: Initial instructions rebuilt before each request.
+        tools: Explicit typed tools available to the runtime.
+        extensions: Lifecycle extensions. None keeps default memory and tool
+            guidance; an explicit sequence replaces those defaults.
+        reasoning_effort: Default reasoning level, overridable per request.
+        max_iterations: Maximum model calls for each user or internal message.
+        max_internal_messages: Maximum internal continuations per request.
+        event_dispatcher: Optional callbacks awaited in stream order.
 
-        class ConsoleEvents(AgentEventDispatcher):
-            async def on_text_delta_event(self, event: AgentEvent) -> None:
-                print(event.delta, end="", flush=True)
+    Returns:
+        An initialized AgentClient wrapping an ordinary Agent.
 
-        client = await create_agent(model, event_dispatcher=ConsoleEvents())
-        reply = await client.run("Hello")
-        await client.run("Continue in the same session")
+    Raises:
+        ValueError: If runtime limits or extension/tool identities are invalid.
+
+    Examples:
+        Usage::
+
+            from zett_agent import AgentEvent, AgentEventDispatcher, create_agent
+
+            class ConsoleEvents(AgentEventDispatcher):
+                async def on_text_delta_event(self, event: AgentEvent) -> None:
+                    print(event.delta, end="", flush=True)
+
+            client = await create_agent(model, event_dispatcher=ConsoleEvents())
+            reply = await client.run("Hello")
+            await client.run("Continue in the same session")
     """
     agent = await Agent.create(
         model,

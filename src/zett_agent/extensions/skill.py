@@ -101,9 +101,11 @@ class SkillExtension(AgentExtension):
     only each skill's name, description, and location. Complete instructions
     enter context only after the model explicitly calls ``read_skill``.
 
-    Example:
-        extension = SkillExtension([Path(".agent/skills"), Path("~/.skills")])
-        agent = await Agent.create(model, config=config, extensions=[extension])
+    Examples:
+        Usage::
+
+            extension = SkillExtension([Path(".agent/skills"), Path("~/.skills")])
+            agent = await Agent.create(model, config=config, extensions=[extension])
     """
 
     priority = 80

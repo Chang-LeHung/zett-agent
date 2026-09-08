@@ -48,13 +48,14 @@ class ExternalEventExtension(AgentExtension):
     base owns pending Futures, routing, duplicate rejection, thread-safe wake-up,
     and cleanup. It does not send HTTP responses or render UI components.
 
-    Routing:
+    Args:
         response_event_name: Accepted inbound name, or a collection of names.
         correlation_field: Payload key identifying the operation, usually
             tool_call_id. Its value must equal the ID passed to the wait helper.
-        config: Passed separately to accept(config, event). Its session_id and
-            optional request_id select the waiting request. Routing identifiers
-            are not injected into the event payload by Agent.
+
+    The configuration passed separately to accept(config, event) selects the
+    waiting session and optional request ID. Agent does not inject routing
+    identifiers into the payload.
 
     Lifecycle::
 

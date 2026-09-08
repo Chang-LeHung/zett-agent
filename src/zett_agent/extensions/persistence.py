@@ -25,38 +25,38 @@ class RawMessageRecord:
     request_id: str
     sequence: int
     message: AnyMessage
-    # Request-scoped application data captured independently of model messages.
+    #: Request-scoped application data captured independently of model messages.
     metadata: dict[str, JsonValue]
-    # Request-scoped classifications captured independently of model messages.
+    #: Request-scoped classifications captured independently of model messages.
     tags: dict[str, JsonValue]
-    # UTC operation start; GENERATING for assistants, RUNNING_TOOL for tools,
-    # and append time for user-authored or directly imported messages.
+    #: UTC operation start; GENERATING for assistants, RUNNING_TOOL for tools,
+    #: and append time for user-authored or directly imported messages.
     started_at: datetime
-    # UTC operation completion; equal to started_at for instantaneous messages.
+    #: UTC operation completion; equal to started_at for instantaneous messages.
     completed_at: datetime
-    # Total operation duration in nanoseconds, measured by a monotonic clock.
+    #: Total operation duration in nanoseconds, measured by a monotonic clock.
     duration_ns: int
-    # UTC arrival time of the first streamed reasoning delta, when present.
+    #: UTC arrival time of the first streamed reasoning delta, when present.
     reasoning_started_at: datetime | None
-    # UTC boundary where reasoning ended before content, tools, or completion.
+    #: UTC boundary where reasoning ended before content, tools, or completion.
     reasoning_completed_at: datetime | None
-    # Monotonic elapsed reasoning time in nanoseconds; None if not observed.
+    #: Monotonic elapsed reasoning time in nanoseconds; None if not observed.
     reasoning_duration_ns: int | None
-    # UTC arrival time of the first streamed answer-content delta, when present.
+    #: UTC arrival time of the first streamed answer-content delta, when present.
     content_started_at: datetime | None
-    # UTC final-response boundary for a streamed answer-content segment.
+    #: UTC final-response boundary for a streamed answer-content segment.
     content_completed_at: datetime | None
-    # Monotonic elapsed content-streaming time in nanoseconds; None if absent.
+    #: Monotonic elapsed content-streaming time in nanoseconds; None if absent.
     content_duration_ns: int | None
-    # Provider-reported prompt tokens for an assistant model response.
+    #: Provider-reported prompt tokens for an assistant model response.
     input_tokens: int | None
-    # Provider-reported completion tokens, including reasoning when applicable.
+    #: Provider-reported completion tokens, including reasoning when applicable.
     output_tokens: int | None
-    # Input tokens served from a provider cache.
+    #: Input tokens served from a provider cache.
     cache_read_tokens: int | None
-    # Input tokens written into a provider cache when separately reported.
+    #: Input tokens written into a provider cache when separately reported.
     cache_write_tokens: int | None
-    # Reasoning tokens included within output_tokens when separately reported.
+    #: Reasoning tokens included within output_tokens when separately reported.
     reasoning_tokens: int | None
     created_at: datetime
     updated_at: datetime
@@ -217,8 +217,8 @@ class _Request:
 
     request_id: str = field(default_factory=new_uuid7)
     snapshot_version: int = 0
-    # One Raw Log sequence for each non-system context position. A checkpoint
-    # position maps to the last original message represented by that checkpoint.
+    #: One Raw Log sequence for each non-system context position. A checkpoint
+    #: position maps to the last original message represented by that checkpoint.
     context_sequences: list[int] = field(default_factory=list)
 
 
@@ -238,12 +238,14 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
     Raw messages remain immutable. A compaction event stores only its new
     CompactedMessage; recent context continues to live in the Raw Log.
 
-    Example:
-        agent = await Agent.create(model, config=config, extensions=[
-            CustomSessionExtension(client),
-            ToolGuidelinesExtension(),
-            CompactionExtension(model),
-        ])
+    Examples:
+        Usage::
+
+            agent = await Agent.create(model, config=config, extensions=[
+                CustomSessionExtension(client),
+                ToolGuidelinesExtension(),
+                CompactionExtension(model),
+            ])
     """
 
     def __init__(self, storage: StorageT) -> None:

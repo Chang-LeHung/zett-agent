@@ -28,6 +28,14 @@ class CompactionExtension(AgentExtension):
     cutoff, including tool calls and results. The current turn is never split.
     A single oversized turn therefore cannot be compacted by this extension.
 
+    Args:
+        model: Model used to summarize older dialogue, possibly separate from
+            the primary response model.
+        max_tokens: Estimated context threshold that triggers compaction.
+        keep_recent_tokens: Minimum recent token budget, extended to whole turns.
+        count_tokens: Optional provider-specific message token counter.
+        reasoning_effort: Reasoning level used by the summary model.
+
     Visible state transitions::
 
         +---------------+
@@ -55,12 +63,14 @@ class CompactionExtension(AgentExtension):
     If the threshold is not crossed, no compaction event is emitted and the
     request moves directly from primary-ready to the primary model.
 
-    Example:
-        agent = await Agent.create(model, config=config, extensions=[
-            InMemoryMessageAccumulator(),
-            ToolGuidelinesExtension(),
-            CompactionExtension(model, max_tokens=128_000, keep_recent_tokens=32_000),
-        ])
+    Examples:
+        Usage::
+
+            agent = await Agent.create(model, config=config, extensions=[
+                InMemoryMessageAccumulator(),
+                ToolGuidelinesExtension(),
+                CompactionExtension(model, max_tokens=128_000, keep_recent_tokens=32_000),
+            ])
 
     Only the active message list is changed. Pair this extension with
     SessionPersistenceExtension when durable raw history and snapshots are needed.

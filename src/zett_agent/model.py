@@ -24,8 +24,11 @@ class ReasoningEffort(StrEnum):
 class ToolDefinition:
     """Provider-neutral tool metadata supplied with a model request."""
 
+    #: Unique provider-visible function name.
     name: str
+    #: Natural-language purpose used by the model to select this tool.
     description: str
+    #: JSON Schema describing the tool's keyword arguments.
     parameters: Mapping[str, Any]
 
 
@@ -33,11 +36,14 @@ class ToolDefinition:
 class ModelRequest:
     """Complete input for one model step in an agent run."""
 
+    #: Fully assembled context, including instructions and tool round trips.
     messages: Sequence[AnyMessage]
+    #: Tools exposed for this model step; empty means no tool definitions.
     tools: Sequence[ToolDefinition] = ()
+    #: Desired reasoning level; provider capabilities determine its mapping.
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
 
-    # Optional name of the single tool the provider must call for schema-bound output.
+    #: Optional name of the single tool the provider must call for schema-bound output.
     tool_choice: str | None = None
 
 
@@ -49,16 +55,18 @@ class RetryOptions:
     until max_delay. max_retries counts additional attempts, not the initial
     request; zero disables retries. No sleep occurs after the final failure.
 
-    Example:
-        RetryOptions(base_delay=1.0, max_delay=5.0, max_retries=4)
-        # At most five requests, separated by 1, 2, 4, and 5 seconds.
+    Examples:
+        Usage::
+
+            RetryOptions(base_delay=1.0, max_delay=5.0, max_retries=4)
+            # At most five requests, separated by 1, 2, 4, and 5 seconds.
     """
 
-    # Initial retry delay in seconds; zero allows immediate retries.
+    #: Initial retry delay in seconds; zero allows immediate retries.
     base_delay: float = 0.25
-    # Hard upper bound in seconds, including the first retry delay.
+    #: Hard upper bound in seconds, including the first retry delay.
     max_delay: float = 8.0
-    # Maximum additional requests after transient failures.
+    #: Maximum additional requests after transient failures.
     max_retries: int = 3
 
     def __post_init__(self) -> None:
@@ -88,10 +96,15 @@ class ModelUsage:
     makes totals and cache-hit ratios comparable across provider schemas.
     """
 
+    #: Total input tokens, including cached input and cache writes.
     input_tokens: int = 0
+    #: Total generated tokens, including reasoning tokens when reported.
     output_tokens: int = 0
+    #: Input tokens reused from the provider cache, not extra input tokens.
     cache_read_tokens: int = 0
+    #: Input tokens written to the provider cache, not extra input tokens.
     cache_write_tokens: int = 0
+    #: Reasoning subset of output_tokens; zero when not reported.
     reasoning_tokens: int = 0
 
     def __post_init__(self) -> None:
@@ -113,6 +126,7 @@ class ModelUsage:
 
     @property
     def total_tokens(self) -> int:
+        """Return input plus output without double-counting cache or reasoning."""
         return self.input_tokens + self.output_tokens
 
     @property
@@ -127,8 +141,11 @@ class ModelUsage:
 class ModelResponse:
     """Final normalized response for one model step."""
 
+    #: Complete assistant output, including any tool calls and replay blocks.
     message: AssistantMessage
+    #: Provider completion reason, or None when unavailable.
     finish_reason: str | None = None
+    #: Normalized usage for this model call, not the entire conversation.
     usage: ModelUsage = field(default_factory=ModelUsage)
 
 
@@ -136,9 +153,13 @@ class ModelResponse:
 class ToolCallDelta:
     """One streamed fragment of a model-requested tool call."""
 
+    #: Zero-based tool-call index used to assemble parallel streamed fragments.
     index: int
+    #: Incremental call identifier; may be empty after the initial fragment.
     id_delta: str = ""
+    #: Incremental function name; concatenate before executing the tool.
     name_delta: str = ""
+    #: Partial serialized arguments; not necessarily valid standalone JSON.
     arguments_delta: str = ""
 
     def __post_init__(self) -> None:
@@ -161,25 +182,33 @@ class ModelEventType(StrEnum):
 class ModelEvent:
     """One provider-neutral model stream event."""
 
+    #: Discriminator indicating which optional event field is populated.
     type: ModelEventType
+    #: Incremental answer or reasoning text for the corresponding delta type.
     delta: str = ""
+    #: Partial tool identifier/name/arguments for TOOL_CALL_DELTA events.
     tool_call_delta: ToolCallDelta | None = None
+    #: Complete final response, present only for RESPONSE events.
     response: ModelResponse | None = None
 
     @classmethod
     def text(cls, delta: str) -> ModelEvent:
+        """Create one answer-text fragment event."""
         return cls(ModelEventType.TEXT_DELTA, delta=delta)
 
     @classmethod
     def reasoning(cls, delta: str) -> ModelEvent:
+        """Create one provider-reported reasoning fragment event."""
         return cls(ModelEventType.REASONING_DELTA, delta=delta)
 
     @classmethod
     def tool_call(cls, delta: ToolCallDelta) -> ModelEvent:
+        """Create one tool-call fragment event; this does not execute a tool."""
         return cls(ModelEventType.TOOL_CALL_DELTA, tool_call_delta=delta)
 
     @classmethod
     def completed(cls, response: ModelResponse) -> ModelEvent:
+        """Create the single terminal response event for a successful model call."""
         return cls(ModelEventType.RESPONSE, response=response)
 
 
@@ -187,8 +216,8 @@ class ModelEvent:
 class AgentModel(Protocol):
     """Model adapter boundary required by the core agent loop."""
 
-    # Model-owned backoff policy; max_retries=0 disables retries.
-    # This configuration never belongs to ModelRequest.
+    #: Model-owned backoff policy; max_retries=0 disables retries.
+    #: This configuration never belongs to ModelRequest.
     retry: RetryOptions = RetryOptions()
 
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:

@@ -7,7 +7,20 @@ from .base import _OpenAIStyleProvider
 
 
 class DeepSeekProvider(_OpenAIStyleProvider):
-    """DeepSeek streaming adapter implemented through OpenAI-compatible protocol."""
+    """Stream DeepSeek through its OpenAI-compatible protocol.
+
+    Args:
+        model: DeepSeek model identifier accepted by the endpoint.
+        api_key: API credential supplied by the application.
+        transport: Optional HTTPX transport for custom routing or tests.
+        base_url: API root; None uses the default DeepSeek v1 endpoint.
+        temperature: Optional provider sampling temperature.
+        retry: Model-owned retry/backoff policy; never restarts an emitted stream.
+
+    Note:
+        Cache-hit counters are normalized into ModelUsage. Reasoning deltas
+        are emitted only when returned by the provider. Close with aclose().
+    """
 
     def __init__(
         self,

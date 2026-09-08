@@ -39,7 +39,7 @@ class AgentEventType(StrEnum):
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"
-    # An unexecuted call has a persisted skipped result because steering took over.
+    #: An unexecuted call has a persisted skipped result because steering took over.
     TOOL_SKIPPED = "tool_skipped"
     STEERING_STARTED = "steering_started"
     STEERING_COMPLETED = "steering_completed"
@@ -307,37 +307,37 @@ class AgentEvent:
     """One event; fields are populated only when relevant to its type."""
 
     type: AgentEventType
-    # Session that owns the run emitting this event.
+    #: Session that owns the run emitting this event.
     session_id: str
-    # Exclusive request phase when this event was emitted.
+    #: Exclusive request phase when this event was emitted.
     phase: AgentPhase | None = None
-    # Incremental text or reasoning.
+    #: Incremental text or reasoning.
     delta: str = ""
-    # Incomplete tool arguments for display, never for execution.
+    #: Incomplete tool arguments for display, never for execution.
     tool_call_delta: ToolCallDelta | None = None
-    # Complete invocations associated with a tool event. Current execution emits
-    # one item per event; the list shape also supports future concurrent batches.
+    #: Complete invocations associated with a tool event. Current execution emits
+    #: one item per event; the list shape also supports future concurrent batches.
     tool_calls: list[ToolCall] = field(default_factory=list)
-    # Final model response, including usage.
+    #: Final model response, including usage.
     response: ModelResponse | None = None
-    # Tool result or final assistant answer.
+    #: Tool result or final assistant answer.
     message: AssistantMessage | ToolMessage | None = None
-    # Internal instruction associated with INTERNAL_MESSAGE_STARTED/COMPLETED.
+    #: Internal instruction associated with INTERNAL_MESSAGE_STARTED/COMPLETED.
     internal_message: AgentMessage | None = None
-    # User input associated with STEERING_STARTED/COMPLETED/INTERRUPTED.
+    #: User input associated with STEERING_STARTED/COMPLETED/INTERRUPTED.
     steering_message: UserMessage | None = None
-    # Tool failure; skipped calls have success=False but no execution exception.
-    # Model and cancellation exceptions propagate to the caller.
+    #: Tool failure; skipped calls have success=False but no execution exception.
+    #: Model and cancellation exceptions propagate to the caller.
     error: Exception | None = None
-    # Applied compaction details, populated only by COMPACTION_COMPLETED.
+    #: Applied compaction details, populated only by COMPACTION_COMPLETED.
     compaction: CompactionEvent | None = None
-    # Whether a completed compaction replaced context; null for other events.
+    #: Whether a completed compaction replaced context; null for other events.
     applied: bool | None = None
-    # Stable event name used by consumers to match one kind of CUSTOM event.
-    # This field is required and must be non-empty when type is CUSTOM.
+    #: Stable event name used by consumers to match one kind of CUSTOM event.
+    #: This field is required and must be non-empty when type is CUSTOM.
     name: str | None = None
-    # Extension-owned data for CUSTOM events. Extensions targeting JSON/SSE
-    # clients must supply JSON-serializable keys and values.
+    #: Extension-owned data for CUSTOM events. Extensions targeting JSON/SSE
+    #: clients must supply JSON-serializable keys and values.
     payload: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:

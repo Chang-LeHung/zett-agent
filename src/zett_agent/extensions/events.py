@@ -23,33 +23,33 @@ class MessageTiming:
     clock readings themselves are intentionally not persisted.
     """
 
-    # UTC time when processing began. For assistant and tool messages this is
-    # the transition into GENERATING and RUNNING_TOOL, respectively. A directly
-    # appended or user-authored message uses its append time.
+    #: UTC time when processing began. For assistant and tool messages this is
+    #: the transition into GENERATING and RUNNING_TOOL, respectively. A directly
+    #: appended or user-authored message uses its append time.
     started_at: datetime
-    # UTC time when processing ended. For assistant and tool messages this is
-    # the transition back to READY after the operation finished.
+    #: UTC time when processing ended. For assistant and tool messages this is
+    #: the transition back to READY after the operation finished.
     completed_at: datetime
-    # Total elapsed processing time in nanoseconds, calculated from monotonic
-    # clock readings rather than by subtracting the UTC timestamps.
+    #: Total elapsed processing time in nanoseconds, calculated from monotonic
+    #: clock readings rather than by subtracting the UTC timestamps.
     duration_ns: int
-    # UTC arrival time of the first non-empty reasoning delta. None when the
-    # model did not stream reasoning for this message.
+    #: UTC arrival time of the first non-empty reasoning delta. None when the
+    #: model did not stream reasoning for this message.
     reasoning_started_at: datetime | None = None
-    # UTC time when reasoning gave way to content, a tool call, or the final
-    # response. None when no reasoning segment was observed.
+    #: UTC time when reasoning gave way to content, a tool call, or the final
+    #: response. None when no reasoning segment was observed.
     reasoning_completed_at: datetime | None = None
-    # Elapsed reasoning time in nanoseconds measured with a monotonic clock.
-    # None when no complete reasoning segment was observed.
+    #: Elapsed reasoning time in nanoseconds measured with a monotonic clock.
+    #: None when no complete reasoning segment was observed.
     reasoning_duration_ns: int | None = None
-    # UTC arrival time of the first non-empty answer-content delta. None for
-    # messages without streamed answer content, including tool messages.
+    #: UTC arrival time of the first non-empty answer-content delta. None for
+    #: messages without streamed answer content, including tool messages.
     content_started_at: datetime | None = None
-    # UTC time of the final model response after streamed content. None when no
-    # content segment was observed.
+    #: UTC time of the final model response after streamed content. None when no
+    #: content segment was observed.
     content_completed_at: datetime | None = None
-    # Elapsed answer-content streaming time in nanoseconds measured with a
-    # monotonic clock. None when no complete content segment was observed.
+    #: Elapsed answer-content streaming time in nanoseconds measured with a
+    #: monotonic clock. None when no complete content segment was observed.
     content_duration_ns: int | None = None
 
     def __post_init__(self) -> None:
@@ -94,8 +94,8 @@ class MessageAppendedEvent(ExtensionEvent):
 
     message: AnyMessage
     timing: MessageTiming
-    # Provider-reported usage for an assistant model response. User, system,
-    # tool, and directly imported messages do not consume a model response.
+    #: Provider-reported usage for an assistant model response. User, system,
+    #: tool, and directly imported messages do not consume a model response.
     usage: ModelUsage | None = None
 
     def __post_init__(self) -> None:
@@ -140,9 +140,9 @@ class PhaseTransitionEvent(ExtensionEvent):
 
     previous_phase: AgentPhase
     current_phase: AgentPhase
-    # UTC wall-clock time suitable for persistence, logs, and user interfaces.
+    #: UTC wall-clock time suitable for persistence, logs, and user interfaces.
     occurred_at: datetime
-    # Process-local monotonic reading used only to calculate elapsed durations.
+    #: Process-local monotonic reading used only to calculate elapsed durations.
     monotonic_ns: int
 
 
@@ -154,11 +154,11 @@ class RunCancelledEvent(ExtensionEvent):
     It does not suppress CancelledError or GeneratorExit.
     """
 
-    # Active operation interrupted by cancellation.
+    #: Active operation interrupted by cancellation.
     previous_phase: AgentPhase
-    # UTC cancellation time, shared with the corresponding phase transition.
+    #: UTC cancellation time, shared with the corresponding phase transition.
     occurred_at: datetime
-    # Monotonic cancellation boundary for measuring elapsed time.
+    #: Monotonic cancellation boundary for measuring elapsed time.
     monotonic_ns: int
 
 
@@ -166,9 +166,9 @@ class RunCancelledEvent(ExtensionEvent):
 class ModelOutputLifecycleEvent(ExtensionEvent):
     """A precise boundary within one streamed model response."""
 
-    # UTC wall-clock time suitable for persistence, logs, and user interfaces.
+    #: UTC wall-clock time suitable for persistence, logs, and user interfaces.
     occurred_at: datetime
-    # Process-local monotonic reading used only to calculate elapsed durations.
+    #: Process-local monotonic reading used only to calculate elapsed durations.
     monotonic_ns: int
 
     @classmethod
@@ -206,11 +206,11 @@ class CompactionEvent(ExtensionEvent):
     are context positions, not durable raw-log IDs or user-turn numbers.
     """
 
-    # First and last messages folded into the checkpoint.
+    #: First and last messages folded into the checkpoint.
     compressed_from: int
     compressed_to: int
-    # First and last messages retained without modification.
+    #: First and last messages retained without modification.
     kept_from: int
     kept_to: int
-    # Exact checkpoint content now present in the active context.
+    #: Exact checkpoint content now present in the active context.
     summary: str

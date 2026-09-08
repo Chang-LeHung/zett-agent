@@ -1,0 +1,88 @@
+"""Run a bounded goal review using the normal Agent as a private evaluator."""
+
+import asyncio
+from collections.abc import AsyncIterator
+
+from zett_agent import (
+    AgentEvent,
+    AgentEventDispatcher,
+    AssistantMessage,
+    GoalExtension,
+    ModelEvent,
+    ModelRequest,
+    ModelResponse,
+    RetryOptions,
+    SubAgentDefinition,
+    ToolCall,
+    ToolMessage,
+    create_agent,
+)
+
+
+class DraftModel:
+    retry = RetryOptions(max_retries=0)
+
+    def __init__(self) -> None:
+        self.attempt = 0
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        self.attempt += 1
+        answer = "A draft without tests." if self.attempt == 1 else "Implementation and tests are complete."
+        yield ModelEvent.text(answer)
+        yield ModelEvent.completed(ModelResponse(AssistantMessage(content=answer)))
+
+
+class ReviewModel:
+    """Script review decisions; real evaluators must inspect actual evidence."""
+
+    retry = RetryOptions(max_retries=0)
+
+    def __init__(self) -> None:
+        self.reviews = 0
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        if isinstance(request.messages[-1], ToolMessage):
+            message = AssistantMessage(content="Decision submitted.")
+        else:
+            self.reviews += 1
+            achieved = self.reviews > 1
+            message = AssistantMessage(
+                tool_calls=(
+                    ToolCall(
+                        "review-1",
+                        "report_goal_evaluation",
+                        {
+                            "achieved": achieved,
+                            "summary": "Verified" if achieved else "Tests missing",
+                            "remaining_work": [] if achieved else ["Add tests"],
+                            "next_instruction": None if achieved else "Add and run the tests.",
+                        },
+                    ),
+                )
+            )
+        yield ModelEvent.completed(ModelResponse(message))
+
+
+class GoalEvents(AgentEventDispatcher):
+    async def on_internal_message_started_event(self, event: AgentEvent) -> None:
+        print("Continuing after private review")
+
+
+async def main() -> None:
+    reviewer = ReviewModel()
+    definition = SubAgentDefinition(
+        name="review",
+        description="verify goal completion",
+        system_prompt="Inspect evidence and call report_goal_evaluation.",
+        model=reviewer,
+    )
+    client = await create_agent(
+        DraftModel(), extensions=[GoalExtension(definition, max_iterations=2)], event_dispatcher=GoalEvents()
+    )
+    result = await client.run("/goal Implement the change with tests")
+    assert reviewer.reviews == 2
+    print(result.content)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

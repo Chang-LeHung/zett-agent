@@ -185,10 +185,21 @@ class SQLiteSessionStorage:
     Message metadata and tags live in each Raw Log message JSON envelope. Only
     compaction creates snapshots.
 
-    Example:
-        storage = SQLiteSessionStorage(Path.home() / ".zett-agent" / "sessions.sqlite3")
-        # Register SessionPersistenceExtension(storage), then close when finished.
-        storage.close()
+    Args:
+        path: SQLite file path. None uses ``~/.zett-agent/sessions.sqlite3``.
+            Parent directories and ORM tables are created during construction.
+
+    Note:
+        Methods named async still perform synchronous local SQLAlchemy work.
+        Close the owned connection pool explicitly. Tests must pass a temporary
+        file and never use the default user database.
+
+    Examples:
+        Usage::
+
+            storage = SQLiteSessionStorage(Path.home() / ".zett-agent" / "sessions.sqlite3")
+            # Register SessionPersistenceExtension(storage), then close when finished.
+            storage.close()
     """
 
     def __init__(self, path: str | Path | None = None) -> None:
@@ -259,6 +270,19 @@ class SQLiteSessionStorage:
         context, while a conversation UI must display the original messages.
         ``after_sequence`` and ``through_sequence`` optionally restrict the Raw
         Log sequence range; ``offset`` and ``limit`` paginate that filtered range.
+
+        Args:
+            session_id: Conversation to query.
+            after_sequence: Exclusive lower sequence bound, defaulting to zero.
+            through_sequence: Inclusive upper bound, or None for no upper bound.
+            limit: Positive page size.
+            offset: Non-negative number of matching messages to skip.
+
+        Returns:
+            Typed raw records in ascending sequence order; empty if none match.
+
+        Raises:
+            ValueError: If a bound or pagination argument is outside its allowed range.
         """
         if after_sequence < 0:
             raise ValueError("after_sequence cannot be negative")
@@ -474,6 +498,15 @@ class SQLiteSessionStorage:
         )
 
     async def load(self, session_id: str) -> SessionView:
+        """Restore the latest checkpoint and the original messages after its boundary.
+
+        Args:
+            session_id: Stable conversation identifier.
+
+        Returns:
+            A typed SessionView containing the snapshot and ordered raw tail.
+            An unknown session produces an empty view without creating records.
+        """
         with self._session_scope() as session:
             session_row = session.get(AgentSessionModel, session_id)
             snapshot_row = self._latest(session, session_id)
@@ -508,6 +541,27 @@ class SQLiteSessionStorage:
         tags: Mapping[str, JsonValue] | None = None,
         usage: ModelUsage | None = None,
     ) -> int:
+        """Append one original message and return its new per-session sequence.
+
+        Args:
+            session_id: Owning conversation, created on first append if needed.
+            request_id: Correlation ID; repeated IDs do not deduplicate writes.
+            message: Original provider-neutral user, assistant, tool, or agent input.
+            timing: Observed operation timing; None records an instantaneous append.
+            parent_session_id: Immutable parent link for delegated conversations.
+            title: Optional display title used when creating the session.
+            agent_name: Optional display name used when creating the session.
+            metadata: Request-scoped JSON data, separate from model message content.
+            tags: JSON classifications with non-empty keys.
+            usage: Normalized provider counters, allowed only for assistant messages.
+
+        Returns:
+            The strictly increasing sequence assigned to the stored record.
+
+        Raises:
+            ValueError: If metadata, session display values, parent linkage, or
+                the message/usage combination is invalid.
+        """
         if title is not None and (not title.strip() or len(title) > 200):
             raise ValueError("Session title must contain between 1 and 200 characters")
         if agent_name is not None and (not agent_name.strip() or len(agent_name) > 64):
@@ -582,6 +636,26 @@ class SQLiteSessionStorage:
         compacted_through_sequence: int,
         expected_version: int,
     ) -> ContextSnapshot:
+        """Create an immutable compaction checkpoint using optimistic version checking.
+
+        Args:
+            session_id: Conversation whose context was compacted.
+            compacted_message: Summary replacing older dialogue in model context.
+            compacted_through_sequence: Last Raw Log message represented by the
+                summary; later records remain the replay tail.
+            expected_version: Last snapshot version seen by the caller, or zero
+                before the first checkpoint.
+
+        Returns:
+            The new checkpoint with its incremented version and UTC timestamps.
+
+        Raises:
+            ValueError: If the version is stale, the boundary is outside the Raw
+                Log, or the boundary does not advance beyond the previous snapshot.
+
+        Note:
+            This operation never changes or deletes original Raw Log messages.
+        """
         with self._session_scope() as session:
             latest = self._latest(session, session_id)
             version = latest.version if latest else 0

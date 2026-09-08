@@ -24,17 +24,21 @@ class AgentSetupHooksMixin:
         All extensions finish this hook before the first on_state() call, so
         prompt extensions can reliably inspect the complete request tool set.
 
-        Example:
-            async def on_tool(self, context):
-                context.register_tool(read_file)
+        Examples:
+            Usage::
+
+                async def on_tool(self, context):
+                    context.register_tool(read_file)
         """
 
     async def on_state(self, context: AgentContext) -> None:
         """Restore history and initialize state before any input conversion.
 
-        Example:
-            async def on_state(self, context):
-                context.state.messages.insert(0, SystemMessage(content="Use concise answers."))
+        Examples:
+            Usage::
+
+                async def on_state(self, context):
+                    context.state.messages.insert(0, SystemMessage(content="Use concise answers."))
         """
 
     async def on_message(self, context: AgentContext) -> None:
@@ -63,9 +67,11 @@ class AgentRunHooksMixin:
         step. Failed or cancelled requests do not trigger it. Callback errors
         propagate through on_error and prevent RUN_COMPLETED from being emitted.
 
-        Example:
-            async def on_success(self, context, result):
-                await save_answer(context.config.session_id, result.content)
+        Examples:
+            Usage::
+
+                async def on_success(self, context, result):
+                    await save_answer(context.config.session_id, result.content)
         """
 
     async def on_error(self, context: AgentContext, error: Exception) -> None:
@@ -114,13 +120,15 @@ class AgentEventHooksMixin:
         This hook is intended for visible preprocessing operations such as
         context compaction. CUSTOM events do not change the request phase.
 
-        Example:
-            yield AgentEvent(
-                AgentEventType.CUSTOM,
-                session_id=context.config.session_id,
-                name="retrieval_progress",
-                payload={"completed": 3, "total": 10},
-            )
+        Examples:
+            Usage::
+
+                yield AgentEvent(
+                    AgentEventType.CUSTOM,
+                    session_id=context.config.session_id,
+                    name="retrieval_progress",
+                    payload={"completed": 3, "total": 10},
+                )
         """
         if False:
             yield AgentEvent(AgentEventType.MODEL_STARTED, context.config.session_id)
@@ -155,13 +163,15 @@ class AgentEventHooksMixin:
         before tool execution. Closing the consumer closes this iterator so its
         finally blocks can release resources.
 
-        Example:
-            yield AgentEvent(
-                AgentEventType.CUSTOM,
-                session_id=context.config.session_id,
-                name="tool_preparation",
-                payload={"tool_call_id": call.id},
-            )
+        Examples:
+            Usage::
+
+                yield AgentEvent(
+                    AgentEventType.CUSTOM,
+                    session_id=context.config.session_id,
+                    name="tool_preparation",
+                    payload={"tool_call_id": call.id},
+                )
         """
         if False:
             yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="example")
@@ -243,13 +253,13 @@ class AgentExtension(
          |    | append ToolMessage [E]                       |                | available                     | empty
          |    | after_tool()                                 |                v                               v
          |    | emit TOOL_*                                  |         +----------------------+  +--------------------+
-         |    | after_tool_events(); check steering           |         |                      |  |                    |
+         |    | after_tool_events(); check steering           |         |                      |  |                   |
          |    +----------------------------------------------+         | emit *_STARTED       |  | SUCCESS            |
          |                          |                                  | append typed input   |  | close inboxes      |
          |     all tools done       v                                  | reset budget         |  | after_run()        |
          +--------------------------+                                  +----------+-----------+  | on_success()       |
          |                                                                        |              | COMPLETED [E]      |
-         |                                                                        |              | RUN_COMPLETED     |
+         |                                                                        |              | RUN_COMPLETED      |
          |                                                                        |              +--------------------+
          |                                                                        |
          +------------------------ next model step -------------------------------+
@@ -277,7 +287,7 @@ class AgentExtension(
     Those calls receive skipped ToolMessages [E] and TOOL_SKIPPED events before
     the steering UserMessage [E] and STEERING_STARTED event. The loop then returns
     to MODEL STEP with a fresh iteration budget. An active internal/steering input
-    emits *_INTERRUPTED when superseded, or *_COMPLETED after a final answer.
+    emits ``*_INTERRUPTED`` when superseded, or ``*_COMPLETED`` after a final answer.
 
     before_model_events() can stream CUSTOM or compaction events; compaction
     enters COMPACTING and returns to READY. before_tool_events() streams CUSTOM

@@ -35,13 +35,15 @@ class SteeringExtension(AgentExtension):
     results before the new user message is appended. Internal messages remain
     queued until steering has been answered. No internal-message quota applies.
 
-    Example:
-        agent.emit_external_event(
-            ExternalEvent("steering_message", {"content": "Stop editing; explain first."}),
-            config=AgentConfig(session_id="s1"),
-        )
+    Examples:
+        Usage::
 
-        await context.publish(SteeringMessageEvent(UserMessage(content="Inspect another file.")))
+            agent.emit_external_event(
+                ExternalEvent("steering_message", {"content": "Stop editing; explain first."}),
+                config=AgentConfig(session_id="s1"),
+            )
+
+            await context.publish(SteeringMessageEvent(UserMessage(content="Inspect another file.")))
     """
 
     def __init__(self) -> None:

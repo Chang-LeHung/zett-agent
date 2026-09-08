@@ -12,20 +12,22 @@ class AgentEventDispatcher:
     backpressure; callback failures and cancellation propagate to the caller.
     This class does not change the Agent lifecycle or consume its stream.
 
-    Example:
-        from contextlib import aclosing
+    Examples:
+        Usage::
 
-        class ConsoleEvents(AgentEventDispatcher):
-            async def on_text_delta_event(self, event: AgentEvent) -> None:
-                print(event.delta, end="", flush=True)
+            from contextlib import aclosing
 
-            async def on_custom_event(self, event: AgentEvent) -> None:
-                print(event.name, event.payload)
+            class ConsoleEvents(AgentEventDispatcher):
+                async def on_text_delta_event(self, event: AgentEvent) -> None:
+                    print(event.delta, end="", flush=True)
 
-        handler = ConsoleEvents()
-        async with aclosing(agent.stream("Inspect this project")) as events:
-            async for event in events:
-                await handler.dispatch(event)
+                async def on_custom_event(self, event: AgentEvent) -> None:
+                    print(event.name, event.payload)
+
+            handler = ConsoleEvents()
+            async with aclosing(agent.stream("Inspect this project")) as events:
+                async for event in events:
+                    await handler.dispatch(event)
 
     Stream errors and cancellation are raised by the stream itself, not
     synthesized as callbacks. Internal extension events are a separate API.

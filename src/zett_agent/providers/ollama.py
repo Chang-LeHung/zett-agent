@@ -42,7 +42,18 @@ def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, 
 
 
 class OllamaProvider(RetryingProvider):
-    """Stream official Ollama SDK events without buffering the entire HTTP response."""
+    """Stream Ollama SDK events without buffering the entire HTTP response.
+
+    Args:
+        model: Model name installed or available on the target Ollama server.
+        transport: Optional HTTPX transport for custom routing or tests.
+        base_url: Ollama server root; defaults to localhost port 11434.
+        retry: Backoff policy for failures before the first streamed event.
+
+    Note:
+        This adapter does not install models or start the server. Reasoning,
+        vision, and tool support depend on the selected model. Close with aclose().
+    """
 
     def __init__(
         self,

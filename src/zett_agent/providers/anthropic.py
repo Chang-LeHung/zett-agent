@@ -121,7 +121,20 @@ def _to_anthropic_image_block(source: Any) -> dict[str, Any]:
 
 
 class AnthropicProvider(RetryingProvider):
-    """Anthropic provider adapter with raw SDK stream-to-event mapping."""
+    """Map Anthropic SDK streams, including signed thinking and tool blocks.
+
+    Args:
+        model: Model identifier accepted by the Anthropic-compatible endpoint.
+        api_key: API credential supplied by the application.
+        base_url: API root, defaulting to the official Anthropic endpoint.
+        transport: Optional HTTPX transport for isolated tests or custom routing.
+        retry: Exponential backoff for transient failures before output starts.
+
+    Note:
+        Signed replay blocks belong to the originating provider and model.
+        Persist them unchanged for tool round trips; do not render them as
+        user-facing reasoning. Await aclose() to release client resources.
+    """
 
     def __init__(
         self,

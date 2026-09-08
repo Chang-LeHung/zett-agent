@@ -88,7 +88,7 @@ def default_goal_subagent(model: AgentModel) -> SubAgentDefinition:
 
 
 class GoalExtension(AgentExtension):
-    """Continue ``/goal `` requests until a private evaluator accepts the result.
+    """Continue ``/goal`` requests until a private evaluator accepts the result.
 
     This extension does not implement another agent loop. It creates the normal
     :class:`Agent` using a :class:`SubAgentDefinition`, exactly like delegated
@@ -112,23 +112,25 @@ class GoalExtension(AgentExtension):
     ``max_decision_retries`` continues the same evaluator with its history. Its default of three
     means one initial attempt plus three retries.
 
-    Example:
-        definition = SubAgentDefinition(
-            name="goal",
-            description="verify coding work",
-            system_prompt="Inspect the result, then call report_goal_evaluation.",
-            model=reviewer_model,
-            extensions=(CodingExtension(), ToolGuidelinesExtension()),
-            reasoning_effort=ReasoningEffort.HIGH,
-            max_iterations=12,
-        )
-        agent = await Agent.create(
-            primary_model,
-            config=AgentConfig(session_id="session-42"),
-            extensions=[GoalExtension(definition, max_iterations=8, max_decision_retries=3)],
-            max_internal_messages=8,
-        )
-        result = await agent.run("/goal Implement the feature and verify its tests.")
+    Examples:
+        Usage::
+
+            definition = SubAgentDefinition(
+                name="goal",
+                description="verify coding work",
+                system_prompt="Inspect the result, then call report_goal_evaluation.",
+                model=reviewer_model,
+                extensions=(CodingExtension(), ToolGuidelinesExtension()),
+                reasoning_effort=ReasoningEffort.HIGH,
+                max_iterations=12,
+            )
+            agent = await Agent.create(
+                primary_model,
+                config=AgentConfig(session_id="session-42"),
+                extensions=[GoalExtension(definition, max_iterations=8, max_decision_retries=3)],
+                max_internal_messages=8,
+            )
+            result = await agent.run("/goal Implement the feature and verify its tests.")
     """
 
     def __init__(
@@ -152,7 +154,7 @@ class GoalExtension(AgentExtension):
         self._runs: dict[AgentContext, _GoalRun] = {}
 
     async def on_message(self, context: AgentContext) -> None:
-        """Recognize ``/goal `` and replace it with an explicit execution prompt."""
+        """Recognize ``/goal`` followed by a space and inject the execution prompt."""
         message = context.input_message
         run = _GoalRun()
         self._runs[context] = run

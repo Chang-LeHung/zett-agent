@@ -8,11 +8,15 @@ the SQLite storage and restores history before every request. The lower-level
 from zett_agent import SQLiteSessionExtension
 
 history = SQLiteSessionExtension()
-agent = await Agent.create(model, config=AgentConfig(session_id=session_id), extensions=[
-    history,
-    ToolGuidelinesExtension(),
-    CompactionExtension(model),
-])
+agent = await Agent.create(
+    model,
+    config=AgentConfig(session_id=session_id),
+    extensions=[
+        history,
+        ToolGuidelinesExtension(),
+        CompactionExtension(model),
+    ],
+)
 await agent.run("Hello")
 history.close()
 ```

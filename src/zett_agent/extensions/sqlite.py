@@ -7,7 +7,31 @@ from .persistence import BaseSessionPersistenceExtension, RawMessageRecord, Sess
 
 
 class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorage]):
-    """Restore and save agent sessions in an owned SQLite database."""
+    """Restore and save agent sessions in an owned SQLite database.
+
+    Args:
+        path: Database file or None for the storage default under the user data
+            directory. Use an explicit temporary path in tests.
+
+    Examples:
+        Persist and query a conversation::
+
+            persistence = SQLiteSessionExtension("sessions.sqlite")
+            try:
+                client = await create_agent(
+                    model,
+                    config=AgentConfig(session_id="demo"),
+                    extensions=[persistence, ToolGuidelinesExtension()],
+                )
+                await client.run("Remember the project requirements.")
+                messages = persistence.list_raw_messages("demo", limit=20)
+            finally:
+                persistence.close()
+
+    Note:
+        Explicit extensions replace Agent defaults. Storage restores context;
+        do not add a second history restorer to the same request unnecessarily.
+    """
 
     storage: SQLiteSessionStorage
 
@@ -23,7 +47,18 @@ class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorag
         limit: int = 10_000,
         offset: int = 0,
     ) -> list[RawMessageRecord]:
-        """Forward a paginated Raw Log query to the owned session storage."""
+        """Forward a paginated Raw Log query to the owned session storage.
+
+        Args:
+            session_id: Conversation whose immutable messages are requested.
+            after_sequence: Exclusive lower sequence bound; zero starts at the beginning.
+            through_sequence: Inclusive upper bound; None leaves it unbounded.
+            limit: Maximum number of records returned.
+            offset: Records to skip after applying sequence filters.
+
+        Returns:
+            Original messages in ascending sequence order, with timing and usage.
+        """
         return self.storage.list_raw_messages(
             session_id,
             after_sequence=after_sequence,

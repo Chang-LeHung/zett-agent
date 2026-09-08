@@ -28,7 +28,19 @@ SubAgentName = Annotated[str, Field(min_length=1, max_length=64)]
 
 @dataclass(frozen=True, slots=True)
 class SubAgentDefinition:
-    """Configuration for one isolated agent exposed through the task tool."""
+    """Configure one isolated agent exposed through the task tool.
+
+    Attributes:
+        name: Unique lowercase profile name selected by the parent model.
+        description: Profile purpose exposed to the parent's tool guidance.
+        system_prompt: Instructions used only by this child agent.
+        model: Adapter used for delegated inference; caller owns its resources.
+        tools: Static tools explicitly granted to the child.
+        extensions: Child lifecycle extensions, including its history storage.
+            The parent does not inject a separate persistence parameter.
+        reasoning_effort: Default reasoning level for delegated work.
+        max_iterations: Model-call budget per child input.
+    """
 
     name: str
     description: str
@@ -98,13 +110,15 @@ class SubAgentExtension(AgentExtension):
     a UUIDv7 session whose parent_session_id points to the calling session. The
     first version is foreground-only: the parent tool waits for one final report.
 
-    Example:
-        extension = SubAgentExtension()
-        agent = await Agent.create(
-            model,
-            config=AgentConfig(session_id="parent"),
-            extensions=[SessionPersistenceExtension(storage), extension, ToolGuidelinesExtension()],
-        )
+    Examples:
+        Usage::
+
+            extension = SubAgentExtension()
+            agent = await Agent.create(
+                model,
+                config=AgentConfig(session_id="parent"),
+                extensions=[SessionPersistenceExtension(storage), extension, ToolGuidelinesExtension()],
+            )
     """
 
     def __init__(self, subagents: Sequence[SubAgentDefinition] | None = None) -> None:

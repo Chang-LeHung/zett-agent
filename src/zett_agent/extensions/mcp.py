@@ -20,7 +20,13 @@ from .events import ExtensionEvent, RunCancelledEvent
 
 @dataclass(frozen=True, slots=True)
 class McpHttpServer:
-    """One MCP server reached through Streamable HTTP."""
+    """Configure one MCP server reached through Streamable HTTP.
+
+    Attributes:
+        name: Unique server namespace used when registering its tools.
+        url: Non-empty Streamable HTTP endpoint; credentials/routing are the
+            application's responsibility.
+    """
 
     name: str
     url: str
@@ -33,7 +39,18 @@ class McpHttpServer:
 
 @dataclass(frozen=True, slots=True)
 class McpStdioServer:
-    """One local MCP server launched as a child process."""
+    """Configure one local MCP server launched as a child process.
+
+    Attributes:
+        name: Unique server namespace used when registering its tools.
+        command: Executable used to start the server.
+        args: Command arguments passed without shell-string interpolation.
+        env: Optional environment mapping supplied to the MCP process adapter.
+        cwd: Optional working directory for the server process.
+
+    Warning:
+        Only launch trusted servers with appropriate process permissions.
+    """
 
     name: str
     command: str
@@ -77,13 +94,15 @@ class McpExtension(AgentExtension):
     exposed as ``docs__search`` by default, preventing ambiguous registrations
     when several servers provide the same tool name.
 
-    Example:
-        extension = McpExtension(
-            [
-                McpHttpServer(name="docs", url="http://127.0.0.1:8000/mcp"),
-                McpStdioServer(name="local", command="python", args=("server.py",)),
-            ]
-        )
+    Examples:
+        Usage::
+
+            extension = McpExtension(
+                [
+                    McpHttpServer(name="docs", url="http://127.0.0.1:8000/mcp"),
+                    McpStdioServer(name="local", command="python", args=("server.py",)),
+                ]
+            )
     """
 
     priority = 70

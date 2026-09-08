@@ -34,7 +34,24 @@ class AgentTool:
         return ToolDefinition(self.name, self.description, self.parameters)
 
     async def __call__(self, arguments: Mapping[str, Any]) -> Any:
-        """Execute with model-provided keyword arguments."""
+        """Execute with a mapping of model-provided keyword arguments.
+
+        Args:
+            arguments: Input object validated by the decorated function's schema.
+
+        Returns:
+            The function's typed result before JSON serialization.
+
+        Examples:
+            Invoke a decorated tool from Python::
+
+                result = await read_file({"path": "README.md"})
+
+        Note:
+            Decorated synchronous functions run in a worker thread; async
+            functions are awaited directly. A manually supplied handler owns
+            its validation policy.
+        """
         return await self.handler(**arguments)
 
     def serialize_result(self, value: Any) -> str:
@@ -106,21 +123,35 @@ def tool(
 ):
     """Turn a typed function and its structured docstring into an AgentTool.
 
+    Args:
+        function: Typed function for bare @tool use; omitted for @tool(...).
+        name: Optional public name overriding the Python function name.
+        snippet: Optional usage snippet overriding the docstring section.
+        guidelines: Optional model guidance overriding docstring Guidelines.
+
+    Returns:
+        An AgentTool for direct decoration, or a decorator when configured first.
+
+    Raises:
+        ValueError: If annotations, guidance, or documented parameter names are invalid.
+
     Examples:
-        @tool
-        def read_file(path: str) -> str:
-            \"\"\"Read a text file.
+        Register a typed function::
 
-            Args:
-                path: File path relative to the workspace.
+            @tool
+            def read_file(path: str) -> str:
+                \"\"\"Read a text file.
 
-            Snippet:
-                read_file(path=\"README.md\")
+                Args:
+                    path: File path relative to the workspace.
 
-            Guidelines:
-                - Read a file before changing it.
-            \"\"\"
-            return path
+                Snippet:
+                    read_file(path=\"README.md\")
+
+                Guidelines:
+                    - Read a file before changing it.
+                \"\"\"
+                return path
     """
 
     def decorate(function: Callable[..., Any]) -> AgentTool:

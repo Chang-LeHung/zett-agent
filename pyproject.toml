@@ -52,6 +52,14 @@ dev = [
   "pytest-cov>=7,<8",
   "ruff>=0.11,<1",
 ]
+docs = [
+    "pydata-sphinx-theme>=0.16,<1",
+    "sphinx>=8,<10",
+    "sphinx-copybutton>=0.5,<1",
+]
+docs-test = [
+    "playwright>=1.50,<2",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

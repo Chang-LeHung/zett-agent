@@ -24,7 +24,18 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class AgentConfig:
-    """Configuration that identifies one agent run."""
+    """Identify a conversation and optionally one request within it.
+
+    Attributes:
+        session_id: Stable non-empty conversation identifier, reused across turns.
+        request_id: Optional application correlation ID for this invocation.
+            It is not an idempotency key; reusing it does not deduplicate messages.
+        parent_session_id: Parent conversation when running a delegated child.
+            Must differ from session_id.
+
+    Raises:
+        ValueError: If an identity is empty or a session references itself.
+    """
 
     session_id: str
     request_id: str | None = None
@@ -94,11 +105,13 @@ class AgentContext:
         Handler errors propagate immediately and stop delivery. Already completed
         work is not rolled back. Subscribers may retain events themselves.
 
-        Example:
-            await context.publish(CompactionEvent(
-                compressed_from=1, compressed_to=20,
-                kept_from=21, kept_to=30, summary="Earlier decisions...",
-            ))
+        Examples:
+            Usage::
+
+                await context.publish(CompactionEvent(
+                    compressed_from=1, compressed_to=20,
+                    kept_from=21, kept_to=30, summary="Earlier decisions...",
+                ))
         """
         for extension in self.extensions:
             await extension.on_event(self, event)
@@ -155,13 +168,29 @@ class Agent(AgentPhaseTransitionMixin):
         processing. Exceeding either limit raises
         AgentIterationLimitError; pending messages are discarded on failure.
 
-        Example:
-            agent = await Agent.create(
-                model,
-                config=config,
-                tools=[read_file],
-                reasoning_effort=ReasoningEffort.HIGH,
-            )
+        Args:
+            model: Adapter implementing the provider-neutral AgentModel protocol.
+            system_prompt: Initial instructions rebuilt for each request.
+            tools: Static tool definitions with unique names.
+            extensions: Unique named extensions sorted by ascending priority.
+                None installs defaults; an empty sequence omits optional defaults.
+            reasoning_effort: Default provider-neutral reasoning level.
+            max_iterations: Model-call budget per user/internal message.
+            max_internal_messages: Internal input budget per request; zero disables it.
+
+        Note:
+            Construction alone does not initialize the runtime. Await
+            initialize() or use the asynchronous create() factory before running.
+
+        Examples:
+            Usage::
+
+                agent = await Agent.create(
+                    model,
+                    config=config,
+                    tools=[read_file],
+                    reasoning_effort=ReasoningEffort.HIGH,
+                )
         """
         from .extensions.internal_message import InternalMessageExtension
         from .extensions.memory import InMemoryMessageAccumulator
@@ -215,10 +244,12 @@ class Agent(AgentPhaseTransitionMixin):
     async def initialize(self, *, config: AgentConfig) -> None:
         """Bind the default session used when a request omits config.
 
-        Example:
-            agent = Agent(model)
-            await agent.initialize(config=AgentConfig(session_id="session-42"))
-            reply = await agent.run("Hello")
+        Examples:
+            Usage::
+
+                agent = Agent(model)
+                await agent.initialize(config=AgentConfig(session_id="session-42"))
+                reply = await agent.run("Hello")
         """
         if self._initialized_config is not None:
             if self._initialized_config.session_id != config.session_id:
@@ -247,14 +278,16 @@ class Agent(AgentPhaseTransitionMixin):
         including extensions after the first one that accepts it. This keeps the
         caller independent from the extension that owns a protocol.
 
-        Example:
-            accepted = agent.emit_external_event(
-                ExternalEvent(
-                    name="ask_user_response",
-                    payload={"tool_call_id": "call-1", "answer": "Yes"},
-                ),
-                config=AgentConfig(session_id="session-42", request_id="request-1"),
-            )
+        Examples:
+            Usage::
+
+                accepted = agent.emit_external_event(
+                    ExternalEvent(
+                        name="ask_user_response",
+                        payload={"tool_call_id": "call-1", "answer": "Yes"},
+                    ),
+                    config=AgentConfig(session_id="session-42", request_id="request-1"),
+                )
         """
         with self._sessions_lock:
             if config is None and len(self._active_configs) > 1:
@@ -283,9 +316,24 @@ class Agent(AgentPhaseTransitionMixin):
     ) -> Self:
         """Construct and initialize an Agent before returning it.
 
-        Example:
-            agent = await Agent.create(model, config=AgentConfig(session_id="session-42"))
-            reply = await agent.run("Hello")
+        Args:
+            model: Provider-neutral streaming model adapter.
+            config: Initial session identity used when requests omit config.
+            system_prompt: Initial instructions for every fresh request state.
+            tools: Static tools registered before extension setup.
+            extensions: Optional lifecycle extensions; None keeps defaults.
+            reasoning_effort: Default reasoning level for future requests.
+            max_iterations: Maximum model calls per user/internal input.
+            max_internal_messages: Maximum internal continuations per request.
+
+        Returns:
+            An initialized instance of the class on which create() was called.
+
+        Examples:
+            Usage::
+
+                agent = await Agent.create(model, config=AgentConfig(session_id="session-42"))
+                reply = await agent.run("Hello")
         """
         agent = cls(
             model,
@@ -334,14 +382,30 @@ class Agent(AgentPhaseTransitionMixin):
 
         Omit reasoning_effort to use the default configured on this Agent.
 
-        Example:
-            agent = await Agent.create(model, config=AgentConfig(session_id="session-42"))
-            reply = await agent.run(
-                "Summarize this conversation.",
-                config=AgentConfig(session_id="session-42"),
-                metadata={"source": "editor"},
-                tags={"domain": "notes"},
-            )
+        Args:
+            message: User text or a typed message containing text/image blocks.
+            config: Request identity; omitted to reuse the initialized session.
+            reasoning_effort: Optional reasoning override for this request.
+            metadata: JSON data for extensions and Raw Log persistence, not a prompt.
+            tags: JSON classifications for extensions and Raw Log persistence.
+
+        Returns:
+            The final assistant answer, after all stream cleanup completes.
+
+        Raises:
+            AgentProtocolError: If uninitialized or no terminal answer is produced.
+            AgentIterationLimitError: If the model/internal-message budget is exhausted.
+
+        Examples:
+            Usage::
+
+                agent = await Agent.create(model, config=AgentConfig(session_id="session-42"))
+                reply = await agent.run(
+                    "Summarize this conversation.",
+                    config=AgentConfig(session_id="session-42"),
+                    metadata={"source": "editor"},
+                    tags={"domain": "notes"},
+                )
         """
         result: AssistantMessage | None = None
         async with aclosing(
@@ -397,16 +461,33 @@ class Agent(AgentPhaseTransitionMixin):
         messages at each lifecycle hook. Omit reasoning_effort to use the Agent's
         configured default; an explicit value overrides it for this request only.
 
-        Example:
-            agent = await Agent.create(model, config=config, extensions=[history_extension])
-            async for event in agent.stream(
-                "Continue the summary.",
-                config=AgentConfig(session_id="session-42"),
-                reasoning_effort=ReasoningEffort.HIGH,
-                metadata={"source": "command-palette"},
-                tags={"intent": "summary"},
-            ):
-                print(event.type, event.session_id)
+        Args:
+            message: Plain user text or a typed multimodal UserMessage.
+            config: Session/request identity; defaults to the initialized configuration.
+            reasoning_effort: Reasoning override limited to this request.
+            metadata: Request data visible to extensions and persistence.
+            tags: Request classifications visible to extensions and persistence.
+
+        Yields:
+            AgentEvent objects in execution order, ending in RUN_COMPLETED on success.
+
+        Note:
+            Model errors and cancellation propagate as exceptions. Use
+            contextlib.aclosing when stopping iteration early. Concurrent requests
+            must use different session IDs; same-session overlap is rejected.
+
+        Examples:
+            Usage::
+
+                agent = await Agent.create(model, config=config, extensions=[history_extension])
+                async for event in agent.stream(
+                    "Continue the summary.",
+                    config=AgentConfig(session_id="session-42"),
+                    reasoning_effort=ReasoningEffort.HIGH,
+                    metadata={"source": "command-palette"},
+                    tags={"intent": "summary"},
+                ):
+                    print(event.type, event.session_id)
         """
         user_message = message if isinstance(message, UserMessage) else UserMessage(content=message)
         context = self._prepare_request_context(config, metadata, tags, user_message)

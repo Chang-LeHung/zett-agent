@@ -26,6 +26,7 @@ class ImageDetail(StrEnum):
 class TextContent:
     """One text block in an ordered multimodal message."""
 
+    #: Text at this position in a multimodal content list.
     text: str
 
 
@@ -33,6 +34,7 @@ class TextContent:
 class ImageUrlSource:
     """Remote or data URL containing an image."""
 
+    #: Non-empty HTTP, HTTPS, or image data URL.
     url: str
 
     def __post_init__(self) -> None:
@@ -47,7 +49,9 @@ class ImageUrlSource:
 class ImageBytesSource:
     """In-memory encoded image bytes and their MIME type."""
 
+    #: Encoded image file bytes, not decoded pixels or base64 text.
     data: bytes
+    #: Image MIME type, such as image/png or image/jpeg.
     media_type: str
 
     def __post_init__(self) -> None:
@@ -63,8 +67,11 @@ type ImageSource = ImageUrlSource | ImageBytesSource
 class ImageContent:
     """One image block in an ordered multimodal message."""
 
+    #: Remote URL or local in-memory encoded image bytes.
     source: ImageSource
+    #: Requested fidelity, mapped according to provider capabilities.
     detail: ImageDetail = ImageDetail.AUTO
+    #: Optional textual description of the image.
     alt_text: str | None = None
 
 
@@ -81,8 +88,11 @@ def _validate_image_media_type(media_type: str) -> None:
 class ToolCall:
     """A complete model request to invoke a named tool."""
 
+    #: Invocation identifier used to correlate a ToolMessage result.
     id: str
+    #: Registered tool name selected by the model.
     name: str
+    #: Complete parsed keyword arguments, not a partial JSON delta.
     arguments: dict[str, Any] = field(default_factory=dict)
 
 
@@ -91,8 +101,8 @@ class Message:
     """Common base for user, internal agent, assistant, system, and tool roles."""
 
     role: ClassVar[MessageRole]
-    # Application-owned per-message information. Provider adapters do not send
-    # these values to model APIs unless an adapter explicitly defines a mapping.
+    #: Application-owned per-message information. Provider adapters do not send
+    #: these values to model APIs unless an adapter explicitly defines a mapping.
     attributes: dict[str, Any] = field(default_factory=dict)
 
 
@@ -106,7 +116,20 @@ class SystemMessage(Message):
 
 @dataclass(slots=True, kw_only=True)
 class UserMessage(Message):
-    """User text or ordered text/image blocks."""
+    """User text or ordered text/image blocks.
+
+    Examples:
+        Compose a multimodal request::
+
+            message = UserMessage(content=[
+                TextContent("Describe this image."),
+                ImageContent(ImageUrlSource("https://example.com/photo.png")),
+            ])
+
+    Note:
+        Image support depends on the selected model. The text property excludes
+        image payloads; parts preserves their original order.
+    """
 
     role: ClassVar[MessageRole] = MessageRole.USER
     content: UserContent
@@ -124,28 +147,41 @@ class UserMessage(Message):
 
 @dataclass(slots=True, kw_only=True)
 class AssistantMessage(Message):
-    """Model text, reasoning, and complete tool calls."""
+    """Model text, reasoning, and complete tool calls.
+
+    Attributes:
+        content: Final answer text; may be empty for tool-only responses.
+        reasoning: Provider-reported reasoning, or None when unavailable.
+        tool_calls: Complete invocations, separate from streamed argument deltas.
+    """
 
     role: ClassVar[MessageRole] = MessageRole.ASSISTANT
     content: str = ""
     reasoning: str | None = None
     tool_calls: tuple[ToolCall, ...] = ()
 
-    # Provider namespace for opaque replay data; prevents cross-provider reuse.
+    #: Provider namespace for opaque replay data; prevents cross-provider reuse.
     provider: str | None = None
-    # Provider model identifier that produced this response. Together with
-    # provider, it prevents signed replay data from crossing model boundaries.
+    #: Provider model identifier that produced this response. Together with
+    #: provider, it prevents signed replay data from crossing model boundaries.
     model: str | None = None
-    # Opaque provider-authenticated reasoning/tool blocks that must be persisted
-    # and returned structurally unchanged in the next same-provider tool round
-    # trip; adapters may still decode and encode their transport representation.
-    # They are transport state, not user-visible reasoning or portable content.
+    #: Opaque provider-authenticated reasoning/tool blocks that must be persisted
+    #: and returned structurally unchanged in the next same-provider tool round
+    #: trip; adapters may still decode and encode their transport representation.
+    #: They are transport state, not user-visible reasoning or portable content.
     replay_blocks: tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass(slots=True, kw_only=True)
 class ToolMessage(Message):
-    """One tool result returned to the model."""
+    """One tool result returned to the model.
+
+    Attributes:
+        tool_call_id: Identifier of the assistant call answered by this message.
+        name: Invoked tool name.
+        content: Serialized result or failure text passed to the model.
+        success: Whether execution succeeded; false also covers skipped calls.
+    """
 
     role: ClassVar[MessageRole] = MessageRole.TOOL
     tool_call_id: str

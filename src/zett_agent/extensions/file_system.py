@@ -13,9 +13,11 @@ class FileSystemExtension(AgentExtension):
     a filesystem capability because arbitrary commands cannot guarantee that
     they will leave the workspace unchanged.
 
-    Example:
-        extension = FileSystemExtension(read_only=True)
-        agent = await Agent.create(model, config=config, extensions=[extension])
+    Examples:
+        Usage::
+
+            extension = FileSystemExtension(read_only=True)
+            agent = await Agent.create(model, config=config, extensions=[extension])
     """
 
     def __init__(self, *, read_only: bool = False) -> None:

@@ -29,8 +29,8 @@ class CompactionExtension(AgentExtension):
     A single oversized turn therefore cannot be compacted by this extension.
 
     Args:
-        model: Model used to summarize older dialogue, possibly separate from
-            the primary response model.
+        model: Model used to summarize older dialogue. None reuses the current
+            request model, which is useful for a shared multi-session Agent.
         max_tokens: Estimated context threshold that triggers compaction.
         keep_recent_tokens: Minimum recent token budget, extended to whole turns.
         count_tokens: Optional provider-specific message token counter.
@@ -75,7 +75,7 @@ class CompactionExtension(AgentExtension):
 
     def __init__(
         self,
-        model: AgentModel,
+        model: AgentModel | None = None,
         *,
         max_tokens: int = 128_000,
         keep_recent_tokens: int = 32_000,
@@ -143,8 +143,11 @@ class CompactionExtension(AgentExtension):
             ),
             reasoning_effort=self.reasoning_effort,
         )
+        model = self.model if self.model is not None else context.model
+        if model is None:
+            raise AgentProtocolError("Compaction requires a model")
         response = None
-        async with aclosing(self.model.stream(summary_request)) as events:
+        async with aclosing(model.stream(summary_request)) as events:
             async for event in events:
                 if response is not None:
                     raise AgentProtocolError("Compaction model emitted events after its response")

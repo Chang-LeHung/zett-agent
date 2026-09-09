@@ -135,13 +135,20 @@ class SyncAgent(SyncObject[Agent]):
         message: UserMessage | str,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage:
         """Return a final answer, preserving original errors and event callbacks."""
         return self.runtime.call(
-            self._client.run, message, config=config, reasoning_effort=reasoning_effort, metadata=metadata, tags=tags
+            self._client.run,
+            message,
+            config=config,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            metadata=metadata,
+            tags=tags,
         )
 
     def stream(
@@ -149,6 +156,7 @@ class SyncAgent(SyncObject[Agent]):
         message: UserMessage | str,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -160,7 +168,13 @@ class SyncAgent(SyncObject[Agent]):
         iterator on break. The same AgentEvent types as Agent.stream are yielded.
         """
         return self.runtime.stream(
-            self._client.stream, message, config=config, reasoning_effort=reasoning_effort, metadata=metadata, tags=tags
+            self._client.stream,
+            message,
+            config=config,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            metadata=metadata,
+            tags=tags,
         )
 
     def emit_external_event(self, event: ExternalEvent, *, config: AgentConfig | None = None) -> list[str]:

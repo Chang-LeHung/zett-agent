@@ -82,6 +82,28 @@ async def test_concurrent_sessions_restore_only_their_own_history(tmp_path, pers
             extension.close()
 
 
+async def test_concurrent_sessions_can_override_the_default_model():
+    models = {name: GatedModel() for name in ("a", "b")}
+    agent = await Agent.create(None, config=AgentConfig("default"), system_prompt="")
+    with pytest.raises(AgentProtocolError, match="requires a model"):
+        await agent.run("missing model")
+    tasks = [asyncio.create_task(agent.run(name, config=AgentConfig(name), model=models[name])) for name in ("a", "b")]
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(models["a"].entered["a"].wait(), models["b"].entered["b"].wait()),
+            2,
+        )
+        models["a"].release["a"].set()
+        models["b"].release["b"].set()
+        assert [result.content for result in await asyncio.gather(*tasks)] == ["a", "b"]
+        assert agent.model is None
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 class QuestionModel:
     async def stream(self, request):
         if isinstance(request.messages[-1], ToolMessage):

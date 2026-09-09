@@ -154,8 +154,8 @@ class AgentContext:
     tools: dict[str, AgentTool]
     # Fixed priority order for this run; no event history is retained.
     extensions: tuple[AgentExtension, ...] = ()
-    # Model owned by the current Agent; setup extensions may inspect it when
-    # constructing request-scoped capabilities such as default subagents.
+    # Model resolved for this request from its explicit override or Agent default;
+    # setup extensions may inspect it when creating request-scoped capabilities.
     model: AgentModel | None = None
     # Application input available to extensions and Raw Log persistence only.
     metadata: dict[str, JsonValue] = field(default_factory=dict)
@@ -273,7 +273,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     def __init__(
         self,
-        model: AgentModel,
+        model: AgentModel | None,
         *,
         system_prompt: str = "You are a helpful assistant.",
         tools: Sequence[AgentTool] = (),
@@ -299,7 +299,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         AgentIterationLimitError; pending messages are discarded on failure.
 
         Args:
-            model: Adapter implementing the provider-neutral AgentModel protocol.
+            model: Default provider adapter. It may be None when every request
+                supplies an explicit model to run() or stream().
             system_prompt: Initial instructions rebuilt for each request.
             tools: Static tool definitions with unique names.
             extensions: Unique named extensions sorted by ascending priority.
@@ -434,7 +435,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
     @classmethod
     async def create(
         cls,
-        model: AgentModel,
+        model: AgentModel | None,
         *,
         config: AgentConfig,
         system_prompt: str = "You are a helpful assistant.",
@@ -483,6 +484,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         message: UserMessage,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -494,6 +496,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         message: str,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -504,6 +507,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         message: UserMessage | str,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -515,6 +519,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         Args:
             message: User text or a typed message containing text/image blocks.
             config: Request identity; omitted to reuse the initialized session.
+            model: Request-specific model; omitted to use the Agent default.
             reasoning_effort: Optional reasoning override for this request.
             metadata: JSON data for extensions and Raw Log persistence, not a prompt.
             tags: JSON classifications for extensions and Raw Log persistence.
@@ -542,6 +547,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             self.stream(
                 message,
                 config=config,
+                model=model,
                 reasoning_effort=reasoning_effort,
                 metadata=metadata,
                 tags=tags,
@@ -560,6 +566,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         message: UserMessage,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -571,6 +578,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         message: str,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -581,6 +589,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         message: UserMessage | str,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -594,6 +603,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         Args:
             message: Plain user text or a typed multimodal UserMessage.
             config: Session/request identity; defaults to the initialized configuration.
+            model: Request-specific model; omitted to use the Agent default.
             reasoning_effort: Reasoning override limited to this request.
             metadata: Request data visible to extensions and persistence.
             tags: Request classifications visible to extensions and persistence.
@@ -620,7 +630,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     print(event.type, event.session_id)
         """
         user_message = message if isinstance(message, UserMessage) else UserMessage(content=message)
-        context = self._prepare_request_context(config, metadata, tags, user_message)
+        context = self._prepare_request_context(config, model, metadata, tags, user_message)
         effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
         try:
             await self._open_request(context)
@@ -639,6 +649,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
     def _prepare_request_context(
         self,
         config: AgentConfig | None,
+        model: AgentModel | None,
         metadata: Mapping[str, JsonValue] | None,
         tags: Mapping[str, JsonValue] | None,
         input_message: UserMessage,
@@ -649,6 +660,9 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 "Agent is not initialized; await agent.initialize(config=...) or Agent.create(...)"
             )
         config = config or self._initialized_config
+        resolved_model = model if model is not None else self.model
+        if resolved_model is None:
+            raise AgentProtocolError("This request requires a model because the Agent has no default model")
         messages = [SystemMessage(content=self.system_prompt)] if self.system_prompt else []
         # State and dynamic tools are request-scoped. Constructor tools are copied
         # so extension registrations cannot leak into later requests or sessions.
@@ -661,7 +675,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             state=state,
             tools={},
             extensions=self.extensions,
-            model=self.model,
+            model=resolved_model,
             metadata=json_object(metadata, field_name="Context metadata"),
             tags=json_object(tags, field_name="Context tags", nonempty_keys=True),
             input_message=input_message,
@@ -807,7 +821,10 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             phase=state.phase,
         )
         response = None
-        async with aclosing(self.model.stream(request)) as events:
+        model = context.model
+        if model is None:
+            raise AgentProtocolError("The request context has no model")
+        async with aclosing(model.stream(request)) as events:
             async for event in events:
                 if response is not None:
                     raise AgentProtocolError("Model emitted events after its final response")

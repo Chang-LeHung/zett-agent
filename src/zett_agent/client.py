@@ -45,6 +45,7 @@ class AgentClient(SyncMethodsMixin):
         message: UserMessage | str,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -57,6 +58,7 @@ class AgentClient(SyncMethodsMixin):
         Args:
             message: User text or an explicit multimodal UserMessage.
             config: Optional per-request session and request identity.
+            model: Request-specific model; omitted to use the Agent default.
             reasoning_effort: Per-request override of the model reasoning level.
             metadata: Request-scoped JSON data supplied to extensions.
             tags: Request-scoped classifications supplied to extensions.
@@ -69,7 +71,14 @@ class AgentClient(SyncMethodsMixin):
             cancellation exceptions are not converted into synthetic events.
         """
         async with aclosing(
-            self.agent.stream(message, config=config, reasoning_effort=reasoning_effort, metadata=metadata, tags=tags)
+            self.agent.stream(
+                message,
+                config=config,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                metadata=metadata,
+                tags=tags,
+            )
         ) as events:
             async for event in events:
                 if self.event_dispatcher is not None:
@@ -81,6 +90,7 @@ class AgentClient(SyncMethodsMixin):
         message: UserMessage | str,
         *,
         config: AgentConfig | None = None,
+        model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
@@ -90,6 +100,7 @@ class AgentClient(SyncMethodsMixin):
         Args:
             message: User text or an explicit multimodal UserMessage.
             config: Per-request identity; omitted to reuse the initialized session.
+            model: Request-specific model; omitted to use the Agent default.
             reasoning_effort: Override the runtime default for this request only.
             metadata: JSON-compatible application data for persistence/extensions.
             tags: JSON-compatible classifications for persistence/extensions.
@@ -103,7 +114,14 @@ class AgentClient(SyncMethodsMixin):
         """
         result: AssistantMessage | None = None
         async with aclosing(
-            self.stream(message, config=config, reasoning_effort=reasoning_effort, metadata=metadata, tags=tags)
+            self.stream(
+                message,
+                config=config,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                metadata=metadata,
+                tags=tags,
+            )
         ) as events:
             async for event in events:
                 if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
@@ -114,7 +132,7 @@ class AgentClient(SyncMethodsMixin):
 
 
 async def create_agent(
-    model: AgentModel,
+    model: AgentModel | None,
     *,
     config: AgentConfig | None = None,
     system_prompt: str = "You are a helpful assistant.",
@@ -133,7 +151,7 @@ async def create_agent(
     The supplied model and extension resources remain caller-owned.
 
     Args:
-        model: Provider adapter or custom implementation of AgentModel.
+        model: Default provider adapter, or None when each request supplies one.
         config: Stable session identity; omitted to generate a new UUIDv7 ID.
         system_prompt: Initial instructions rebuilt before each request.
         tools: Explicit typed tools available to the runtime.

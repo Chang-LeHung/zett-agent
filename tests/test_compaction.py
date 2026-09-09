@@ -89,6 +89,24 @@ async def test_compaction_preserves_instructions_and_whole_tool_turn():
     assert events[-1].type == AgentEventType.COMPACTION_COMPLETED
 
 
+async def test_compaction_can_reuse_the_request_model():
+    model = SummaryModel()
+    state = context(
+        [
+            UserMessage(content="Old " * 100),
+            AssistantMessage(content="Old answer"),
+            UserMessage(content="Current"),
+        ]
+    )
+    state.model = model
+
+    events = await compact(CompactionExtension(max_tokens=1, keep_recent_tokens=1), state)
+
+    assert model.requests
+    assert events[0].type is AgentEventType.COMPACTION_STARTED
+    assert events[-1].type is AgentEventType.COMPACTION_COMPLETED
+
+
 @pytest.mark.parametrize("limit,recent", [(100000, 1), (1, 20)])
 async def test_no_model_call_below_threshold_or_without_old_turns(limit, recent):
     model = SummaryModel()

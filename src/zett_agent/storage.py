@@ -8,7 +8,7 @@ from enum import IntEnum
 from pathlib import Path
 
 from pydantic import TypeAdapter
-from sqlalchemy import Index, Integer, String, Text, create_engine, delete, func, select, update
+from sqlalchemy import Index, Integer, String, Text, create_engine, delete, func, select
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -424,24 +424,6 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             row.updated_at = datetime.now(UTC)
             session.flush()
             return self._summary(session, row)
-
-    def set_session_title_if_empty(self, session_id: str, title: str) -> bool:
-        """Set the generated title only while the session remains untitled.
-
-        The conditional update prevents a delayed background summarizer from
-        overwriting a title entered by the user or produced by another request.
-        It also makes first-response title generation idempotent.
-        """
-        normalized_title = title.strip()
-        if not normalized_title or len(normalized_title) > 200:
-            raise ValueError("Session title must contain between 1 and 200 characters")
-        with self._session_scope() as session:
-            result = session.execute(
-                update(AgentSessionModel)
-                .where(AgentSessionModel.id == session_id, AgentSessionModel.title.is_(None))
-                .values(title=normalized_title, updated_at=datetime.now(UTC))
-            )
-            return result.rowcount == 1
 
     @staticmethod
     def _summary(session: Session, row: AgentSessionModel) -> SessionSummary:

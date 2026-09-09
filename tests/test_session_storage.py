@@ -120,17 +120,6 @@ async def test_storage_persists_parent_identity_and_message_metadata(storage):
     assert storage.count_messages("child") == 1
 
 
-def test_generated_session_title_is_installed_only_once(storage):
-    session = storage.create_session()
-
-    assert storage.set_session_title_if_empty(session.session_id, "Generated title") is True
-    assert storage.set_session_title_if_empty(session.session_id, "Late replacement") is False
-    assert storage.get_session(session.session_id).title == "Generated title"
-
-    with pytest.raises(ValueError, match="between 1 and 200"):
-        storage.set_session_title_if_empty(session.session_id, "  ")
-
-
 async def test_agent_persists_provider_usage_on_each_assistant_raw_message(storage):
     class UsageModel:
         async def stream(self, request):

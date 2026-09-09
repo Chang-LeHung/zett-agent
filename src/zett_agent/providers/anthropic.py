@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import ssl
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import replace
@@ -34,6 +33,7 @@ from .base import (
     ProviderAuthError,
     ProviderResponseError,
     RetryingProvider,
+    _parse_tool_arguments,
     _parse_tool_calls,
     _reasoning_effort_to_budget,
     _to_model_data,
@@ -302,7 +302,10 @@ class AnthropicProvider(RetryingProvider):
                     case "content_block_stop":
                         index = int(data.get("index", 0))
                         if index in streams:
-                            replay[index]["input"] = json.loads(streams[index].argument_buffer or "{}")
+                            replay[index]["input"] = _parse_tool_arguments(
+                                streams[index].argument_buffer,
+                                index=index,
+                            )
                     case "message_delta":
                         delta = data.get("delta", {})
                         finish_reason = delta.get("stop_reason")
@@ -318,7 +321,7 @@ class AnthropicProvider(RetryingProvider):
 
         tool_calls = _parse_tool_calls(streams)
         for index, stream in streams.items():
-            replay[index]["input"] = json.loads(stream.argument_buffer or "{}")
+            replay[index]["input"] = _parse_tool_arguments(stream.argument_buffer, index=index)
         yield ModelEvent.completed(
             ModelResponse(
                 message=AssistantMessage(

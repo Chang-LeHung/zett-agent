@@ -102,6 +102,21 @@ def test_tool_call_parser_orders_calls_generates_ids_and_rejects_missing_names()
         _parse_tool_calls({0: _ToolCallAccumulator(index=0, argument_buffer="{}")})
 
 
+def test_tool_call_parser_accepts_control_characters_but_rejects_non_objects():
+    multiline = _ToolCallAccumulator(
+        index=0,
+        call_id="call-write",
+        name="write",
+        argument_buffer='{"content":"first line\nsecond\tline"}',
+    )
+    assert _parse_tool_calls({0: multiline}) == (
+        ToolCall("call-write", "write", {"content": "first line\nsecond\tline"}),
+    )
+
+    with pytest.raises(ProviderResponseError, match="must be a JSON object"):
+        _parse_tool_calls({0: _ToolCallAccumulator(index=0, name="write", argument_buffer='["value"]')})
+
+
 @pytest.mark.parametrize(
     "factory",
     [

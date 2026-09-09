@@ -204,16 +204,31 @@ def _parse_tool_calls(streams: Mapping[int, _ToolCallAccumulator]) -> tuple[Tool
     calls: list[ToolCall] = []
     for index in sorted(streams):
         stream = streams[index]
-        try:
-            args = json.loads(stream.argument_buffer) if stream.argument_buffer else {}
-        except JSONDecodeError as error:
-            raise ProviderResponseError(f"Invalid tool-call arguments for index {index}: {error}") from error
+        args = _parse_tool_arguments(stream.argument_buffer, index=index)
         if not stream.call_id:
             stream.call_id = f"call_{index}"
         if not stream.name:
             raise ProviderResponseError(f"Tool call at index {index} did not provide a name")
         calls.append(ToolCall(id=stream.call_id, name=stream.name, arguments=args))
     return tuple(calls)
+
+
+def _parse_tool_arguments(payload: str, *, index: int) -> dict[str, Any]:
+    """Decode one accumulated tool argument object from a provider stream.
+
+    Some OpenAI-compatible providers, including DeepSeek, occasionally expose
+    decoded newlines or tabs inside the nested ``function.arguments`` string.
+    ``strict=False`` accepts only those otherwise-invalid control characters;
+    malformed JSON syntax is still rejected. Tool arguments must remain an
+    object because the runtime invokes tools with named keyword arguments.
+    """
+    try:
+        parsed = json.loads(payload, strict=False) if payload else {}
+    except JSONDecodeError as error:
+        raise ProviderResponseError(f"Invalid tool-call arguments for index {index}: {error}") from error
+    if not isinstance(parsed, dict):
+        raise ProviderResponseError(f"Tool-call arguments for index {index} must be a JSON object")
+    return parsed
 
 
 def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:

@@ -36,17 +36,13 @@ async def test_file_tools_write_read_and_replace_text(tmp_path, monkeypatch):
     assert not (tmp_path / "notes/example.txt").exists()
 
 
-async def test_file_tools_reject_unsafe_or_ambiguous_operations(tmp_path, monkeypatch):
+async def test_file_tools_reject_invalid_or_ambiguous_operations(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     tool_module = importlib.import_module("zett_agent.tools.coding")
     monkeypatch.setattr(tool_module, "MAX_FILE_BYTES", 16)
     await write_file({"path": "existing.txt", "content": "same same"})
     (tmp_path / "directory").mkdir()
 
-    with pytest.raises(ValueError, match="escapes"):
-        await read_file({"path": "../outside.txt"})
-    with pytest.raises(ValueError, match="relative"):
-        await read_file({"path": str(tmp_path / "existing.txt")})
     with pytest.raises(ValueError, match="does not exist"):
         await read_file({"path": "missing.txt"})
     with pytest.raises(ValueError, match="does not exist"):
@@ -55,8 +51,6 @@ async def test_file_tools_reject_unsafe_or_ambiguous_operations(tmp_path, monkey
         await delete_file({"path": "missing.txt"})
     with pytest.raises(ValueError, match="does not exist"):
         await delete_file({"path": "directory"})
-    with pytest.raises(ValueError, match="escapes"):
-        await delete_file({"path": "../outside.txt"})
     with pytest.raises(ValueError, match="not a file"):
         await write_file({"path": "directory", "content": "text"})
     with pytest.raises(ValueError, match="already exists"):
@@ -80,7 +74,7 @@ async def test_local_tools_export_typed_schemas():
     assert set(tools) == {"glob", "grep", "read_file", "write_file", "replace_in_file", "delete_file", "run_shell"}
     assert tools["read_file"].parameters["properties"]["start_line"]["minimum"] == 1
     assert tools["read_file"].parameters["properties"]["line_count"]["maximum"] == 2_000
-    assert tools["read_file"].parameters["properties"]["path"]["description"].startswith("Relative path")
+    assert tools["read_file"].parameters["properties"]["path"]["description"].startswith("Absolute path")
     assert tools["read_file"].snippet.startswith("read_file(")
     assert tools["read_file"].guidelines == (
         "Use line ranges for large files.",
@@ -103,17 +97,19 @@ async def test_glob_finds_sorted_working_directory_paths(tmp_path, monkeypatch):
     (tmp_path / "src" / "outside.py").symlink_to(outside)
 
     result = await glob({"pattern": "src/**/*.py"})
-    assert result.paths == ["src/nested/a.py", "src/z.py"]
+    assert result.paths == ["src/nested/a.py", "src/outside.py", "src/z.py"]
     assert result.truncated is False
 
     limited = await glob({"pattern": "src/**/*.py", "max_results": 1})
     assert limited.paths == ["src/nested/a.py"]
     assert limited.truncated is True
 
-    with pytest.raises(ValueError, match="escape"):
-        await glob({"pattern": "../*.py"})
-    with pytest.raises(ValueError, match="relative"):
-        await glob({"pattern": str(tmp_path / "*.py")})
+    absolute = await glob({"pattern": str(tmp_path / "src" / "**" / "*.py")})
+    assert absolute.paths == [
+        str(tmp_path / "src" / "nested" / "a.py"),
+        str(tmp_path / "src" / "outside.py"),
+        str(tmp_path / "src" / "z.py"),
+    ]
     outside.unlink()
 
 
@@ -138,14 +134,38 @@ async def test_grep_searches_text_files_and_reports_locations(tmp_path, monkeypa
 
     with pytest.raises(ValueError, match="Invalid regular expression"):
         await grep({"pattern": "[", "file_pattern": "src/**/*.py"})
-    with pytest.raises(ValueError, match="escape"):
-        await grep({"pattern": "Agent", "file_pattern": "../**/*"})
+    absolute = await grep({"pattern": "Agent", "file_pattern": str(tmp_path / "src" / "*.py")})
+    assert [(match.path, match.line_number) for match in absolute.matches] == [(str(tmp_path / "src" / "first.py"), 1)]
 
     tool_module = importlib.import_module("zett_agent.tools.coding")
     monkeypatch.setattr(tool_module, "MAX_FILE_BYTES", 4)
     oversized = await grep({"pattern": "Agent", "file_pattern": "src/first.py"})
     assert oversized.files_searched == 0
     assert oversized.matches == []
+
+
+async def test_file_tools_accept_absolute_and_parent_paths(tmp_path, monkeypatch):
+    working_directory = tmp_path / "workspace"
+    working_directory.mkdir()
+    monkeypatch.chdir(working_directory)
+    absolute = tmp_path / "absolute.txt"
+
+    created = await write_file({"path": str(absolute), "content": "before"})
+    assert created.path == str(absolute)
+    assert (await read_file({"path": str(absolute)})).content == "before"
+
+    replaced = await replace_in_file({"path": "../absolute.txt", "old_text": "before", "new_text": "after"})
+    assert replaced.path == "../absolute.txt"
+    assert (await read_file({"path": "../absolute.txt"})).content == "after"
+
+    globbed = await glob({"pattern": "../*.txt"})
+    assert globbed.paths == ["../absolute.txt"]
+    searched = await grep({"pattern": "after", "file_pattern": "../*.txt"})
+    assert [(match.path, match.text) for match in searched.matches] == [("../absolute.txt", "after")]
+
+    deleted = await delete_file({"path": str(absolute)})
+    assert deleted.path == str(absolute)
+    assert not absolute.exists()
 
 
 async def test_shell_tool_captures_status_output_and_truncation(tmp_path, monkeypatch):

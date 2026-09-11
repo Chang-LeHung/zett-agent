@@ -25,11 +25,11 @@ SteeringExtension remain Agent-owned built-ins and must not be registered again.
      - Include tool snippets and guidelines in model instructions.
      - Include explicitly when supplying a custom extension list.
    * - FileSystemExtension
-     - Read/search or edit the current working directory.
-     - read_only limits registered tools, not OS permissions.
+     - Read/search or edit files through relative or absolute paths.
+     - Injects the current directory; read_only limits tools, not OS permissions.
    * - CodingExtension
      - Add writable filesystem tools and shell execution.
-     - Run only with a suitable sandbox/trust policy.
+     - Injects the directory used by relative paths and shell execution.
    * - AskUserExtension
      - Let the model ask the UI a question and wait.
      - Route replies with session ID and tool-call ID.

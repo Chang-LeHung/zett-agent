@@ -54,7 +54,7 @@ class DeleteFileResult(BaseModel):
 
 
 class GlobResult(BaseModel):
-    """Paths matched by one working-directory-relative glob pattern."""
+    """Paths matched by one relative or absolute glob pattern."""
 
     pattern: str
     paths: list[str]
@@ -74,7 +74,7 @@ class GrepMatch(BaseModel):
 
 
 class GrepResult(BaseModel):
-    """Text matches found across files in the current working directory."""
+    """Text matches found across files selected by a glob pattern."""
 
     pattern: str
     matches: list[GrepMatch]
@@ -109,26 +109,35 @@ MaxResults = Annotated[int, Field(ge=1, le=5_000)]
 MAX_FILE_BYTES = 2 * 1024 * 1024
 
 
-def _resolve_working_path(path: str) -> tuple[Path, Path]:
-    """Resolve one relative path without allowing it to escape the current directory."""
+def _resolve_file_path(path: str) -> tuple[Path, Path]:
+    """Resolve an absolute path or a path relative to the current directory."""
     working_directory = Path.cwd().resolve()
     candidate = Path(path).expanduser()
-    if candidate.is_absolute():
-        raise ValueError("Path must be relative to the current working directory")
-    target = (working_directory / candidate).resolve()
-    if not target.is_relative_to(working_directory):
-        raise ValueError(f"Path escapes the current working directory: {path}")
+    target = candidate.resolve() if candidate.is_absolute() else (working_directory / candidate).resolve()
     return working_directory, target
 
 
-def _validate_working_pattern(pattern: str) -> Path:
-    """Validate a glob pattern before evaluating it from the current directory."""
+def _resolve_glob_pattern(pattern: str) -> tuple[Path, str, bool]:
+    """Return the search root, relative glob expression, and output path style."""
     candidate = Path(pattern).expanduser()
     if candidate.is_absolute():
-        raise ValueError("Pattern must be relative to the current working directory")
-    if ".." in candidate.parts:
-        raise ValueError("Pattern cannot escape the current working directory")
-    return candidate
+        root = Path(candidate.anchor)
+        return root, candidate.relative_to(root).as_posix(), True
+    return Path.cwd().resolve(), candidate.as_posix(), False
+
+
+def _result_path(path: str, working_directory: Path, target: Path) -> str:
+    """Preserve relative results for relative inputs and absolute results otherwise."""
+    if Path(path).expanduser().is_absolute():
+        return target.as_posix()
+    return Path(os.path.relpath(target, working_directory)).as_posix()
+
+
+def _matched_path(candidate: Path, working_directory: Path, *, absolute: bool) -> str:
+    """Render a glob match using the same relative/absolute style as its pattern."""
+    if absolute:
+        return candidate.absolute().as_posix()
+    return Path(os.path.relpath(candidate.absolute(), working_directory)).as_posix()
 
 
 def _read_working_text(path: Path) -> str:
@@ -155,10 +164,10 @@ def _write_working_text(path: Path, content: str) -> None:
 
 @tool
 def glob(pattern: Annotated[str, Field(min_length=1)], max_results: MaxResults = 200) -> GlobResult:
-    """Find paths matching a glob pattern in the current working directory.
+    """Find paths matching a relative or absolute glob pattern.
 
     Args:
-        pattern: Relative glob pattern such as **/*.py or src/**/test_*.py.
+        pattern: Glob pattern such as **/*.py, ../tests/*.py, or /work/src/**/*.py.
         max_results: Maximum number of sorted paths to return.
 
     Snippet:
@@ -169,20 +178,17 @@ def glob(pattern: Annotated[str, Field(min_length=1)], max_results: MaxResults =
         - Narrow the pattern when the result is truncated.
     """
     working_directory = Path.cwd().resolve()
-    validated_pattern = _validate_working_pattern(pattern)
+    root, resolved_pattern, absolute = _resolve_glob_pattern(pattern)
     paths: list[str] = []
     output_bytes = 0
     truncated = False
-    for candidate in sorted(working_directory.glob(validated_pattern.as_posix())):
-        resolved = candidate.resolve()
-        if not resolved.is_relative_to(working_directory):
-            continue
-        relative = candidate.relative_to(working_directory).as_posix()
-        size = len(relative.encode("utf-8"))
+    for candidate in sorted(root.glob(resolved_pattern)):
+        rendered = _matched_path(candidate, working_directory, absolute=absolute)
+        size = len(rendered.encode("utf-8"))
         if len(paths) == max_results or output_bytes + size > MAX_OUTPUT_BYTES:
             truncated = True
             break
-        paths.append(relative)
+        paths.append(rendered)
         output_bytes += size
     return GlobResult(pattern=pattern, paths=paths, truncated=truncated)
 
@@ -194,11 +200,11 @@ def grep(
     case_sensitive: bool = True,
     max_results: MaxResults = 200,
 ) -> GrepResult:
-    """Search UTF-8 text files with a regular expression from the current working directory.
+    """Search UTF-8 text files selected by a relative or absolute glob pattern.
 
     Args:
         pattern: Python regular expression to search for on each line.
-        file_pattern: Relative glob selecting files to search.
+        file_pattern: Relative or absolute glob selecting files to search.
         case_sensitive: Whether letter case must match exactly.
         max_results: Maximum number of matching lines to return.
 
@@ -211,7 +217,7 @@ def grep(
         - Use read_file for surrounding context after locating a match.
     """
     working_directory = Path.cwd().resolve()
-    validated_file_pattern = _validate_working_pattern(file_pattern)
+    root, resolved_file_pattern, absolute = _resolve_glob_pattern(file_pattern)
     flags = 0 if case_sensitive else re.IGNORECASE
     try:
         expression = re.compile(pattern, flags)
@@ -222,9 +228,8 @@ def grep(
     output_bytes = 0
     files_searched = 0
     truncated = False
-    for candidate in sorted(working_directory.glob(validated_file_pattern.as_posix())):
-        resolved = candidate.resolve()
-        if not candidate.is_file() or not resolved.is_relative_to(working_directory):
+    for candidate in sorted(root.glob(resolved_file_pattern)):
+        if not candidate.is_file():
             continue
         if candidate.stat().st_size > MAX_FILE_BYTES:
             continue
@@ -243,7 +248,7 @@ def grep(
             text_start = max(0, match.start() - 100) if len(line.encode("utf-8")) > MAX_MATCH_BYTES else 0
             preview = utf8_prefix(line[text_start:], MAX_MATCH_BYTES)
             item = GrepMatch(
-                path=candidate.relative_to(working_directory).as_posix(),
+                path=_matched_path(candidate, working_directory, absolute=absolute),
                 line_number=line_number,
                 column=match.start() + 1,
                 text=preview,
@@ -265,10 +270,10 @@ def grep(
 def read_file(
     path: FilePath, start_line: StartLine = 1, line_count: LineCount = 200, start_column: StartLine = 1
 ) -> ReadFileResult:
-    """Read a line range from a UTF-8 text file in the current working directory.
+    """Read a line range from a UTF-8 text file.
 
     Args:
-        path: Relative path inside the current working directory.
+        path: Absolute path or a path relative to the current working directory.
         start_line: One-based first line to return.
         line_count: Maximum number of lines to return.
         start_column: One-based character column on start_line, used to resume a long line.
@@ -281,7 +286,7 @@ def read_file(
         - Inspect the current content before editing a file.
         - Continue with next_line and next_column when has_more is true.
     """
-    working_directory, target = _resolve_working_path(path)
+    working_directory, target = _resolve_file_path(path)
     if not target.is_file():
         raise ValueError(f"File does not exist: {path}")
     selected: list[str] = []
@@ -311,7 +316,7 @@ def read_file(
             else:
                 column += len(fragment)
     return ReadFileResult(
-        path=target.relative_to(working_directory).as_posix(),
+        path=_result_path(path, working_directory, target),
         content="".join(selected),
         start_line=start_line,
         end_line=end_line,
@@ -325,10 +330,10 @@ def read_file(
 
 @tool
 def write_file(path: FilePath, content: str, overwrite: bool = True) -> WriteFileResult:
-    """Atomically write a UTF-8 text file in the current working directory.
+    """Atomically write a UTF-8 text file.
 
     Args:
-        path: Relative path inside the current working directory.
+        path: Absolute path or a path relative to the current working directory.
         content: Complete UTF-8 text to write.
         overwrite: Whether an existing file may be replaced.
 
@@ -339,7 +344,7 @@ def write_file(path: FilePath, content: str, overwrite: bool = True) -> WriteFil
         - Use for new files or intentional full-file replacement.
         - Prefer replace_in_file for a small change to an existing file.
     """
-    working_directory, target = _resolve_working_path(path)
+    working_directory, target = _resolve_file_path(path)
     if target.exists() and not target.is_file():
         raise ValueError(f"Path is not a file: {path}")
     created = not target.exists()
@@ -347,7 +352,7 @@ def write_file(path: FilePath, content: str, overwrite: bool = True) -> WriteFil
         raise ValueError(f"File already exists: {path}")
     _write_working_text(target, content)
     return WriteFileResult(
-        path=target.relative_to(working_directory).as_posix(),
+        path=_result_path(path, working_directory, target),
         bytes_written=len(content.encode("utf-8")),
         created=created,
     )
@@ -363,7 +368,7 @@ def replace_in_file(
     """Replace exact text in a UTF-8 file, requiring one match by default.
 
     Args:
-        path: Relative path inside the current working directory.
+        path: Absolute path or a path relative to the current working directory.
         old_text: Exact text to find.
         new_text: Replacement text.
         replace_all: Whether every exact match should be replaced.
@@ -375,7 +380,7 @@ def replace_in_file(
         - Keep replace_all false unless every occurrence should change.
         - Read the file first when the target text may be ambiguous.
     """
-    working_directory, target = _resolve_working_path(path)
+    working_directory, target = _resolve_file_path(path)
     if not target.is_file():
         raise ValueError(f"File does not exist: {path}")
     content = _read_working_text(target)
@@ -388,7 +393,7 @@ def replace_in_file(
     updated = content.replace(old_text, new_text, -1 if replace_all else 1)
     _write_working_text(target, updated)
     return ReplaceFileResult(
-        path=target.relative_to(working_directory).as_posix(),
+        path=_result_path(path, working_directory, target),
         replacements=replacements,
         bytes_written=len(updated.encode("utf-8")),
     )
@@ -396,10 +401,10 @@ def replace_in_file(
 
 @tool
 def delete_file(path: FilePath) -> DeleteFileResult:
-    """Delete one file inside the current working directory.
+    """Delete one regular file by relative or absolute path.
 
     Args:
-        path: Relative path of the existing regular file to delete.
+        path: Absolute path or a path relative to the current working directory.
 
     Snippet:
         delete_file(path="notes/obsolete.md")
@@ -409,12 +414,12 @@ def delete_file(path: FilePath) -> DeleteFileResult:
         - Inspect or confirm the exact path before deleting it.
         - This tool never deletes directories or recursively expands patterns.
     """
-    working_directory, target = _resolve_working_path(path)
+    working_directory, target = _resolve_file_path(path)
     if not target.is_file():
         raise ValueError(f"File does not exist: {path}")
-    relative = target.relative_to(working_directory).as_posix()
+    result_path = _result_path(path, working_directory, target)
     target.unlink()
-    return DeleteFileResult(path=relative, deleted=True)
+    return DeleteFileResult(path=result_path, deleted=True)
 
 
 @tool
@@ -439,7 +444,7 @@ async def run_shell(
     """
     if not command.strip():
         raise ValueError("Shell command cannot be blank")
-    working_directory, output_root = _resolve_working_path(".zett-tool-output")
+    working_directory, output_root = _resolve_file_path(".zett-tool-output")
     output_root.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="shell-", dir=output_root))
     stdout_file, stderr_file = directory / "stdout.txt", directory / "stderr.txt"

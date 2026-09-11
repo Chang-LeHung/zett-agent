@@ -1,6 +1,7 @@
 """Coding extension integration with model schemas and tool dispatch."""
 
 import json
+from pathlib import Path
 
 from zett_agent import (
     Agent,
@@ -45,6 +46,8 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
         guidance = "\n".join(
             message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)
         )
+        assert f'Current working directory: "{Path.cwd().resolve()}".' in guidance
+        assert "Relative filesystem paths are resolved from this directory" in guidance
         assert all(f"## {name}" in guidance for name in tool_names)
         if read_only:
             assert "## write_file" not in guidance
@@ -82,6 +85,14 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
         extensions=[ToolGuidelinesExtension(), CodingExtension()],
     )
     await agent.run("Edit and search a file")
+    environment_messages = [
+        message
+        for message in model.requests[0].messages
+        if isinstance(message, SystemMessage) and "# Filesystem environment" in message.content
+    ]
+    assert len(environment_messages) == 1
+    assert f'Current working directory: "{tmp_path}".' in environment_messages[0].content
+    assert "Shell commands run from this directory." in environment_messages[0].content
     results = {
         message.name: json.loads(message.content)
         for message in model.requests[1].messages

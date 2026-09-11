@@ -1,5 +1,7 @@
 """Local coding tools exposed as an Agent extension."""
 
+from pathlib import Path
+
 from ..agent import AgentContext
 from ..tools import run_shell
 from .file_system import FileSystemExtension
@@ -33,6 +35,10 @@ class CodingExtension(FileSystemExtension):
 
     def __init__(self) -> None:
         super().__init__(read_only=False)
+
+    def _working_directory_instructions(self, working_directory: Path) -> str:
+        """Include the directory used by both file tools and shell commands."""
+        return f"{super()._working_directory_instructions(working_directory)}\nShell commands run from this directory."
 
     async def on_tool(self, context: AgentContext) -> None:
         """Register writable filesystem tools followed by shell execution."""

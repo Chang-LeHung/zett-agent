@@ -249,7 +249,9 @@ class AgentExtension(
         metrics = MetricsExtension()
         metrics.priority = 200
 
-    ``[E]`` marks an internal event published to every extension.
+    ``[E]`` marks an internal event published to extensions. Agent-owned events
+    use the default broadcast; extension-authored events may target one unique
+    extension name.
 
     .. zett-diagram:: extension-lifecycle
 
@@ -344,8 +346,9 @@ class AgentExtension(
     before_model_events() can stream CUSTOM or compaction events; compaction
     enters COMPACTING and returns to READY. before_tool_events() streams CUSTOM
     events in READY. These AgentEvents reach the caller; [E] marks an awaited,
-    sequential broadcast through the separate async on_event() hook, not a
-    synchronous Python callback.
+    sequential delivery through the separate async on_event() hook, not a
+    synchronous Python callback. AgentContext.publish broadcasts by default or
+    routes to one named extension when ``target`` is supplied.
 
     Tool execution errors become failed ToolMessages and still run after_tool(),
     which receives the original exception separately and can modify the message

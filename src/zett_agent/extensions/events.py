@@ -10,7 +10,7 @@ from ..model import ModelUsage
 
 @dataclass(frozen=True, slots=True)
 class ExtensionEvent:
-    """Immutable notification broadcast to registered extensions."""
+    """Immutable notification broadcast or routed to a named extension."""
 
 
 @dataclass(frozen=True, slots=True)

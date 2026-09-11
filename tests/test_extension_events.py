@@ -73,6 +73,59 @@ async def test_publish_preserves_order_and_stops_on_handler_failure():
         event.summary = "Changed"
 
 
+async def test_publish_can_target_one_named_extension():
+    calls = []
+    event = CompactionEvent(1, 2, 3, 4, "Summary")
+
+    class Subscriber(AgentExtension):
+        def __init__(self, name):
+            self.name = name
+
+        async def on_event(self, context, received):
+            assert received is event
+            calls.append(self.name)
+
+    context = AgentContext(
+        AgentConfig("session"),
+        AgentState(),
+        {},
+        (Subscriber("first"), Subscriber("second"), Subscriber("third")),
+    )
+
+    await context.publish(event, target="second")
+
+    assert calls == ["second"]
+
+
+@pytest.mark.parametrize("target", ["", "missing"])
+async def test_publish_rejects_invalid_or_unknown_target(target):
+    context = AgentContext(AgentConfig("session"), AgentState(), {}, (AgentExtension(),))
+
+    with pytest.raises(ValueError, match="target"):
+        await context.publish(CompactionEvent(1, 2, 3, 4, "Summary"), target=target)
+
+
+async def test_publish_rejects_ambiguous_target_without_delivery():
+    calls = []
+
+    class Subscriber(AgentExtension):
+        name = "duplicate"
+
+        async def on_event(self, context, event):
+            calls.append(event)
+
+    context = AgentContext(
+        AgentConfig("session"),
+        AgentState(),
+        {},
+        (Subscriber(), Subscriber()),
+    )
+
+    with pytest.raises(ValueError, match="Ambiguous"):
+        await context.publish(CompactionEvent(1, 2, 3, 4, "Summary"), target="duplicate")
+    assert calls == []
+
+
 async def test_memory_accumulator_ignores_system_events_and_tracks_compaction():
     accumulator = InMemoryMessageAccumulator()
     context = AgentContext(

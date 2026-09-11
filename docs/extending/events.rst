@@ -32,6 +32,10 @@ and ``await context.publish(event)``. Every extension's on_event receives it in
 priority order. Use a different event type when reacting, rather than recursively
 publishing the same event again. Internal events are not streamed automatically.
 
+Pass ``target="ExtensionName"`` to deliver only to the extension with that
+registered name. A missing or ambiguous target raises ``ValueError``; omitting
+``target`` preserves ordered broadcast behavior.
+
 Pause a tool for external approval
 --------------------------------------
 

@@ -18,8 +18,8 @@ All three are called events, but their destinations and delivery rules differ.
      - Async stream, in order
    * - ExtensionEvent
      - context.publish(event)
-     - Every extension's on_event
-     - Awaited sequential broadcast
+     - Every extension's on_event by default, or one named extension
+     - Awaited sequential broadcast or targeted delivery
    * - ExternalEvent
      - Application / UI callback
      - Extension.accept(config, event)
@@ -72,9 +72,10 @@ Internal notifications
 ``RunCancelledEvent`` tells subscribers to release pending work. Publishing an
 ``InternalMessageEvent`` queues an AgentMessage for another model iteration.
 
-An internal event is not retained or forwarded to the UI automatically. Subscriber
-exceptions stop the broadcast; previously processed subscribers are not rolled back.
-Avoid recursive publishing of the same event from its own handler.
+An internal event is not retained or forwarded to the UI automatically. Pass a
+unique extension name as ``target`` for one recipient; omit it to broadcast.
+Subscriber exceptions stop delivery; previously processed subscribers are not
+rolled back. Avoid recursive publishing of the same event from its own handler.
 
 External replies
 --------------------

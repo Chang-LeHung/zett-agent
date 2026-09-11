@@ -141,6 +141,10 @@ class AgentContext:
 
             await context.publish(MyIndexReadyEvent(document_count=12))
 
+        Or deliver it to one named extension::
+
+            await context.publish(event, target="SearchIndexExtension")
+
     .. seealso::
         :class:`~zett_agent.AgentExtension` for lifecycle hooks and
         :class:`~zett_agent.AgentTool` for request-scoped tool registration.
@@ -173,11 +177,13 @@ class AgentContext:
         # schemas and descriptions between sessions. Keep the callable itself.
         self.tools[tool.name] = replace(tool, parameters=deepcopy(tool.parameters))
 
-    async def publish(self, event: ExtensionEvent) -> None:
-        """Deliver an event sequentially to all registered extensions.
+    async def publish(self, event: ExtensionEvent, *, target: str | None = None) -> None:
+        """Deliver an event to one named extension or broadcast it by default.
 
-        Handler errors propagate immediately and stop delivery. Already completed
-        work is not rolled back. Subscribers may retain events themselves.
+        A target must match exactly one registered extension name. Unknown or
+        ambiguous targets raise ValueError without delivering the event. During
+        broadcast, handler errors propagate immediately and stop delivery.
+        Already completed work is not rolled back. Subscribers may retain events.
 
         Examples:
             Usage::
@@ -186,8 +192,19 @@ class AgentContext:
                     compressed_from=1, compressed_to=20,
                     kept_from=21, kept_to=30, summary="Earlier decisions...",
                 ))
+
+                await context.publish(event, target="MetricsExtension")
         """
-        for extension in self.extensions:
+        extensions = self.extensions
+        if target is not None:
+            if not isinstance(target, str) or not target.strip():
+                raise ValueError("Extension event target must be a non-empty string")
+            extensions = tuple(extension for extension in extensions if extension.name == target)
+            if not extensions:
+                raise ValueError(f"Unknown extension event target: {target!r}")
+            if len(extensions) > 1:
+                raise ValueError(f"Ambiguous extension event target: {target!r}")
+        for extension in extensions:
             await extension.on_event(self, event)
 
     async def append_message(

@@ -957,6 +957,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 success=error is None,
             )
             tool_completed = await self._finish_tool_execution(context)
+            await self._notify_after_tool(context, call, result, error)
             await context.append_message(
                 result,
                 MessageTiming(
@@ -965,7 +966,6 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     duration_ns=max(0, tool_completed.monotonic_ns - tool_started.monotonic_ns),
                 ),
             )
-            await self._notify_after_tool(context, call, result)
             yield AgentEvent(
                 AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
                 session_id=context.config.session_id,
@@ -974,7 +974,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 message=result,
                 error=error,
             )
-            async with aclosing(self._after_tool_events(context, call, result)) as events:
+            async with aclosing(self._after_tool_events(context, call, result, error)) as events:
                 async for event in events:
                     yield event
             steering = self._steering_extension.take(context)
@@ -1071,10 +1071,14 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     yield event
 
     async def _after_tool_events(
-        self, context: AgentContext, call: ToolCall, result: ToolMessage
+        self,
+        context: AgentContext,
+        call: ToolCall,
+        result: ToolMessage,
+        error: Exception | None,
     ) -> AsyncIterator[AgentEvent]:
         for extension in self.extensions:
-            async with aclosing(extension.after_tool_events(context, call, result)) as events:
+            async with aclosing(extension.after_tool_events(context, call, result, error)) as events:
                 async for event in events:
                     self._validate_post_operation_event(context, event)
                     yield event
@@ -1139,9 +1143,10 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         context: AgentContext,
         call: ToolCall,
         result: ToolMessage,
+        error: Exception | None,
     ) -> None:
         for extension in self.extensions:
-            await extension.after_tool(context, call, result)
+            await extension.after_tool(context, call, result, error)
 
     async def _notify_after_run(self, context: AgentContext, result: AssistantMessage) -> None:
         for extension in self.extensions:

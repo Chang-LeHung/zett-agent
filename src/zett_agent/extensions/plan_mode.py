@@ -324,7 +324,11 @@ class PlanModeExtension(ExternalEventExtension):
             baseline.plan_applied = False
 
     async def after_tool_events(
-        self, context: AgentContext, call: ToolCall, result: ToolMessage
+        self,
+        context: AgentContext,
+        call: ToolCall,
+        result: ToolMessage,
+        error: Exception | None,
     ) -> AsyncIterator[AgentEvent]:
         """Apply approved transitions and notify the UI after the tool completes.
 

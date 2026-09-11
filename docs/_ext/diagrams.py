@@ -88,7 +88,7 @@ DIAGRAMS = {
     setup --> premodel["PRE-MODEL<br/>before_model() / before_model_events()<br/>optional compaction"]
     premodel --> model["MODEL STEP<br/>append AssistantMessage<br/>after_model() / MODEL_COMPLETED<br/>after_model_events()"]
     model --> calls[Has tool calls?]
-    calls -- yes --> tools["TOOL STEP<br/>before_tool() / before_tool_events()<br/>execute / append ToolMessage<br/>after_tool() / TOOL_* / after_tool_events()"]
+    calls -- yes --> tools["TOOL STEP<br/>before_tool() / before_tool_events()<br/>execute / after_tool()<br/>append ToolMessage / TOOL_* / after_tool_events()"]
     tools --> premodel
     calls -- no --> inbox[Steering or internal input?]
     inbox -- yes --> continuation[Append selected input]

@@ -55,7 +55,9 @@ One model/tool cycle
                                       |
                                 execute tool
                                       |
-                         append ToolMessage -> after_tool()
+                         create ToolMessage -> after_tool()
+                                      |
+                            append ToolMessage
                                       |
                           TOOL_COMPLETED / TOOL_FAILED
                                       |

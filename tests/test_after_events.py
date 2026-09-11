@@ -45,8 +45,9 @@ async def test_post_hooks_follow_completion_in_priority_order(failed):
             assert context.state.messages[-1] is response.message
             yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name=f"model-{self.name}")
 
-        async def after_tool_events(self, context, call, result):
+        async def after_tool_events(self, context, call, result, error):
             assert result.success is not failed
+            assert (error is not None) is failed
             assert context.state.phase is AgentPhase.READY
             yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name=f"tool-{self.name}")
 

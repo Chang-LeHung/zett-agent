@@ -110,8 +110,20 @@ class AgentToolHooksMixin:
     async def before_tool(self, context: AgentContext, call: ToolCall) -> None:
         """Run before one requested tool is invoked."""
 
-    async def after_tool(self, context: AgentContext, call: ToolCall, result: ToolMessage) -> None:
-        """Run after one tool result is appended, including failed results."""
+    async def after_tool(
+        self,
+        context: AgentContext,
+        call: ToolCall,
+        result: ToolMessage,
+        error: Exception | None,
+    ) -> None:
+        """Inspect or modify a tool result before it is appended.
+
+        ``error`` is the original execution exception for a failed result and
+        None after successful execution. Changes made to ``result`` are included
+        in context, persistence, and the next model request. Raising prevents the
+        result from being appended.
+        """
 
 
 class AgentEventHooksMixin:
@@ -164,13 +176,18 @@ class AgentEventHooksMixin:
             yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
 
     async def after_tool_events(
-        self, context: AgentContext, call: ToolCall, result: ToolMessage
+        self,
+        context: AgentContext,
+        call: ToolCall,
+        result: ToolMessage,
+        error: Exception | None,
     ) -> AsyncIterator[AgentEvent]:
         """Stream CUSTOM events after after_tool and TOOL_COMPLETED/TOOL_FAILED.
 
-        Inspect result.success to distinguish success from a reported tool error.
-        Skipped or cancelled tools do not call this hook. Events are emitted
-        before steering selection or the next tool; execution remains in READY.
+        ``error`` is the same original execution exception passed to after_tool,
+        or None after success. Skipped or cancelled tools do not call this hook.
+        Events are emitted before steering selection or the next tool; execution
+        remains in READY.
         """
         if False:
             yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
@@ -267,8 +284,8 @@ class AgentExtension(
         | HAS TOOL CALLS?                         |-- yes --->| TOOL STEP                           |     |
         +-----------------------------------------+           | before_tool()                       |     |
                              |                                | before_tool_events()                |     |
-                             |                                | execute -> append ToolMessage       |-----+
-                             |                                | after_tool() / TOOL_*               |     |
+                             |                                | execute -> after_tool()             |-----+
+                             |                                | append ToolMessage / TOOL_*         |     |
                              | no                             | after_tool_events()                 |     |
                              |                                +-------------------------------------+     |
                              |                                                                            |
@@ -330,7 +347,9 @@ class AgentExtension(
     sequential broadcast through the separate async on_event() hook, not a
     synchronous Python callback.
 
-    Tool execution errors become failed ToolMessages and still run after_tool().
+    Tool execution errors become failed ToolMessages and still run after_tool(),
+    which receives the original exception separately and can modify the message
+    before it is appended and published.
     Unhandled model or hook errors take the exception exit. Cancellation skips
     on_error(), after_run(), and on_success(). Errors raised by subscribers after
     a terminal phase was committed do not change that terminal phase.

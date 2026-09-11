@@ -58,7 +58,7 @@ Model and tool hooks
    * - :meth:`~zett_agent.AgentExtension.before_tool`
      - Before one tool call. A raised exception fails the request before execution.
    * - :meth:`~zett_agent.AgentExtension.after_tool`
-     - ToolMessage already appended, including execution failure results; inspect result.success.
+     - Tool execution has finished but ToolMessage is not appended yet. Inspect the separate error argument and modify the result before context and persistence receive it.
 
 Event-producing hooks
 -------------------------
@@ -75,7 +75,7 @@ Event-producing hooks
    * - :meth:`~zett_agent.AgentExtension.before_tool_events`
      - After before_tool, before TOOL_STARTED. Use for UI approval or preparation progress.
    * - :meth:`~zett_agent.AgentExtension.after_tool_events`
-     - After after_tool and TOOL_COMPLETED/TOOL_FAILED, before steering selection or another tool.
+     - After after_tool and TOOL_COMPLETED/TOOL_FAILED; receives the same separate error argument before steering selection or another tool.
 
 Skipped or cancelled tools do not trigger after_tool_events. Custom output is
 produced while the request is READY; it does not become a phase transition simply

@@ -572,6 +572,51 @@ async def test_tool_error_returns_to_model(call):
     assert events[-1].message.content == "Please clarify."
 
 
+async def test_after_tool_can_inspect_exception_and_modify_result_before_append():
+    class ToolFailure(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("public failure")
+            self.detail = {"retryable": True, "status": 503}
+
+    failure = ToolFailure()
+
+    @tool(guidelines="Use to exercise failure normalization.")
+    def fail() -> None:
+        """Always fail with structured runtime details."""
+        raise failure
+
+    class NormalizeFailure(AgentExtension):
+        appended: ToolMessage | None = None
+
+        async def after_tool(self, context, call, result, error):
+            assert error is failure
+            assert result not in context.state.messages
+            result.content = '{"error":"temporarily unavailable","retryable":true}'
+            result.attributes["status"] = failure.detail["status"]
+
+        async def on_event(self, context, event):
+            if isinstance(event, MessageAppendedEvent) and isinstance(event.message, ToolMessage):
+                self.appended = event.message
+
+    extension = NormalizeFailure()
+    model = ScriptedModel(
+        AssistantMessage(tool_calls=(ToolCall("c1", "fail", {}),)),
+        AssistantMessage(content="Try again later."),
+    )
+    events = [
+        event
+        async for event in (await Agent.create(model, tools=[fail], extensions=[extension], config=CONFIG)).stream(
+            "Do it", config=CONFIG
+        )
+    ]
+
+    result = next(event.message for event in events if event.type is AgentEventType.TOOL_FAILED)
+    assert result is extension.appended
+    assert result.attributes == {"status": 503}
+    assert model.requests[1].messages[-1] is result
+    assert model.requests[1].messages[-1].content == '{"error":"temporarily unavailable","retryable":true}'
+
+
 async def test_agent_state_retains_messages_between_runs():
     history = [UserMessage(content="Old question"), AssistantMessage(content="Old reply")]
     model = ScriptedModel(AssistantMessage(content="New reply"), AssistantMessage(content="Other reply"))
@@ -731,8 +776,9 @@ async def test_extensions_receive_all_success_hooks_and_can_modify_messages():
         async def before_tool(self, context, call):
             calls.append("before_tool")
 
-        async def after_tool(self, context, call, result):
+        async def after_tool(self, context, call, result, error):
             calls.append("after_tool")
+            assert error is None
 
         async def after_run(self, context, result):
             calls.append("after_run")

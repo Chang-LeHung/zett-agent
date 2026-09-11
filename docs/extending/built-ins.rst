@@ -18,6 +18,9 @@ SteeringExtension remain Agent-owned built-ins and must not be registered again.
    * - SQLiteSessionExtension
      - Restore raw history and compaction checkpoints across restarts.
      - Close the owned pool; use one history restorer.
+   * - JSONLExtension
+     - Append one self-contained audit record for each Agent turn.
+     - One session owns one file; earlier turns are not repeated.
    * - ToolGuidelinesExtension
      - Include tool snippets and guidelines in model instructions.
      - Include explicitly when supplying a custom extension list.

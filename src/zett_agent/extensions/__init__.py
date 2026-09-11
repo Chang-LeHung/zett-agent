@@ -45,6 +45,7 @@ from .goal import (
     default_goal_subagent,
 )
 from .internal_message import INTERNAL_MESSAGE_EVENT_NAME, InternalMessageExtension
+from .jsonl import JSONLExtension
 from .mcp import McpClient, McpClientFactory, McpExtension, McpHttpServer, McpServer, McpStdioServer
 from .memory import InMemoryMessageAccumulator
 from .persistence import (

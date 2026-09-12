@@ -19,16 +19,18 @@ class AgentSetupHooksMixin:
     """Hooks that prepare request-scoped tools and conversation context."""
 
     async def on_tool(self, context: AgentContext) -> None:
-        """Register tools before any extension restores or injects messages.
+        """Register local or provider-hosted tools before context restoration.
 
         All extensions finish this hook before the first on_state() call, so
-        prompt extensions can reliably inspect the complete request tool set.
+        prompt extensions can reliably inspect ``context.tools`` and
+        ``context.server_tools`` as complete request-scoped registries.
 
         Examples:
             Usage::
 
                 async def on_tool(self, context):
                     context.register_tool(read_file)
+                    context.register_server_tool(ServerToolDefinition(type="web_search"))
         """
 
     async def on_state(self, context: AgentContext) -> None:
@@ -84,10 +86,11 @@ class AgentModelHooksMixin:
     async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
         """Inspect the current request before preprocessing a primary model call.
 
-        Request fields are frozen. Change messages through context.state.messages
-        and tools through context.tools; the runtime rebuilds these fields before
-        the next hook and before calling the provider. This is a shallow request
-        view, not an immutable copy of each message or tool definition.
+        Request fields are frozen. Change messages through context.state.messages,
+        local tools through context.tools, and provider tools through
+        context.server_tools; the runtime rebuilds these fields before the next
+        hook and before calling the provider. This is a shallow request view, not
+        an immutable copy of each message or tool definition.
 
         Examples:
             Inspect the tools offered in this iteration::

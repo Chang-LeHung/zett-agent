@@ -17,8 +17,8 @@ Setup hooks
      - State at entry
      - Intended operation
    * - :meth:`~zett_agent.AgentExtension.on_tool`
-     - Fresh registry already contains constructor tools.
-     - Register dynamic tools through context.register_tool.
+     - Fresh local registry already contains constructor tools; server registry is empty.
+     - Register dynamic tools through context.register_tool or context.register_server_tool.
    * - :meth:`~zett_agent.AgentExtension.on_state`
      - All dynamic tools registered; new input not appended.
      - Restore history and insert system instructions.
@@ -52,7 +52,7 @@ Model and tool hooks
    * - Hook
      - Boundary and constraints
    * - :meth:`~zett_agent.AgentExtension.before_model`
-     - Receives context and ModelRequest; inspect the current request or change context.state.messages and context.tools.
+     - Receives context and ModelRequest; inspect it or change context.state.messages, context.tools, and context.server_tools.
    * - :meth:`~zett_agent.AgentExtension.after_model`
      - Complete AssistantMessage already appended; receives ModelResponse including usage.
    * - :meth:`~zett_agent.AgentExtension.before_tool`
@@ -83,10 +83,11 @@ because its payload says "working". Do not synthesize MODEL_STARTED or completio
 events that are owned by the core loop.
 
 Both before-model hooks receive ``(context, request)``. The runtime refreshes
-request messages and tool definitions before each extension and again before
-the provider call. Request fields are frozen; edit ``context.state.messages``
-or ``context.tools`` to affect subsequent hooks and the provider. The supplied
-request is a shallow view at entry, not a live view of later list changes.
+request messages and both tool registries before each extension and again before
+the provider call. Request fields are frozen; edit ``context.state.messages``,
+``context.tools``, or ``context.server_tools`` to affect subsequent hooks and the
+provider. The supplied request is a shallow view at entry, not a live view of
+later registry changes.
 
 Notification and input hooks
 --------------------------------

@@ -13,7 +13,15 @@ from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransition
 from .exceptions import AgentIterationLimitError, AgentProtocolError
 from .json_types import JsonValue, json_object
 from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
-from .model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ModelUsage, ReasoningEffort
+from .model import (
+    AgentModel,
+    ModelEventType,
+    ModelRequest,
+    ModelResponse,
+    ModelUsage,
+    ReasoningEffort,
+    ServerToolDefinition,
+)
 from .sync_runtime import SyncMethodsMixin
 from .tools import AgentTool
 
@@ -122,9 +130,9 @@ class AgentState:
 class AgentContext:
     """Per-run references shared by all lifecycle hooks.
 
-    Register request-scoped tools during on_tool(). Mutate state.messages and
-    tools in place to update the current request without leaking registrations
-    into another request or session.
+    Register request-scoped local and server tools during on_tool(). Mutate
+    state.messages and either tool registry in place to update the current
+    request without leaking registrations into another request or session.
 
     .. note::
         Context identity is request-scoped. It is safe to use a context as a key
@@ -136,6 +144,16 @@ class AgentContext:
 
             async def on_tool(self, context: AgentContext) -> None:
                 context.register_tool(read_file)
+
+        Register a provider-hosted tool without adding a local executor::
+
+            async def on_tool(self, context: AgentContext) -> None:
+                context.register_server_tool(
+                    ServerToolDefinition(
+                        type="web_search",
+                        configuration={"search_context_size": "medium"},
+                    )
+                )
 
         Publish an internal notification to every extension::
 
@@ -168,6 +186,9 @@ class AgentContext:
     # New input before it is appended. Setup hooks may replace this message to
     # implement explicit command modes while preserving its raw form in attributes.
     input_message: UserMessage | None = None
+    # Provider-hosted tools registered for this request, keyed by wire type.
+    # They are sent to the model but never dispatched by the local tool loop.
+    server_tools: dict[str, ServerToolDefinition] = field(default_factory=dict)
 
     def register_tool(self, tool: AgentTool) -> None:
         """Register one request-scoped tool while rejecting ambiguous names."""
@@ -176,6 +197,23 @@ class AgentContext:
         # Tool metadata is mutable; a copied registry alone would still share
         # schemas and descriptions between sessions. Keep the callable itself.
         self.tools[tool.name] = replace(tool, parameters=deepcopy(tool.parameters))
+
+    def register_server_tool(self, tool: ServerToolDefinition) -> None:
+        """Register one request-scoped provider tool by its unique wire type.
+
+        The opaque configuration is copied because extensions may reuse one
+        definition across concurrent sessions. Server tools are model-side
+        capabilities and therefore never appear in :attr:`tools`, which is the
+        registry used by the Agent's local executor.
+
+        Raises:
+            ValueError: If this request already contains the same server-tool
+                type. Registering two configurations under one discriminator
+                would make provider behavior order-dependent.
+        """
+        if tool.type in self.server_tools:
+            raise ValueError(f"Server tool {tool.type!r} is already registered")
+        self.server_tools[tool.type] = replace(tool, configuration=deepcopy(tool.configuration))
 
     async def publish(self, event: ExtensionEvent, *, target: str | None = None) -> None:
         """Deliver an event to one named extension or broadcast it by default.
@@ -820,6 +858,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         request = ModelRequest(
             messages=tuple(state.messages),
             tools=tuple(tool.definition for tool in context.tools.values()),
+            server_tools=tuple(context.server_tools.values()),
             reasoning_effort=reasoning_effort,
         )
         await self._notify_before_model(context, request)
@@ -1170,6 +1209,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             request,
             messages=tuple(context.state.messages),
             tools=tuple(tool.definition for tool in context.tools.values()),
+            server_tools=tuple(context.server_tools.values()),
         )
 
     async def _notify_before_model(self, context: AgentContext, request: ModelRequest) -> None:

@@ -27,6 +27,7 @@ from zett_agent import (
     ReasoningCompletedEvent,
     ReasoningEffort,
     ReasoningStartedEvent,
+    ServerToolDefinition,
     SteeringExtension,
     SystemMessage,
     ToolCall,
@@ -274,6 +275,85 @@ async def test_context_registers_request_scoped_tools_before_messages_load():
     assert model.requests[0].tools == (add.definition,)
     assert any("## add\n- Use for exact addition." in message.content for message in model.requests[0].messages)
     assert model.requests[1].messages[-1].content == "5"
+
+
+async def test_extension_registers_request_scoped_server_tools() -> None:
+    definition = ServerToolDefinition(
+        type="web_search",
+        configuration={"filters": {"allowed_domains": ["example.com"]}},
+    )
+    contexts: list[AgentContext] = []
+
+    class RegisterServerTool(AgentExtension):
+        async def on_tool(self, context: AgentContext) -> None:
+            context.register_server_tool(definition)
+
+        async def on_state(self, context: AgentContext) -> None:
+            assert tuple(context.server_tools) == ("web_search",)
+            contexts.append(context)
+
+    model = ScriptedModel(AssistantMessage(content="First"), AssistantMessage(content="Second"))
+    agent = await Agent.create(model, extensions=[RegisterServerTool()], config=CONFIG)
+
+    await agent.run("Search", config=CONFIG)
+    await agent.run("Search again", config=AgentConfig(session_id=CONFIG.session_id))
+
+    assert model.requests[0].server_tools == (definition,)
+    assert model.requests[1].server_tools == (definition,)
+    assert contexts[0].server_tools is not contexts[1].server_tools
+    assert contexts[0].server_tools["web_search"] is not definition
+    assert contexts[0].server_tools["web_search"] is not contexts[1].server_tools["web_search"]
+    assert agent.tools == {}
+
+
+async def test_context_rejects_duplicate_server_tool_registration() -> None:
+    class DuplicateServerTools(AgentExtension):
+        async def on_tool(self, context: AgentContext) -> None:
+            context.register_server_tool(ServerToolDefinition(type="web_search"))
+            context.register_server_tool(
+                ServerToolDefinition(type="web_search", configuration={"search_context_size": "high"})
+            )
+
+    agent = await Agent.create(
+        ScriptedModel(AssistantMessage(content="unused")),
+        extensions=[DuplicateServerTools()],
+        config=CONFIG,
+    )
+
+    with pytest.raises(ValueError, match="Server tool 'web_search' is already registered"):
+        await agent.run("Hello")
+
+    assert agent.state.phase == AgentPhase.FAILED
+
+
+async def test_before_model_server_tool_registration_reaches_later_hooks_and_provider() -> None:
+    seen: list[tuple[ServerToolDefinition, ...]] = []
+
+    class RegisterBeforeModel(AgentExtension):
+        name = "register-server-tool"
+
+        async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
+            assert request.server_tools == ()
+            context.register_server_tool(ServerToolDefinition(type="web_search"))
+
+    class ObserveBeforeModel(AgentExtension):
+        name = "observe-server-tool"
+
+        async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
+            seen.append(tuple(request.server_tools))
+
+    model = ScriptedModel(AssistantMessage(content="Done"))
+    agent = await Agent.create(
+        model,
+        extensions=[RegisterBeforeModel(), ObserveBeforeModel()],
+        config=CONFIG,
+    )
+
+    await agent.run("Search")
+
+    expected = (ServerToolDefinition(type="web_search"),)
+    assert seen == [expected]
+    assert model.requests[0].server_tools == expected
 
 
 async def test_all_tool_hooks_finish_before_any_message_hook() -> None:

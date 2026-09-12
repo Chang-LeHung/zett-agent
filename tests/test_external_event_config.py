@@ -4,9 +4,9 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEventType,
     AgentExtension,
+    AgentRunConfig,
     AssistantMessage,
     ExternalEvent,
     ModelEvent,
@@ -21,8 +21,8 @@ class AnswerModel:
 
 @pytest.mark.parametrize("explicit", [True, False])
 async def test_external_event_config_routes_steering_without_payload_identity(explicit):
-    agent = await Agent.create(AnswerModel(), config=AgentConfig("default"))
-    config = AgentConfig("active", request_id="request")
+    agent = await Agent.create(AnswerModel(), config=AgentRunConfig("default"))
+    config = AgentRunConfig("active", request_id="request")
     stream = agent.stream("initial", config=config)
     assert (await anext(stream)).type == AgentEventType.MODEL_STARTED
     event = ExternalEvent("steering_message", {"content": "redirect"})
@@ -35,15 +35,15 @@ async def test_external_event_config_routes_steering_without_payload_identity(ex
 
 
 async def test_extensions_route_by_config_not_payload_and_reject_mismatched_request():
-    agent = await Agent.create(AnswerModel(), config=AgentConfig("s"))
-    stream = agent.stream("initial", config=AgentConfig("s", request_id="r"))
+    agent = await Agent.create(AnswerModel(), config=AgentRunConfig("s"))
+    stream = agent.stream("initial", config=AgentRunConfig("s", request_id="r"))
     await anext(stream)
     try:
         event = ExternalEvent("steering_message", {"session_id": "other", "request_id": "other", "content": "x"})
-        assert agent.emit_external_event(event, config=AgentConfig("s")) == ["SteeringExtension"]
+        assert agent.emit_external_event(event, config=AgentRunConfig("s")) == ["SteeringExtension"]
         assert event.payload["session_id"] == "other"
         assert not agent.emit_external_event(
-            ExternalEvent("steering_message", {"content": "x"}), config=AgentConfig("s", request_id="other")
+            ExternalEvent("steering_message", {"content": "x"}), config=AgentRunConfig("s", request_id="other")
         )
     finally:
         await stream.aclose()
@@ -63,7 +63,7 @@ async def test_broadcast_preserves_objects_and_returns_all_accepting_names_in_pr
             received.append((self.name, config, event))
             return self.accepts
 
-    config = AgentConfig("session", request_id="request")
+    config = AgentRunConfig("session", request_id="request")
     agent = Agent(
         AnswerModel(),
         extensions=[Receiver("last", 300, True), Receiver("first", 1, True), Receiver("ignored", 20, False)],
@@ -76,7 +76,7 @@ async def test_broadcast_preserves_objects_and_returns_all_accepting_names_in_pr
     assert all(item is event for _, _, item in received)
     assert all(routing is (config if initialized else None) for _, routing, _ in received)
     received.clear()
-    explicit = AgentConfig("explicit")
+    explicit = AgentRunConfig("explicit")
     assert agent.emit_external_event(event, config=explicit) == ["first", "last"]
     assert all(routing is explicit for _, routing, _ in received)
     assert event.payload == {"session_id": "business-field"}

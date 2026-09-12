@@ -7,11 +7,11 @@ import pytest
 from zett_agent import (
     INTERNAL_MESSAGE_EVENT_NAME,
     Agent,
-    AgentConfig,
     AgentEventType,
     AgentExtension,
     AgentIterationLimitError,
     AgentMessage,
+    AgentRunConfig,
     AssistantMessage,
     ExternalEvent,
     InternalMessageEvent,
@@ -61,7 +61,7 @@ async def test_internal_message_tool_loop_still_obeys_its_own_budget():
             yield ModelEvent.completed(ModelResponse(message))
 
     model = ToolLoopModel()
-    agent = await Agent.create(model, config=AgentConfig("budget"), extensions=[Publisher()], max_iterations=2)
+    agent = await Agent.create(model, config=AgentRunConfig("budget"), extensions=[Publisher()], max_iterations=2)
     with pytest.raises(AgentIterationLimitError):
         await agent.run("initial")
     assert model.calls == 3
@@ -104,7 +104,7 @@ async def test_request_internal_message_limit_and_reuse(limit, queued, use_strea
     model.release_first_request.set()
     options = {} if limit == 8 else {"max_internal_messages": limit}
     agent = await Agent.create(
-        model, config=AgentConfig("limits"), extensions=[Publisher()], max_iterations=1, **options
+        model, config=AgentRunConfig("limits"), extensions=[Publisher()], max_iterations=1, **options
     )
     assert agent.max_internal_messages == limit
     for _ in range(2):
@@ -127,7 +127,7 @@ async def test_external_internal_message_continues_loop_and_persists_complete_hi
     persistence = SQLiteSessionExtension(tmp_path / "sessions.db")
     agent = await Agent.create(
         model,
-        config=AgentConfig("session-1", request_id="request-1"),
+        config=AgentRunConfig("session-1", request_id="request-1"),
         extensions=[persistence],
     )
     task = asyncio.create_task(_collect(agent, "initial question"))
@@ -194,7 +194,7 @@ async def test_internal_internal_message_event_queues_messages_in_publish_order(
 
     model = PausingModel("initial", "first answer", "second answer")
     model.release_first_request.set()
-    agent = await Agent.create(model, config=AgentConfig("internal"), extensions=[Publisher()])
+    agent = await Agent.create(model, config=AgentRunConfig("internal"), extensions=[Publisher()])
 
     events = await _collect(agent, "question")
 
@@ -229,7 +229,7 @@ async def test_internal_message_arriving_during_internal_message_processing_crea
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content=answer)))
 
     model = ThreeStepModel()
-    agent = await Agent.create(model, config=AgentConfig("batches"))
+    agent = await Agent.create(model, config=AgentRunConfig("batches"))
     events = []
 
     async def consume() -> None:
@@ -266,8 +266,8 @@ def test_internal_extension_cannot_be_supplied_by_caller(renamed):
 async def test_builtin_internal_inboxes_are_isolated_between_agents() -> None:
     first_model = PausingModel("one", "internal answer")
     second_model = PausingModel("two")
-    first = await Agent.create(first_model, config=AgentConfig("same"), extensions=[])
-    second = await Agent.create(second_model, config=AgentConfig("same"), extensions=[])
+    first = await Agent.create(first_model, config=AgentRunConfig("same"), extensions=[])
+    second = await Agent.create(second_model, config=AgentRunConfig("same"), extensions=[])
 
     assert not first.emit_external_event(
         ExternalEvent(INTERNAL_MESSAGE_EVENT_NAME, {"session_id": "same", "content": "too early"})
@@ -280,7 +280,7 @@ async def test_builtin_internal_inboxes_are_isolated_between_agents() -> None:
     )
     assert not first.emit_external_event(
         ExternalEvent(INTERNAL_MESSAGE_EVENT_NAME, {"content": "bad"}),
-        config=AgentConfig("same", request_id="wrong-request"),
+        config=AgentRunConfig("same", request_id="wrong-request"),
     )
     first_model.release_first_request.set()
     second_model.release_first_request.set()
@@ -303,7 +303,7 @@ async def test_each_internal_message_has_an_independent_iteration_budget() -> No
     model.release_first_request.set()
     agent = await Agent.create(
         model,
-        config=AgentConfig("limited"),
+        config=AgentRunConfig("limited"),
         extensions=[Publisher()],
         max_iterations=1,
     )
@@ -329,7 +329,7 @@ async def test_cancellation_discards_queued_internal_message_before_agent_reuse(
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="fresh answer")))
 
     model = CancelThenAnswerModel()
-    agent = await Agent.create(model, config=AgentConfig("cancelled"), extensions=[])
+    agent = await Agent.create(model, config=AgentRunConfig("cancelled"), extensions=[])
     task = asyncio.create_task(agent.run("cancel this"))
     await model.first_started.wait()
     assert agent.emit_external_event(

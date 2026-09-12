@@ -4,7 +4,7 @@ Keep and restore conversations
 Session identity is not history storage
 -------------------------------------------
 
-``AgentConfig.session_id`` identifies a conversation. ``request_id`` is an
+``AgentRunConfig.session_id`` identifies a conversation. ``request_id`` is an
 optional correlation ID for one invocation, not an idempotency key. Reusing a
 request ID does not deduplicate messages. The caller must define any retry/edit
 policy that requires replacing an earlier user submission.

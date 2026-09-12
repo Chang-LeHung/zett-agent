@@ -18,7 +18,7 @@ hosted capability you want to expose::
         ],
     )
 
-Every extension calls :meth:`~zett_agent.AgentContext.register_server_tool`
+Every extension calls :meth:`~zett_agent.AgentRunContext.register_server_tool`
 during ``on_tool``. The resulting definitions are request-scoped and reach
 every subsequent before-model hook and the final ``ModelRequest``. They never
 enter the Agent's local tool executor.

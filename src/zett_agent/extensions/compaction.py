@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import tiktoken
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
 from ..messages import AgentMessage, AnyMessage, SystemMessage, UserMessage
@@ -95,7 +95,7 @@ class CompactionExtension(AgentExtension):
         encoding = tiktoken.get_encoding("o200k_base")
         return sum(len(encoding.encode_ordinary(repr(message))) for message in messages)
 
-    async def before_model_events(self, context: AgentContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
+    async def before_model_events(self, context: AgentRunContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
         """Stream compaction state while atomically replacing older context.
 
         The incoming request describes the primary call. The summarizer uses

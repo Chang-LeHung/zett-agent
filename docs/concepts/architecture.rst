@@ -37,7 +37,7 @@ What each object owns
      - Convenience creation and event-aware stream collection; exposes the runtime as client.agent.
    * - AgentModel
      - Provider requests, event normalization, and pre-output retry policy.
-   * - AgentContext
+   * - AgentRunContext
      - Per-request references shared with extensions. Use it instead of global Agent state.
    * - AgentExtension
      - Optional behavior at documented hooks; default hooks do nothing.

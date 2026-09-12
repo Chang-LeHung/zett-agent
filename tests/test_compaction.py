@@ -2,12 +2,12 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentEventType,
     AgentExtension,
     AgentPhase,
     AgentProtocolError,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AssistantMessage,
     CompactionEvent,
@@ -45,7 +45,7 @@ class Collector(AgentExtension):
 
 
 def context(messages):
-    return AgentContext(AgentConfig(session_id="test"), AgentState(messages=messages), {}, (Collector(),))
+    return AgentRunContext(AgentRunConfig(session_id="test"), AgentState(messages=messages), {}, (Collector(),))
 
 
 async def compact(extension, state):
@@ -159,15 +159,15 @@ async def test_compaction_event_delivered_after_context_update(fail):
     agent = await Agent.create(
         PrimaryModel(),
         extensions=[Restore(), CompactionExtension(SummaryModel(), max_tokens=100, keep_recent_tokens=1), Observer()],
-        config=AgentConfig(session_id="test"),
+        config=AgentRunConfig(session_id="test"),
     )
     streamed = []
     if fail:
         with pytest.raises(RuntimeError, match="Model failed"):
-            async for event in agent.stream("Latest", config=AgentConfig(session_id="test")):
+            async for event in agent.stream("Latest", config=AgentRunConfig(session_id="test")):
                 streamed.append(event)
     else:
-        streamed = [event async for event in agent.stream("Latest", config=AgentConfig(session_id="test"))]
+        streamed = [event async for event in agent.stream("Latest", config=AgentRunConfig(session_id="test"))]
     assert len(observed) == 1
     assert observed[0].kept_from == observed[0].kept_to == 3
     assert [event.type for event in streamed[:3]] == [

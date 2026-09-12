@@ -3,9 +3,9 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from zett_agent import (
-    AgentConfig,
-    AgentContext,
     AgentExtension,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     CompactionEvent,
     InMemoryMessageAccumulator,
@@ -26,8 +26,8 @@ async def test_context_appends_message_before_publishing_its_event():
             assert context.state.messages[-1] is event.message
             observed.append(event)
 
-    context = AgentContext(
-        AgentConfig("session"),
+    context = AgentRunContext(
+        AgentRunConfig("session"),
         AgentState(),
         {},
         (Subscriber(),),
@@ -60,8 +60,8 @@ async def test_publish_preserves_order_and_stops_on_handler_failure():
             if self.fail:
                 raise RuntimeError("Subscriber failed")
 
-    context = AgentContext(
-        AgentConfig("session"),
+    context = AgentRunContext(
+        AgentRunConfig("session"),
         AgentState(),
         {},
         (Subscriber("first"), Subscriber("second", fail=True), Subscriber("third")),
@@ -85,8 +85,8 @@ async def test_publish_can_target_one_named_extension():
             assert received is event
             calls.append(self.name)
 
-    context = AgentContext(
-        AgentConfig("session"),
+    context = AgentRunContext(
+        AgentRunConfig("session"),
         AgentState(),
         {},
         (Subscriber("first"), Subscriber("second"), Subscriber("third")),
@@ -99,7 +99,7 @@ async def test_publish_can_target_one_named_extension():
 
 @pytest.mark.parametrize("target", ["", "missing"])
 async def test_publish_rejects_invalid_or_unknown_target(target):
-    context = AgentContext(AgentConfig("session"), AgentState(), {}, (AgentExtension(),))
+    context = AgentRunContext(AgentRunConfig("session"), AgentState(), {}, (AgentExtension(),))
 
     with pytest.raises(ValueError, match="target"):
         await context.publish(CompactionEvent(1, 2, 3, 4, "Summary"), target=target)
@@ -114,8 +114,8 @@ async def test_publish_rejects_ambiguous_target_without_delivery():
         async def on_event(self, context, event):
             calls.append(event)
 
-    context = AgentContext(
-        AgentConfig("session"),
+    context = AgentRunContext(
+        AgentRunConfig("session"),
         AgentState(),
         {},
         (Subscriber(), Subscriber()),
@@ -128,8 +128,8 @@ async def test_publish_rejects_ambiguous_target_without_delivery():
 
 async def test_memory_accumulator_ignores_system_events_and_tracks_compaction():
     accumulator = InMemoryMessageAccumulator()
-    context = AgentContext(
-        AgentConfig("session"),
+    context = AgentRunContext(
+        AgentRunConfig("session"),
         AgentState(messages=[SystemMessage(content="Current"), UserMessage(content="Old")]),
         {},
         (accumulator,),

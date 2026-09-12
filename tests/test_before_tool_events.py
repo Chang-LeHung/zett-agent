@@ -4,12 +4,12 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEvent,
     AgentEventType,
     AgentExtension,
     AgentPhase,
     AgentProtocolError,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -64,7 +64,7 @@ async def test_hooks_run_for_each_call_in_order_before_tool_execution():
 
     agent = await Agent.create(
         ToolModel(),
-        config=AgentConfig("tools"),
+        config=AgentRunConfig("tools"),
         tools=[recording_tool(executed)],
         extensions=[Extension("one"), Extension("two")],
     )
@@ -116,7 +116,7 @@ async def test_pre_tool_interruption_closes_hook_without_executing_tool(mode):
                 closed.append(True)
 
     agent = await Agent.create(
-        ToolModel(), config=AgentConfig("tools"), tools=[recording_tool(executed)], extensions=[Extension()]
+        ToolModel(), config=AgentRunConfig("tools"), tools=[recording_tool(executed)], extensions=[Extension()]
     )
     stream = agent.stream("run")
     if mode == "close":

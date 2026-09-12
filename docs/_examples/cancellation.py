@@ -5,10 +5,10 @@ from collections.abc import AsyncIterator
 from contextlib import aclosing
 
 from zett_agent import (
-    AgentContext,
     AgentEventType,
     AgentExtension,
     AgentPhase,
+    AgentRunContext,
     AssistantMessage,
     ExtensionEvent,
     ModelEvent,
@@ -22,19 +22,19 @@ from zett_agent import (
 
 class WorkTracker(AgentExtension):
     def __init__(self) -> None:
-        self.active: set[AgentContext] = set()
+        self.active: set[AgentRunContext] = set()
 
-    async def before_run(self, context: AgentContext) -> None:
+    async def before_run(self, context: AgentRunContext) -> None:
         self.active.add(context)
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         if isinstance(event, RunCancelledEvent):
             self.active.discard(context)
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         self.active.discard(context)
 
-    async def on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         self.active.discard(context)
 
 

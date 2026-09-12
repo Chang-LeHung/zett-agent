@@ -30,7 +30,7 @@ Common entry points
 
 * Create a client: :func:`~zett_agent.create_agent`.
 * Run or stream: :class:`~zett_agent.AgentClient` and :class:`~zett_agent.Agent`.
-* Write an extension: :class:`~zett_agent.AgentExtension` and :class:`~zett_agent.AgentContext`.
+* Write an extension: :class:`~zett_agent.AgentExtension` and :class:`~zett_agent.AgentRunContext`.
 * Wait for external input: :class:`~zett_agent.ExternalEventExtension`.
 * Add persistence: :class:`~zett_agent.BaseSessionPersistenceExtension`.
 * Implement a model: :class:`~zett_agent.AgentModel`.

@@ -8,7 +8,7 @@ from zett_agent import (
     DEFAULT_SKILL_ROOTS,
     READ_SKILL_TOOL_NAME,
     Agent,
-    AgentConfig,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -69,7 +69,7 @@ Read every changed file before reporting findings.
     extension = SkillExtension([tmp_path])
     agent = await Agent.create(
         model,
-        config=AgentConfig("skill-session"),
+        config=AgentRunConfig("skill-session"),
         extensions=[extension, ToolGuidelinesExtension()],
     )
 
@@ -173,7 +173,7 @@ async def test_skill_extension_is_inert_when_no_skills_exist(tmp_path):
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
 
     extension = SkillExtension([tmp_path / "missing"])
-    agent = await Agent.create(Model(), config=AgentConfig("empty-skills"), extensions=[extension])
+    agent = await Agent.create(Model(), config=AgentRunConfig("empty-skills"), extensions=[extension])
 
     await agent.run("Hello")
     assert extension.skills == ()

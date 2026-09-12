@@ -10,7 +10,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from ..agent import Agent, AgentConfig, AgentContext
+from ..agent import Agent, AgentRunConfig, AgentRunContext
 from ..ids import new_uuid7
 from ..model import AgentModel, ReasoningEffort
 from ..tools import AgentTool, tool
@@ -116,7 +116,7 @@ class SubAgentExtension(AgentExtension):
             extension = SubAgentExtension()
             agent = await Agent.create(
                 model,
-                config=AgentConfig(session_id="parent"),
+                config=AgentRunConfig(session_id="parent"),
                 extensions=[SessionPersistenceExtension(storage), extension, ToolGuidelinesExtension()],
             )
     """
@@ -129,22 +129,22 @@ class SubAgentExtension(AgentExtension):
             raise ValueError("Subagent names must be unique")
         self._configured_subagents = configured
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Register the request-bound task tool and its available-agent schema."""
         subagents = self._resolve_subagents(context)
         context.register_tool(self._build_tool(context, subagents))
 
-    def _resolve_subagents(self, context: AgentContext) -> Mapping[str, SubAgentDefinition]:
+    def _resolve_subagents(self, context: AgentRunContext) -> Mapping[str, SubAgentDefinition]:
         """Resolve configured profiles or create defaults using the parent model."""
         if self._configured_subagents is not None:
             return self._configured_subagents
         if context.model is None:
-            raise ValueError("Default subagents require an AgentContext model")
+            raise ValueError("Default subagents require an AgentRunContext model")
         return {definition.name: definition for definition in default_subagents(context.model)}
 
     def _build_tool(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         subagents: Mapping[str, SubAgentDefinition],
     ) -> AgentTool:
         """Build one task tool whose child is linked to the calling session."""
@@ -180,7 +180,7 @@ class SubAgentExtension(AgentExtension):
             child_session_id = new_uuid7()
             child = await Agent.create(
                 definition.model,
-                config=AgentConfig(
+                config=AgentRunConfig(
                     session_id=child_session_id,
                     parent_session_id=context.config.session_id,
                 ),

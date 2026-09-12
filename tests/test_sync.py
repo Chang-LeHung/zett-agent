@@ -10,8 +10,6 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentEvent,
     AgentEventDispatcher,
     AgentEventType,
@@ -19,6 +17,8 @@ from zett_agent import (
     AgentMessage,
     AgentPhase,
     AgentProtocolError,
+    AgentRunConfig,
+    AgentRunContext,
     AskUserExtension,
     AssistantMessage,
     ExternalEvent,
@@ -184,7 +184,7 @@ def test_sync_context_keeps_task_identity_and_suppresses_errors():
 
 
 def test_close_early_cancels_agent_then_same_session_can_run():
-    with SyncAgent(EchoModel(), config=AgentConfig("cancel")) as agent:
+    with SyncAgent(EchoModel(), config=AgentRunConfig("cancel")) as agent:
         with agent.stream("first") as events:
             assert next(events).type is AgentEventType.MODEL_STARTED
         assert agent.get_state("cancel").phase is AgentPhase.CANCELLED
@@ -193,7 +193,7 @@ def test_close_early_cancels_agent_then_same_session_can_run():
 
 def test_sessions_are_isolated_across_calling_threads():
     with SyncAgent(EchoModel()) as agent, ThreadPoolExecutor() as pool:
-        jobs = [pool.submit(agent.run, str(i), config=AgentConfig(f"session-{i}")) for i in range(4)]
+        jobs = [pool.submit(agent.run, str(i), config=AgentRunConfig(f"session-{i}")) for i in range(4)]
         assert [job.result(timeout=5).content for job in jobs] == [f"1:{i}" for i in range(4)]
 
 
@@ -224,7 +224,7 @@ def test_sync_model_tool_and_sqlite_history(tmp_path):
 
     storage = SQLiteSessionExtension(tmp_path / "sessions.sqlite3")
     try:
-        with SyncAgent(ToolModel(), tools=[double], extensions=[storage], config=AgentConfig("stored")) as agent:
+        with SyncAgent(ToolModel(), tools=[double], extensions=[storage], config=AgentRunConfig("stored")) as agent:
             assert agent.run("calculate").content.endswith("calculate")
         records = storage.list_raw_messages("stored")
         assert [r.message.role for r in records] == ["user", "assistant", "tool", "assistant"]
@@ -242,7 +242,7 @@ def test_sync_agent_uses_async_hooks_with_original_context():
 
     class Hooks(AgentExtension):
         async def on_message(self, context):
-            assert isinstance(context, AgentContext)
+            assert isinstance(context, AgentRunContext)
             assert not hasattr(context, "sync")
             assert get_ident() != caller_thread
             context.input_message = UserMessage(content="transformed")
@@ -336,7 +336,7 @@ def test_existing_agent_can_be_initialized_and_run_through_sync_view():
     with agent.sync() as blocking:
         with pytest.raises(AgentProtocolError, match="not initialized"):
             blocking.run("early")
-        blocking.initialize(config=AgentConfig("existing"))
+        blocking.initialize(config=AgentRunConfig("existing"))
         assert blocking.run("now").content == "1:now"
 
 
@@ -417,7 +417,7 @@ def test_callback_failure_closes_the_request():
         async def on_text_delta_event(self, event):
             raise ValueError("handler error")
 
-    with SyncAgent(EchoModel(), config=AgentConfig("callback"), event_dispatcher=Handler()) as agent:
+    with SyncAgent(EchoModel(), config=AgentRunConfig("callback"), event_dispatcher=Handler()) as agent:
         with pytest.raises(ValueError, match="handler error"):
             list(agent.stream("hi"))
         assert agent.get_state("callback").phase is AgentPhase.CANCELLED
@@ -527,7 +527,7 @@ def test_sync_agent_cancellation_closes_async_generator_hook():
             finally:
                 finished.set()
 
-    with SyncAgent(EchoModel(), extensions=[SlowHook()], config=AgentConfig("slow")) as agent:
+    with SyncAgent(EchoModel(), extensions=[SlowHook()], config=AgentRunConfig("slow")) as agent:
         with ThreadPoolExecutor() as pool:
             stream = agent.stream("hello")
             reader = pool.submit(next, stream, None)

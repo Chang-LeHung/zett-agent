@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..tools import run_shell
 from .file_system import FileSystemExtension
 
@@ -19,7 +19,7 @@ class CodingExtension(FileSystemExtension):
 
             agent = await Agent.create(
                 model,
-                config=AgentConfig(session_id="coding-session"),
+                config=AgentRunConfig(session_id="coding-session"),
                 extensions=[CodingExtension(), ToolGuidelinesExtension()],
             )
 
@@ -40,7 +40,7 @@ class CodingExtension(FileSystemExtension):
         """Include the directory used by both file tools and shell commands."""
         return f"{super()._working_directory_instructions(working_directory)}\nShell commands run from this directory."
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Register writable filesystem tools followed by shell execution."""
         await super().on_tool(context)
         context.register_tool(run_shell)

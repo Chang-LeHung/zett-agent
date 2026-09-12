@@ -51,12 +51,12 @@ def test_every_example_is_classified_and_valid_python():
 
 
 async def test_example_extension_isolates_concurrent_requests_and_cleans_errors():
-    from zett_agent import AgentConfig, create_agent
+    from zett_agent import AgentRunConfig, create_agent
 
     example = runpy.run_path(str(EXAMPLES / "custom_extension.py"))
     extension = example["NoteExtension"]()
     clients = [
-        await create_agent(example["NoteModel"](), config=AgentConfig(session_id=str(index)), extensions=[extension])
+        await create_agent(example["NoteModel"](), config=AgentRunConfig(session_id=str(index)), extensions=[extension])
         for index in range(2)
     ]
     results = await asyncio.gather(*(client.run("/note extensions") for client in clients))
@@ -72,17 +72,17 @@ async def test_example_extension_isolates_concurrent_requests_and_cleans_errors(
 async def test_approval_example_rejection_validation_and_routing(answer):
     from contextlib import aclosing
 
-    from zett_agent import AgentConfig, AgentEventType, ExternalEvent, create_agent
+    from zett_agent import AgentEventType, AgentRunConfig, ExternalEvent, create_agent
 
     example = runpy.run_path(str(EXAMPLES / "approval.py"))
-    config = AgentConfig(session_id="approval-edge", request_id="request-edge")
+    config = AgentRunConfig(session_id="approval-edge", request_id="request-edge")
     client = await create_agent(example["ApprovalModel"](), config=config, extensions=[example["ApprovalExtension"]()])
     observed = []
     async with aclosing(client.stream("Ask first")) as events:
         async for event in events:
             if event.type == AgentEventType.CUSTOM:
                 response = ExternalEvent("approval.response", {"tool_call_id": "approval-1", "approved": answer})
-                assert client.agent.emit_external_event(response, config=AgentConfig(session_id="other")) == []
+                assert client.agent.emit_external_event(response, config=AgentRunConfig(session_id="other")) == []
                 assert client.agent.emit_external_event(response, config=config) == ["ApprovalExtension"]
             if event.type in (AgentEventType.TOOL_COMPLETED, AgentEventType.TOOL_FAILED):
                 observed.append(event)

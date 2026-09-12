@@ -15,14 +15,14 @@ from .events import ExtensionEvent, SteeringMessageEvent
 from .external import ExternalEvent
 
 if TYPE_CHECKING:
-    from ..agent import AgentConfig, AgentContext
+    from ..agent import AgentRunConfig, AgentRunContext
 
 STEERING_MESSAGE_EVENT_NAME = "steering_message"
 
 
 @dataclass(slots=True)
 class _Inbox:
-    context: AgentContext
+    context: AgentRunContext
     messages: deque[UserMessage] = field(default_factory=deque)
     accepting: bool = True
 
@@ -40,29 +40,29 @@ class SteeringExtension(AgentExtension):
 
             agent.emit_external_event(
                 ExternalEvent("steering_message", {"content": "Stop editing; explain first."}),
-                config=AgentConfig(session_id="s1"),
+                config=AgentRunConfig(session_id="s1"),
             )
 
             await context.publish(SteeringMessageEvent(UserMessage(content="Inspect another file.")))
     """
 
     def __init__(self) -> None:
-        self._inboxes: dict[AgentContext, _Inbox] = {}
+        self._inboxes: dict[AgentRunContext, _Inbox] = {}
         self._lock = Lock()
 
-    def open(self, context: AgentContext) -> None:
+    def open(self, context: AgentRunContext) -> None:
         """Initialize request-local routing before extension hooks run."""
         with self._lock:
             if context in self._inboxes:
                 raise AgentProtocolError("Steering inbox is already active")
             self._inboxes[context] = _Inbox(context)
 
-    def close(self, context: AgentContext) -> None:
+    def close(self, context: AgentRunContext) -> None:
         """Clear routing and messages on every request exit."""
         with self._lock:
             self._inboxes.pop(context, None)
 
-    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
+    def accept(self, config: AgentRunConfig | None, event: ExternalEvent) -> bool:
         """Route external text by session and optional request ID, from any thread."""
         if event.name != STEERING_MESSAGE_EVENT_NAME:
             return False
@@ -90,7 +90,7 @@ class SteeringExtension(AgentExtension):
             matches[0].messages.append(UserMessage(content=content))
             return True
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Receive typed user input, including multimodal UserMessages."""
         if isinstance(event, SteeringMessageEvent):
             with self._lock:
@@ -99,13 +99,13 @@ class SteeringExtension(AgentExtension):
                     raise AgentProtocolError("Steering inbox is closed")
                 inbox.messages.append(event.message)
 
-    def take(self, context: AgentContext) -> UserMessage | None:
+    def take(self, context: AgentRunContext) -> UserMessage | None:
         """Poll after a model/tool call without closing an empty inbox."""
         with self._lock:
             inbox = self._inboxes[context]
             return inbox.messages.popleft() if inbox.messages else None
 
-    def select_next(self, context: AgentContext, reserve_other_input: Callable[[], bool]) -> UserMessage | None:
+    def select_next(self, context: AgentRunContext, reserve_other_input: Callable[[], bool]) -> UserMessage | None:
         """Return only steering input; atomically close when no input remains.
 
         The caller owns other input and reserves it through a synchronous

@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentExtension,
+    AgentRunConfig,
     AssistantMessage,
     CompactionExtension,
     ModelEvent,
@@ -87,7 +87,7 @@ async def test_successful_turn_writes_valid_session_and_raw_log_rows(sqlite_exte
 
     agent = await Agent.create(
         AnswerModel("Stored answer"),
-        config=AgentConfig("session"),
+        config=AgentRunConfig("session"),
         extensions=[Classifier(), sqlite_extension],
     )
 
@@ -121,7 +121,7 @@ async def test_successful_turn_writes_valid_session_and_raw_log_rows(sqlite_exte
 async def test_complete_tool_turn_preserves_roles_and_session_view(sqlite_extension):
     agent = await Agent.create(
         ToolRoundModel(),
-        config=AgentConfig("tool-session"),
+        config=AgentRunConfig("tool-session"),
         tools=[add],
         extensions=[sqlite_extension],
     )
@@ -182,7 +182,7 @@ async def test_cancelled_tool_turn_is_persisted_as_provider_complete_and_can_res
     model = CancelThenAnswerModel()
     agent = await Agent.create(
         model,
-        config=AgentConfig("cancel-resume"),
+        config=AgentRunConfig("cancel-resume"),
         tools=[wait_for_cancel],
         extensions=[sqlite_extension],
     )
@@ -232,7 +232,7 @@ async def test_restore_omits_legacy_incomplete_tool_batch_without_mutating_raw_l
                 yield event
 
     model = CapturingModel()
-    agent = await Agent.create(model, config=AgentConfig("legacy"), extensions=[sqlite_extension])
+    agent = await Agent.create(model, config=AgentRunConfig("legacy"), extensions=[sqlite_extension])
 
     await agent.run("Try again")
 
@@ -253,7 +253,7 @@ async def test_compaction_writes_snapshot_without_rewriting_raw_log(sqlite_exten
     await storage.append("session", "old-request", AssistantMessage(content="Old answer"))
     agent = await Agent.create(
         AnswerModel("Current answer"),
-        config=AgentConfig("session"),
+        config=AgentRunConfig("session"),
         extensions=[
             sqlite_extension,
             CompactionExtension(AnswerModel("Compact checkpoint"), max_tokens=50, keep_recent_tokens=1),

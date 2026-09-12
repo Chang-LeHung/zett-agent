@@ -5,7 +5,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..messages import AssistantMessage
 from ..tools import AgentTool, tool
 from .base import AgentExtension
@@ -86,19 +86,19 @@ class TodoWriteExtension(AgentExtension):
     def __init__(self) -> None:
         self._sessions: dict[str, tuple[TodoItem, ...]] = {}
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Register a request-scoped todo_write tool bound to this session."""
         context.register_tool(self._build_tool(context))
 
-    async def after_run(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def after_run(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Release todo state after a successful request finishes."""
         self.clear(context.config.session_id)
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Release todo state when a request terminates with an error."""
         self.clear(context.config.session_id)
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Release todo state when cancellation terminates a request."""
         if isinstance(event, RunCancelledEvent):
             self.clear(context.config.session_id)
@@ -114,7 +114,7 @@ class TodoWriteExtension(AgentExtension):
         self._validate_session_id(session_id)
         self._sessions.pop(session_id, None)
 
-    def _build_tool(self, context: AgentContext) -> AgentTool:
+    def _build_tool(self, context: AgentRunContext) -> AgentTool:
         """Create a validated tool whose state is isolated by session ID."""
 
         @tool(name=TODO_WRITE_TOOL_NAME)

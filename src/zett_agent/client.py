@@ -3,7 +3,7 @@
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import aclosing
 
-from .agent import Agent, AgentConfig
+from .agent import Agent, AgentRunConfig
 from .dispatcher import AgentEventDispatcher
 from .events import AgentEvent, AgentEventType
 from .exceptions import AgentProtocolError
@@ -31,7 +31,7 @@ class AgentClient(SyncMethodsMixin):
     Examples:
         Usage::
 
-            agent = await Agent.create(model, config=AgentConfig(session_id="existing"))
+            agent = await Agent.create(model, config=AgentRunConfig(session_id="existing"))
             client = AgentClient(agent, event_dispatcher=ConsoleEvents())
             reply = await client.run("Continue")
     """
@@ -44,7 +44,7 @@ class AgentClient(SyncMethodsMixin):
         self,
         message: UserMessage | str,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -92,7 +92,7 @@ class AgentClient(SyncMethodsMixin):
         self,
         message: UserMessage | str,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -140,7 +140,7 @@ class AgentClient(SyncMethodsMixin):
 async def create_agent(
     model: AgentModel | None,
     *,
-    config: AgentConfig | None = None,
+    config: AgentRunConfig | None = None,
     system_prompt: str = "You are a helpful assistant.",
     tools: Sequence[AgentTool] = (),
     extensions: Sequence[AgentExtension] | None = None,
@@ -192,7 +192,7 @@ async def create_agent(
     """
     agent = await Agent.create(
         model,
-        config=config if config is not None else AgentConfig(session_id=new_uuid7()),
+        config=config if config is not None else AgentRunConfig(session_id=new_uuid7()),
         system_prompt=system_prompt,
         tools=tools,
         extensions=extensions,

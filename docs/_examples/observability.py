@@ -4,8 +4,8 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from zett_agent import (
-    AgentContext,
     AgentExtension,
+    AgentRunContext,
     AssistantMessage,
     ExtensionEvent,
     MessageAppendedEvent,
@@ -24,7 +24,7 @@ class UsageObserver(AgentExtension):
     def __init__(self) -> None:
         self.records: list[tuple[str, MessageAppendedEvent]] = []
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         if isinstance(event, MessageAppendedEvent) and event.usage is not None:
             self.records.append((context.config.session_id, event))
 

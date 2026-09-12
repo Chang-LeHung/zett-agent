@@ -10,8 +10,8 @@ import truststore
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEventType,
+    AgentRunConfig,
     AnthropicProvider,
     AssistantMessage,
     CompactionExtension,
@@ -88,14 +88,14 @@ async def test_live_tool_round_trip(protocol: str, effort: ReasoningEffort) -> N
             system_prompt="Call add exactly once to compute 2+3, then reply with the tool result only.",
             tools=[add],
             max_iterations=3,
-            config=AgentConfig(session_id=f"live-{protocol}"),
+            config=AgentRunConfig(session_id=f"live-{protocol}"),
         )
         async with asyncio.timeout(90):
             events = [
                 event
                 async for event in agent.stream(
                     UserMessage(content="Use add to compute 2+3."),
-                    config=AgentConfig(session_id=f"live-{protocol}"),
+                    config=AgentRunConfig(session_id=f"live-{protocol}"),
                     reasoning_effort=effort,
                 )
             ]
@@ -144,14 +144,14 @@ async def test_live_compaction_persists_snapshot_and_answers_from_summary(tmp_pa
                     reasoning_effort=ReasoningEffort.OFF,
                 ),
             ],
-            config=AgentConfig(session_id=session_id),
+            config=AgentRunConfig(session_id=session_id),
         )
         async with asyncio.timeout(120):
             events = [
                 event
                 async for event in agent.stream(
                     "What is the durable project code?",
-                    config=AgentConfig(session_id=session_id),
+                    config=AgentRunConfig(session_id=session_id),
                     reasoning_effort=ReasoningEffort.OFF,
                 )
             ]

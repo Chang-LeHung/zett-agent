@@ -45,7 +45,7 @@ class _ToolInvocation:
 
 
 @dataclass(frozen=True, slots=True)
-class AgentConfig:
+class AgentRunConfig:
     """Identify a conversation and optionally one request within it.
 
     Attributes:
@@ -61,11 +61,11 @@ class AgentConfig:
     Examples:
         A root conversation needs only a session ID::
 
-            config = AgentConfig(session_id="chat-42")
+            config = AgentRunConfig(session_id="chat-42")
 
         A delegated agent identifies its parent separately::
 
-            child = AgentConfig(
+            child = AgentRunConfig(
                 session_id="review-42",
                 request_id="request-7",
                 parent_session_id="chat-42",
@@ -140,7 +140,7 @@ class AgentState:
 
 
 @dataclass(slots=True, weakref_slot=True, eq=False)
-class AgentContext:
+class AgentRunContext:
     """Per-run references shared by all lifecycle hooks.
 
     Register request-scoped local and server tools during on_tool(). Mutate
@@ -155,12 +155,12 @@ class AgentContext:
     Examples:
         Register a tool for only the current request::
 
-            async def on_tool(self, context: AgentContext) -> None:
+            async def on_tool(self, context: AgentRunContext) -> None:
                 context.register_tool(read_file)
 
         Register a provider-hosted tool without adding a local executor::
 
-            async def on_tool(self, context: AgentContext) -> None:
+            async def on_tool(self, context: AgentRunContext) -> None:
                 context.register_server_tool(
                     ServerToolDefinition(
                         type="web_search",
@@ -182,7 +182,7 @@ class AgentContext:
     """
 
     # Configuration for this invocation.
-    config: AgentConfig
+    config: AgentRunConfig
     # Conversation state populated for the current request.
     state: AgentState
     # Live registry used for model schemas and tool execution.
@@ -315,7 +315,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
             agent = await Agent.create(
                 model,
-                config=AgentConfig(session_id="chat-42"),
+                config=AgentRunConfig(session_id="chat-42"),
                 tools=[read_file, grep],
                 reasoning_effort=ReasoningEffort.HIGH,
             )
@@ -442,20 +442,20 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         # Runtime data is session-scoped. state remains the most recently
         # started state for single-session callers; use get_state for routing.
         self._states: dict[str, AgentState] = {}
-        self._active_configs: dict[str, AgentConfig] = {}
+        self._active_configs: dict[str, AgentRunConfig] = {}
         self._sessions_lock = RLock()
-        self._initialized_config: AgentConfig | None = None
+        self._initialized_config: AgentRunConfig | None = None
         self.max_iterations = max_iterations
         self.max_internal_messages = max_internal_messages
 
-    async def initialize(self, *, config: AgentConfig) -> None:
+    async def initialize(self, *, config: AgentRunConfig) -> None:
         """Bind the default session used when a request omits config.
 
         Examples:
             Usage::
 
                 agent = Agent(model)
-                await agent.initialize(config=AgentConfig(session_id="session-42"))
+                await agent.initialize(config=AgentRunConfig(session_id="session-42"))
                 reply = await agent.run("Hello")
         """
         if self._initialized_config is not None:
@@ -473,7 +473,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         with self._sessions_lock:
             return self._states.get(session_id)
 
-    def emit_external_event(self, event: ExternalEvent, *, config: AgentConfig | None = None) -> list[str]:
+    def emit_external_event(self, event: ExternalEvent, *, config: AgentRunConfig | None = None) -> list[str]:
         """Broadcast config and event separately; return accepting extension names.
 
         Without explicit config, use the sole active request, then the initialized
@@ -493,7 +493,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                         name="ask_user_response",
                         payload={"tool_call_id": "call-1", "answer": "Yes"},
                     ),
-                    config=AgentConfig(session_id="session-42", request_id="request-1"),
+                    config=AgentRunConfig(session_id="session-42", request_id="request-1"),
                 )
         """
         with self._sessions_lock:
@@ -513,7 +513,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         cls,
         model: AgentModel | None,
         *,
-        config: AgentConfig,
+        config: AgentRunConfig,
         system_prompt: str = "You are a helpful assistant.",
         tools: Sequence[AgentTool] = (),
         extensions: Sequence[AgentExtension] | None = None,
@@ -541,7 +541,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         Examples:
             Usage::
 
-                agent = await Agent.create(model, config=AgentConfig(session_id="session-42"))
+                agent = await Agent.create(model, config=AgentRunConfig(session_id="session-42"))
                 reply = await agent.run("Hello")
         """
         agent = cls(
@@ -562,7 +562,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self,
         message: UserMessage,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -575,7 +575,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self,
         message: str,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -587,7 +587,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self,
         message: UserMessage | str,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -617,10 +617,10 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         Examples:
             Usage::
 
-                agent = await Agent.create(model, config=AgentConfig(session_id="session-42"))
+                agent = await Agent.create(model, config=AgentRunConfig(session_id="session-42"))
                 reply = await agent.run(
                     "Summarize this conversation.",
-                    config=AgentConfig(session_id="session-42"),
+                    config=AgentRunConfig(session_id="session-42"),
                     metadata={"source": "editor"},
                     tags={"domain": "notes"},
                 )
@@ -649,7 +649,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self,
         message: UserMessage,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -662,7 +662,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self,
         message: str,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -674,7 +674,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self,
         message: UserMessage | str,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -710,7 +710,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 agent = await Agent.create(model, config=config, extensions=[history_extension])
                 async for event in agent.stream(
                     "Continue the summary.",
-                    config=AgentConfig(session_id="session-42"),
+                    config=AgentRunConfig(session_id="session-42"),
                     reasoning_effort=ReasoningEffort.HIGH,
                     metadata={"source": "command-palette"},
                     tags={"intent": "summary"},
@@ -739,12 +739,12 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     def _prepare_request_context(
         self,
-        config: AgentConfig | None,
+        config: AgentRunConfig | None,
         model: AgentModel | None,
         metadata: Mapping[str, JsonValue] | None,
         tags: Mapping[str, JsonValue] | None,
         input_message: UserMessage,
-    ) -> AgentContext:
+    ) -> AgentRunContext:
         """Validate input, create isolated state/tools, and claim the session."""
         if self._initialized_config is None:
             raise AgentProtocolError(
@@ -761,7 +761,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             messages=messages,
             parent_session_id=config.parent_session_id,
         )
-        context = AgentContext(
+        context = AgentRunContext(
             config=config,
             state=state,
             tools={},
@@ -783,7 +783,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             self.state = state
         return context
 
-    async def _open_request(self, context: AgentContext) -> None:
+    async def _open_request(self, context: AgentRunContext) -> None:
         """Open inboxes, restore history through hooks, then append the new input."""
         from .extensions.events import MessageTiming
 
@@ -801,7 +801,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     async def _stream_loop(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         reasoning_effort: ReasoningEffort,
         parallel_tool_call: bool,
     ) -> AsyncIterator[AgentEvent]:
@@ -895,7 +895,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     async def _stream_model_step(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         reasoning_effort: ReasoningEffort,
         parallel_tool_call: bool,
     ) -> AsyncIterator[AgentEvent]:
@@ -1009,7 +1009,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             async for event in events:
                 yield event
 
-    def _select_pending_input(self, context: AgentContext) -> tuple[UserMessage | None, AgentMessage | None]:
+    def _select_pending_input(self, context: AgentRunContext) -> tuple[UserMessage | None, AgentMessage | None]:
         """Reserve steering first, or internal input, without a queue-closing race."""
         internal: AgentMessage | None = None
 
@@ -1021,7 +1021,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         steering = self._steering_extension.select_next(context, reserve_internal_input)
         return steering, internal
 
-    async def _handle_request_cancellation(self, context: AgentContext, cancellation: BaseException) -> None:
+    async def _handle_request_cancellation(self, context: AgentRunContext, cancellation: BaseException) -> None:
         """Close interrupted tool calls, then publish the request cancellation.
 
         A completed assistant tool-call message is persisted before execution
@@ -1036,7 +1036,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         except Exception as notification_error:
             cancellation.add_note(f"Cancellation notification failed: {notification_error!r}")
 
-    async def _cancel_unanswered_tool_calls(self, context: AgentContext) -> None:
+    async def _cancel_unanswered_tool_calls(self, context: AgentRunContext) -> None:
         """Append cancellation results for the latest unfinished tool-call batch."""
         from .extensions.events import MessageTiming
 
@@ -1065,7 +1065,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 MessageTiming.instant(),
             )
 
-    async def _handle_request_failure(self, context: AgentContext, error: Exception) -> None:
+    async def _handle_request_failure(self, context: AgentRunContext, error: Exception) -> None:
         """Report failure without masking the original error or terminal phase."""
         # A terminal transition is already committed before subscribers run.
         # Never replace the original error with an illegal terminal transition
@@ -1080,7 +1080,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         except Exception as notification_error:
             error.add_note(f"Error hook failed: {notification_error!r}")
 
-    def _release_request(self, context: AgentContext) -> None:
+    def _release_request(self, context: AgentRunContext) -> None:
         """Clear only this request's inboxes and release its session for reuse."""
         self._steering_extension.close(context)
         self._internal_message_extension.close(context)
@@ -1089,7 +1089,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     async def _execute_tools(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         calls: Sequence[ToolCall],
         parallel_tool_call: bool,
         active_input: AgentMessage | UserMessage | None = None,
@@ -1126,7 +1126,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     async def _execute_parallel_tools(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         calls: Sequence[ToolCall],
     ) -> AsyncIterator[AgentEvent]:
         """Run one parallel batch and stream each result as its handler finishes."""
@@ -1162,7 +1162,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     async def _execute_serial_tools(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         calls: Sequence[ToolCall],
         active_input: AgentMessage | UserMessage | None,
     ) -> AsyncIterator[AgentEvent]:
@@ -1194,7 +1194,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 return
 
     @staticmethod
-    async def _invoke_tool(context: AgentContext, call: ToolCall) -> _ToolInvocation:
+    async def _invoke_tool(context: AgentRunContext, call: ToolCall) -> _ToolInvocation:
         """Run only a handler concurrently; lifecycle hooks remain serialized."""
         from .extensions.events import MessageTiming
 
@@ -1235,7 +1235,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     async def _finalize_tool(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         invocation: _ToolInvocation,
     ) -> AsyncIterator[AgentEvent]:
         """Publish one completed invocation and append its result to context."""
@@ -1256,7 +1256,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     async def _start_steering(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         message: UserMessage,
         pending_calls: Sequence[ToolCall] = (),
         active_input: AgentMessage | UserMessage | None = None,
@@ -1301,7 +1301,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             steering_message=message,
         )
 
-    async def _apply_extension_event_phase(self, context: AgentContext, event: AgentEvent) -> None:
+    async def _apply_extension_event_phase(self, context: AgentRunContext, event: AgentEvent) -> None:
         """Validate and apply phase transitions represented by extension events."""
         match event.type:
             case AgentEventType.COMPACTION_STARTED:
@@ -1316,7 +1316,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 raise AgentProtocolError(f"Extension emitted unsupported pre-model event: {event.type.value!r}")
         event.phase = context.state.phase
 
-    async def _before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+    async def _before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         """Forward custom events and close each extension iterator on exit."""
         for extension in self.extensions:
             async with aclosing(extension.before_tool_events(context, call)) as events:
@@ -1326,12 +1326,12 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     event.phase = context.state.phase
                     yield event
 
-    async def _notify_on_tool(self, context: AgentContext) -> None:
+    async def _notify_on_tool(self, context: AgentRunContext) -> None:
         """Let every extension register request-scoped tools in priority order."""
         for extension in self.extensions:
             await extension.on_tool(context)
 
-    async def _after_model_events(self, context: AgentContext, response: ModelResponse) -> AsyncIterator[AgentEvent]:
+    async def _after_model_events(self, context: AgentRunContext, response: ModelResponse) -> AsyncIterator[AgentEvent]:
         for extension in self.extensions:
             async with aclosing(extension.after_model_events(context, response)) as events:
                 async for event in events:
@@ -1340,7 +1340,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
     async def _after_tool_events(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         call: ToolCall,
         result: ToolMessage,
         error: Exception | None,
@@ -1352,29 +1352,29 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     yield event
 
     @staticmethod
-    def _validate_post_operation_event(context: AgentContext, event: AgentEvent) -> None:
+    def _validate_post_operation_event(context: AgentRunContext, event: AgentEvent) -> None:
         """Do not let a post-operation hook impersonate runtime or other-session events."""
         if event.type is not AgentEventType.CUSTOM:
             raise AgentProtocolError("Post-operation hooks may emit only CUSTOM events")
         if event.session_id != context.config.session_id:
             raise AgentProtocolError("Post-operation event belongs to another session")
 
-    async def _notify_on_state(self, context: AgentContext) -> None:
+    async def _notify_on_state(self, context: AgentRunContext) -> None:
         """Restore history and system instructions before input conversion."""
         for extension in self.extensions:
             await extension.on_state(context)
 
-    async def _notify_on_message(self, context: AgentContext) -> None:
+    async def _notify_on_message(self, context: AgentRunContext) -> None:
         """Let extensions transform current input before append and persistence."""
         for extension in self.extensions:
             await extension.on_message(context)
 
-    async def _notify_before_run(self, context: AgentContext) -> None:
+    async def _notify_before_run(self, context: AgentRunContext) -> None:
         for extension in self.extensions:
             await extension.before_run(context)
 
     @staticmethod
-    def _refresh_model_request(context: AgentContext, request: ModelRequest) -> ModelRequest:
+    def _refresh_model_request(context: AgentRunContext, request: ModelRequest) -> ModelRequest:
         """Capture current context while retaining per-call model options.
 
         Preprocessing can replace history or tool registrations. Refresh before
@@ -1387,11 +1387,11 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             server_tools=tuple(context.server_tools.values()),
         )
 
-    async def _notify_before_model(self, context: AgentContext, request: ModelRequest) -> None:
+    async def _notify_before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
         for extension in self.extensions:
             await extension.before_model(context, self._refresh_model_request(context, request))
 
-    async def _before_model_events(self, context: AgentContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
+    async def _before_model_events(self, context: AgentRunContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
         for extension in self.extensions:
             async with aclosing(
                 extension.before_model_events(context, self._refresh_model_request(context, request))
@@ -1399,17 +1399,17 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 async for event in events:
                     yield event
 
-    async def _notify_after_model(self, context: AgentContext, response: ModelResponse) -> None:
+    async def _notify_after_model(self, context: AgentRunContext, response: ModelResponse) -> None:
         for extension in self.extensions:
             await extension.after_model(context, response)
 
-    async def _notify_before_tool(self, context: AgentContext, call: ToolCall) -> None:
+    async def _notify_before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
         for extension in self.extensions:
             await extension.before_tool(context, call)
 
     async def _notify_after_tool(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         call: ToolCall,
         result: ToolMessage,
         error: Exception | None,
@@ -1417,15 +1417,15 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         for extension in self.extensions:
             await extension.after_tool(context, call, result, error)
 
-    async def _notify_after_run(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def _notify_after_run(self, context: AgentRunContext, result: AssistantMessage) -> None:
         for extension in self.extensions:
             await extension.after_run(context, result)
 
-    async def _notify_on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def _notify_on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Notify extensions after successful post-run processing."""
         for extension in self.extensions:
             await extension.on_success(context, result)
 
-    async def _notify_error(self, context: AgentContext, error: Exception) -> None:
+    async def _notify_error(self, context: AgentRunContext, error: Exception) -> None:
         for extension in self.extensions:
             await extension.on_error(context, error)

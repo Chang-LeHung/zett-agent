@@ -15,7 +15,7 @@ State has an owner and a lifetime
      - Local variable
      - A computed payload
    * - One request
-     - Dictionary keyed by AgentContext
+     - Dictionary keyed by AgentRunContext
      - Tool approval or model-step counter
    * - One conversation
      - Map keyed by session ID or persistent storage
@@ -29,7 +29,7 @@ rejected. The ``agent.state`` convenience attribute points to the most recently
 prepared state, so it is not a safe way for a shared extension to select its
 request. Always use ``context.state`` passed to that hook.
 
-AgentContext uses identity semantics, making it suitable as a request-local map
+AgentRunContext uses identity semantics, making it suitable as a request-local map
 key. A normal dictionary retains it strongly; remove entries on every terminal
 path. Do not rely on garbage collection as your cleanup protocol.
 

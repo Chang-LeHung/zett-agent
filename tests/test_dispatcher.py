@@ -9,11 +9,11 @@ import pytest
 from zett_agent import (
     Agent,
     AgentClient,
-    AgentConfig,
     AgentEvent,
     AgentEventDispatcher,
     AgentEventType,
     AgentPhase,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -88,7 +88,7 @@ async def test_dispatch_with_real_agent_stream_preserves_order():
         async def on_run_completed_event(self, event):
             received.append(event.message.content)
 
-    agent = await Agent.create(Model(), config=AgentConfig(session_id="test"))
+    agent = await Agent.create(Model(), config=AgentRunConfig(session_id="test"))
     handler = Handler()
     async with aclosing(agent.stream("Greet me")) as events:
         async for event in events:
@@ -123,7 +123,7 @@ async def test_create_binds_handler_for_run_and_stream(collect):
     other = await create_agent(Model(), event_dispatcher=Handler())
     await other.run("Different session")
     assert received[2].session_id != received[0].session_id
-    await agent.run("Explicit session", config=AgentConfig(session_id="explicit"))
+    await agent.run("Explicit session", config=AgentRunConfig(session_id="explicit"))
     assert received[3].session_id == "explicit"
 
 
@@ -153,7 +153,7 @@ async def test_client_wraps_existing_agent_and_closes_interrupted_stream():
             yield ModelEvent.text("Hello")
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Hello")))
 
-    runtime = await Agent.create(Model(), config=AgentConfig(session_id="existing"))
+    runtime = await Agent.create(Model(), config=AgentRunConfig(session_id="existing"))
     client = AgentClient(runtime)
     assert client.agent is runtime
     async with aclosing(client.stream("Hello")) as events:
@@ -173,7 +173,7 @@ async def test_factory_preserves_explicit_configuration_and_model_errors():
     model = Model()
     client = await create_agent(
         model,
-        config=AgentConfig(session_id="explicit"),
+        config=AgentRunConfig(session_id="explicit"),
         system_prompt="Custom instructions",
         reasoning_effort=ReasoningEffort.HIGH,
         max_iterations=4,

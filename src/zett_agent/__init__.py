@@ -1,7 +1,7 @@
 from .agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
 )
 from .client import AgentClient, create_agent
@@ -272,8 +272,8 @@ __all__ = [
     "ContextSnapshot",
     "RawMessageRecord",
     "CompactionExtension",
-    "AgentConfig",
-    "AgentContext",
+    "AgentRunConfig",
+    "AgentRunContext",
     "AgentExtension",
     "AgentSetupHooksMixin",
     "AgentRunHooksMixin",

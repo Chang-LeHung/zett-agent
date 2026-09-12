@@ -94,12 +94,12 @@ Extension hooks, callbacks, and models
 
 Extension lifecycle hooks use ``async def``, including async generators for
 event-producing hooks. SyncAgent runs them on its background event loop with
-the original :class:`~zett_agent.AgentContext`, without a proxy or automatic
+the original :class:`~zett_agent.AgentRunContext`, without a proxy or automatic
 worker-thread adaptation. Await ``context.publish(event)`` and
 ``context.append_message(...)`` as usual. Extensions do not expose ``.sync()``;
 their external-event ``accept`` method remains synchronous.
 
-AgentContext and the internal ModelOutputTracker also remain async-only;
+AgentRunContext and the internal ModelOutputTracker also remain async-only;
 they are runtime implementation objects, not independent synchronous entry points.
 
 Application-side dispatcher callbacks also use ``async def``:

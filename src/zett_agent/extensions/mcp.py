@@ -11,7 +11,7 @@ from typing import Any, Protocol
 from mcp import Client, StdioServerParameters
 from mcp_types import CallToolResult, ListToolsResult, Tool
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..messages import AssistantMessage
 from ..tools import AgentTool
 from .base import AgentExtension
@@ -120,9 +120,9 @@ class McpExtension(AgentExtension):
         self.servers = tuple(servers)
         self.namespace_tools = namespace_tools
         self._client_factory = client_factory or _default_client_factory
-        self._requests: dict[AgentContext, _McpRequest] = {}
+        self._requests: dict[AgentRunContext, _McpRequest] = {}
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Connect all servers and register their complete paginated tool lists."""
         request = _McpRequest()
         await request.stack.__aenter__()
@@ -137,15 +137,15 @@ class McpExtension(AgentExtension):
             await request.stack.aclose()
             raise
 
-    async def on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Close request transports after a successful final answer."""
         await self._close(context)
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Close request transports after a failed request."""
         await self._close(context)
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Close request transports when cancellation bypasses on_error."""
         if isinstance(event, RunCancelledEvent):
             await self._close(context)
@@ -169,7 +169,7 @@ class McpExtension(AgentExtension):
             guidelines=(f"Use this tool for capabilities provided by the {server.name} MCP server.",),
         )
 
-    async def _close(self, context: AgentContext) -> None:
+    async def _close(self, context: AgentRunContext) -> None:
         request = self._requests.pop(context, None)
         if request is not None:
             await request.stack.aclose()

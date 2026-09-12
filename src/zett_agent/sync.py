@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from contextvars import copy_context
 from typing import Any, Self
 
-from .agent import Agent, AgentConfig
+from .agent import Agent, AgentRunConfig
 from .client import AgentClient
 from .dispatcher import AgentEventDispatcher
 from .events import AgentEvent
@@ -72,7 +72,7 @@ class SyncAgent(SyncObject[Agent]):
     session. Provider and extension resources remain caller-owned.
 
     The synchronous interface does not change Extension execution: lifecycle
-    hooks remain async and receive the original AgentContext on the background
+    hooks remain async and receive the original AgentRunContext on the background
     loop. A supplied runtime is shared and is not closed when this view exits.
 
     Examples:
@@ -99,7 +99,7 @@ class SyncAgent(SyncObject[Agent]):
         self,
         model: AgentModel,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         system_prompt: str = "You are a helpful assistant.",
         tools: Sequence[AgentTool] = (),
         extensions: Sequence[AgentExtension] | None = None,
@@ -115,7 +115,7 @@ class SyncAgent(SyncObject[Agent]):
             agent = owner.call(
                 Agent.create,
                 model,
-                config=config if config is not None else AgentConfig(session_id=new_uuid7()),
+                config=config if config is not None else AgentRunConfig(session_id=new_uuid7()),
                 system_prompt=system_prompt,
                 tools=tools,
                 extensions=extensions,
@@ -136,7 +136,7 @@ class SyncAgent(SyncObject[Agent]):
         self,
         message: UserMessage | str,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -159,7 +159,7 @@ class SyncAgent(SyncObject[Agent]):
         self,
         message: UserMessage | str,
         *,
-        config: AgentConfig | None = None,
+        config: AgentRunConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         parallel_tool_call: bool | None = None,
@@ -183,7 +183,7 @@ class SyncAgent(SyncObject[Agent]):
             tags=tags,
         )
 
-    def emit_external_event(self, event: ExternalEvent, *, config: AgentConfig | None = None) -> list[str]:
+    def emit_external_event(self, event: ExternalEvent, *, config: AgentRunConfig | None = None) -> list[str]:
         """Route Ask User, Plan Mode, and steering replies while generation waits."""
         return self.runtime.call(self.wrapped.emit_external_event, event, config=config)
 
@@ -200,7 +200,7 @@ class SyncAgent(SyncObject[Agent]):
 def create_agent_sync(
     model: AgentModel,
     *,
-    config: AgentConfig | None = None,
+    config: AgentRunConfig | None = None,
     system_prompt: str = "You are a helpful assistant.",
     tools: Sequence[AgentTool] = (),
     extensions: Sequence[AgentExtension] | None = None,

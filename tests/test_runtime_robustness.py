@@ -4,14 +4,14 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentEvent,
     AgentEventType,
     AgentExtension,
     AgentPhase,
     AgentPhaseTransitionMixin,
     AgentProtocolError,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AssistantMessage,
     ContentCompletedEvent,
@@ -29,7 +29,7 @@ from zett_agent import (
     ToolCallDelta,
 )
 
-CONFIG = AgentConfig("robustness-session")
+CONFIG = AgentRunConfig("robustness-session")
 
 
 @pytest.mark.parametrize(
@@ -50,7 +50,7 @@ async def test_cancellation_publishes_a_dedicated_event_once(phase):
             assert context.state.phase == AgentPhase.CANCELLED
             received.append(event)
 
-    context = AgentContext(CONFIG, AgentState(phase=phase), {}, (Observer(),))
+    context = AgentRunContext(CONFIG, AgentState(phase=phase), {}, (Observer(),))
     machine = AgentPhaseTransitionMixin()
     await machine._cancel_request(context)
     await machine._cancel_request(context)
@@ -124,7 +124,7 @@ async def test_agent_rejects_extension_events_outside_the_pre_model_protocol():
 
 async def test_phase_guards_reject_wrong_phase_and_do_not_recancel_completion():
     machine = AgentPhaseTransitionMixin()
-    context = AgentContext(CONFIG, AgentState(), {}, ())
+    context = AgentRunContext(CONFIG, AgentState(), {}, ())
 
     with pytest.raises(AgentProtocolError, match="must be 'generating'"):
         machine._require_phase(context.state, AgentPhase.GENERATING)
@@ -143,7 +143,7 @@ async def test_output_tracker_ignores_empty_deltas_and_closes_reasoning_for_a_to
         async def on_event(self, context, event):
             published.append(event)
 
-    context = AgentContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, (Observer(),))
+    context = AgentRunContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, (Observer(),))
     tracker = ModelOutputTracker()
     await tracker.observe(context, ModelEvent.reasoning(""))
     await tracker.observe(context, ModelEvent.text(""))
@@ -171,7 +171,7 @@ async def test_output_tracker_publishes_each_content_boundary_only_once():
         async def on_event(self, context, event):
             published.append(event)
 
-    context = AgentContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, (Observer(),))
+    context = AgentRunContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, (Observer(),))
     tracker = ModelOutputTracker()
     await tracker.observe(context, ModelEvent.text("one"))
     await tracker.observe(context, ModelEvent.text("two"))
@@ -185,7 +185,7 @@ async def test_output_tracker_publishes_each_content_boundary_only_once():
 
 @pytest.mark.parametrize("segment", ["reasoning", "content"])
 async def test_output_completion_requires_an_open_segment(segment):
-    context = AgentContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
+    context = AgentRunContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
     tracker = ModelOutputTracker()
     complete = getattr(tracker, f"_complete_{segment}")
     with pytest.raises(AgentProtocolError, match="requires an open"):
@@ -199,7 +199,7 @@ async def test_output_completion_requires_an_open_segment(segment):
 
 @pytest.mark.parametrize("prefix", ["content", "tool", "reasoning-content", "reasoning-tool"])
 async def test_reasoning_cannot_resume_after_other_output(prefix):
-    context = AgentContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
+    context = AgentRunContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
     tracker = ModelOutputTracker()
     if prefix.startswith("reasoning-"):
         await tracker.observe(context, ModelEvent.reasoning("thinking"))
@@ -215,7 +215,7 @@ async def test_reasoning_cannot_resume_after_other_output(prefix):
 
 @pytest.mark.parametrize("phase", [phase for phase in AgentPhase if phase != AgentPhase.GENERATING])
 async def test_output_tracker_rejects_non_generating_phase(phase):
-    context = AgentContext(CONFIG, AgentState(phase=phase), {}, ())
+    context = AgentRunContext(CONFIG, AgentState(phase=phase), {}, ())
     tracker = ModelOutputTracker()
     with pytest.raises(AgentProtocolError, match="must be 'generating'"):
         await tracker.observe(context, ModelEvent.text("answer"))
@@ -224,7 +224,7 @@ async def test_output_tracker_rejects_non_generating_phase(phase):
 
 @pytest.mark.parametrize("kind", [ModelEventType.RESPONSE, ModelEventType.TOOL_CALL_DELTA])
 async def test_malformed_events_do_not_complete_reasoning(kind):
-    context = AgentContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
+    context = AgentRunContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
     tracker = ModelOutputTracker()
     await tracker.observe(context, ModelEvent.reasoning("thinking"))
     with pytest.raises(AgentProtocolError, match="Missing"):

@@ -17,9 +17,9 @@ from prompt_toolkit.patch_stdout import patch_stdout
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEvent,
     AgentEventType,
+    AgentRunConfig,
     AnyMessage,
     AssistantMessage,
     CodingExtension,
@@ -258,7 +258,7 @@ async def run_request(agent: Agent, session_id: str, prompt: str) -> None:
         "reasoning": False,
         "answer": False,
     }
-    async for event in agent.stream(prompt, config=AgentConfig(session_id=session_id)):
+    async for event in agent.stream(prompt, config=AgentRunConfig(session_id=session_id)):
         print_event(event, output_state)
     print()
 
@@ -290,7 +290,7 @@ async def main() -> None:
                 reasoning_effort=ReasoningEffort(args.compaction_reasoning_effort),
             ),
         ],
-        config=AgentConfig(session_id=session_id),
+        config=AgentRunConfig(session_id=session_id),
     )
 
     print(f"Zett Coding Agent | cwd={Path.cwd()} | session={session_id}")

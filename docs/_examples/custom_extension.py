@@ -5,11 +5,11 @@ from collections.abc import AsyncIterator
 from copy import deepcopy
 
 from zett_agent import (
-    AgentContext,
     AgentEvent,
     AgentEventDispatcher,
     AgentEventType,
     AgentExtension,
+    AgentRunContext,
     AssistantMessage,
     ExtensionEvent,
     InMemoryMessageAccumulator,
@@ -34,9 +34,9 @@ class NoteExtension(AgentExtension):
     priority = 50
 
     def __init__(self) -> None:
-        self.active: dict[AgentContext, int] = {}
+        self.active: dict[AgentRunContext, int] = {}
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         @tool
         def lookup_note(topic: str) -> str:
             """Look up a small demonstration note.
@@ -54,10 +54,10 @@ class NoteExtension(AgentExtension):
 
         context.register_tool(lookup_note)
 
-    async def on_state(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentRunContext) -> None:
         context.state.messages.insert(0, SystemMessage(content="Use the note tool for project facts."))
 
-    async def on_message(self, context: AgentContext) -> None:
+    async def on_message(self, context: AgentRunContext) -> None:
         message = context.input_message
         if message is not None and message.text.startswith("/note "):
             attributes = deepcopy(message.attributes)
@@ -69,7 +69,7 @@ class NoteExtension(AgentExtension):
         # The Agent appends input after all on_message hooks. Do not append here.
         self.active[context] = 0
 
-    async def before_model_events(self, context: AgentContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
+    async def before_model_events(self, context: AgentRunContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
         self.active[context] += 1
         yield AgentEvent(
             AgentEventType.CUSTOM,
@@ -78,13 +78,13 @@ class NoteExtension(AgentExtension):
             payload={"step": self.active[context]},
         )
 
-    async def on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         self.active.pop(context, None)
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         self.active.pop(context, None)
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         if isinstance(event, RunCancelledEvent):
             self.active.pop(context, None)
 

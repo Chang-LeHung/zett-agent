@@ -4,7 +4,7 @@ import asyncio
 
 from zett_agent import (
     Agent,
-    AgentConfig,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelRequest,
@@ -39,8 +39,8 @@ class DemoModel:
 
 
 async def main() -> None:
-    agent = await Agent.create(DemoModel(), tools=[add], config=AgentConfig(session_id="example-session"))
-    reply = await agent.run("What is 2 + 3?", config=AgentConfig(session_id="example-session"))
+    agent = await Agent.create(DemoModel(), tools=[add], config=AgentRunConfig(session_id="example-session"))
+    reply = await agent.run("What is 2 + 3?", config=AgentRunConfig(session_id="example-session"))
     print(reply.content)
 
 

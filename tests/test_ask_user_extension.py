@@ -10,11 +10,11 @@ import pytest
 from zett_agent import (
     ASK_USER_RESPONSE_EVENT_NAME,
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentEventType,
     AgentExtension,
     AgentPhase,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AskUserEvent,
     AskUserExtension,
@@ -64,7 +64,7 @@ class ExternalEventRecorder(AgentExtension):
         self.accepts = accepts
         self.events: list[ExternalEvent] = []
 
-    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
+    def accept(self, config: AgentRunConfig | None, event: ExternalEvent) -> bool:
         self.events.append(event)
         return self.accepts
 
@@ -77,8 +77,8 @@ class ContextRecorder(AgentExtension):
         self.context = context
 
 
-def _context(session_id: str = "base-extension") -> AgentContext:
-    return AgentContext(AgentConfig(session_id), AgentState(), {})
+def _context(session_id: str = "base-extension") -> AgentRunContext:
+    return AgentRunContext(AgentRunConfig(session_id), AgentState(), {})
 
 
 async def _wait_for_ask(events: list, ready: asyncio.Event, agent: Agent) -> None:
@@ -172,7 +172,7 @@ async def test_ask_user_ignores_other_tool_calls() -> None:
 async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():
     extension = AskUserExtension()
     model = AskModel()
-    config = AgentConfig("session-1", request_id="request-1")
+    config = AgentRunConfig("session-1", request_id="request-1")
     agent = await Agent.create(model, config=config, extensions=[extension])
     events, ready = [], asyncio.Event()
     task = asyncio.create_task(_wait_for_ask(events, ready, agent))
@@ -199,8 +199,8 @@ async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():
         ASK_USER_RESPONSE_EVENT_NAME,
         {"tool_call_id": "question-1", "answer": "Markdown"},
     )
-    assert agent.emit_external_event(response, config=AgentConfig("other-session")) == []
-    assert agent.emit_external_event(response, config=AgentConfig("session-1", request_id="stale")) == []
+    assert agent.emit_external_event(response, config=AgentRunConfig("other-session")) == []
+    assert agent.emit_external_event(response, config=AgentRunConfig("session-1", request_id="stale")) == []
     assert not task.done()
     assert agent.emit_external_event(response, config=config) == ["AskUserExtension"]
     assert agent.emit_external_event(response, config=config) == []
@@ -225,7 +225,7 @@ async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():
     ],
 )
 def test_accept_rejects_unrelated_or_malformed_events(event):
-    assert not AskUserExtension().accept(AgentConfig("missing"), event)
+    assert not AskUserExtension().accept(AgentRunConfig("missing"), event)
 
 
 def test_external_event_rejects_an_empty_name():
@@ -241,7 +241,7 @@ def test_external_event_requires_a_string_keyed_dictionary(payload):
 
 async def test_accept_can_resume_from_another_thread():
     extension = AskUserExtension()
-    agent = await Agent.create(AskModel(), config=AgentConfig("thread-session"), extensions=[extension])
+    agent = await Agent.create(AskModel(), config=AgentRunConfig("thread-session"), extensions=[extension])
     events, ready = [], asyncio.Event()
     task = asyncio.create_task(_wait_for_ask(events, ready, agent))
     await asyncio.wait_for(ready.wait(), timeout=1)
@@ -258,8 +258,8 @@ async def test_accept_can_resume_from_another_thread():
 
 async def test_same_tool_call_id_is_routed_by_session():
     extension = AskUserExtension()
-    first = await Agent.create(AskModel(), config=AgentConfig("first"), extensions=[extension])
-    second = await Agent.create(AskModel(), config=AgentConfig("second"), extensions=[extension])
+    first = await Agent.create(AskModel(), config=AgentRunConfig("first"), extensions=[extension])
+    second = await Agent.create(AskModel(), config=AgentRunConfig("second"), extensions=[extension])
     first_events, second_events = [], []
     first_ready, second_ready = asyncio.Event(), asyncio.Event()
     first_task = asyncio.create_task(_wait_for_ask(first_events, first_ready, first))
@@ -303,7 +303,7 @@ async def test_multiple_questions_complete_end_to_end_in_model_order():
             yield ModelEvent.completed(ModelResponse(message))
 
     model = TwoQuestionModel()
-    agent = await Agent.create(model, config=AgentConfig("two-questions"), extensions=[AskUserExtension()])
+    agent = await Agent.create(model, config=AgentRunConfig("two-questions"), extensions=[AskUserExtension()])
     events = []
     async for event in agent.stream("Ask both questions"):
         events.append(event)
@@ -347,7 +347,7 @@ async def test_ask_user_tool_schema_and_guidance_are_visible_to_model():
     model = AnswerModel()
     agent = await Agent.create(
         model,
-        config=AgentConfig("schema"),
+        config=AgentRunConfig("schema"),
         extensions=[ToolGuidelinesExtension(), AskUserExtension()],
     )
     await agent.run("Hello")
@@ -363,7 +363,7 @@ async def test_ask_user_tool_schema_and_guidance_are_visible_to_model():
 
 async def test_cancelling_wait_removes_pending_response():
     extension = AskUserExtension()
-    agent = await Agent.create(AskModel(), config=AgentConfig("cancel-session"), extensions=[extension])
+    agent = await Agent.create(AskModel(), config=AgentRunConfig("cancel-session"), extensions=[extension])
     events, ready = [], asyncio.Event()
     task = asyncio.create_task(_wait_for_ask(events, ready, agent))
     await asyncio.wait_for(ready.wait(), timeout=1)
@@ -384,7 +384,7 @@ async def test_cancel_event_wakes_the_waiting_agent_and_rejects_a_late_answer():
     recorder = ContextRecorder()
     agent = await Agent.create(
         AskModel(),
-        config=AgentConfig("cancel-event"),
+        config=AgentRunConfig("cancel-event"),
         extensions=[recorder, extension],
     )
     events, ready = [], asyncio.Event()
@@ -418,7 +418,7 @@ async def test_error_hook_wakes_the_waiting_agent_with_the_original_error():
     recorder = ContextRecorder()
     agent = await Agent.create(
         AskModel(),
-        config=AgentConfig("error-event"),
+        config=AgentRunConfig("error-event"),
         extensions=[recorder, extension],
     )
     events, ready = [], asyncio.Event()
@@ -440,7 +440,7 @@ async def test_unrelated_internal_event_does_not_wake_the_waiting_agent():
     recorder = ContextRecorder()
     agent = await Agent.create(
         AskModel(),
-        config=AgentConfig("unrelated-event"),
+        config=AgentRunConfig("unrelated-event"),
         extensions=[recorder, extension],
     )
     events, ready = [], asyncio.Event()
@@ -458,7 +458,7 @@ async def test_unrelated_internal_event_does_not_wake_the_waiting_agent():
 
 async def test_closing_after_tool_started_discards_the_delivered_response():
     extension = AskUserExtension()
-    agent = await Agent.create(AskModel(), config=AgentConfig("close-after-answer"), extensions=[extension])
+    agent = await Agent.create(AskModel(), config=AgentRunConfig("close-after-answer"), extensions=[extension])
     stream = agent.stream("Ask")
 
     while not isinstance(await anext(stream), AskUserEvent):
@@ -493,7 +493,7 @@ async def test_invalid_ask_arguments_do_not_pause_the_agent():
             yield ModelEvent.completed(ModelResponse(message))
 
     model = InvalidModel()
-    agent = await Agent.create(model, config=AgentConfig("invalid"), extensions=[AskUserExtension()])
+    agent = await Agent.create(model, config=AgentRunConfig("invalid"), extensions=[AskUserExtension()])
     events = [event async for event in agent.stream("Ask")]
     assert all(not isinstance(event, AskUserEvent) for event in events)
     failed = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))

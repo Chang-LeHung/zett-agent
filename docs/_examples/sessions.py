@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from zett_agent import (
-    AgentConfig,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelRequest,
@@ -30,7 +30,7 @@ async def main() -> None:
     # No demo touches the default database under the user's home directory.
     with TemporaryDirectory(prefix="zett-docs-") as directory:
         path = Path(directory) / "sessions.sqlite"
-        config = AgentConfig(session_id="project-notes")
+        config = AgentRunConfig(session_id="project-notes")
         first_storage = SQLiteSessionExtension(path)
         try:
             first = await create_agent(TurnModel(), config=config, extensions=[first_storage])

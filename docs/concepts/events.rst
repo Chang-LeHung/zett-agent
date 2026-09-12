@@ -80,7 +80,7 @@ rolled back. Avoid recursive publishing of the same event from its own handler.
 External replies
 --------------------
 
-The application supplies routing in AgentConfig and business data in the event
+The application supplies routing in AgentRunConfig and business data in the event
 payload. ``emit_external_event`` returns the names of extensions that accepted it.
 Acceptance means delivery was claimed, not that the pending tool succeeded.
 Duplicate or stale approval replies are rejected by ExternalEventExtension.

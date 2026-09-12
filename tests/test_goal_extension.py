@@ -8,12 +8,12 @@ import pytest
 from zett_agent import (
     GOAL_EVALUATION_TOOL_NAME,
     Agent,
-    AgentConfig,
     AgentEventType,
     AgentExtension,
     AgentIterationLimitError,
     AgentMessage,
     AgentProtocolError,
+    AgentRunConfig,
     AssistantMessage,
     CodingExtension,
     GoalEvaluation,
@@ -118,7 +118,7 @@ async def test_incomplete_result_is_injected_then_verified_with_hidden_child_eve
     original = UserMessage(content="/goal Implement and test", attributes={"source": "editor"})
     agent = await Agent.create(
         primary,
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[extension],
     )
 
@@ -159,7 +159,7 @@ async def test_non_goal_messages_bypass_evaluator(message: str) -> None:
     evaluator = EvaluatorModel()
     agent = await Agent.create(
         primary,
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[GoalExtension(definition(evaluator))],
     )
 
@@ -172,7 +172,7 @@ async def test_goal_command_rejects_empty_text_and_cleans_state() -> None:
     extension = GoalExtension(definition(EvaluatorModel()))
     agent = await Agent.create(
         PrimaryModel("unused"),
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[extension],
     )
 
@@ -197,7 +197,7 @@ async def test_multimodal_goal_preserves_raw_content_copy_and_images() -> None:
     )
     agent = await Agent.create(
         primary,
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[GoalExtension(definition(evaluator))],
     )
 
@@ -236,7 +236,7 @@ async def test_default_definition_reuses_parent_model_and_coding_extensions() ->
     model = CombinedModel()
     agent = await Agent.create(
         model,
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[GoalExtension()],
     )
 
@@ -271,7 +271,7 @@ async def test_custom_definition_controls_model_effort_extensions_and_iteration_
     )
     agent = await Agent.create(
         PrimaryModel("Done"),
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[GoalExtension(configured)],
     )
 
@@ -294,7 +294,7 @@ async def test_goal_continuation_limit_is_exact_and_cleans_state() -> None:
     primary = PrimaryModel("initial", "retry one", "retry two")
     agent = await Agent.create(
         primary,
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[extension],
         max_internal_messages=10,
     )
@@ -354,7 +354,7 @@ async def test_child_agent_without_report_is_rejected() -> None:
     extension = GoalExtension(definition(evaluator))
     agent = await Agent.create(
         PrimaryModel("Parent result"),
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[extension],
     )
 
@@ -392,7 +392,7 @@ async def test_missing_decisions_are_retried_until_one_is_reported() -> None:
     evaluator = EventuallyDecidesModel()
     agent = await Agent.create(
         PrimaryModel("Parent result"),
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[GoalExtension(definition(evaluator), max_decision_retries=3)],
     )
 
@@ -461,7 +461,7 @@ async def test_decision_retry_preserves_session_and_tool_evidence(history, tmp_p
         agent = await Agent.create(
             PrimaryModel("Done"),
             extensions=[GoalExtension(child)],
-            config=AgentConfig(session_id="parent"),
+            config=AgentRunConfig(session_id="parent"),
         )
         assert (await agent.run("/goal Verify tests")).content == "Done"
         assert len(observer.sessions) == 2
@@ -491,7 +491,7 @@ async def test_zero_decision_retries_runs_only_initial_attempt() -> None:
     evaluator = NoDecisionModel()
     agent = await Agent.create(
         PrimaryModel("Parent result"),
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[GoalExtension(definition(evaluator), max_decision_retries=0)],
     )
 
@@ -532,7 +532,7 @@ async def test_tool_call_candidate_is_not_evaluated_until_parent_final_answer() 
     evaluator = EvaluatorModel(decision(True))
     agent = await Agent.create(
         ToolPrimary(),
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         tools=[noop],
         extensions=[GoalExtension(definition(evaluator))],
     )
@@ -555,7 +555,7 @@ async def test_goal_state_is_cleared_when_parent_request_is_cancelled() -> None:
     extension = GoalExtension(definition(EvaluatorModel(decision(True))))
     agent = await Agent.create(
         BlockingModel(),
-        config=AgentConfig(session_id="parent-session"),
+        config=AgentRunConfig(session_id="parent-session"),
         extensions=[extension],
     )
 

@@ -63,5 +63,5 @@ Continue with :doc:`providers`, then :doc:`streaming`.
    in-memory history. A new request always starts with fresh AgentState; an
    extension must restore previous conversation messages.
 
-Related API: :class:`~zett_agent.Agent`, :class:`~zett_agent.AgentConfig`,
+Related API: :class:`~zett_agent.Agent`, :class:`~zett_agent.AgentRunConfig`,
 :class:`~zett_agent.InMemoryMessageAccumulator`.

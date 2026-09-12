@@ -10,9 +10,9 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEventType,
     AgentProtocolError,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelEventType,
@@ -376,7 +376,7 @@ async def test_agent_forwards_server_tools_without_running_same_named_local_tool
 
     agent = await Agent.create(
         Model(),
-        config=AgentConfig(session_id="server-tool-session"),
+        config=AgentRunConfig(session_id="server-tool-session"),
         tools=(web_fetch,),
     )
     events = [event async for event in agent.stream("Fetch it")]
@@ -427,7 +427,7 @@ async def test_agent_rejects_invalid_server_tool_lifecycle(
             if not model_events or model_events[-1].type != ModelEventType.RESPONSE:
                 yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
 
-    agent = await Agent.create(Model(), config=AgentConfig(session_id="invalid-server-tool"))
+    agent = await Agent.create(Model(), config=AgentRunConfig(session_id="invalid-server-tool"))
 
     with pytest.raises(AgentProtocolError, match=message):
         _ = [event async for event in agent.stream("Fetch it")]

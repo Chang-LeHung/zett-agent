@@ -5,10 +5,10 @@ from collections.abc import AsyncIterator
 from contextlib import aclosing
 
 from zett_agent import (
-    AgentConfig,
-    AgentContext,
     AgentEvent,
     AgentEventType,
+    AgentRunConfig,
+    AgentRunContext,
     AssistantMessage,
     ExternalEvent,
     ExternalEventExtension,
@@ -28,7 +28,7 @@ class ApprovalExtension(ExternalEventExtension):
     def __init__(self) -> None:
         super().__init__(response_event_name="approval.response", correlation_field="tool_call_id")
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         @tool
         def request_approval(action: str) -> str:
             """Ask the user whether a proposed action should proceed.
@@ -50,7 +50,7 @@ class ApprovalExtension(ExternalEventExtension):
 
         context.register_tool(request_approval)
 
-    async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+    async def before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         if call.name != "request_approval":
             return
         async with self._wait_for_external_event(context, call.id):
@@ -78,7 +78,7 @@ class ApprovalModel:
 
 
 async def main() -> None:
-    config = AgentConfig(session_id="approval-demo", request_id="request-1")
+    config = AgentRunConfig(session_id="approval-demo", request_id="request-1")
     client = await create_agent(
         ApprovalModel(), config=config, extensions=[ApprovalExtension(), ToolGuidelinesExtension()]
     )

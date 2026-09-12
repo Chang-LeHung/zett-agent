@@ -6,12 +6,12 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentEventType,
     AgentExtension,
     AgentMessage,
     AgentPhase,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AssistantMessage,
     ExternalEvent,
@@ -41,8 +41,8 @@ class ScriptedModel:
 @pytest.mark.parametrize("other_input", [True, False])
 def test_select_next_returns_only_user_messages_and_closes_only_when_idle(other_input):
     extension = SteeringExtension()
-    config = AgentConfig("selection")
-    context = AgentContext(config, AgentState(), {})
+    config = AgentRunConfig("selection")
+    context = AgentRunContext(config, AgentState(), {})
     extension.open(context)
     reservations = []
 
@@ -86,7 +86,7 @@ async def test_steering_skips_remaining_tools_and_persists_matching_results(tmp_
     persistence = SQLiteSessionExtension(tmp_path / "session.db")
     agent = await Agent.create(
         model,
-        config=AgentConfig("s", request_id="r"),
+        config=AgentRunConfig("s", request_id="r"),
         tools=[record],
         extensions=[persistence],
         max_iterations=1,
@@ -149,7 +149,7 @@ async def test_steering_precedes_internal_and_new_steering_interrupts_active_int
         AssistantMessage(tool_calls=(ToolCall("skip", "unused"),)),
         AssistantMessage(content="done"),
     )
-    agent = await Agent.create(model, config=AgentConfig("s"), extensions=[Inject()])
+    agent = await Agent.create(model, config=AgentRunConfig("s"), extensions=[Inject()])
     events = [event async for event in agent.stream("original")]
     assert [request.messages[-1].content for request in model.requests] == [
         "original",
@@ -176,7 +176,7 @@ async def test_new_steering_interrupts_previous_steering_without_false_completio
         AssistantMessage(tool_calls=(ToolCall("t", "unused"),)),
         AssistantMessage(content="done"),
     )
-    agent = await Agent.create(model, config=AgentConfig("s"), extensions=[Inject()])
+    agent = await Agent.create(model, config=AgentRunConfig("s"), extensions=[Inject()])
     events = [event async for event in agent.stream("original")]
     assert [
         event.steering_message.content for event in events if event.type == AgentEventType.STEERING_INTERRUPTED
@@ -197,7 +197,7 @@ async def test_steering_waits_for_running_tool_then_redirects():
         return "released"
 
     model = ScriptedModel(AssistantMessage(tool_calls=(ToolCall("t", "wait"),)), AssistantMessage(content="done"))
-    agent = await Agent.create(model, config=AgentConfig("s"), tools=[wait])
+    agent = await Agent.create(model, config=AgentRunConfig("s"), tools=[wait])
     task = asyncio.create_task(agent.run("original"))
     try:
         await asyncio.wait_for(entered.wait(), 2)
@@ -215,15 +215,15 @@ async def test_steering_waits_for_running_tool_then_redirects():
 @pytest.mark.parametrize(
     "config,payload",
     [
-        (AgentConfig("s"), {}),
-        (AgentConfig("other"), {"content": "x"}),
-        (AgentConfig("s"), {"content": ""}),
-        (AgentConfig("s", request_id="other"), {"content": "x"}),
+        (AgentRunConfig("s"), {}),
+        (AgentRunConfig("other"), {"content": "x"}),
+        (AgentRunConfig("s"), {"content": ""}),
+        (AgentRunConfig("s", request_id="other"), {"content": "x"}),
     ],
 )
 async def test_invalid_steering_is_rejected_and_close_cleans_queue(config, payload):
     agent = await Agent.create(
-        ScriptedModel(AssistantMessage(content="fresh")), config=AgentConfig("s", request_id="r"), extensions=[]
+        ScriptedModel(AssistantMessage(content="fresh")), config=AgentRunConfig("s", request_id="r"), extensions=[]
     )
     stream = agent.stream("cancel")
     await anext(stream)
@@ -249,7 +249,7 @@ async def test_steering_is_not_limited_by_internal_quota_and_resets_message_budg
 
     model = ScriptedModel(AssistantMessage(content="initial"), *[AssistantMessage(content="done") for _ in range(10)])
     agent = await Agent.create(
-        model, config=AgentConfig("s"), extensions=[Inject()], max_internal_messages=0, max_iterations=1
+        model, config=AgentRunConfig("s"), extensions=[Inject()], max_internal_messages=0, max_iterations=1
     )
     assert (await agent.run("original")).content == "done"
     assert [request.messages[-1].content for request in model.requests] == ["original", *map(str, range(10))]
@@ -266,7 +266,7 @@ async def test_model_error_discards_pending_steering_and_allows_reuse():
                 raise ValueError("model failed")
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="fresh")))
 
-    agent = await Agent.create(FailingOnce(), config=AgentConfig("s"), extensions=[])
+    agent = await Agent.create(FailingOnce(), config=AgentRunConfig("s"), extensions=[])
     with pytest.raises(ValueError, match="model failed"):
         async for event in agent.stream("old"):
             if event.type == AgentEventType.TEXT_DELTA:

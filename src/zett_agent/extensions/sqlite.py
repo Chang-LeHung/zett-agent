@@ -20,7 +20,7 @@ class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorag
             try:
                 client = await create_agent(
                     model,
-                    config=AgentConfig(session_id="demo"),
+                    config=AgentRunConfig(session_id="demo"),
                     extensions=[persistence, ToolGuidelinesExtension()],
                 )
                 await client.run("Remember the project requirements.")

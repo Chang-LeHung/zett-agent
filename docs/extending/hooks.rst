@@ -1,7 +1,7 @@
 Lifecycle hook reference
 ============================
 
-All hooks receive :class:`~zett_agent.AgentContext` unless noted. An ordinary
+All hooks receive :class:`~zett_agent.AgentRunContext` unless noted. An ordinary
 async hook returns None. The four ``*_events`` hooks are async generators yielding
 AgentEvent. ``accept`` is synchronous and returns bool. Default implementations
 are no-ops; override only what your extension needs.

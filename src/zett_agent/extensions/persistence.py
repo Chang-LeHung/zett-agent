@@ -7,7 +7,7 @@ from weakref import WeakKeyDictionary
 
 from pydantic import BaseModel, Field
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..ids import new_uuid7
 from ..json_types import JsonValue
 from ..messages import AnyMessage, AssistantMessage, SystemMessage, ToolMessage
@@ -251,7 +251,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
 
     def __init__(self, storage: StorageT) -> None:
         self.storage = storage
-        self._requests: WeakKeyDictionary[AgentContext, _Request] = WeakKeyDictionary()
+        self._requests: WeakKeyDictionary[AgentRunContext, _Request] = WeakKeyDictionary()
 
     @staticmethod
     def _provider_safe_messages(messages: Sequence[AnyMessage]) -> list[AnyMessage]:
@@ -288,7 +288,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
             index = cursor
         return restored
 
-    async def _restore(self, context: AgentContext) -> SessionView:
+    async def _restore(self, context: AgentRunContext) -> SessionView:
         view = await self.storage.load(context.config.session_id)
         configured_parent = context.state.parent_session_id
         session_exists = view.snapshot is not None or bool(view.raw_tail)
@@ -301,7 +301,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         context.state.messages[:] = [*instructions, *self._provider_safe_messages(view.messages)]
         return view
 
-    async def on_state(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentRunContext) -> None:
         """Restore context and map every dialogue position to its Raw Log boundary."""
         view = await self._restore(context)
         sequences = []
@@ -314,7 +314,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
             context_sequences=sequences,
         )
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         if isinstance(event, RunCancelledEvent):
             self._requests.pop(context, None)
             return
@@ -337,7 +337,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
             case CompactionEvent() as compaction:
                 await self._snapshot(context, request, compaction)
 
-    async def _snapshot(self, context: AgentContext, request: _Request, event: CompactionEvent) -> None:
+    async def _snapshot(self, context: AgentRunContext, request: _Request, event: CompactionEvent) -> None:
         """Store the summary and remap its context position to the compacted prefix."""
         if event.compressed_from != 1 or event.compressed_to > len(request.context_sequences):
             raise ValueError("Compaction range does not match the restored Raw Log context")
@@ -357,10 +357,10 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
             *request.context_sequences[event.compressed_to :],
         ]
 
-    async def on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Release bookkeeping; original messages were appended as they arrived."""
         self._requests.pop(context, None)
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Release bookkeeping; append-only Raw Log history remains available."""
         self._requests.pop(context, None)

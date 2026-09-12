@@ -6,9 +6,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from zett_agent import (
-    AgentConfig,
     AgentEvent,
     AgentEventDispatcher,
+    AgentRunConfig,
     AnyMessage,
     AssistantMessage,
     CompactionExtension,
@@ -56,7 +56,7 @@ async def main() -> None:
         try:
             client = await create_agent(
                 AnswerModel(),
-                config=AgentConfig(session_id="compaction-demo"),
+                config=AgentRunConfig(session_id="compaction-demo"),
                 extensions=[
                     storage,
                     CompactionExtension(

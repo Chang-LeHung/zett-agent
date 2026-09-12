@@ -10,7 +10,7 @@ retain registration order. Extensions must have unique names, including built-in
 
 .. code-block:: text
 
-   fresh AgentState + AgentContext
+   fresh AgentState + AgentRunContext
              |
         on_tool()        register request-local tools
              |

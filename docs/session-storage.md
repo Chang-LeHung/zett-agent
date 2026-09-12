@@ -10,7 +10,7 @@ from zett_agent import SQLiteSessionExtension
 history = SQLiteSessionExtension()
 agent = await Agent.create(
     model,
-    config=AgentConfig(session_id=session_id),
+    config=AgentRunConfig(session_id=session_id),
     extensions=[
         history,
         ToolGuidelinesExtension(),

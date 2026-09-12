@@ -8,14 +8,14 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentEvent,
     AgentEventType,
     AgentExtension,
     AgentMessage,
     AgentPhase,
     AgentProtocolError,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AssistantMessage,
     ExternalEvent,
@@ -79,7 +79,7 @@ async def test_every_lifecycle_hook_failure_releases_session_and_allows_retry(ho
             raise failure
 
     setattr(Fault, hook, inject)
-    agent = await Agent.create(ToolModel(), config=AgentConfig("fault"), tools=[echo], extensions=[Fault()])
+    agent = await Agent.create(ToolModel(), config=AgentRunConfig("fault"), tools=[echo], extensions=[Fault()])
     with pytest.raises(type(failure)) as caught:
         await asyncio.wait_for(agent.run("first"), 2)
     assert caught.value is failure
@@ -110,7 +110,7 @@ async def test_event_generator_failure_runs_finally_and_preserves_error(hook, ca
                 finalized.append(True)
 
     setattr(Fault, hook, events)
-    agent = await Agent.create(ToolModel(), config=AgentConfig("events"), tools=[echo], extensions=[Fault()])
+    agent = await Agent.create(ToolModel(), config=AgentRunConfig("events"), tools=[echo], extensions=[Fault()])
     with pytest.raises(type(failure)) as caught:
         await agent.run("fail")
     assert caught.value is failure
@@ -130,7 +130,7 @@ async def test_event_generator_failure_runs_finally_and_preserves_error(hook, ca
     ],
 )
 async def test_closing_at_each_public_boundary_is_idempotent(boundary):
-    agent = await Agent.create(ToolModel(), config=AgentConfig("close"), tools=[echo], extensions=[])
+    agent = await Agent.create(ToolModel(), config=AgentRunConfig("close"), tools=[echo], extensions=[])
     stream = agent.stream("first")
     async for event in stream:
         if event.type is boundary:
@@ -154,8 +154,8 @@ async def test_closing_at_each_public_boundary_is_idempotent(boundary):
 )
 async def test_inbox_open_close_and_late_publication(extension_type, name, message, event_type):
     extension = extension_type()
-    config = AgentConfig("inbox")
-    context = AgentContext(config, AgentState(), {})
+    config = AgentRunConfig("inbox")
+    context = AgentRunContext(config, AgentState(), {})
     external = ExternalEvent(name, {"content": "queued"})
     assert not extension.accept(None, external)
     assert not extension.accept(config, external)
@@ -176,8 +176,8 @@ def test_steering_accept_and_final_selection_are_atomic_across_threads():
     with ThreadPoolExecutor(max_workers=2) as executor:
         for _ in range(100):
             extension = SteeringExtension()
-            config = AgentConfig("race")
-            context = AgentContext(config, AgentState(), {})
+            config = AgentRunConfig("race")
+            context = AgentRunContext(config, AgentState(), {})
             extension.open(context)
             barrier = Barrier(2, timeout=2)
 
@@ -209,8 +209,8 @@ async def test_many_sessions_overlap_and_cleanup_without_cross_session_messages(
             await release.wait()
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content=request.messages[-1].content)))
 
-    agent = await Agent.create(ParallelModel(), config=AgentConfig("default"), system_prompt="")
-    tasks = [asyncio.create_task(agent.run(str(i), config=AgentConfig(str(i)))) for i in range(count)]
+    agent = await Agent.create(ParallelModel(), config=AgentRunConfig("default"), system_prompt="")
+    tasks = [asyncio.create_task(agent.run(str(i), config=AgentRunConfig(str(i)))) for i in range(count)]
     try:
         await asyncio.wait_for(ready.wait(), 3)
         assert len(agent._active_configs) == count

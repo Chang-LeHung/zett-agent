@@ -7,7 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from zett_agent import (
-    AgentConfig,
+    AgentRunConfig,
     AssistantMessage,
     FileSystemExtension,
     ModelEvent,
@@ -65,7 +65,7 @@ async def main() -> None:
             )
             client = await create_agent(
                 ParentModel(),
-                config=AgentConfig(session_id="parent"),
+                config=AgentRunConfig(session_id="parent"),
                 extensions=[persistence, SubAgentExtension([definition]), ToolGuidelinesExtension()],
             )
             print((await client.run("Review the design")).content)

@@ -1,4 +1,4 @@
-"""Validate JSON-only data shared by AgentContext and Raw Log persistence.
+"""Validate JSON-only data shared by AgentRunContext and Raw Log persistence.
 
 This module defines the data shape accepted by ``Agent.run(metadata=..., tags=...)``.
 Those values are extension context, not model-message fields. The Agent validates
@@ -9,7 +9,7 @@ them into each Raw Log record::
          |
          | json_object()
          v
-    AgentContext.metadata / AgentContext.tags
+    AgentRunContext.metadata / AgentRunContext.tags
          |
          | extensions may inspect or modify the dictionaries
          v

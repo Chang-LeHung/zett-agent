@@ -4,8 +4,6 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentEvent,
     AgentEventType,
     AgentExtension,
@@ -13,6 +11,8 @@ from zett_agent import (
     AgentPhase,
     AgentPhaseTransitionMixin,
     AgentProtocolError,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AssistantMessage,
     ContentCompletedEvent,
@@ -37,11 +37,11 @@ from zett_agent import (
     tool,
 )
 
-CONFIG = AgentConfig(session_id="test-session")
+CONFIG = AgentRunConfig(session_id="test-session")
 
 
 def test_agent_config_validates_session_identity_fields() -> None:
-    config = AgentConfig("session", request_id="request", parent_session_id="parent")
+    config = AgentRunConfig("session", request_id="request", parent_session_id="parent")
 
     assert (config.session_id, config.request_id, config.parent_session_id) == ("session", "request", "parent")
 
@@ -57,7 +57,7 @@ async def test_phase_transition_mixin_validates_predecessors() -> None:
 
     machine = AgentPhaseTransitionMixin()
     state = AgentState()
-    context = AgentContext(CONFIG, state, {}, (Observer(),))
+    context = AgentRunContext(CONFIG, state, {}, (Observer(),))
 
     await machine._start_context_loading(context)
     await machine._finish_context_loading(context)
@@ -98,7 +98,7 @@ async def test_phase_transition_mixin_supports_terminal_paths(terminal: str) -> 
 
     machine = AgentPhaseTransitionMixin()
     state = AgentState()
-    context = AgentContext(CONFIG, state, {}, (Observer(),))
+    context = AgentRunContext(CONFIG, state, {}, (Observer(),))
     await machine._start_context_loading(context)
 
     if terminal == "failed":
@@ -236,22 +236,22 @@ async def test_success_callback_failures_prevent_completion(failure_hook):
 
 
 async def test_context_registers_request_scoped_tools_before_messages_load():
-    contexts: list[AgentContext] = []
+    contexts: list[AgentRunContext] = []
     calls: list[str] = []
 
     class RegisterTools(AgentExtension):
-        async def on_tool(self, context: AgentContext) -> None:
+        async def on_tool(self, context: AgentRunContext) -> None:
             calls.append("on_tool")
             context.register_tool(add)
 
-        async def on_state(self, context: AgentContext) -> None:
+        async def on_state(self, context: AgentRunContext) -> None:
             calls.append("on_state")
             assert add.name in context.tools
 
-        async def before_run(self, context: AgentContext) -> None:
+        async def before_run(self, context: AgentRunContext) -> None:
             contexts.append(context)
 
-        async def before_tool(self, context: AgentContext, call: ToolCall) -> None:
+        async def before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
             assert context is contexts[-1]
 
     model = ScriptedModel(
@@ -261,7 +261,7 @@ async def test_context_registers_request_scoped_tools_before_messages_load():
     )
     agent = await Agent.create(model, extensions=[RegisterTools(), ToolGuidelinesExtension()], config=CONFIG)
     await agent.run("Add", config=CONFIG)
-    next_config = AgentConfig(session_id=CONFIG.session_id)
+    next_config = AgentRunConfig(session_id=CONFIG.session_id)
     await agent.run("Continue", config=next_config)
     assert contexts[0] is not contexts[1]
     assert contexts[1].config is next_config
@@ -282,13 +282,13 @@ async def test_extension_registers_request_scoped_server_tools() -> None:
         type="web_search",
         configuration={"filters": {"allowed_domains": ["example.com"]}},
     )
-    contexts: list[AgentContext] = []
+    contexts: list[AgentRunContext] = []
 
     class RegisterServerTool(AgentExtension):
-        async def on_tool(self, context: AgentContext) -> None:
+        async def on_tool(self, context: AgentRunContext) -> None:
             context.register_server_tool(definition)
 
-        async def on_state(self, context: AgentContext) -> None:
+        async def on_state(self, context: AgentRunContext) -> None:
             assert tuple(context.server_tools) == ("web_search",)
             contexts.append(context)
 
@@ -296,7 +296,7 @@ async def test_extension_registers_request_scoped_server_tools() -> None:
     agent = await Agent.create(model, extensions=[RegisterServerTool()], config=CONFIG)
 
     await agent.run("Search", config=CONFIG)
-    await agent.run("Search again", config=AgentConfig(session_id=CONFIG.session_id))
+    await agent.run("Search again", config=AgentRunConfig(session_id=CONFIG.session_id))
 
     assert model.requests[0].server_tools == (definition,)
     assert model.requests[1].server_tools == (definition,)
@@ -308,7 +308,7 @@ async def test_extension_registers_request_scoped_server_tools() -> None:
 
 async def test_context_rejects_duplicate_server_tool_registration() -> None:
     class DuplicateServerTools(AgentExtension):
-        async def on_tool(self, context: AgentContext) -> None:
+        async def on_tool(self, context: AgentRunContext) -> None:
             context.register_server_tool(ServerToolDefinition(type="web_search"))
             context.register_server_tool(
                 ServerToolDefinition(type="web_search", configuration={"search_context_size": "high"})
@@ -332,14 +332,14 @@ async def test_before_model_server_tool_registration_reaches_later_hooks_and_pro
     class RegisterBeforeModel(AgentExtension):
         name = "register-server-tool"
 
-        async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
+        async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
             assert request.server_tools == ()
             context.register_server_tool(ServerToolDefinition(type="web_search"))
 
     class ObserveBeforeModel(AgentExtension):
         name = "observe-server-tool"
 
-        async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
+        async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
             seen.append(tuple(request.server_tools))
 
     model = ScriptedModel(AssistantMessage(content="Done"))
@@ -360,16 +360,16 @@ async def test_all_tool_hooks_finish_before_any_message_hook() -> None:
     calls: list[str] = []
 
     class GuidanceFirst(ToolGuidelinesExtension):
-        async def on_state(self, context: AgentContext) -> None:
+        async def on_state(self, context: AgentRunContext) -> None:
             calls.append("guidance:on_state")
             await super().on_state(context)
 
     class RegisterLast(AgentExtension):
-        async def on_tool(self, context: AgentContext) -> None:
+        async def on_tool(self, context: AgentRunContext) -> None:
             calls.append("register:on_tool")
             context.register_tool(add)
 
-        async def on_state(self, context: AgentContext) -> None:
+        async def on_state(self, context: AgentRunContext) -> None:
             calls.append("register:on_state")
 
     model = ScriptedModel(AssistantMessage(content="Done"))
@@ -388,7 +388,7 @@ async def test_all_tool_hooks_finish_before_any_message_hook() -> None:
 
 async def test_context_rejects_duplicate_tool_registration() -> None:
     class DuplicateRegistration(AgentExtension):
-        async def on_tool(self, context: AgentContext) -> None:
+        async def on_tool(self, context: AgentRunContext) -> None:
             context.register_tool(add)
 
     agent = await Agent.create(
@@ -813,10 +813,10 @@ async def test_duplicate_tools_are_rejected():
 
 def test_agent_config_rejects_an_empty_session_id():
     with pytest.raises(ValueError, match="session_id"):
-        AgentConfig(session_id="  ")
+        AgentRunConfig(session_id="  ")
 
     with pytest.raises(ValueError, match="request_id"):
-        AgentConfig(session_id="session", request_id="  ")
+        AgentRunConfig(session_id="session", request_id="  ")
 
 
 async def test_agent_rejects_invalid_initialization_transitions():
@@ -826,7 +826,7 @@ async def test_agent_rejects_invalid_initialization_transitions():
     agent = Agent(ScriptedModel())
     await agent.initialize(config=CONFIG)
     with pytest.raises(AgentProtocolError, match="another session"):
-        await agent.initialize(config=AgentConfig("other-session"))
+        await agent.initialize(config=AgentRunConfig("other-session"))
 
 
 async def test_extensions_receive_all_success_hooks_and_can_modify_messages():

@@ -107,7 +107,7 @@ class MessageAppendedEvent(ExtensionEvent):
 class InternalMessageEvent(ExtensionEvent):
     """Request that the active Agent process one internal instruction.
 
-    Extensions publish this event through ``AgentContext.publish()``. The
+    Extensions publish this event through ``AgentRunContext.publish()``. The
     built-in InternalMessageExtension receives it and queues the message without
     coupling the producing extension to the Agent loop.
     """

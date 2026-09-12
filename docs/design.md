@@ -10,11 +10,11 @@ agent = await Agent.create(
     model,
     tools=[add],
     extensions=[history_extension],
-    config=AgentConfig(session_id="calculator-session"),
+    config=AgentRunConfig(session_id="calculator-session"),
 )
 reply = await agent.run(
     "Add 2 and 3",
-    config=AgentConfig(session_id="calculator-session"),
+    config=AgentRunConfig(session_id="calculator-session"),
 )
 print(reply.content)
 ```

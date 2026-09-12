@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..messages import SystemMessage
 from ..tools import AgentTool, tool
 from .base import AgentExtension
@@ -130,12 +130,12 @@ class SkillExtension(AgentExtension):
         """Return discovered skills in deterministic name order."""
         return self._skills
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Register skill loading only when at least one valid skill exists."""
         if self._skills:
             context.register_tool(self._read_skill_tool)
 
-    async def on_state(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentRunContext) -> None:
         """Place the compact skill catalog with the request's system messages."""
         if not self._skills:
             return

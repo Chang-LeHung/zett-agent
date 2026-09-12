@@ -55,8 +55,8 @@ Overlapping requests for the same session are rejected until cleanup finishes.
 
 ```python
 replies = await asyncio.gather(
-    agent.run("Explain indexing", config=AgentConfig("session-a")),
-    agent.run("Review my plan", config=AgentConfig("session-b")),
+    agent.run("Explain indexing", config=AgentRunConfig("session-a")),
+    agent.run("Review my plan", config=AgentRunConfig("session-b")),
 )
 state_a = agent.get_state("session-a")
 ```
@@ -69,7 +69,7 @@ accumulator or persistence extension; extensions=[] does not remember dialogue.
 This is conversation isolation, not a security sandbox: filesystem and shell
 tools still share the configured working directory and process permissions.
 Model clients and custom tool handlers must support concurrent calls; custom
-extensions must keep mutable request data under AgentContext or session IDs.
+extensions must keep mutable request data under AgentRunContext or session IDs.
 Do not mutate shared Agent configuration while requests are running.
 
 ## A complete example without an API key
@@ -88,7 +88,7 @@ A real provider uses the same interface:
 import asyncio
 import os
 
-from zett_agent import Agent, AgentConfig, AgentState, AssistantMessage, DeepSeekProvider, UserMessage, tool
+from zett_agent import Agent, AgentRunConfig, AgentState, AssistantMessage, DeepSeekProvider, UserMessage, tool
 
 
 @tool
@@ -104,10 +104,10 @@ def add(left: int, right: int) -> int:
 async def main() -> None:
     model = DeepSeekProvider("deepseek-v4-flash", os.environ["DEEPSEEK_API"])
     try:
-        agent = await Agent.create(model, tools=[add], config=AgentConfig(session_id="calculator-session"))
+        agent = await Agent.create(model, tools=[add], config=AgentRunConfig(session_id="calculator-session"))
         reply = await agent.run(
             "Use add to calculate 2 + 3.",
-            config=AgentConfig(session_id="calculator-session"),
+            config=AgentRunConfig(session_id="calculator-session"),
         )
         print(reply.content)
     finally:
@@ -123,7 +123,7 @@ Direct construction requires explicit initialization:
 
 ```python
 agent = Agent(model)
-await agent.initialize(config=AgentConfig(session_id="session-42"))
+await agent.initialize(config=AgentRunConfig(session_id="session-42"))
 reply = await agent.run("Hello")
 ```
 
@@ -152,15 +152,15 @@ class RestoreHistory(AgentExtension):
 agent = await Agent.create(
     model,
     extensions=[RestoreHistory()],
-    config=AgentConfig(session_id="conversation-42"),
+    config=AgentRunConfig(session_id="conversation-42"),
 )
 reply = await agent.run(
     "What was my previous question?",
-    config=AgentConfig(session_id="conversation-42"),
+    config=AgentRunConfig(session_id="conversation-42"),
 )
 ```
 
-`AgentConfig.session_id` identifies the conversation that owns a run and is
+`AgentRunConfig.session_id` identifies the conversation that owns a run and is
 included in every streamed event. `on_state` runs for every request and fills
 the new state before the incoming user message is appended.
 
@@ -191,7 +191,7 @@ an async event stream for visible pre-model work such as compaction.
 intermediate model steps, failed requests, or cancellation. Callback failures
 propagate through `on_error` and prevent the completion event.
 
-Each hook receives an `AgentContext` containing this run's `config`, fresh
+Each hook receives an `AgentRunContext` containing this run's `config`, fresh
 `state`, and the live `tools` dictionary. A new context and state are created for
 each run; only the tools registry remains shared with the Agent. Responses, tool calls, and tool
 results remain separate arguments on their respective hooks.
@@ -225,17 +225,17 @@ guidance = ToolGuidelinesExtension()
 
 agent = await Agent.create(
     model,
-    config=AgentConfig(session_id="math"),
+    config=AgentRunConfig(session_id="math"),
     tools=[add],
     extensions=[memory, guidance],
 )
-await agent.run("Add 2 and 3", config=AgentConfig(session_id="math"))
+await agent.run("Add 2 and 3", config=AgentRunConfig(session_id="math"))
 
 # A later Agent instance can continue the same in-memory session.
 next_agent = await Agent.create(
-    model, tools=[add], extensions=[memory, guidance], config=AgentConfig(session_id="math")
+    model, tools=[add], extensions=[memory, guidance], config=AgentRunConfig(session_id="math")
 )
-await next_agent.run("Now add 4", config=AgentConfig(session_id="math"))
+await next_agent.run("Now add 4", config=AgentRunConfig(session_id="math"))
 ```
 
 `ToolGuidelinesExtension` injects guidance into every fresh state through
@@ -273,7 +273,7 @@ reply = await agent.run(
 )
 ```
 
-The values are available as `AgentContext.metadata` and `AgentContext.tags` at
+The values are available as `AgentRunContext.metadata` and `AgentRunContext.tags` at
 every lifecycle hook. They are never attached to `UserMessage`,
 `AssistantMessage`, or `ToolMessage`, so provider requests cannot receive them.
 The persistence extension captures the current context values beside every
@@ -298,7 +298,7 @@ from zett_agent import CompactionExtension
 
 agent = await Agent.create(
     model,
-    config=AgentConfig(session_id="example"),
+    config=AgentRunConfig(session_id="example"),
     extensions=[
         InMemoryMessageAccumulator(),
         ToolGuidelinesExtension(),
@@ -336,7 +336,7 @@ runtime state before `MODEL_STARTED`.
 
 ```python
 class Observer(AgentExtension):
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         match event:
             case CompactionEvent():
                 print(event.compressed_from, event.compressed_to)
@@ -391,7 +391,7 @@ commands cannot be classified as read-only at the extension boundary.
 ```python
 from zett_agent import (
     Agent,
-    AgentConfig,
+    AgentRunConfig,
     glob,
     grep,
     read_file,
@@ -402,7 +402,7 @@ from zett_agent import (
 
 agent = await Agent.create(
     model,
-    config=AgentConfig(session_id="session-42"),
+    config=AgentRunConfig(session_id="session-42"),
     tools=[glob, grep, read_file, write_file, replace_in_file, run_shell],
 )
 ```
@@ -507,7 +507,7 @@ The package `__init__.py` exposes the stable public tool API.
 ```python
 agent = await Agent.create(
     model,
-    config=AgentConfig(session_id="coding"),
+    config=AgentRunConfig(session_id="coding"),
     extensions=[CodingExtension(), ToolGuidelinesExtension()],
 )
 ```
@@ -536,7 +536,7 @@ observable task progress:
 todo_extension = TodoWriteExtension()
 agent = await Agent.create(
     model,
-    config=AgentConfig(session_id="coding"),
+    config=AgentRunConfig(session_id="coding"),
     extensions=[todo_extension, ToolGuidelinesExtension()],
 )
 ```
@@ -581,7 +581,7 @@ def accept_from_ui(name: str, payload: dict[str, object]) -> list[str]:
 The outbound payload includes `session_id`, `tool_call_id`, question, ordered options,
 `allow_multiple`, and the expected response event name. The inbound envelope
 always contains only `name` and `payload`. Routing identity is passed separately
-as `AgentConfig`; the payload's `tool_call_id` identifies the pending question.
+as `AgentRunConfig`; the payload's `tool_call_id` identifies the pending question.
 Other response fields are
 application-defined and are returned unchanged to the model. Once the response
 is accepted, the stream proceeds directly to `TOOL_STARTED`; `TOOL_COMPLETED`
@@ -603,7 +603,7 @@ requires explicit user confirmation before activating it:
 plan_mode = PlanModeExtension()
 agent = await Agent.create(
     model,
-    config=AgentConfig(session_id="coding-session"),
+    config=AgentRunConfig(session_id="coding-session"),
     extensions=[
         CodingExtension(),
         ToolGuidelinesExtension(),
@@ -661,7 +661,7 @@ subagents = SubAgentExtension()
 
 agent = await Agent.create(
     model,
-    config=AgentConfig(session_id="parent-session"),
+    config=AgentRunConfig(session_id="parent-session"),
     extensions=[
         history,
         subagents,

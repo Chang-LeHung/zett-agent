@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from zett_agent import (
     Agent,
-    AgentConfig,
+    AgentRunConfig,
     AssistantMessage,
     BaseSessionPersistenceExtension,
     CompactionExtension,
@@ -138,7 +138,7 @@ async def test_agent_persists_provider_usage_on_each_assistant_raw_message(stora
 
     agent = await Agent.create(
         UsageModel(),
-        config=AgentConfig("usage-session"),
+        config=AgentRunConfig("usage-session"),
         extensions=[SessionPersistenceExtension(storage)],
     )
     await agent.run("Measure this request")
@@ -221,7 +221,7 @@ async def test_raw_message_context_rejects_invalid_input_and_corrupt_rows(storag
 async def test_persistence_restores_a_child_parent_when_config_omits_it(storage):
     first = await Agent.create(
         Model("Child answer"),
-        config=AgentConfig(
+        config=AgentRunConfig(
             "child",
             parent_session_id="parent",
         ),
@@ -231,7 +231,7 @@ async def test_persistence_restores_a_child_parent_when_config_omits_it(storage)
 
     restored = await Agent.create(
         Model("Continued"),
-        config=AgentConfig("child"),
+        config=AgentRunConfig("child"),
         extensions=[SessionPersistenceExtension(storage)],
     )
     await restored.run("Continue")
@@ -247,7 +247,7 @@ async def test_persistence_rejects_changing_an_existing_root_into_a_child(storag
     await storage.append("root", "request", UserMessage(content="Existing root"))
     agent = await Agent.create(
         Model(),
-        config=AgentConfig("root", parent_session_id="parent"),
+        config=AgentRunConfig("root", parent_session_id="parent"),
         extensions=[SessionPersistenceExtension(storage)],
     )
 
@@ -259,7 +259,7 @@ async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_pa
     path = tmp_path / "owned.sqlite3"
     first = SQLiteSessionExtension(path)
     try:
-        agent = await Agent.create(Model("First answer"), config=AgentConfig("session"), extensions=[first])
+        agent = await Agent.create(Model("First answer"), config=AgentRunConfig("session"), extensions=[first])
         await agent.run("First question")
     finally:
         first.close()
@@ -267,7 +267,7 @@ async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_pa
     second = SQLiteSessionExtension(path)
     model = Model("Second answer")
     try:
-        agent = await Agent.create(model, config=AgentConfig("session"), extensions=[second])
+        agent = await Agent.create(model, config=AgentRunConfig("session"), extensions=[second])
         await agent.run("Second question")
         assert [message.content for message in model.requests[0].messages] == [
             "You are a helpful assistant.",
@@ -289,10 +289,10 @@ async def test_custom_persistence_extension_only_wires_its_storage(tmp_path):
 
     extension = CustomSessionExtension(tmp_path / "custom.sqlite3")
     try:
-        first = await Agent.create(Model("Stored"), config=AgentConfig("session"), extensions=[extension])
+        first = await Agent.create(Model("Stored"), config=AgentRunConfig("session"), extensions=[extension])
         await first.run("Remember this")
         second_model = Model("Continued")
-        second = await Agent.create(second_model, config=AgentConfig("session"), extensions=[extension])
+        second = await Agent.create(second_model, config=AgentRunConfig("session"), extensions=[extension])
         await second.run("Continue")
 
         assert [message.content for message in second_model.requests[0].messages[1:-1]] == [
@@ -313,7 +313,7 @@ async def test_raw_log_persists_model_output_timing(storage):
 
     agent = await Agent.create(
         StreamingModel(),
-        config=AgentConfig("timed-session"),
+        config=AgentRunConfig("timed-session"),
         extensions=[SessionPersistenceExtension(storage)],
     )
     await agent.run("Question")
@@ -353,7 +353,9 @@ async def test_sqlite_session_extension_lists_paginated_raw_messages(tmp_path):
 async def test_same_agent_reloads_snapshot_and_external_tail_every_request(storage):
     session_id = "test-session"
     model = Model()
-    agent = await Agent.create(model, config=AgentConfig(session_id), extensions=[SessionPersistenceExtension(storage)])
+    agent = await Agent.create(
+        model, config=AgentRunConfig(session_id), extensions=[SessionPersistenceExtension(storage)]
+    )
     await agent.run("First")
     first = await storage.load(session_id)
     assert first.snapshot is None
@@ -385,7 +387,7 @@ async def test_same_agent_reloads_snapshot_and_external_tail_every_request(stora
 async def test_configured_request_id_is_persisted(storage):
     agent = await Agent.create(
         Model(),
-        config=AgentConfig("test-session", request_id="request-from-application"),
+        config=AgentRunConfig("test-session", request_id="request-from-application"),
         extensions=[SessionPersistenceExtension(storage)],
     )
     await agent.run("Hello")
@@ -398,7 +400,7 @@ async def test_compaction_snapshot_keeps_raw_log_and_restores_checkpoint(storage
     await storage.append(session_id, "old", AssistantMessage(content="Old answer"))
     agent = await Agent.create(
         Model(),
-        config=AgentConfig(session_id),
+        config=AgentRunConfig(session_id),
         extensions=[
             SessionPersistenceExtension(storage),
             CompactionExtension(Model("Checkpoint"), max_tokens=100, keep_recent_tokens=1),
@@ -425,7 +427,7 @@ async def test_compaction_snapshot_keeps_raw_log_and_restores_checkpoint(storage
     # A fresh Agent restores the checkpoint plus the later answer exactly once.
     restored_model = Model()
     restored = await Agent.create(
-        restored_model, config=AgentConfig(session_id), extensions=[SessionPersistenceExtension(storage)]
+        restored_model, config=AgentRunConfig(session_id), extensions=[SessionPersistenceExtension(storage)]
     )
     assert restored.state.messages == []
     await restored.run("Continue")

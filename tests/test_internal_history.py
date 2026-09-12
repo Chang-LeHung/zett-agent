@@ -4,10 +4,10 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEventType,
     AgentExtension,
     AgentMessage,
+    AgentRunConfig,
     AssistantMessage,
     InternalMessageEvent,
     ModelEvent,
@@ -39,7 +39,7 @@ async def test_internal_messages_are_restored_from_raw_history_and_snapshot_tail
 
     persistence = SQLiteSessionExtension(tmp_path / "history.db")
     model = AnswerModel()
-    agent = await Agent.create(model, config=AgentConfig("priority"), extensions=[Inject(), persistence])
+    agent = await Agent.create(model, config=AgentRunConfig("priority"), extensions=[Inject(), persistence])
     try:
         events = []
         async for event in agent.stream("initial"):

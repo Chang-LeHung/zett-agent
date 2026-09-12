@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from zett_agent import (
-    AgentConfig,
+    AgentRunConfig,
     AnyMessage,
     AssistantMessage,
     BaseSessionPersistenceExtension,
@@ -84,7 +84,7 @@ async def main() -> None:
         database = SQLiteSessionStorage(Path(directory) / "sessions.sqlite")
         try:
             extension = AuditedPersistence(database)
-            client = await create_agent(FixedModel(), config=AgentConfig(session_id="audit"), extensions=[extension])
+            client = await create_agent(FixedModel(), config=AgentRunConfig(session_id="audit"), extensions=[extension])
             await client.run("Remember this")
             assert extension.storage.operations == ["load", "append:user", "append:assistant"]
             print(", ".join(extension.storage.operations))

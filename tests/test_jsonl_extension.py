@@ -4,8 +4,8 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEventType,
+    AgentRunConfig,
     AssistantMessage,
     JSONLExtension,
     ModelEvent,
@@ -39,7 +39,7 @@ def records(extension: JSONLExtension, session_id: str) -> list[dict]:
 
 async def test_jsonl_writes_one_line_per_turn_without_repeating_history(tmp_path):
     extension = JSONLExtension(tmp_path / "turns")
-    config = AgentConfig("session", request_id="request-1")
+    config = AgentRunConfig("session", request_id="request-1")
     agent = await Agent.create(ToolModel(), tools=[lookup], extensions=[extension], config=config)
 
     await agent.run(
@@ -48,7 +48,7 @@ async def test_jsonl_writes_one_line_per_turn_without_repeating_history(tmp_path
         metadata={"source": "editor", "attempt": 1},
         tags={"intent": "lookup"},
     )
-    await agent.run("Second", config=AgentConfig("session", request_id="request-2"))
+    await agent.run("Second", config=AgentRunConfig("session", request_id="request-2"))
 
     saved = records(extension, "session")
     assert len(saved) == 2
@@ -71,8 +71,8 @@ async def test_jsonl_writes_one_line_per_turn_without_repeating_history(tmp_path
 
 async def test_jsonl_uses_one_file_per_session_and_safe_file_names(tmp_path):
     extension = JSONLExtension(tmp_path)
-    first = await Agent.create(ToolModel(), tools=[lookup], extensions=[extension], config=AgentConfig("../first"))
-    second = await Agent.create(ToolModel(), tools=[lookup], extensions=[extension], config=AgentConfig("second"))
+    first = await Agent.create(ToolModel(), tools=[lookup], extensions=[extension], config=AgentRunConfig("../first"))
+    second = await Agent.create(ToolModel(), tools=[lookup], extensions=[extension], config=AgentRunConfig("second"))
 
     await first.run("One")
     await second.run("Two")
@@ -92,7 +92,7 @@ async def test_jsonl_records_failed_turn_once_without_serializing_exception(tmp_
             yield
 
     extension = JSONLExtension(tmp_path)
-    agent = await Agent.create(FailingModel(), extensions=[extension], config=AgentConfig("failed"))
+    agent = await Agent.create(FailingModel(), extensions=[extension], config=AgentRunConfig("failed"))
 
     with pytest.raises(RuntimeError, match="provider unavailable"):
         await agent.run("Try")
@@ -106,7 +106,7 @@ async def test_jsonl_records_failed_turn_once_without_serializing_exception(tmp_
 
 async def test_jsonl_records_cancelled_turn_once(tmp_path):
     extension = JSONLExtension(tmp_path)
-    agent = await Agent.create(ToolModel(), tools=[lookup], extensions=[extension], config=AgentConfig("cancelled"))
+    agent = await Agent.create(ToolModel(), tools=[lookup], extensions=[extension], config=AgentRunConfig("cancelled"))
     stream = agent.stream("Stop")
     async for event in stream:
         if event.type is AgentEventType.MODEL_STARTED:

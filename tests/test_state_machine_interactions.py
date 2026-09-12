@@ -6,14 +6,14 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentEvent,
     AgentEventType,
     AgentExtension,
     AgentPhase,
     AgentPhaseTransitionMixin,
     AgentProtocolError,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AssistantMessage,
     ModelEvent,
@@ -64,7 +64,7 @@ async def test_transition_matrix_rejects_without_mutation_or_notification(source
         async def on_event(self, context, event):
             received.append(event)
 
-    context = AgentContext(AgentConfig("matrix"), AgentState(phase=source), {}, (Observer(),))
+    context = AgentRunContext(AgentRunConfig("matrix"), AgentState(phase=source), {}, (Observer(),))
     operation = getattr(AgentPhaseTransitionMixin(), method)
     if source not in allowed:
         with pytest.raises(AgentProtocolError, match="Invalid agent phase transition"):
@@ -106,7 +106,7 @@ async def test_task_cancel_during_transition_subscription_then_reuse_agent(phase
         async def on_error(self, context, error):
             errors.append(error)
 
-    agent = await Agent.create(FinalModel(), config=AgentConfig("cancel"), extensions=[BlockingObserver()])
+    agent = await Agent.create(FinalModel(), config=AgentRunConfig("cancel"), extensions=[BlockingObserver()])
     task = asyncio.create_task(agent.run("first"))
     try:
         await asyncio.wait_for(entered.wait(), 2)
@@ -142,7 +142,7 @@ async def test_failure_notifications_do_not_mask_the_original_model_exception():
             assert error is original
             raise RuntimeError("error hook")
 
-    agent = await Agent.create(BrokenModel(), config=AgentConfig("failure"), extensions=[BrokenObserver()])
+    agent = await Agent.create(BrokenModel(), config=AgentRunConfig("failure"), extensions=[BrokenObserver()])
     with pytest.raises(ValueError) as caught:
         await agent.run("hello")
     assert caught.value is original
@@ -158,7 +158,7 @@ async def test_completed_observer_failure_preserves_terminal_state_and_original_
             if isinstance(event, PhaseTransitionEvent) and event.current_phase == AgentPhase.COMPLETED:
                 raise original
 
-    agent = await Agent.create(FinalModel(), config=AgentConfig("completion"), extensions=[BrokenObserver()])
+    agent = await Agent.create(FinalModel(), config=AgentRunConfig("completion"), extensions=[BrokenObserver()])
     with pytest.raises(RuntimeError) as caught:
         await agent.run("hello")
     assert caught.value is original
@@ -175,7 +175,7 @@ async def test_completed_subscription_cannot_reenter_agent_before_stream_finishe
                     await agent.run("nested")
                 rejected.append(caught.value)
 
-    agent = await Agent.create(FinalModel(), config=AgentConfig("reentry"), extensions=[ReentrantObserver()])
+    agent = await Agent.create(FinalModel(), config=AgentRunConfig("reentry"), extensions=[ReentrantObserver()])
     state = None
     stream = agent.stream("hello")
     async for event in stream:
@@ -194,7 +194,7 @@ async def test_cancel_notification_failure_does_not_break_generator_close():
             if isinstance(event, RunCancelledEvent):
                 raise RuntimeError("cancel subscriber")
 
-    agent = await Agent.create(FinalModel(), config=AgentConfig("close"), extensions=[BrokenObserver()])
+    agent = await Agent.create(FinalModel(), config=AgentRunConfig("close"), extensions=[BrokenObserver()])
     stream = agent.stream("hello")
     assert (await anext(stream)).type == AgentEventType.MODEL_STARTED
     await stream.aclose()
@@ -218,7 +218,7 @@ async def test_close_during_compaction_synchronously_closes_extension_generator(
             if isinstance(event, RunCancelledEvent):
                 cancelled.append(event)
 
-    agent = await Agent.create(FinalModel(), config=AgentConfig("compact"), extensions=[Compaction()])
+    agent = await Agent.create(FinalModel(), config=AgentRunConfig("compact"), extensions=[Compaction()])
     stream = agent.stream("hello")
     assert (await anext(stream)).type == AgentEventType.COMPACTION_STARTED
     await stream.aclose()
@@ -268,7 +268,7 @@ async def test_cancel_running_tool_cleans_up_and_does_not_execute_the_next_tool(
                 cancelled.append(event)
 
     agent = await Agent.create(
-        ToolModel(), config=AgentConfig("tools"), tools=[wait_tool, next_tool], extensions=[Observer()]
+        ToolModel(), config=AgentRunConfig("tools"), tools=[wait_tool, next_tool], extensions=[Observer()]
     )
     task = asyncio.create_task(agent.run("run tools"))
     try:

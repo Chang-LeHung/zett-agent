@@ -117,7 +117,7 @@ class Message:
     Provider adapters ignore it unless they explicitly document another mapping.
 
     .. note::
-        Request-level ``metadata`` and ``tags`` live on :class:`AgentContext` and
+        Request-level ``metadata`` and ``tags`` live on :class:`AgentRunContext` and
         are persisted beside Raw Log records. They are intentionally different
         from per-message ``attributes``.
 

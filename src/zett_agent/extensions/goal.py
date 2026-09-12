@@ -9,7 +9,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..agent import Agent, AgentConfig, AgentContext
+from ..agent import Agent, AgentRunConfig, AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentIterationLimitError, AgentProtocolError
 from ..ids import new_uuid7
@@ -126,7 +126,7 @@ class GoalExtension(AgentExtension):
             )
             agent = await Agent.create(
                 primary_model,
-                config=AgentConfig(session_id="session-42"),
+                config=AgentRunConfig(session_id="session-42"),
                 extensions=[GoalExtension(definition, max_iterations=8, max_decision_retries=3)],
                 max_internal_messages=8,
             )
@@ -151,9 +151,9 @@ class GoalExtension(AgentExtension):
         self._definition = definition
         self.max_iterations = max_iterations
         self.max_decision_retries = max_decision_retries
-        self._runs: dict[AgentContext, _GoalRun] = {}
+        self._runs: dict[AgentRunContext, _GoalRun] = {}
 
-    async def on_message(self, context: AgentContext) -> None:
+    async def on_message(self, context: AgentRunContext) -> None:
         """Recognize ``/goal`` followed by a space and inject the execution prompt."""
         message = context.input_message
         run = _GoalRun()
@@ -176,7 +176,7 @@ class GoalExtension(AgentExtension):
         run.goal = goal
         run.raw_content = raw_content
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Release request-local state when cancellation bypasses run callbacks."""
         match event:
             case RunCancelledEvent():
@@ -184,7 +184,7 @@ class GoalExtension(AgentExtension):
 
     async def after_model_events(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         response: ModelResponse,
     ) -> AsyncIterator[AgentEvent]:
         """Privately evaluate a candidate answer and enqueue one continuation."""
@@ -253,7 +253,7 @@ class GoalExtension(AgentExtension):
 
     async def _evaluate(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         run: _GoalRun,
         result: AssistantMessage,
     ) -> GoalEvaluation:
@@ -302,7 +302,7 @@ class GoalExtension(AgentExtension):
         # Keep retry history in memory for this evaluator's lifetime.
         evaluator = await Agent.create(
             definition.model,
-            config=AgentConfig(
+            config=AgentRunConfig(
                 session_id=new_uuid7(),
                 parent_session_id=context.config.session_id,
             ),
@@ -329,12 +329,12 @@ class GoalExtension(AgentExtension):
             )
         raise AgentProtocolError(f"Goal evaluator completed without reporting a decision after {attempts} attempts")
 
-    async def on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Release request-local goal state after verified success."""
         _ = result
         self._runs.pop(context, None)
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Release request-local goal state after any failed request."""
         _ = error
         self._runs.pop(context, None)

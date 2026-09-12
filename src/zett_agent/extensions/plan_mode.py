@@ -6,7 +6,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
 from ..messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage
@@ -247,7 +247,7 @@ class PlanModeExtension(ExternalEventExtension):
                                 "approved": True,
                             },
                         ),
-                        config=AgentConfig(session_id=event.session_id),
+                        config=AgentRunConfig(session_id=event.session_id),
                     )
 
     .. note::
@@ -277,7 +277,7 @@ class PlanModeExtension(ExternalEventExtension):
         self._active_sessions: set[str] = set()
         self._entered_events: set[str] = set()
         self._exited_events: set[str] = set()
-        self._requests: dict[AgentContext, _RequestBaseline] = {}
+        self._requests: dict[AgentRunContext, _RequestBaseline] = {}
         filesystem_tools = FileSystemExtension(read_only=False).tools
         self._filesystem_tools: tuple[AgentTool, ...] = (*filesystem_tools, run_shell)
         self._filesystem_tool_names = frozenset(tool.name for tool in self._filesystem_tools)
@@ -287,7 +287,7 @@ class PlanModeExtension(ExternalEventExtension):
         self._validate_session_id(session_id)
         return session_id in self._active_sessions
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Expose either the proposal Tool or the active Plan Mode tool set."""
         baseline = _RequestBaseline(
             tools=dict(context.tools),
@@ -301,18 +301,18 @@ class PlanModeExtension(ExternalEventExtension):
         else:
             context.register_tool(baseline.enter_tool)
 
-    async def on_state(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentRunContext) -> None:
         """Replace system instructions only after Plan Mode was approved."""
         baseline = self._baseline(context)
         baseline.system_messages = self._normal_system_messages(context, baseline)
         if self.is_plan_mode(context.config.session_id):
             self._replace_plan_system_messages(context, baseline)
 
-    async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
+    async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
         """Apply an approved entry or exit before the next model step."""
         self._apply_mode(context)
 
-    def _apply_mode(self, context: AgentContext) -> None:
+    def _apply_mode(self, context: AgentRunContext) -> None:
         """Apply session mode without invoking a model lifecycle hook manually."""
         baseline = self._baseline(context)
         if self.is_plan_mode(context.config.session_id):
@@ -325,7 +325,7 @@ class PlanModeExtension(ExternalEventExtension):
 
     async def after_tool_events(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         call: ToolCall,
         result: ToolMessage,
         error: Exception | None,
@@ -346,7 +346,7 @@ class PlanModeExtension(ExternalEventExtension):
             self._exited_events.remove(session_id)
             yield PlanModeExitedEvent(session_id)
 
-    async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+    async def before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         """Pause valid transition Tool Calls until their responses arrive."""
 
         match call.name:
@@ -375,7 +375,7 @@ class PlanModeExtension(ExternalEventExtension):
             case _:
                 return
 
-    async def before_tool(self, context: AgentContext, call: ToolCall) -> None:
+    async def before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
         """Reject tools outside the active Plan Mode capability set."""
         allowed = self._filesystem_tool_names | {EXIT_PLAN_MODE_TOOL_NAME}
         if self.is_plan_mode(context.config.session_id) and call.name not in allowed:
@@ -383,18 +383,18 @@ class PlanModeExtension(ExternalEventExtension):
         if not self.is_plan_mode(context.config.session_id) and call.name == EXIT_PLAN_MODE_TOOL_NAME:
             raise AgentProtocolError("Cannot exit Plan Mode while it is not active")
 
-    async def after_run(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def after_run(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Release request-local restoration state after success."""
         self._requests.pop(context, None)
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Wake external waits and release restoration state after failure."""
         self._requests.pop(context, None)
         self._entered_events.discard(context.config.session_id)
         self._exited_events.discard(context.config.session_id)
         await super().on_error(context, error)
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Wake external waits and release restoration state on cancellation."""
         await super().on_event(context, event)
         if isinstance(event, RunCancelledEvent):
@@ -402,7 +402,7 @@ class PlanModeExtension(ExternalEventExtension):
             self._entered_events.discard(context.config.session_id)
             self._exited_events.discard(context.config.session_id)
 
-    def _build_enter_tool(self, context: AgentContext) -> AgentTool:
+    def _build_enter_tool(self, context: AgentRunContext) -> AgentTool:
         """Create the request-bound Tool that consumes one approved decision."""
 
         @tool(name=ENTER_PLAN_MODE_TOOL_NAME)
@@ -434,7 +434,7 @@ class PlanModeExtension(ExternalEventExtension):
 
         return enter_plan_mode
 
-    def _build_exit_tool(self, context: AgentContext) -> AgentTool:
+    def _build_exit_tool(self, context: AgentRunContext) -> AgentTool:
         """Create the request-bound Tool that submits a plan for approval."""
 
         @tool(name=EXIT_PLAN_MODE_TOOL_NAME)
@@ -466,26 +466,26 @@ class PlanModeExtension(ExternalEventExtension):
 
         return exit_plan_mode
 
-    def _replace_plan_tools(self, context: AgentContext, baseline: _RequestBaseline) -> None:
+    def _replace_plan_tools(self, context: AgentRunContext, baseline: _RequestBaseline) -> None:
         context.tools.clear()
         for registered in self._filesystem_tools:
             context.register_tool(registered)
         context.register_tool(baseline.exit_tool)
 
-    def _replace_plan_system_messages(self, context: AgentContext, baseline: _RequestBaseline) -> None:
+    def _replace_plan_system_messages(self, context: AgentRunContext, baseline: _RequestBaseline) -> None:
         dialogue = [message for message in context.state.messages if not isinstance(message, SystemMessage)]
         guidance = render_tool_guidance((*self._filesystem_tools, baseline.exit_tool))
         prompt = self.system_prompt if not guidance else f"{self.system_prompt}\n\n{guidance}"
         context.state.messages[:] = [SystemMessage(content=prompt), *dialogue]
 
-    def _restore_normal_mode(self, context: AgentContext, baseline: _RequestBaseline) -> None:
+    def _restore_normal_mode(self, context: AgentRunContext, baseline: _RequestBaseline) -> None:
         dialogue = [message for message in context.state.messages if not isinstance(message, SystemMessage)]
         context.tools.clear()
         context.tools.update(baseline.tools)
         context.register_tool(baseline.enter_tool)
         context.state.messages[:] = [*baseline.system_messages, *dialogue]
 
-    def _baseline(self, context: AgentContext) -> _RequestBaseline:
+    def _baseline(self, context: AgentRunContext) -> _RequestBaseline:
         baseline = self._requests.get(context)
         if baseline is None:
             raise AgentProtocolError("Plan Mode request was not initialized by on_tool")
@@ -493,7 +493,7 @@ class PlanModeExtension(ExternalEventExtension):
 
     def _normal_system_messages(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         baseline: _RequestBaseline,
     ) -> tuple[SystemMessage, ...]:
         instructions = [message for message in context.state.messages if isinstance(message, SystemMessage)]

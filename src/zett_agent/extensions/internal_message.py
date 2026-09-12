@@ -14,14 +14,14 @@ from .events import ExtensionEvent, InternalMessageEvent
 from .external import ExternalEvent
 
 if TYPE_CHECKING:
-    from ..agent import AgentConfig, AgentContext
+    from ..agent import AgentRunConfig, AgentRunContext
 
 INTERNAL_MESSAGE_EVENT_NAME = "internal_message"
 
 
 @dataclass(slots=True)
 class _Inbox:
-    context: AgentContext
+    context: AgentRunContext
     messages: deque[AgentMessage] = field(default_factory=deque)
     accepting: bool = True
 
@@ -40,22 +40,22 @@ class InternalMessageExtension(AgentExtension):
     """
 
     def __init__(self) -> None:
-        self._inboxes: dict[AgentContext, _Inbox] = {}
+        self._inboxes: dict[AgentRunContext, _Inbox] = {}
         self._lock = Lock()
 
-    def open(self, context: AgentContext) -> None:
+    def open(self, context: AgentRunContext) -> None:
         """Open a request inbox before lifecycle hooks run."""
         with self._lock:
             if context in self._inboxes:
                 raise AgentProtocolError("Internal inbox is already active")
             self._inboxes[context] = _Inbox(context)
 
-    def close(self, context: AgentContext) -> None:
+    def close(self, context: AgentRunContext) -> None:
         """Release queued input on every exit, including broken cleanup hooks."""
         with self._lock:
             self._inboxes.pop(context, None)
 
-    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
+    def accept(self, config: AgentRunConfig | None, event: ExternalEvent) -> bool:
         """Accept internal text for an unambiguously identified active request."""
         if event.name != INTERNAL_MESSAGE_EVENT_NAME:
             return False
@@ -83,7 +83,7 @@ class InternalMessageExtension(AgentExtension):
             matches[0].messages.append(AgentMessage(content=content))
             return True
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Append a typed internal instruction to its originating request."""
         if isinstance(event, InternalMessageEvent):
             with self._lock:
@@ -92,7 +92,7 @@ class InternalMessageExtension(AgentExtension):
                     raise AgentProtocolError("Internal inbox is closed")
                 inbox.messages.append(event.message)
 
-    def next_message(self, context: AgentContext) -> AgentMessage | None:
+    def next_message(self, context: AgentRunContext) -> AgentMessage | None:
         """Take the next internal instruction, or atomically close an empty inbox."""
         with self._lock:
             inbox = self._inboxes[context]

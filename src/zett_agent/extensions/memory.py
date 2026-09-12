@@ -1,6 +1,6 @@
 """In-memory conversation accumulation exposed as an Agent extension."""
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..messages import AnyMessage, SystemMessage
 from .base import AgentExtension
 from .events import CompactionEvent, ExtensionEvent, MessageAppendedEvent
@@ -17,7 +17,7 @@ class InMemoryMessageAccumulator(AgentExtension):
     def __init__(self) -> None:
         self._sessions: dict[str, list[AnyMessage]] = {}
 
-    async def on_state(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentRunContext) -> None:
         """Combine current instructions with an independent copy of remembered dialogue."""
         state = context.state
         instructions = [message for message in state.messages if isinstance(message, SystemMessage)]
@@ -28,7 +28,7 @@ class InMemoryMessageAccumulator(AgentExtension):
             self._sessions[context.config.session_id] = remembered
         state.messages[:] = [*instructions, *remembered]
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Accumulate raw messages and replace dialogue after successful compaction."""
         session_id = context.config.session_id
         match event:

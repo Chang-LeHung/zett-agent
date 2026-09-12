@@ -9,9 +9,9 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentExtension,
     AgentPhase,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -105,7 +105,7 @@ async def test_explore_subagent_runs_end_to_end_in_a_persisted_child_session(sto
     extension = SubAgentExtension(definitions)
     agent = await Agent.create(
         model,
-        config=AgentConfig("parent-session"),
+        config=AgentRunConfig("parent-session"),
         extensions=[
             SessionPersistenceExtension(storage),
             extension,
@@ -166,7 +166,7 @@ async def test_task_schema_and_guidance_describe_available_subagents(storage, bu
     model = DelegatingModel(subagent_type="reasoning")
     agent = await Agent.create(
         model,
-        config=AgentConfig("parent"),
+        config=AgentRunConfig("parent"),
         extensions=[
             SessionPersistenceExtension(storage),
             SubAgentExtension(builtins(model)),
@@ -200,7 +200,7 @@ async def test_unknown_subagent_becomes_a_failed_tool_result_without_a_child_ses
     model = DelegatingModel(subagent_type="missing")
     agent = await Agent.create(
         model,
-        config=AgentConfig("parent"),
+        config=AgentRunConfig("parent"),
         extensions=[SessionPersistenceExtension(storage), SubAgentExtension(builtins(model))],
     )
 
@@ -249,7 +249,7 @@ async def test_cancelling_parent_propagates_into_a_running_subagent(storage, bui
     definitions = builtins(model)
     agent = await Agent.create(
         model,
-        config=AgentConfig("parent"),
+        config=AgentRunConfig("parent"),
         extensions=[
             SessionPersistenceExtension(storage),
             SubAgentExtension(definitions),
@@ -306,7 +306,7 @@ async def test_default_subagents_do_not_require_parent_persistence(builtins, mon
     monkeypatch.setattr("zett_agent.extensions.subagent.default_subagents", lambda resolved_model: definitions)
     agent = await Agent.create(
         model,
-        config=AgentConfig("parent"),
+        config=AgentRunConfig("parent"),
         extensions=[SubAgentExtension()],
     )
 
@@ -334,7 +334,7 @@ async def test_custom_subagent_extensions_run_inside_the_child_lifecycle(storage
     )
     agent = await Agent.create(
         model,
-        config=AgentConfig("parent"),
+        config=AgentRunConfig("parent"),
         extensions=[
             persistence,
             SubAgentExtension((definition,)),
@@ -375,7 +375,7 @@ async def test_subagent_uses_its_definition_model_instead_of_the_parent_model(st
     )
     agent = await Agent.create(
         parent_model,
-        config=AgentConfig("parent"),
+        config=AgentRunConfig("parent"),
         extensions=[
             persistence,
             SubAgentExtension((definition,)),
@@ -399,7 +399,7 @@ async def test_custom_definition_does_not_receive_implicit_persistence(storage):
     )
     agent = await Agent.create(
         model,
-        config=AgentConfig("parent"),
+        config=AgentRunConfig("parent"),
         extensions=[
             SessionPersistenceExtension(storage),
             SubAgentExtension((definition,)),
@@ -415,6 +415,6 @@ async def test_custom_definition_does_not_receive_implicit_persistence(storage):
 
 def test_agent_config_rejects_invalid_parent_session_ids():
     with pytest.raises(ValueError, match="parent_session_id cannot be empty"):
-        AgentConfig("child", parent_session_id=" ")
+        AgentRunConfig("child", parent_session_id=" ")
     with pytest.raises(ValueError, match="must differ"):
-        AgentConfig("same", parent_session_id="same")
+        AgentRunConfig("same", parent_session_id="same")

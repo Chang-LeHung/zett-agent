@@ -16,10 +16,10 @@ from zett_agent import (
     PLAN_MODE_EXITED_EVENT_NAME,
     PLAN_MODE_SYSTEM_PROMPT,
     Agent,
-    AgentConfig,
     AgentEventType,
     AgentIterationLimitError,
     AgentProtocolError,
+    AgentRunConfig,
     AssistantMessage,
     CodingExtension,
     ExternalEvent,
@@ -47,7 +47,7 @@ async def test_enter_completion_is_emitted_even_without_another_model_iteration(
     plan_mode = PlanModeExtension()
     agent = await Agent.create(
         ScriptedModel(proposal()),
-        config=AgentConfig("last-step"),
+        config=AgentRunConfig("last-step"),
         extensions=[plan_mode],
         max_iterations=1,
     )
@@ -65,7 +65,7 @@ async def test_enter_completion_is_emitted_even_without_another_model_iteration(
                             "approved": True,
                         },
                     ),
-                    config=AgentConfig("last-step"),
+                    config=AgentRunConfig("last-step"),
                 ) == ["PlanModeExtension"]
     assert any(event.type is AgentEventType.TOOL_COMPLETED for event in events), [
         (event.type, event.error) for event in events
@@ -160,7 +160,7 @@ async def test_model_proposal_waits_for_approval_then_enters_plan_mode():
     plan_mode = PlanModeExtension()
     agent = await Agent.create(
         model,
-        config=AgentConfig("planning"),
+        config=AgentRunConfig("planning"),
         system_prompt="Normal implementation prompt",
         extensions=[CodingExtension(), ToolGuidelinesExtension(), plan_mode],
     )
@@ -219,7 +219,7 @@ async def test_declined_proposal_keeps_normal_mode_prompt_and_tools():
     plan_mode = PlanModeExtension()
     agent = await Agent.create(
         model,
-        config=AgentConfig("declined"),
+        config=AgentRunConfig("declined"),
         system_prompt="Normal implementation prompt",
         extensions=[CodingExtension(), ToolGuidelinesExtension(), plan_mode],
     )
@@ -253,7 +253,7 @@ def test_external_response_cannot_proactively_enter_plan_mode():
 async def test_malformed_external_decision_becomes_failed_tool_result():
     model = ScriptedModel(proposal(), AssistantMessage(content="Handled failure"))
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("malformed"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("malformed"), extensions=[plan_mode])
     events = []
     ready = asyncio.Event()
 
@@ -286,7 +286,7 @@ async def test_invalid_tool_arguments_do_not_wait_for_external_input():
         AssistantMessage(content="Recovered"),
     )
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("invalid"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("invalid"), extensions=[plan_mode])
 
     events = [event async for event in agent.stream("Plan")]
 
@@ -310,7 +310,7 @@ async def test_empty_or_invalid_enter_request_never_opens_confirmation(arguments
         AssistantMessage(content="Continue without planning"),
     )
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("empty-enter"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("empty-enter"), extensions=[plan_mode])
 
     events = [event async for event in agent.stream("Handle the request")]
 
@@ -324,7 +324,7 @@ async def test_empty_or_invalid_enter_request_never_opens_confirmation(arguments
 async def test_cancelling_confirmation_wait_rejects_late_response():
     model = ScriptedModel(proposal())
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("cancelled"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("cancelled"), extensions=[plan_mode])
     stream = agent.stream("Plan")
     confirmation = None
     async for event in stream:
@@ -353,7 +353,7 @@ async def test_active_plan_mode_rejects_tools_outside_its_capability_set():
         AssistantMessage(tool_calls=(ToolCall("task-1", "task", {}),)),
     )
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("restricted"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("restricted"), extensions=[plan_mode])
     await run_with_decision(agent, approved=True)
 
     with pytest.raises(AgentProtocolError, match="not allowed in Plan Mode"):
@@ -377,7 +377,7 @@ async def test_active_plan_mode_executes_filesystem_and_shell_tools(tmp_path, mo
     plan_mode = PlanModeExtension()
     agent = await Agent.create(
         model,
-        config=AgentConfig("plan-tools"),
+        config=AgentRunConfig("plan-tools"),
         extensions=[plan_mode],
         parallel_tool_call=False,
     )
@@ -406,7 +406,7 @@ async def test_model_submits_plan_and_approved_exit_restores_normal_mode():
     plan_mode = PlanModeExtension()
     agent = await Agent.create(
         model,
-        config=AgentConfig("exit-approved"),
+        config=AgentRunConfig("exit-approved"),
         system_prompt="Normal implementation prompt",
         extensions=[CodingExtension(), ToolGuidelinesExtension(), plan_mode],
     )
@@ -454,7 +454,7 @@ async def test_declined_exit_keeps_plan_mode_active():
         AssistantMessage(content="I will refine the plan"),
     )
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("exit-declined"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("exit-declined"), extensions=[plan_mode])
     await run_with_decision(agent, approved=True)
 
     events = await run_with_exit_decision(agent, approved=False)
@@ -485,7 +485,7 @@ async def test_empty_or_invalid_exit_request_keeps_plan_mode_active(arguments):
         AssistantMessage(content="Continue planning"),
     )
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("empty-exit"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("empty-exit"), extensions=[plan_mode])
     await run_with_decision(agent, approved=True)
 
     events = [event async for event in agent.stream("Submit the plan")]
@@ -509,7 +509,7 @@ async def test_full_lifecycle_restores_empty_prompt_and_empty_original_tool_set(
     plan_mode = PlanModeExtension()
     agent = await Agent.create(
         model,
-        config=AgentConfig("empty-baseline"),
+        config=AgentRunConfig("empty-baseline"),
         system_prompt="",
         tools=[],
         extensions=[plan_mode],
@@ -538,7 +538,7 @@ async def test_full_lifecycle_restores_empty_prompt_and_empty_original_tool_set(
 async def test_wrong_response_event_cannot_wake_an_enter_confirmation():
     model = ScriptedModel(proposal(), AssistantMessage(content="Continue"))
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("wrong-event"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("wrong-event"), extensions=[plan_mode])
     ready = asyncio.Event()
 
     async def consume():
@@ -578,7 +578,7 @@ async def test_wrong_response_event_cannot_wake_an_enter_confirmation():
 async def test_empty_external_response_does_not_wake_pending_confirmation(payload):
     model = ScriptedModel(proposal(), AssistantMessage(content="Continue"))
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("empty-response"), extensions=[plan_mode])
+    agent = await Agent.create(model, config=AgentRunConfig("empty-response"), extensions=[plan_mode])
     ready = asyncio.Event()
 
     async def consume():
@@ -604,7 +604,7 @@ async def test_exit_tool_is_illegal_outside_plan_mode():
     model = ScriptedModel(exit_proposal())
     agent = await Agent.create(
         model,
-        config=AgentConfig("illegal-exit"),
+        config=AgentRunConfig("illegal-exit"),
         extensions=[PlanModeExtension()],
     )
 

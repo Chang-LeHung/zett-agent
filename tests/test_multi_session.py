@@ -6,11 +6,11 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
     AgentMessage,
     AgentPhase,
     AgentProtocolError,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AskUserExtension,
     AssistantMessage,
@@ -44,16 +44,17 @@ class GatedModel:
 async def test_concurrent_sessions_restore_only_their_own_history(tmp_path, persistent):
     extension = SQLiteSessionExtension(tmp_path / "sessions.db") if persistent else InMemoryMessageAccumulator()
     model = GatedModel()
-    agent = await Agent.create(model, config=AgentConfig("a"), extensions=[extension], system_prompt="")
+    agent = await Agent.create(model, config=AgentRunConfig("a"), extensions=[extension], system_prompt="")
     tasks = [
-        asyncio.create_task(agent.run(name, config=AgentConfig(name), metadata={"owner": name})) for name in ("a", "b")
+        asyncio.create_task(agent.run(name, config=AgentRunConfig(name), metadata={"owner": name}))
+        for name in ("a", "b")
     ]
     try:
         await asyncio.wait_for(asyncio.gather(*(e.wait() for e in model.entered.values())), 2)
         assert agent.get_state("a") is not agent.get_state("b")
         assert agent.get_state("missing") is None
         with pytest.raises(AgentProtocolError):
-            await agent.run("a", config=AgentConfig("a"))
+            await agent.run("a", config=AgentRunConfig("a"))
         with pytest.raises(AgentProtocolError, match="require config"):
             agent.emit_external_event(ExternalEvent("unknown", {}))
         model.release["a"].set()
@@ -63,7 +64,7 @@ async def test_concurrent_sessions_restore_only_their_own_history(tmp_path, pers
         model.release["b"].set()
         await asyncio.wait_for(tasks[1], 2)
         for name in ("a", "b"):
-            await agent.run(name, config=AgentConfig(name), metadata={"owner": name})
+            await agent.run(name, config=AgentRunConfig(name), metadata={"owner": name})
             assert [m.content for m in agent.get_state(name).messages] == [name] * 4
             if persistent:
                 records = extension.list_raw_messages(name)
@@ -84,10 +85,12 @@ async def test_concurrent_sessions_restore_only_their_own_history(tmp_path, pers
 
 async def test_concurrent_sessions_can_override_the_default_model():
     models = {name: GatedModel() for name in ("a", "b")}
-    agent = await Agent.create(None, config=AgentConfig("default"), system_prompt="")
+    agent = await Agent.create(None, config=AgentRunConfig("default"), system_prompt="")
     with pytest.raises(AgentProtocolError, match="requires a model"):
         await agent.run("missing model")
-    tasks = [asyncio.create_task(agent.run(name, config=AgentConfig(name), model=models[name])) for name in ("a", "b")]
+    tasks = [
+        asyncio.create_task(agent.run(name, config=AgentRunConfig(name), model=models[name])) for name in ("a", "b")
+    ]
     try:
         await asyncio.wait_for(
             asyncio.gather(models["a"].entered["a"].wait(), models["b"].entered["b"].wait()),
@@ -116,8 +119,8 @@ class QuestionModel:
 async def test_cancel_one_waiting_session_does_not_cancel_other(tmp_path):
     ask = AskUserExtension()
     storage = SQLiteSessionExtension(tmp_path / "cancel.db")
-    agent = await Agent.create(QuestionModel(), config=AgentConfig("a"), extensions=[ask, storage])
-    streams = {name: agent.stream(name, config=AgentConfig(name, request_id=name)) for name in ("a", "b")}
+    agent = await Agent.create(QuestionModel(), config=AgentRunConfig("a"), extensions=[ask, storage])
+    streams = {name: agent.stream(name, config=AgentRunConfig(name, request_id=name)) for name in ("a", "b")}
     try:
         for stream in streams.values():
             async for event in stream:
@@ -126,9 +129,9 @@ async def test_cancel_one_waiting_session_does_not_cancel_other(tmp_path):
         await streams["a"].aclose()
         assert agent.get_state("a").phase is AgentPhase.CANCELLED
         response = ExternalEvent("ask_user_response", {"tool_call_id": "same-call", "answer": "b-only"})
-        assert agent.emit_external_event(response, config=AgentConfig("a")) == []
-        assert agent.emit_external_event(response, config=AgentConfig("b", request_id="stale")) == []
-        assert agent.emit_external_event(response, config=AgentConfig("b", request_id="b")) == ["AskUserExtension"]
+        assert agent.emit_external_event(response, config=AgentRunConfig("a")) == []
+        assert agent.emit_external_event(response, config=AgentRunConfig("b", request_id="stale")) == []
+        assert agent.emit_external_event(response, config=AgentRunConfig("b", request_id="b")) == ["AskUserExtension"]
         remaining = [event async for event in streams["b"]]
         assert remaining[-1].message.content.endswith('"b-only"}}')
         assert storage._requests == {}
@@ -142,7 +145,7 @@ async def test_cancel_one_waiting_session_does_not_cancel_other(tmp_path):
 
 async def test_todo_cleanup_and_plan_baselines_are_session_local():
     todo, plan = TodoWriteExtension(), PlanModeExtension()
-    contexts = [AgentContext(AgentConfig(name), AgentState(), {}) for name in ("a", "b")]
+    contexts = [AgentRunContext(AgentRunConfig(name), AgentState(), {}) for name in ("a", "b")]
     for context in contexts:
         await todo.on_tool(context)
         await plan.on_tool(context)
@@ -162,29 +165,29 @@ async def test_todo_cleanup_and_plan_baselines_are_session_local():
 
 async def test_shared_filesystem_extension_copies_mutable_tool_definitions():
     extension = FileSystemExtension(read_only=True)
-    a, b = [AgentContext(AgentConfig(name), AgentState(), {}) for name in ("a", "b")]
+    a, b = [AgentRunContext(AgentRunConfig(name), AgentState(), {}) for name in ("a", "b")]
     await extension.on_tool(a)
     await extension.on_tool(b)
     a.tools["read_file"].description = "only session a"
     a.tools["read_file"].parameters["properties"].clear()
     assert b.tools["read_file"].description != "only session a"
     assert b.tools["read_file"].parameters["properties"]
-    c = AgentContext(AgentConfig("c"), AgentState(), {})
+    c = AgentRunContext(AgentRunConfig("c"), AgentState(), {})
     await extension.on_tool(c)
     assert c.tools["read_file"].parameters == b.tools["read_file"].parameters
 
 
 async def test_internal_and_steering_queues_are_isolated_on_one_agent():
     model = GatedModel()
-    agent = await Agent.create(model, config=AgentConfig("a"), system_prompt="")
-    tasks = [asyncio.create_task(agent.run(name, config=AgentConfig(name))) for name in ("a", "b")]
+    agent = await Agent.create(model, config=AgentRunConfig("a"), system_prompt="")
+    tasks = [asyncio.create_task(agent.run(name, config=AgentRunConfig(name))) for name in ("a", "b")]
     try:
         await asyncio.wait_for(asyncio.gather(*(event.wait() for event in model.entered.values())), 2)
         assert agent.emit_external_event(
-            ExternalEvent("internal_message", {"content": "a-internal"}), config=AgentConfig("a")
+            ExternalEvent("internal_message", {"content": "a-internal"}), config=AgentRunConfig("a")
         ) == ["InternalMessageExtension"]
         assert agent.emit_external_event(
-            ExternalEvent("steering_message", {"content": "b-steering"}), config=AgentConfig("b")
+            ExternalEvent("steering_message", {"content": "b-steering"}), config=AgentRunConfig("b")
         ) == ["SteeringExtension"]
         for event in model.release.values():
             event.set()

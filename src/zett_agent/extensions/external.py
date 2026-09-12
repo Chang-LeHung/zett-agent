@@ -14,7 +14,7 @@ from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
 
 if TYPE_CHECKING:
-    from ..agent import AgentConfig, AgentContext
+    from ..agent import AgentRunConfig, AgentRunContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +35,7 @@ class ExternalEvent:
 class _PendingExternalEvent:
     """One context-bound Future protected against duplicate cross-thread delivery."""
 
-    context: AgentContext
+    context: AgentRunContext
     future: asyncio.Future[ExternalEvent]
     response_event_names: frozenset[str]
     accepted: bool = False
@@ -90,7 +90,7 @@ class ExternalEventExtension(AgentExtension):
         from collections.abc import AsyncIterator
 
         from zett_agent import (
-            AgentContext, AgentEvent, AgentEventType, ExternalEventExtension,
+            AgentRunContext, AgentEvent, AgentEventType, ExternalEventExtension,
             ToolCall, tool,
         )
 
@@ -101,7 +101,7 @@ class ExternalEventExtension(AgentExtension):
                     correlation_field="tool_call_id",
                 )
 
-            async def on_tool(self, context: AgentContext) -> None:
+            async def on_tool(self, context: AgentRunContext) -> None:
                 @tool
                 async def confirm() -> bool:
                     '''Ask the user whether to proceed.
@@ -121,7 +121,7 @@ class ExternalEventExtension(AgentExtension):
                 context.register_tool(confirm)
 
             async def before_tool_events(
-                self, context: AgentContext, call: ToolCall
+                self, context: AgentRunContext, call: ToolCall
             ) -> AsyncIterator[AgentEvent]:
                 if call.name != "confirm":
                     return
@@ -135,9 +135,9 @@ class ExternalEventExtension(AgentExtension):
 
     Usage::
 
-        from zett_agent import Agent, AgentConfig, ExternalEvent
+        from zett_agent import Agent, AgentRunConfig, ExternalEvent
 
-        config = AgentConfig(session_id="session-42", request_id="request-1")
+        config = AgentRunConfig(session_id="session-42", request_id="request-1")
         agent = await Agent.create(model, config=config, extensions=[ConfirmationExtension()])
 
         # Consume agent.stream(...) and forward confirmation_requested to the UI.
@@ -161,7 +161,7 @@ class ExternalEventExtension(AgentExtension):
     super() to preserve cleanup. Future mutation is scheduled on its owning loop
     when accept is called from another thread. Keep that loop alive until request
     cleanup has finished. This base supports sequential tools: one staged response
-    per AgentContext, not concurrent external-response tools in the same request.
+    per AgentRunContext, not concurrent external-response tools in the same request.
     """
 
     def __init__(self, *, response_event_name: str | Collection[str], correlation_field: str) -> None:
@@ -173,13 +173,13 @@ class ExternalEventExtension(AgentExtension):
         self._response_event_names = frozenset(names)
         self._correlation_field = correlation_field
         self._pending: dict[tuple[str, str], _PendingExternalEvent] = {}
-        self._accepted: dict[tuple[AgentContext, str], ExternalEvent] = {}
+        self._accepted: dict[tuple[AgentRunContext, str], ExternalEvent] = {}
         self._pending_lock = Lock()
 
     @asynccontextmanager
     async def _wait_for_external_event(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         correlation_id: str,
         *,
         response_event_name: str | None = None,
@@ -213,7 +213,7 @@ class ExternalEventExtension(AgentExtension):
             if not pending.future.done():
                 pending.future.cancel()
 
-    def _take_external_event(self, context: AgentContext) -> ExternalEvent:
+    def _take_external_event(self, context: AgentRunContext) -> ExternalEvent:
         """Pop this invocation's staged response exactly once inside its tool.
 
         Call only after _wait_for_external_event has finished successfully.
@@ -225,7 +225,7 @@ class ExternalEventExtension(AgentExtension):
             raise RuntimeError("Tool executed without an accepted external response")
         return response
 
-    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
+    def accept(self, config: AgentRunConfig | None, event: ExternalEvent) -> bool:
         """Claim a matching response and wake its waiter on the Future's loop.
 
         Usually called by Agent.emit_external_event, not directly by the UI.
@@ -263,18 +263,18 @@ class ExternalEventExtension(AgentExtension):
         self._run_on_future_loop(pending.future, deliver)
         return True
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Cancel active waits when their request enters CANCELLED."""
         if isinstance(event, RunCancelledEvent):
             self._discard_staged(context)
             self._terminate_waits(context)
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Complete active waits with the request's original error."""
         self._discard_staged(context)
         self._terminate_waits(context, error=error)
 
-    def _terminate_waits(self, context: AgentContext, *, error: Exception | None = None) -> None:
+    def _terminate_waits(self, context: AgentRunContext, *, error: Exception | None = None) -> None:
         """Remove and wake every pending operation owned by one request."""
         with self._pending_lock:
             keys = [key for key, pending in self._pending.items() if pending.context is context]
@@ -294,7 +294,7 @@ class ExternalEventExtension(AgentExtension):
 
             self._run_on_future_loop(pending.future, terminate)
 
-    def _discard_staged(self, context: AgentContext) -> None:
+    def _discard_staged(self, context: AgentRunContext) -> None:
         """Remove responses that can no longer be consumed by a tool."""
         stale = [key for key in self._accepted if key[0] is context]
         for key in stale:

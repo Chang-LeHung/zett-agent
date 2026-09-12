@@ -11,7 +11,7 @@ from pathlib import Path
 from threading import Lock
 from weakref import WeakKeyDictionary
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..messages import AnyMessage, AssistantMessage, UserMessage
 from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
@@ -31,7 +31,7 @@ class JSONLExtension(AgentExtension):
     terminal outcome. Model retries and tool loops remain inside that one line;
     history from earlier turns is not copied again.
 
-    Each record also contains AgentContext metadata and tags. Message attributes
+    Each record also contains AgentRunContext metadata and tags. Message attributes
     remain attached to their messages. Completed, failed, and cancelled turns
     are recorded, while raw exception objects and provider credentials are not.
 
@@ -45,7 +45,7 @@ class JSONLExtension(AgentExtension):
             history = JSONLExtension(".agent-turns")
             agent = await Agent.create(
                 model,
-                config=AgentConfig("session-42"),
+                config=AgentRunConfig("session-42"),
                 extensions=[history],
             )
 
@@ -65,7 +65,7 @@ class JSONLExtension(AgentExtension):
 
     def __init__(self, directory: str | Path) -> None:
         self.directory = Path(directory)
-        self._pending: WeakKeyDictionary[AgentContext, _PendingTurn] = WeakKeyDictionary()
+        self._pending: WeakKeyDictionary[AgentRunContext, _PendingTurn] = WeakKeyDictionary()
         self._write_lock = Lock()
 
     def session_path(self, session_id: str) -> Path:
@@ -73,18 +73,18 @@ class JSONLExtension(AgentExtension):
         encoded = base64.urlsafe_b64encode(session_id.encode("utf-8")).decode("ascii").rstrip("=")
         return self.directory / f"{encoded}.jsonl"
 
-    async def before_run(self, context: AgentContext) -> None:
+    async def before_run(self, context: AgentRunContext) -> None:
         """Remember the finalized input that marks the start of this turn."""
         message = context.input_message
         if message is None or not any(item is message for item in context.state.messages):
             raise RuntimeError("JSONL turn input must be appended before before_run")
         self._pending[context] = _PendingTurn(message, datetime.now(UTC))
 
-    async def on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Append one completed turn after the final assistant response exists."""
         await self._finalize(context, status="completed")
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Append one failed turn with a safe error summary."""
         await self._finalize(
             context,
@@ -92,14 +92,14 @@ class JSONLExtension(AgentExtension):
             error={"type": type(error).__name__, "message": str(error)},
         )
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Append a cancelled turn from its dedicated terminal notification."""
         if isinstance(event, RunCancelledEvent):
             await self._finalize(context, status="cancelled", completed_at=event.occurred_at)
 
     async def _finalize(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         *,
         status: str,
         error: dict[str, str] | None = None,
@@ -129,7 +129,7 @@ class JSONLExtension(AgentExtension):
         await asyncio.to_thread(self._append_line, self.session_path(context.config.session_id), line)
 
     @staticmethod
-    def _turn_messages(context: AgentContext, input_message: UserMessage) -> list[AnyMessage]:
+    def _turn_messages(context: AgentRunContext, input_message: UserMessage) -> list[AnyMessage]:
         for index, message in enumerate(context.state.messages):
             if message is input_message:
                 return list(context.state.messages[index:])

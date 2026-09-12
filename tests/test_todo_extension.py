@@ -8,8 +8,8 @@ import pytest
 from zett_agent import (
     TODO_WRITE_TOOL_NAME,
     Agent,
-    AgentConfig,
     AgentEventType,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -78,7 +78,7 @@ async def test_todo_write_advances_every_task_in_order_until_complete():
     extension = TodoWriteExtension()
     agent = await Agent.create(
         model,
-        config=AgentConfig("todo-lifecycle"),
+        config=AgentRunConfig("todo-lifecycle"),
         extensions=[extension, ToolGuidelinesExtension()],
     )
 
@@ -119,7 +119,7 @@ async def test_todo_write_advances_every_task_in_order_until_complete():
 async def test_invalid_initial_todo_list_fails_without_storing_state(items):
     model = ScriptedModel(todo_call("invalid-initial", *items), AssistantMessage(content="Recovered"))
     extension = TodoWriteExtension()
-    agent = await Agent.create(model, config=AgentConfig("invalid-initial"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("invalid-initial"), extensions=[extension])
 
     events = [event async for event in agent.stream("Start tasks")]
 
@@ -173,7 +173,7 @@ async def test_invalid_update_fails_atomically_and_preserves_current_task(update
         AssistantMessage(content="Recovered"),
     )
     extension = TodoWriteExtension()
-    agent = await Agent.create(model, config=AgentConfig("invalid-update"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("invalid-update"), extensions=[extension])
 
     events = [event async for event in agent.stream("Work through tasks")]
 
@@ -196,8 +196,8 @@ async def test_successful_requests_clear_session_state_and_clear_handles_empty_s
         todo_call("second", ("Second session", TodoStatus.PROCESSING)),
         AssistantMessage(content="done"),
     )
-    first_agent = await Agent.create(first_model, config=AgentConfig("first"), extensions=[extension])
-    second_agent = await Agent.create(second_model, config=AgentConfig("second"), extensions=[extension])
+    first_agent = await Agent.create(first_model, config=AgentRunConfig("first"), extensions=[extension])
+    second_agent = await Agent.create(second_model, config=AgentRunConfig("second"), extensions=[extension])
 
     await first_agent.run("First")
     await second_agent.run("Second")
@@ -222,7 +222,7 @@ async def test_model_error_clears_active_todo_state():
             yield
 
     extension = TodoWriteExtension()
-    agent = await Agent.create(FailingModel(), config=AgentConfig("error-cleanup"), extensions=[extension])
+    agent = await Agent.create(FailingModel(), config=AgentRunConfig("error-cleanup"), extensions=[extension])
 
     with pytest.raises(RuntimeError, match="model failed"):
         await agent.run("Start")
@@ -236,7 +236,7 @@ async def test_stream_keeps_todos_until_successful_terminal_cleanup():
         AssistantMessage(content="Finished"),
     )
     extension = TodoWriteExtension()
-    agent = await Agent.create(model, config=AgentConfig("stream-cleanup"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("stream-cleanup"), extensions=[extension])
     state_at_tool_completion = None
     state_at_run_completion = object()
 
@@ -264,7 +264,7 @@ async def test_successful_cleanup_allows_a_fresh_list_in_the_next_run():
         AssistantMessage(content="Second run finished"),
     )
     extension = TodoWriteExtension()
-    agent = await Agent.create(model, config=AgentConfig("success-reuse"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("success-reuse"), extensions=[extension])
 
     first_reply = await agent.run("First run")
     second_reply = await agent.run("Second run")
@@ -296,7 +296,7 @@ async def test_cancellation_clears_active_todo_state():
 
     model = BlockingModel()
     extension = TodoWriteExtension()
-    agent = await Agent.create(model, config=AgentConfig("cancel-cleanup"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("cancel-cleanup"), extensions=[extension])
     task = asyncio.create_task(agent.run("Start"))
     await asyncio.wait_for(model.blocked.wait(), timeout=1)
 
@@ -334,7 +334,7 @@ async def test_cancelled_agent_can_restart_with_a_fresh_todo_list():
 
     model = CancelThenResumeModel()
     extension = TodoWriteExtension()
-    agent = await Agent.create(model, config=AgentConfig("cancel-reuse"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("cancel-reuse"), extensions=[extension])
     cancelled_run = asyncio.create_task(agent.run("Start old work"))
     await asyncio.wait_for(model.blocked.wait(), timeout=1)
     cancelled_run.cancel()
@@ -372,7 +372,7 @@ async def test_failed_agent_can_restart_with_a_fresh_todo_list():
 
     model = FailThenResumeModel()
     extension = TodoWriteExtension()
-    agent = await Agent.create(model, config=AgentConfig("error-reuse"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("error-reuse"), extensions=[extension])
     with pytest.raises(RuntimeError, match="temporary model failure"):
         await agent.run("Start old work")
 
@@ -388,7 +388,7 @@ async def test_request_without_todo_calls_completes_with_empty_state():
     extension = TodoWriteExtension()
     agent = await Agent.create(
         ScriptedModel(AssistantMessage(content="No task list needed")),
-        config=AgentConfig("no-todos"),
+        config=AgentRunConfig("no-todos"),
         extensions=[extension],
     )
 
@@ -410,7 +410,7 @@ async def test_completed_list_can_be_repeated_but_cannot_be_reopened():
         AssistantMessage(content="Finished"),
     )
     extension = TodoWriteExtension()
-    agent = await Agent.create(model, config=AgentConfig("completed-list"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("completed-list"), extensions=[extension])
 
     events = [event async for event in agent.stream("Finish one task")]
 

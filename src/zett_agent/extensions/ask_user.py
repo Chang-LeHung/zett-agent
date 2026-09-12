@@ -7,7 +7,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..messages import ToolCall
 from ..tools import AgentTool, tool
@@ -133,7 +133,7 @@ class AskUserExtension(ExternalEventExtension):
                 name="ask_user_response",
                 payload={"tool_call_id": "call-7", "answer": "Markdown"},
             ),
-            config=AgentConfig(session_id="session-42"),
+            config=AgentRunConfig(session_id="session-42"),
         )
 
     ExternalEventExtension owns routing, synchronization, wake-up, and cleanup.
@@ -156,11 +156,11 @@ class AskUserExtension(ExternalEventExtension):
             correlation_field="tool_call_id",
         )
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Register a request-scoped ask_user tool bound to this context."""
         context.register_tool(self._build_tool(context))
 
-    async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+    async def before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         """Emit AskUserEvent, then wait for the matching external response."""
         if call.name != ASK_USER_TOOL_NAME:
             return
@@ -173,7 +173,7 @@ class AskUserExtension(ExternalEventExtension):
         async with self._wait_for_external_event(context, call.id):
             yield AskUserEvent(context.config.session_id, call, request)
 
-    def _build_tool(self, context: AgentContext) -> AgentTool:
+    def _build_tool(self, context: AgentRunContext) -> AgentTool:
         """Create a validated tool whose result belongs to this request context."""
 
         @tool(name=ASK_USER_TOOL_NAME)

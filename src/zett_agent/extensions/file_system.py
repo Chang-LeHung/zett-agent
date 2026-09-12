@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from ..agent import AgentContext
+from ..agent import AgentRunContext
 from ..messages import SystemMessage
 from ..tools import AgentTool, delete_file, glob, grep, read_file, replace_in_file, write_file
 from .base import AgentExtension
@@ -34,7 +34,7 @@ class FileSystemExtension(AgentExtension):
         read_tools = (read_file, glob, grep)
         return read_tools if self.read_only else (*read_tools, write_file, replace_in_file, delete_file)
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Register the selected filesystem tools for this request."""
         for registered in self.tools:
             context.register_tool(registered)
@@ -48,7 +48,7 @@ class FileSystemExtension(AgentExtension):
             "Relative filesystem paths are resolved from this directory. Absolute paths are also allowed."
         )
 
-    async def on_state(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentRunContext) -> None:
         """Inject the request's resolved working directory into model context."""
         state = context.state
         message = SystemMessage(content=self._working_directory_instructions(Path.cwd().resolve()))

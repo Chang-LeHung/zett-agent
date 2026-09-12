@@ -437,7 +437,7 @@ class SyncContext[T](AbstractContextManager):
     truthy return suppresses the exception just as async with would.
 
     The supplied runtime remains caller-owned. This is a resource-lifecycle
-    adapter, not an AgentContext and not a synchronous proxy for the yielded
+    adapter, not an AgentRunContext and not a synchronous proxy for the yielded
     resource's methods.
 
     Examples:

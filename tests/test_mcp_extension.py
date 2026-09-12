@@ -9,8 +9,8 @@ from mcp_types import CallToolResult, ListToolsResult, TextContent, Tool
 import zett_agent.extensions.mcp as mcp_module
 from zett_agent import (
     Agent,
-    AgentConfig,
-    AgentContext,
+    AgentRunConfig,
+    AgentRunContext,
     AgentState,
     AssistantMessage,
     McpExtension,
@@ -89,7 +89,7 @@ async def test_mcp_extension_discovers_all_pages_executes_tool_and_closes_on_suc
 
     model = Model()
     extension = McpExtension([McpHttpServer("docs", "http://127.0.0.1:8000/mcp")], client_factory=factory)
-    agent = await Agent.create(model, config=AgentConfig("mcp-success"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("mcp-success"), extensions=[extension])
 
     await agent.run("Search docs")
 
@@ -111,7 +111,7 @@ async def test_mcp_extension_preserves_unstructured_content_and_reports_remote_e
     )
     factory = ClientFactory({"server": client})
     extension = McpExtension([McpStdioServer("server", "fake-server")], client_factory=factory)
-    context = AgentContext(AgentConfig("direct"), AgentState(), {}, extensions=(extension,))
+    context = AgentRunContext(AgentRunConfig("direct"), AgentState(), {}, extensions=(extension,))
     await extension.on_tool(context)
 
     assert await context.tools["server__okay"]({"query": "x"}) == [{"type": "text", "text": "plain result"}]
@@ -134,7 +134,7 @@ async def test_mcp_extension_supports_unprefixed_tools_and_fallback_messages():
         namespace_tools=False,
         client_factory=factory,
     )
-    context = AgentContext(AgentConfig("unprefixed"), AgentState(), {})
+    context = AgentRunContext(AgentRunConfig("unprefixed"), AgentState(), {})
     await extension.on_tool(context)
 
     assert set(context.tools) == {"remote"}
@@ -148,7 +148,7 @@ async def test_mcp_extension_closes_connections_on_cancellation():
     client = FakeClient({None: ListToolsResult(tools=[])})
     factory = ClientFactory({"server": client})
     extension = McpExtension([McpHttpServer("server", "https://example.test/mcp")], client_factory=factory)
-    context = AgentContext(AgentConfig("cancelled"), AgentState(), {}, extensions=(extension,))
+    context = AgentRunContext(AgentRunConfig("cancelled"), AgentState(), {}, extensions=(extension,))
     await extension.on_tool(context)
 
     await extension.on_event(
@@ -183,7 +183,7 @@ async def test_mcp_extension_unwinds_open_connections_when_discovery_fails():
         ],
         client_factory=factory,
     )
-    context = AgentContext(AgentConfig("failure"), AgentState(), {})
+    context = AgentRunContext(AgentRunConfig("failure"), AgentState(), {})
 
     with pytest.raises(RuntimeError, match="discovery failed"):
         await extension.on_tool(context)

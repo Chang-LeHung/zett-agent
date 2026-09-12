@@ -4,11 +4,11 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEvent,
     AgentEventType,
     AgentExtension,
     AgentPhase,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -32,7 +32,7 @@ async def test_custom_events_preserve_name_payload_order_and_phase(payload, comp
         async def stream(self, request):
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
 
-    agent = await Agent.create(Model(), config=AgentConfig("session"), extensions=[Extension()])
+    agent = await Agent.create(Model(), config=AgentRunConfig("session"), extensions=[Extension()])
     events = [event async for event in agent.stream("hello")]
     assert events[1 if compacting else 0] is custom
     assert custom.name == "progress"

@@ -4,9 +4,9 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentExtension,
     AgentProtocolError,
+    AgentRunConfig,
     AssistantMessage,
     MessageAppendedEvent,
     ModelEvent,
@@ -22,7 +22,7 @@ async def test_restore_then_transform_then_persist_once_before_run(tmp_path, pri
     order = []
     original = UserMessage(content="current", attributes={"source": "test"})
     prior = UserMessage(content="history")
-    config = AgentConfig("setup")
+    config = AgentRunConfig("setup")
 
     class Transform(AgentExtension):
         async def on_tool(self, context):
@@ -82,7 +82,9 @@ async def test_invalid_transformed_input_is_not_persisted(tmp_path):
             yield
 
     try:
-        agent = await Agent.create(UnusedModel(), config=AgentConfig("invalid"), extensions=[storage, InvalidInput()])
+        agent = await Agent.create(
+            UnusedModel(), config=AgentRunConfig("invalid"), extensions=[storage, InvalidInput()]
+        )
         with pytest.raises(AgentProtocolError, match="must produce a UserMessage"):
             await agent.run("input")
         assert storage.list_raw_messages("invalid") == []

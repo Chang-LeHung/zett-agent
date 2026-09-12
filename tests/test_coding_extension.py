@@ -5,7 +5,7 @@ from pathlib import Path
 
 from zett_agent import (
     Agent,
-    AgentConfig,
+    AgentRunConfig,
     AssistantMessage,
     CodingExtension,
     FileSystemExtension,
@@ -35,7 +35,7 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
         model = Model()
         agent = await Agent.create(
             model,
-            config=AgentConfig(f"filesystem-{read_only}"),
+            config=AgentRunConfig(f"filesystem-{read_only}"),
             extensions=[FileSystemExtension(read_only=read_only), ToolGuidelinesExtension()],
         )
 
@@ -81,7 +81,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
     model = Model()
     agent = await Agent.create(
         model,
-        config=AgentConfig("files"),
+        config=AgentRunConfig("files"),
         extensions=[ToolGuidelinesExtension(), CodingExtension()],
         parallel_tool_call=False,
     )
@@ -109,7 +109,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
     assert not (tmp_path / "note.txt").exists()
     assert all(message.success for message in model.requests[1].messages if isinstance(message, ToolMessage))
 
-    await agent.run("Another request", config=AgentConfig("other-files"))
+    await agent.run("Another request", config=AgentRunConfig("other-files"))
     for request in model.requests:
         assert {definition.name for definition in request.tools} == {call.name for call in calls}
         guidance = "\n".join(message.content for message in request.messages if isinstance(message, SystemMessage))

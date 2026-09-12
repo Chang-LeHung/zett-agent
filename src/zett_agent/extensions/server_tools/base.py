@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ...agent import AgentContext
+from ...agent import AgentRunContext
 from ...model import ServerToolDefinition
 from ..base import AgentExtension
 
@@ -62,7 +62,7 @@ class ServerToolExtension(AgentExtension):
         self.server_tools = resolved
         self.name = name or type(self).__name__
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Add all hosted tools to the current request's isolated registry."""
         for server_tool in self.server_tools:
             context.register_server_tool(server_tool)

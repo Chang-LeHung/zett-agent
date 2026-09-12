@@ -4,12 +4,12 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEvent,
     AgentEventType,
     AgentExtension,
     AgentPhase,
     AgentProtocolError,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -53,7 +53,7 @@ async def test_post_hooks_follow_completion_in_priority_order(failed):
 
     agent = await Agent.create(
         Model(),
-        config=AgentConfig("s"),
+        config=AgentRunConfig("s"),
         tools=[] if failed else [work],
         extensions=[Observer("late", 200), Observer("early", 10)],
     )
@@ -89,7 +89,7 @@ async def test_post_hook_failures_and_close_release_resources(hook, mode):
             finalized.append(True)
 
     setattr(Observer, hook, produce)
-    agent = await Agent.create(Model(), config=AgentConfig("s"), tools=[work], extensions=[Observer()])
+    agent = await Agent.create(Model(), config=AgentRunConfig("s"), tools=[work], extensions=[Observer()])
     stream = agent.stream("go")
     if mode == "close":
         async for event in stream:

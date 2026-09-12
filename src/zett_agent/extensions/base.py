@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from ..events import AgentEvent, AgentEventType
 
 if TYPE_CHECKING:
-    from ..agent import AgentConfig, AgentContext
+    from ..agent import AgentRunConfig, AgentRunContext
     from ..messages import AssistantMessage, ToolCall, ToolMessage
     from ..model import ModelRequest, ModelResponse
     from .events import ExtensionEvent
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class AgentSetupHooksMixin:
     """Hooks that prepare request-scoped tools and conversation context."""
 
-    async def on_tool(self, context: AgentContext) -> None:
+    async def on_tool(self, context: AgentRunContext) -> None:
         """Register local or provider-hosted tools before context restoration.
 
         All extensions finish this hook before the first on_state() call, so
@@ -33,7 +33,7 @@ class AgentSetupHooksMixin:
                     context.register_server_tool(ServerToolDefinition(type="web_search"))
         """
 
-    async def on_state(self, context: AgentContext) -> None:
+    async def on_state(self, context: AgentRunContext) -> None:
         """Restore history and initialize state before any input conversion.
 
         Examples:
@@ -43,7 +43,7 @@ class AgentSetupHooksMixin:
                     context.state.messages.insert(0, SystemMessage(content="Use concise answers."))
         """
 
-    async def on_message(self, context: AgentContext) -> None:
+    async def on_message(self, context: AgentRunContext) -> None:
         """Transform context.input_message after state restoration, before append.
 
         Replace the pending UserMessage to implement commands such as /goal.
@@ -56,13 +56,13 @@ class AgentSetupHooksMixin:
 class AgentRunHooksMixin:
     """Hooks around one complete request and its terminal outcome."""
 
-    async def before_run(self, context: AgentContext) -> None:
+    async def before_run(self, context: AgentRunContext) -> None:
         """Run after the transformed user input is appended and published."""
 
-    async def after_run(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def after_run(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Run after a successful final answer is appended."""
 
-    async def on_success(self, context: AgentContext, result: AssistantMessage) -> None:
+    async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Run once after all after_run hooks succeed, before RUN_COMPLETED.
 
         This callback observes a completed request, not an intermediate model
@@ -76,14 +76,14 @@ class AgentRunHooksMixin:
                     await save_answer(context.config.session_id, result.content)
         """
 
-    async def on_error(self, context: AgentContext, error: Exception) -> None:
+    async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Run before an agent error is propagated to the caller."""
 
 
 class AgentModelHooksMixin:
     """Hooks immediately before and after each primary model invocation."""
 
-    async def before_model(self, context: AgentContext, request: ModelRequest) -> None:
+    async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
         """Inspect the current request before preprocessing a primary model call.
 
         Request fields are frozen. Change messages through context.state.messages,
@@ -103,19 +103,19 @@ class AgentModelHooksMixin:
                         )
         """
 
-    async def after_model(self, context: AgentContext, response: ModelResponse) -> None:
+    async def after_model(self, context: AgentRunContext, response: ModelResponse) -> None:
         """Run after the complete assistant message is appended."""
 
 
 class AgentToolHooksMixin:
     """Hooks immediately before and after each requested tool invocation."""
 
-    async def before_tool(self, context: AgentContext, call: ToolCall) -> None:
+    async def before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
         """Run before one requested tool is invoked."""
 
     async def after_tool(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         call: ToolCall,
         result: ToolMessage,
         error: Exception | None,
@@ -132,7 +132,7 @@ class AgentToolHooksMixin:
 class AgentEventHooksMixin:
     """Hooks for streaming, internal notifications, and external input."""
 
-    def accept(self, config: AgentConfig | None, event: ExternalEvent) -> bool:
+    def accept(self, config: AgentRunConfig | None, event: ExternalEvent) -> bool:
         """Handle one external event and report whether it was accepted.
 
         The Agent broadcasts each event to every registered extension. Override
@@ -145,7 +145,7 @@ class AgentEventHooksMixin:
         """
         return False
 
-    async def before_model_events(self, context: AgentContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
+    async def before_model_events(self, context: AgentRunContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
         """Stream extension-owned events before a primary model request.
 
         This hook is intended for visible preprocessing operations such as
@@ -168,7 +168,7 @@ class AgentEventHooksMixin:
         if False:
             yield AgentEvent(AgentEventType.MODEL_STARTED, context.config.session_id)
 
-    async def after_model_events(self, context: AgentContext, response: ModelResponse) -> AsyncIterator[AgentEvent]:
+    async def after_model_events(self, context: AgentRunContext, response: ModelResponse) -> AsyncIterator[AgentEvent]:
         """Stream CUSTOM events after after_model and MODEL_COMPLETED.
 
         The response is already appended. Hooks run in priority order in READY,
@@ -180,7 +180,7 @@ class AgentEventHooksMixin:
 
     async def after_tool_events(
         self,
-        context: AgentContext,
+        context: AgentRunContext,
         call: ToolCall,
         result: ToolMessage,
         error: Exception | None,
@@ -195,7 +195,7 @@ class AgentEventHooksMixin:
         if False:
             yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
 
-    async def before_tool_events(self, context: AgentContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+    async def before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
         """Stream CUSTOM events after before_tool and before each tool starts.
 
         Hooks run in priority order while the request remains READY. Equal
@@ -216,7 +216,7 @@ class AgentEventHooksMixin:
         if False:
             yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="example")
 
-    async def on_event(self, context: AgentContext, event: ExtensionEvent) -> None:
+    async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Process a published notification; inspect its concrete type with match."""
 
 
@@ -233,7 +233,7 @@ class AgentExtension(
         Override only the hooks needed by one concern. Hook groups are barriers:
         every ``on_tool`` completes before any ``on_state`` starts, regardless
         of extension priority. Lifecycle hooks use ``async def`` even with
-        SyncAgent; they receive the original AgentContext on the runtime loop.
+        SyncAgent; they receive the original AgentRunContext on the runtime loop.
         External-event ``accept`` remains a synchronous method.
 
     .. seealso::
@@ -350,7 +350,7 @@ class AgentExtension(
     enters COMPACTING and returns to READY. before_tool_events() streams CUSTOM
     events in READY. These AgentEvents reach the caller; [E] marks an awaited,
     sequential delivery through the separate async on_event() hook, not a
-    synchronous Python callback. AgentContext.publish broadcasts by default or
+    synchronous Python callback. AgentRunContext.publish broadcasts by default or
     routes to one named extension when ``target`` is supplied.
 
     Tool execution errors become failed ToolMessages and still run after_tool(),

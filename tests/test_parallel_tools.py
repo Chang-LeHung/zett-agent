@@ -6,9 +6,9 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEventType,
     AgentPhase,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelRequest,
@@ -90,7 +90,7 @@ async def test_parallel_tools_run_first_together_then_serial_tools() -> None:
     )
     agent = await Agent.create(
         model,
-        config=AgentConfig("parallel"),
+        config=AgentRunConfig("parallel"),
         tools=[inspect, mutate],
         extensions=[],
     )
@@ -137,7 +137,7 @@ async def test_agent_parallel_switch_forces_parallel_marked_tools_to_run_seriall
     model = ToolBatchModel((ToolCall("one", "inspect", {"value": 1}), ToolCall("two", "inspect", {"value": 2})))
     agent = await Agent.create(
         model,
-        config=AgentConfig("serial-override"),
+        config=AgentRunConfig("serial-override"),
         tools=[inspect],
         extensions=[],
         parallel_tool_call=False,
@@ -194,7 +194,7 @@ async def test_parallel_failure_is_returned_without_cancelling_sibling_or_serial
             ToolCall("finish", "finish"),
         )
     )
-    agent = await Agent.create(model, config=AgentConfig("failure"), tools=[inspect, finish], extensions=[])
+    agent = await Agent.create(model, config=AgentRunConfig("failure"), tools=[inspect, finish], extensions=[])
 
     events = [event async for event in agent.stream("run")]
 
@@ -244,7 +244,7 @@ async def test_parallel_results_stream_in_completion_order_with_same_named_calls
             ToolCall("failed-id", "inspect", {"name": "failed", "fail": True}),
         )
     )
-    agent = await Agent.create(model, config=AgentConfig("completion-order"), tools=[inspect], extensions=[])
+    agent = await Agent.create(model, config=AgentRunConfig("completion-order"), tools=[inspect], extensions=[])
     stream = agent.stream("run")
 
     async def release_in_order() -> None:
@@ -299,7 +299,7 @@ async def test_run_override_does_not_change_agent_parallel_default() -> None:
     model = ToolBatchModel(())
     agent = await Agent.create(
         model,
-        config=AgentConfig("override"),
+        config=AgentRunConfig("override"),
         extensions=[],
         parallel_tool_call=False,
     )
@@ -339,7 +339,7 @@ async def test_cancelling_parallel_batch_cancels_every_running_handler() -> None
             cancelled.append(index)
 
     model = ToolBatchModel((ToolCall("one", "wait", {"index": 1}), ToolCall("two", "wait", {"index": 2})))
-    agent = await Agent.create(model, config=AgentConfig("cancel"), tools=[wait], extensions=[])
+    agent = await Agent.create(model, config=AgentRunConfig("cancel"), tools=[wait], extensions=[])
     task = asyncio.create_task(agent.run("run"))
     await asyncio.wait_for(all_started.wait(), timeout=1)
 

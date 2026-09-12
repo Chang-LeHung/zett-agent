@@ -6,10 +6,10 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentEvent,
     AgentEventType,
     AgentExtension,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -81,7 +81,7 @@ async def test_each_hook_and_provider_receive_latest_messages_and_tools(effort):
             assert not request.tools
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
 
-    agent = await Agent.create(Model(), config=AgentConfig("fresh"), extensions=[Second(), First()])
+    agent = await Agent.create(Model(), config=AgentRunConfig("fresh"), extensions=[Second(), First()])
     events = [event async for event in agent.stream("hello", reasoning_effort=effort)]
     assert events[-1].message.content == "done"
     assert len(seen) == 5
@@ -108,6 +108,6 @@ async def test_failed_preprocessing_never_calls_provider(streaming):
             if False:
                 yield
 
-    agent = await Agent.create(Model(), config=AgentConfig("failure"), extensions=[Reject()])
+    agent = await Agent.create(Model(), config=AgentRunConfig("failure"), extensions=[Reject()])
     with pytest.raises(ValueError, match="rejected request"):
         await agent.run("hello")

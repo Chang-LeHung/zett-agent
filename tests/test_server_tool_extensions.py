@@ -6,8 +6,8 @@ import pytest
 
 from zett_agent import (
     Agent,
-    AgentConfig,
     AgentExtension,
+    AgentRunConfig,
     AnthropicServerToolExtension,
     AssistantMessage,
     DeepSeekServerToolExtension,
@@ -61,7 +61,7 @@ async def test_provider_extension_registers_its_default_server_tool(
     model = RecordingModel()
     agent = await Agent.create(
         model,
-        config=AgentConfig(session_id=f"session-{tool_type}"),
+        config=AgentRunConfig(session_id=f"session-{tool_type}"),
         extensions=[extension],
     )
 
@@ -82,7 +82,7 @@ async def test_multiple_google_server_tools_keep_registration_order() -> None:
             "code_execution",
         ]
     )
-    agent = await Agent.create(model, config=AgentConfig("google-tools"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("google-tools"), extensions=[extension])
 
     await agent.run("Read and calculate")
 
@@ -99,7 +99,7 @@ async def test_provider_extension_preserves_opaque_configuration() -> None:
     }
     extension = OpenRouterServerToolExtension([ServerToolDefinition("openrouter:web_search", configuration)])
     model = RecordingModel()
-    agent = await Agent.create(model, config=AgentConfig("openrouter-tools"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("openrouter-tools"), extensions=[extension])
 
     await agent.run("Search")
 
@@ -152,7 +152,7 @@ async def test_extension_accepts_mixed_type_strings_and_definitions() -> None:
             "code_execution",
         ]
     )
-    agent = await Agent.create(model, config=AgentConfig("mixed-server-tools"), extensions=[extension])
+    agent = await Agent.create(model, config=AgentRunConfig("mixed-server-tools"), extensions=[extension])
 
     await agent.run("Search and calculate")
 

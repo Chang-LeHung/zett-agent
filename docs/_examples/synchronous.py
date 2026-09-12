@@ -4,9 +4,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from zett_agent import (
-    AgentConfig,
     AgentEventDispatcher,
     AgentEventType,
+    AgentRunConfig,
     AssistantMessage,
     ModelEvent,
     ModelResponse,
@@ -38,7 +38,7 @@ def main() -> None:
         try:
             with create_agent_sync(
                 SyncModelAdapter(Echo()),
-                config=AgentConfig("sync-example"),
+                config=AgentRunConfig("sync-example"),
                 extensions=[history],
                 event_dispatcher=Console(),
             ) as agent:

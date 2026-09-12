@@ -210,4 +210,5 @@ class SubAgentExtension(AgentExtension):
                 *(f"Use {item.name!r} when you need to {item.description}" for item in subagents.values()),
             ),
             snippet=task.snippet,
+            execution_mode=task.execution_mode,
         )

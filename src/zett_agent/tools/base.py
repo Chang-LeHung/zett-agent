@@ -5,12 +5,22 @@ import inspect
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, get_type_hints
 
 from pydantic import ConfigDict, TypeAdapter, create_model
 
 from ..model import ToolDefinition
 from ..sync_runtime import SyncMethodsMixin
+
+
+class ToolExecutionMode(StrEnum):
+    """Local scheduling policy for one Agent tool."""
+
+    #: Execute alone and only after every parallel tool in the response finishes.
+    SERIAL = "serial"
+    #: The handler may run concurrently with other parallel handlers.
+    PARALLEL = "parallel"
 
 
 @dataclass(slots=True)
@@ -23,12 +33,15 @@ class AgentTool(SyncMethodsMixin):
     handler: Callable[..., Awaitable[Any]]
     guidelines: tuple[str, ...]
     snippet: str = ""
+    execution_mode: ToolExecutionMode = ToolExecutionMode.SERIAL
 
     def __post_init__(self) -> None:
         if not self.description.strip():
             raise ValueError("A tool description cannot be empty")
         if not self.guidelines or any(not guideline.strip() for guideline in self.guidelines):
             raise ValueError("A tool needs at least one non-empty guideline")
+        if not isinstance(self.execution_mode, ToolExecutionMode):
+            raise ValueError("execution_mode must be a ToolExecutionMode")
 
     @property
     def definition(self) -> ToolDefinition:
@@ -121,6 +134,7 @@ def tool(
     name: str | None = None,
     snippet: str | None = None,
     guidelines: str | Sequence[str] | None = None,
+    execution_mode: ToolExecutionMode = ToolExecutionMode.SERIAL,
 ):
     """Turn a typed function and its structured docstring into an AgentTool.
 
@@ -129,6 +143,8 @@ def tool(
         name: Optional public name overriding the Python function name.
         snippet: Optional usage snippet overriding the docstring section.
         guidelines: Optional model guidance overriding docstring Guidelines.
+        execution_mode: Whether the local handler must run serially or may run
+            concurrently with other parallel handlers. The safe default is serial.
 
     Returns:
         An AgentTool for direct decoration, or a decorator when configured first.
@@ -195,6 +211,7 @@ def tool(
             handler=invoke,
             guidelines=resolved_guidelines,
             snippet=snippet if snippet is not None else documentation.snippet,
+            execution_mode=execution_mode,
         )
 
     return decorate(function) if function is not None else decorate

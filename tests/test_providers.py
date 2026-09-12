@@ -285,6 +285,7 @@ async def test_openai_provider_streams_text_and_usage() -> None:
     assert captured["body"]["messages"][2] == {"role": "user", "content": "Verify the arithmetic."}
     assert captured["body"]["tools"][0]["function"]["name"] == "add"
     assert captured["body"]["reasoning_effort"] == "medium"
+    assert captured["body"]["parallel_tool_calls"] is True
 
     deltas = [event.delta for event in events if event.type == ModelEventType.TEXT_DELTA]
     assert deltas == ["Hello", " world"]
@@ -650,7 +651,9 @@ async def test_anthropic_provider_streams_request_with_tool_and_multimodal_block
             AssistantMessage(content="", tool_calls=(ToolCall(id="toolu_1", name="add", arguments={"a": 1, "b": 2}),)),
             ToolMessage(content='{"ok":true}', tool_call_id="toolu_1", name="add"),
         ),
+        tools=(ToolDefinition("add", "Add values", {"type": "object"}),),
         reasoning_effort=ReasoningEffort.OFF,
+        parallel_tool_call=False,
     )
     provider = AnthropicProvider(model="claude-3-5-sonnet", api_key="sk-ant", transport=_mock_transport(handler))
     await _collect(provider.stream(request))
@@ -668,6 +671,10 @@ async def test_anthropic_provider_streams_request_with_tool_and_multimodal_block
         {"type": "tool_use", "id": "toolu_1", "name": "add", "input": {"a": 1, "b": 2}},
     ]
     assert tool_message["role"] == "user"
+    assert captured["body"]["tool_choice"] == {
+        "type": "auto",
+        "disable_parallel_tool_use": True,
+    }
     assert tool_message["content"] == [
         {"type": "tool_result", "tool_use_id": "toolu_1", "content": '{"ok":true}', "is_error": False}
     ]

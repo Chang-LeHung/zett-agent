@@ -212,6 +212,7 @@ async def test_openai_request_supports_temperature_forced_tool_and_no_tool_omiss
         tools=(ToolDefinition("extract", "Extract data", {"type": "object"}),),
         reasoning_effort=ReasoningEffort.OFF,
         tool_choice="extract",
+        parallel_tool_call=False,
     )
     try:
         events = await _collect(provider.stream(request))
@@ -222,6 +223,7 @@ async def test_openai_request_supports_temperature_forced_tool_and_no_tool_omiss
     assert "reasoning_effort" not in captured
     assert captured["temperature"] == 0.25
     assert captured["tool_choice"] == {"type": "function", "function": {"name": "extract"}}
+    assert captured["parallel_tool_calls"] is False
     assert events[-1].type == ModelEventType.RESPONSE
 
 

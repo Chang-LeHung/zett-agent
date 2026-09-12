@@ -126,9 +126,18 @@ class ModelRequest:
     server_tools: Sequence[ServerToolDefinition] = ()
     #: Desired reasoning level; provider capabilities determine its mapping.
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
-
     #: Optional name of the single tool the provider must call for schema-bound output.
     tool_choice: str | None = None
+    #: Whether the provider may return more than one local tool call in one response.
+    #:
+    #: Adapters map this preference when their protocol exposes an equivalent
+    #: switch. The Agent still decides whether returned calls are safe to run
+    #: concurrently; this flag alone never makes local execution concurrent.
+    parallel_tool_call: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.parallel_tool_call, bool):
+            raise ValueError("parallel_tool_call must be a boolean")
 
 
 @dataclass(frozen=True, slots=True)

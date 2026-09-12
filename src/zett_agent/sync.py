@@ -104,6 +104,7 @@ class SyncAgent(SyncObject[Agent]):
         tools: Sequence[AgentTool] = (),
         extensions: Sequence[AgentExtension] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        parallel_tool_call: bool = True,
         max_iterations: int = 36,
         max_internal_messages: int = 8,
         event_dispatcher: AgentEventDispatcher | None = None,
@@ -119,6 +120,7 @@ class SyncAgent(SyncObject[Agent]):
                 tools=tools,
                 extensions=extensions,
                 reasoning_effort=reasoning_effort,
+                parallel_tool_call=parallel_tool_call,
                 max_iterations=max_iterations,
                 max_internal_messages=max_internal_messages,
             )
@@ -137,6 +139,7 @@ class SyncAgent(SyncObject[Agent]):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage:
@@ -147,6 +150,7 @@ class SyncAgent(SyncObject[Agent]):
             config=config,
             model=model,
             reasoning_effort=reasoning_effort,
+            parallel_tool_call=parallel_tool_call,
             metadata=metadata,
             tags=tags,
         )
@@ -158,6 +162,7 @@ class SyncAgent(SyncObject[Agent]):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> SyncStream[AgentEvent]:
@@ -173,6 +178,7 @@ class SyncAgent(SyncObject[Agent]):
             config=config,
             model=model,
             reasoning_effort=reasoning_effort,
+            parallel_tool_call=parallel_tool_call,
             metadata=metadata,
             tags=tags,
         )
@@ -199,6 +205,7 @@ def create_agent_sync(
     tools: Sequence[AgentTool] = (),
     extensions: Sequence[AgentExtension] | None = None,
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+    parallel_tool_call: bool = True,
     max_iterations: int = 36,
     max_internal_messages: int = 8,
     event_dispatcher: AgentEventDispatcher | None = None,
@@ -219,6 +226,7 @@ def create_agent_sync(
         tools=tools,
         extensions=extensions,
         reasoning_effort=reasoning_effort,
+        parallel_tool_call=parallel_tool_call,
         max_iterations=max_iterations,
         max_internal_messages=max_internal_messages,
         event_dispatcher=event_dispatcher,

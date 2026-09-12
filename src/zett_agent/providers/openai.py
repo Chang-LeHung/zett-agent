@@ -1,6 +1,8 @@
+from typing import Any
+
 import httpx
 
-from ..model import DEFAULT_RETRY_OPTIONS, RetryOptions
+from ..model import DEFAULT_RETRY_OPTIONS, ModelRequest, RetryOptions
 from .base import _OpenAIStyleProvider
 
 
@@ -64,3 +66,10 @@ class OpenAIProvider(_OpenAIStyleProvider):
             retry=retry,
         )
         self.provider_name = "openai"
+
+    def _provider_specific_request_fields(self, request: ModelRequest) -> dict[str, Any]:
+        """Map the provider-neutral parallel preference to OpenAI's API."""
+        return {
+            **super()._provider_specific_request_fields(request),
+            "parallel_tool_calls": request.parallel_tool_call,
+        }

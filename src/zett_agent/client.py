@@ -47,6 +47,7 @@ class AgentClient(SyncMethodsMixin):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AsyncIterator[AgentEvent]:
@@ -60,6 +61,7 @@ class AgentClient(SyncMethodsMixin):
             config: Optional per-request session and request identity.
             model: Request-specific model; omitted to use the Agent default.
             reasoning_effort: Per-request override of the model reasoning level.
+            parallel_tool_call: Per-request override of parallel tool calling.
             metadata: Request-scoped JSON data supplied to extensions.
             tags: Request-scoped classifications supplied to extensions.
 
@@ -76,6 +78,7 @@ class AgentClient(SyncMethodsMixin):
                 config=config,
                 model=model,
                 reasoning_effort=reasoning_effort,
+                parallel_tool_call=parallel_tool_call,
                 metadata=metadata,
                 tags=tags,
             )
@@ -92,6 +95,7 @@ class AgentClient(SyncMethodsMixin):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage:
@@ -102,6 +106,7 @@ class AgentClient(SyncMethodsMixin):
             config: Per-request identity; omitted to reuse the initialized session.
             model: Request-specific model; omitted to use the Agent default.
             reasoning_effort: Override the runtime default for this request only.
+            parallel_tool_call: Override parallel tool calling for this request.
             metadata: JSON-compatible application data for persistence/extensions.
             tags: JSON-compatible classifications for persistence/extensions.
 
@@ -119,6 +124,7 @@ class AgentClient(SyncMethodsMixin):
                 config=config,
                 model=model,
                 reasoning_effort=reasoning_effort,
+                parallel_tool_call=parallel_tool_call,
                 metadata=metadata,
                 tags=tags,
             )
@@ -139,6 +145,7 @@ async def create_agent(
     tools: Sequence[AgentTool] = (),
     extensions: Sequence[AgentExtension] | None = None,
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+    parallel_tool_call: bool = True,
     max_iterations: int = 36,
     max_internal_messages: int = 8,
     event_dispatcher: AgentEventDispatcher | None = None,
@@ -158,6 +165,8 @@ async def create_agent(
         extensions: Lifecycle extensions. None keeps default memory and tool
             guidance; an explicit sequence replaces those defaults.
         reasoning_effort: Default reasoning level, overridable per request.
+        parallel_tool_call: Allow supported providers and parallel-marked local
+            tools to use parallel calls. Individual tools default to serial.
         max_iterations: Maximum model calls for each user or internal message.
         max_internal_messages: Maximum internal continuations per request.
         event_dispatcher: Optional callbacks awaited in stream order.
@@ -188,6 +197,7 @@ async def create_agent(
         tools=tools,
         extensions=extensions,
         reasoning_effort=reasoning_effort,
+        parallel_tool_call=parallel_tool_call,
         max_iterations=max_iterations,
         max_internal_messages=max_internal_messages,
     )

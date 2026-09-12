@@ -224,7 +224,13 @@ class AnthropicProvider(RetryingProvider):
         if not system:
             body.pop("system")
         if request.tool_choice:
-            body["tool_choice"] = {"type": "tool", "name": request.tool_choice}
+            body["tool_choice"] = {
+                "type": "tool",
+                "name": request.tool_choice,
+                "disable_parallel_tool_use": not request.parallel_tool_call,
+            }
+        elif not request.parallel_tool_call and (request.tools or request.server_tools):
+            body["tool_choice"] = {"type": "auto", "disable_parallel_tool_use": True}
         if request.reasoning_effort != ReasoningEffort.OFF and not request.tool_choice:
             body["max_tokens"] = _reasoning_effort_to_budget(request.reasoning_effort) + 4096
             body["thinking"] = {

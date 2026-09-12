@@ -6,7 +6,9 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import aclosing
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from threading import RLock
+from time import monotonic_ns
 from typing import TYPE_CHECKING, Self, overload
 
 from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
@@ -23,12 +25,22 @@ from .model import (
     ServerToolDefinition,
 )
 from .sync_runtime import SyncMethodsMixin
-from .tools import AgentTool
+from .tools import AgentTool, ToolExecutionMode
 
 if TYPE_CHECKING:
     from .extensions.base import AgentExtension
     from .extensions.events import ExtensionEvent, MessageTiming
     from .extensions.external import ExternalEvent
+
+
+@dataclass(frozen=True, slots=True)
+class _ToolInvocation:
+    """Completed handler output retained until ordered lifecycle finalization."""
+
+    call: ToolCall
+    result: ToolMessage
+    error: Exception | None
+    timing: MessageTiming
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,9 +303,11 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         | AssistantMessage     |
         +----------------------+
 
-    The loop is sequential today: complete tool calls are executed in model
-    order. Streaming deltas are display data; only the final
-    :class:`ModelResponse` is appended as an assistant message.
+    Tools are serial by default. When parallel calling is enabled, explicitly
+    parallel tools from one model response run together before serial tools.
+    Hooks, Raw Log appends, and completion events remain ordered. Streaming
+    deltas are display data; only the final :class:`ModelResponse` is appended
+    as an assistant message.
 
     Examples:
         Prefer the asynchronous factory when using the runtime directly::
@@ -334,6 +348,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         tools: Sequence[AgentTool] = (),
         extensions: Sequence[AgentExtension] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        parallel_tool_call: bool = True,
         max_iterations: int = 36,
         max_internal_messages: int = 8,
     ) -> None:
@@ -361,6 +376,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             extensions: Unique named extensions sorted by ascending priority.
                 None installs defaults; an empty sequence omits optional defaults.
             reasoning_effort: Default provider-neutral reasoning level.
+            parallel_tool_call: Allow providers to return multiple tool calls
+                and concurrently execute tools explicitly marked parallel.
             max_iterations: Model-call budget per user/internal message.
             max_internal_messages: Internal input budget per request; zero disables it.
 
@@ -385,6 +402,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
         if max_iterations < 1:
             raise ValueError("max_iterations must be positive")
+        if not isinstance(parallel_tool_call, bool):
+            raise ValueError("parallel_tool_call must be a boolean")
         if isinstance(max_internal_messages, bool) or not isinstance(max_internal_messages, int):
             raise ValueError("max_internal_messages must be a non-negative integer")
         if max_internal_messages < 0:
@@ -417,6 +436,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self.extensions = tuple(sorted(configured_extensions, key=lambda extension: extension.priority))
         self.system_prompt = system_prompt
         self.reasoning_effort = reasoning_effort
+        self.parallel_tool_call = parallel_tool_call
         self.state = AgentState()
         # Runtime data is session-scoped. state remains the most recently
         # started state for single-session callers; use get_state for routing.
@@ -497,6 +517,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         tools: Sequence[AgentTool] = (),
         extensions: Sequence[AgentExtension] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
+        parallel_tool_call: bool = True,
         max_iterations: int = 36,
         max_internal_messages: int = 8,
     ) -> Self:
@@ -509,6 +530,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             tools: Static tools registered before extension setup.
             extensions: Optional lifecycle extensions; None keeps defaults.
             reasoning_effort: Default reasoning level for future requests.
+            parallel_tool_call: Enable provider and local parallel tool calls.
             max_iterations: Maximum model calls per user/internal input.
             max_internal_messages: Maximum internal continuations per request.
 
@@ -527,6 +549,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             tools=tools,
             extensions=extensions,
             reasoning_effort=reasoning_effort,
+            parallel_tool_call=parallel_tool_call,
             max_iterations=max_iterations,
             max_internal_messages=max_internal_messages,
         )
@@ -541,6 +564,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage: ...
@@ -553,6 +577,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage: ...
@@ -564,6 +589,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AssistantMessage:
@@ -576,6 +602,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             config: Request identity; omitted to reuse the initialized session.
             model: Request-specific model; omitted to use the Agent default.
             reasoning_effort: Optional reasoning override for this request.
+            parallel_tool_call: Optional parallel-call override for this request.
             metadata: JSON data for extensions and Raw Log persistence, not a prompt.
             tags: JSON classifications for extensions and Raw Log persistence.
 
@@ -604,6 +631,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 config=config,
                 model=model,
                 reasoning_effort=reasoning_effort,
+                parallel_tool_call=parallel_tool_call,
                 metadata=metadata,
                 tags=tags,
             )
@@ -623,6 +651,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AsyncIterator[AgentEvent]: ...
@@ -635,6 +664,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AsyncIterator[AgentEvent]: ...
@@ -646,6 +676,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         config: AgentConfig | None = None,
         model: AgentModel | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
         metadata: Mapping[str, JsonValue] | None = None,
         tags: Mapping[str, JsonValue] | None = None,
     ) -> AsyncIterator[AgentEvent]:
@@ -660,6 +691,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             config: Session/request identity; defaults to the initialized configuration.
             model: Request-specific model; omitted to use the Agent default.
             reasoning_effort: Reasoning override limited to this request.
+            parallel_tool_call: Parallel-call override limited to this request.
             metadata: Request data visible to extensions and persistence.
             tags: Request classifications visible to extensions and persistence.
 
@@ -685,11 +717,14 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     print(event.type, event.session_id)
         """
         user_message = message if isinstance(message, UserMessage) else UserMessage(content=message)
-        context = self._prepare_request_context(config, model, metadata, tags, user_message)
         effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
+        allow_parallel = self.parallel_tool_call if parallel_tool_call is None else parallel_tool_call
+        if not isinstance(allow_parallel, bool):
+            raise ValueError("parallel_tool_call must be a boolean")
+        context = self._prepare_request_context(config, model, metadata, tags, user_message)
         try:
             await self._open_request(context)
-            async with aclosing(self._stream_loop(context, effort)) as events:
+            async with aclosing(self._stream_loop(context, effort, allow_parallel)) as events:
                 async for event in events:
                     yield event
         except (asyncio.CancelledError, GeneratorExit) as cancellation:
@@ -763,7 +798,12 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         await context.append_message(context.input_message, MessageTiming.instant())
         await self._notify_before_run(context)
 
-    async def _stream_loop(self, context: AgentContext, reasoning_effort: ReasoningEffort) -> AsyncIterator[AgentEvent]:
+    async def _stream_loop(
+        self,
+        context: AgentContext,
+        reasoning_effort: ReasoningEffort,
+        parallel_tool_call: bool,
+    ) -> AsyncIterator[AgentEvent]:
         """Alternate model and tool steps, processing queued inputs before completion."""
         from .extensions.events import MessageTiming
 
@@ -776,7 +816,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
             message_iterations += 1
             response = None
-            async with aclosing(self._stream_model_step(context, reasoning_effort)) as model_events:
+            async with aclosing(self._stream_model_step(context, reasoning_effort, parallel_tool_call)) as model_events:
                 async for event in model_events:
                     if event.type == AgentEventType.MODEL_COMPLETED:
                         response = event.response
@@ -843,7 +883,9 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 message_iterations = 0
                 continue
 
-            async with aclosing(self._execute_tools(context, response.message.tool_calls, active_input)) as tool_events:
+            async with aclosing(
+                self._execute_tools(context, response.message.tool_calls, parallel_tool_call, active_input)
+            ) as tool_events:
                 async for event in tool_events:
                     if event.type == AgentEventType.STEERING_STARTED:
                         active_input = event.steering_message
@@ -851,7 +893,10 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     yield event
 
     async def _stream_model_step(
-        self, context: AgentContext, reasoning_effort: ReasoningEffort
+        self,
+        context: AgentContext,
+        reasoning_effort: ReasoningEffort,
+        parallel_tool_call: bool,
     ) -> AsyncIterator[AgentEvent]:
         """Run preprocessing and one model call, validate its stream, and persist output."""
         config, state = context.config, context.state
@@ -860,6 +905,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             tools=tuple(tool.definition for tool in context.tools.values()),
             server_tools=tuple(context.server_tools.values()),
             reasoning_effort=reasoning_effort,
+            parallel_tool_call=parallel_tool_call,
         )
         await self._notify_before_model(context, request)
 
@@ -1017,57 +1063,95 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self,
         context: AgentContext,
         calls: Sequence[ToolCall],
+        parallel_tool_call: bool,
         active_input: AgentMessage | UserMessage | None = None,
     ) -> AsyncIterator[AgentEvent]:
-        from .extensions.events import MessageTiming
+        parallel_calls: list[ToolCall] = []
+        serial_calls: list[ToolCall] = []
+        for call in calls:
+            registered = context.tools.get(call.name)
+            if (
+                parallel_tool_call
+                and registered is not None
+                and registered.execution_mode is ToolExecutionMode.PARALLEL
+            ):
+                parallel_calls.append(call)
+            else:
+                serial_calls.append(call)
 
+        if parallel_calls:
+            async with aclosing(self._execute_parallel_tools(context, parallel_calls)) as events:
+                async for event in events:
+                    yield event
+            steering = self._steering_extension.take(context)
+            if steering is not None:
+                async with aclosing(
+                    self._start_steering(context, steering, serial_calls, active_input)
+                ) as steering_events:
+                    async for event in steering_events:
+                        yield event
+                return
+
+        async with aclosing(self._execute_serial_tools(context, serial_calls, active_input)) as events:
+            async for event in events:
+                yield event
+
+    async def _execute_parallel_tools(
+        self,
+        context: AgentContext,
+        calls: Sequence[ToolCall],
+    ) -> AsyncIterator[AgentEvent]:
+        """Run one parallel batch, then finalize its results in call order."""
+        for call in calls:
+            await self._notify_before_tool(context, call)
+            async with aclosing(self._before_tool_events(context, call)) as preprocessing:
+                async for event in preprocessing:
+                    yield event
+
+        await self._start_tool_execution(context)
+        yield AgentEvent(
+            AgentEventType.TOOL_STARTED,
+            session_id=context.config.session_id,
+            phase=context.state.phase,
+            tool_calls=list(calls),
+        )
+        tasks = [asyncio.create_task(self._invoke_tool(context, call)) for call in calls]
+        try:
+            invocations = await asyncio.gather(*tasks)
+        except BaseException:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+        await self._finish_tool_execution(context)
+
+        for invocation in invocations:
+            async with aclosing(self._finalize_tool(context, invocation)) as events:
+                async for event in events:
+                    yield event
+
+    async def _execute_serial_tools(
+        self,
+        context: AgentContext,
+        calls: Sequence[ToolCall],
+        active_input: AgentMessage | UserMessage | None,
+    ) -> AsyncIterator[AgentEvent]:
+        """Run serial calls one at a time and stop at a steering boundary."""
         for index, call in enumerate(calls):
             await self._notify_before_tool(context, call)
             async with aclosing(self._before_tool_events(context, call)) as preprocessing:
                 async for event in preprocessing:
                     yield event
-            tool_started = await self._start_tool_execution(context)
+            await self._start_tool_execution(context)
             yield AgentEvent(
                 AgentEventType.TOOL_STARTED,
                 session_id=context.config.session_id,
                 phase=context.state.phase,
                 tool_calls=[call],
             )
-            error = None
-            try:
-                registered = context.tools.get(call.name)
-                if registered is None:
-                    raise ValueError(f"Unknown tool: {call.name}")
-                output = await registered(call.arguments)
-                content = registered.serialize_result(output)
-            except Exception as tool_error:
-                error = tool_error
-                content = json.dumps({"error": str(tool_error)})
-            result = ToolMessage(
-                tool_call_id=call.id,
-                name=call.name,
-                content=content,
-                success=error is None,
-            )
-            tool_completed = await self._finish_tool_execution(context)
-            await self._notify_after_tool(context, call, result, error)
-            await context.append_message(
-                result,
-                MessageTiming(
-                    started_at=tool_started.occurred_at,
-                    completed_at=tool_completed.occurred_at,
-                    duration_ns=max(0, tool_completed.monotonic_ns - tool_started.monotonic_ns),
-                ),
-            )
-            yield AgentEvent(
-                AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
-                session_id=context.config.session_id,
-                phase=context.state.phase,
-                tool_calls=[call],
-                message=result,
-                error=error,
-            )
-            async with aclosing(self._after_tool_events(context, call, result, error)) as events:
+            invocation = await self._invoke_tool(context, call)
+            await self._finish_tool_execution(context)
+            async with aclosing(self._finalize_tool(context, invocation)) as events:
                 async for event in events:
                     yield event
             steering = self._steering_extension.take(context)
@@ -1078,6 +1162,63 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     async for event in steering_events:
                         yield event
                 return
+
+    @staticmethod
+    async def _invoke_tool(context: AgentContext, call: ToolCall) -> _ToolInvocation:
+        """Run only a handler concurrently; lifecycle hooks remain serialized."""
+        from .extensions.events import MessageTiming
+
+        started_at = datetime.now(UTC)
+        started_ns = monotonic_ns()
+        error = None
+        try:
+            registered = context.tools.get(call.name)
+            if registered is None:
+                raise ValueError(f"Unknown tool: {call.name}")
+            output = await registered(call.arguments)
+            content = registered.serialize_result(output)
+        except Exception as tool_error:
+            error = tool_error
+            content = json.dumps({"error": str(tool_error)})
+        completed_ns = monotonic_ns()
+        completed_at = datetime.now(UTC)
+        result = ToolMessage(
+            tool_call_id=call.id,
+            name=call.name,
+            content=content,
+            success=error is None,
+        )
+        return _ToolInvocation(
+            call=call,
+            result=result,
+            error=error,
+            timing=MessageTiming(
+                started_at=started_at,
+                completed_at=completed_at,
+                duration_ns=max(0, completed_ns - started_ns),
+            ),
+        )
+
+    async def _finalize_tool(
+        self,
+        context: AgentContext,
+        invocation: _ToolInvocation,
+    ) -> AsyncIterator[AgentEvent]:
+        """Publish one completed invocation in deterministic model-call order."""
+        call, result, error = invocation.call, invocation.result, invocation.error
+        await self._notify_after_tool(context, call, result, error)
+        await context.append_message(result, invocation.timing)
+        yield AgentEvent(
+            AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
+            session_id=context.config.session_id,
+            phase=context.state.phase,
+            tool_calls=[call],
+            message=result,
+            error=error,
+        )
+        async with aclosing(self._after_tool_events(context, call, result, error)) as events:
+            async for event in events:
+                yield event
 
     async def _start_steering(
         self,

@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 import truststore
+from json_repair import repair_json
 from openai import APIStatusError, AsyncOpenAI
 
 from ..exceptions import AgentError
@@ -218,14 +219,29 @@ def _parse_tool_arguments(payload: str, *, index: int) -> dict[str, Any]:
 
     Some OpenAI-compatible providers, including DeepSeek, occasionally expose
     decoded newlines or tabs inside the nested ``function.arguments`` string.
-    ``strict=False`` accepts only those otherwise-invalid control characters;
-    malformed JSON syntax is still rejected. Tool arguments must remain an
-    object because the runtime invokes tools with named keyword arguments.
+    ``strict=False`` accepts those control characters without changing valid
+    JSON semantics. Models can also occasionally omit a comma or fail to escape
+    a quote in a long argument string. For a complete top-level object, use the
+    bounded ``json-repair`` fallback before rejecting the model response.
+
+    The fallback deliberately requires both outer braces. A payload cut off by
+    a token limit must fail instead of being completed heuristically and passed
+    to a mutating tool with silently truncated content. Tool arguments must
+    remain an object because the runtime invokes tools with named keyword
+    arguments; the tool's Pydantic input model performs the final schema check.
     """
     try:
         parsed = json.loads(payload, strict=False) if payload else {}
     except JSONDecodeError as error:
-        raise ProviderResponseError(f"Invalid tool-call arguments for index {index}: {error}") from error
+        stripped = payload.strip()
+        if not (stripped.startswith("{") and stripped.endswith("}")):
+            raise ProviderResponseError(f"Invalid tool-call arguments for index {index}: {error}") from error
+        try:
+            parsed = repair_json(stripped, return_objects=True, skip_json_loads=True)
+        except (ValueError, TypeError, RecursionError) as repair_error:
+            raise ProviderResponseError(
+                f"Invalid tool-call arguments for index {index}: {error}; repair failed: {repair_error}"
+            ) from error
     if not isinstance(parsed, dict):
         raise ProviderResponseError(f"Tool-call arguments for index {index} must be a JSON object")
     return parsed

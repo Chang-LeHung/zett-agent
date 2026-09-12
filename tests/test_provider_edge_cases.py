@@ -30,6 +30,7 @@ from zett_agent.model import ModelEvent
 from zett_agent.providers.anthropic import _to_anthropic_image_block
 from zett_agent.providers.base import (
     _normalize_image_source,
+    _parse_tool_arguments,
     _parse_tool_calls,
     _reasoning_effort_to_budget,
     _to_model_data,
@@ -115,6 +116,27 @@ def test_tool_call_parser_accepts_control_characters_but_rejects_non_objects():
 
     with pytest.raises(ProviderResponseError, match="must be a JSON object"):
         _parse_tool_calls({0: _ToolCallAccumulator(index=0, name="write", argument_buffer='["value"]')})
+
+
+def test_tool_call_parser_repairs_complete_malformed_llm_json():
+    long_content = "x" * 2_100
+    missing_comma = f'{{"content":"{long_content}" "title":"Compiler parsing"}}'
+    unescaped_quote = f'{{"title":"Notes","content":"{long_content}Use the "parse" phase"}}'
+
+    assert _parse_tool_arguments(missing_comma, index=0) == {
+        "content": long_content,
+        "title": "Compiler parsing",
+    }
+    assert _parse_tool_arguments(unescaped_quote, index=0) == {
+        "title": "Notes",
+        "content": f'{long_content}Use the "parse" phase',
+    }
+
+
+@pytest.mark.parametrize("payload", ['{"content":"truncated', '"content":"missing object"}'])
+def test_tool_call_parser_does_not_repair_truncated_or_non_object_envelopes(payload):
+    with pytest.raises(ProviderResponseError, match="Invalid tool-call arguments"):
+        _parse_tool_arguments(payload, index=3)
 
 
 @pytest.mark.parametrize(

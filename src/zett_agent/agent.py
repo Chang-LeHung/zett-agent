@@ -909,11 +909,48 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         return steering, internal
 
     async def _handle_request_cancellation(self, context: AgentContext, cancellation: BaseException) -> None:
-        """Publish cancellation without replacing the original exception."""
+        """Close interrupted tool calls, then publish the request cancellation.
+
+        A completed assistant tool-call message is persisted before execution
+        starts. If cancellation interrupts a tool, leaving that message without
+        one ToolMessage per call makes the next provider request invalid. Write
+        explicit failed observations while persistence bookkeeping is still
+        active so the restored conversation remains protocol-complete.
+        """
         try:
+            await self._cancel_unanswered_tool_calls(context)
             await self._cancel_request(context)
         except Exception as notification_error:
             cancellation.add_note(f"Cancellation notification failed: {notification_error!r}")
+
+    async def _cancel_unanswered_tool_calls(self, context: AgentContext) -> None:
+        """Append cancellation results for the latest unfinished tool-call batch."""
+        from .extensions.events import MessageTiming
+
+        pending: dict[str, ToolCall] = {}
+        for message in context.state.messages:
+            match message:
+                case AssistantMessage(tool_calls=calls) if calls:
+                    pending = {call.id: call for call in calls}
+                case ToolMessage(tool_call_id=tool_call_id) if pending:
+                    pending.pop(tool_call_id, None)
+                case _:
+                    # A valid tool batch is contiguous. Another message means
+                    # this is older malformed history, not the operation that
+                    # the current cancellation interrupted.
+                    if pending:
+                        pending.clear()
+
+        for call in pending.values():
+            await context.append_message(
+                ToolMessage(
+                    tool_call_id=call.id,
+                    name=call.name,
+                    content=json.dumps({"cancelled": True, "reason": "Request cancelled before tool completion"}),
+                    success=False,
+                ),
+                MessageTiming.instant(),
+            )
 
     async def _handle_request_failure(self, context: AgentContext, error: Exception) -> None:
         """Report failure without masking the original error or terminal phase."""

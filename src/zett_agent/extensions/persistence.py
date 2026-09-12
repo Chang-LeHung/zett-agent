@@ -1,4 +1,5 @@
-from collections.abc import Mapping
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -9,7 +10,7 @@ from pydantic import BaseModel, Field
 from ..agent import AgentContext
 from ..ids import new_uuid7
 from ..json_types import JsonValue
-from ..messages import AnyMessage, AssistantMessage, SystemMessage
+from ..messages import AnyMessage, AssistantMessage, SystemMessage, ToolMessage
 from ..model import ModelUsage
 from .base import AgentExtension
 from .compaction import CompactedMessage
@@ -252,6 +253,41 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         self.storage = storage
         self._requests: WeakKeyDictionary[AgentContext, _Request] = WeakKeyDictionary()
 
+    @staticmethod
+    def _provider_safe_messages(messages: Sequence[AnyMessage]) -> list[AnyMessage]:
+        """Exclude interrupted tool batches from restored model context.
+
+        Raw Log records remain immutable and available to a UI. Older processes
+        may nevertheless have stopped after persisting an AssistantMessage with
+        tool calls and before persisting every matching ToolMessage. Providers
+        reject that sequence, so this projection omits only the malformed
+        assistant/tool batch while retaining surrounding completed dialogue.
+        """
+        restored: list[AnyMessage] = []
+        index = 0
+        while index < len(messages):
+            message = messages[index]
+            if isinstance(message, ToolMessage):
+                # An orphan result has no meaningful provider context.
+                index += 1
+                continue
+            if not isinstance(message, AssistantMessage) or not message.tool_calls:
+                restored.append(message)
+                index += 1
+                continue
+
+            tool_messages: list[ToolMessage] = []
+            cursor = index + 1
+            while cursor < len(messages) and isinstance(messages[cursor], ToolMessage):
+                tool_messages.append(messages[cursor])
+                cursor += 1
+            expected = Counter(call.id for call in message.tool_calls)
+            observed = Counter(result.tool_call_id for result in tool_messages)
+            if expected == observed:
+                restored.extend((message, *tool_messages))
+            index = cursor
+        return restored
+
     async def _restore(self, context: AgentContext) -> SessionView:
         view = await self.storage.load(context.config.session_id)
         configured_parent = context.state.parent_session_id
@@ -262,7 +298,7 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         # Instructions are supplied by the current application configuration;
         # persisted context contributes dialogue and checkpoints only.
         instructions = [message for message in context.state.messages if isinstance(message, SystemMessage)]
-        context.state.messages[:] = [*instructions, *view.messages]
+        context.state.messages[:] = [*instructions, *self._provider_safe_messages(view.messages)]
         return view
 
     async def on_state(self, context: AgentContext) -> None:

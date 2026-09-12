@@ -1,5 +1,6 @@
 """Short integration scenarios against a disposable real SQLite database."""
 
+import asyncio
 from pathlib import Path
 from uuid import UUID
 
@@ -153,6 +154,96 @@ async def test_complete_tool_turn_preserves_roles_and_session_view(sqlite_extens
             int(MessageKind.ASSISTANT),
         ]
         assert [row.sequence for row in rows] == [1, 2, 3, 4]
+
+
+async def test_cancelled_tool_turn_is_persisted_as_provider_complete_and_can_resume(sqlite_extension):
+    entered = asyncio.Event()
+
+    @tool(guidelines="Wait until the request is cancelled.")
+    async def wait_for_cancel() -> str:
+        """Block so the test can cancel an active tool."""
+        entered.set()
+        await asyncio.Event().wait()
+        return "unreachable"
+
+    class CancelThenAnswerModel:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            message = (
+                AssistantMessage(tool_calls=(ToolCall("wait-1", "wait_for_cancel"),))
+                if len(self.requests) == 1
+                else AssistantMessage(content="Resumed safely")
+            )
+            yield ModelEvent.completed(ModelResponse(message))
+
+    model = CancelThenAnswerModel()
+    agent = await Agent.create(
+        model,
+        config=AgentConfig("cancel-resume"),
+        tools=[wait_for_cancel],
+        extensions=[sqlite_extension],
+    )
+    first = asyncio.create_task(agent.run("Start a tool"))
+    await asyncio.wait_for(entered.wait(), 2)
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+
+    records = sqlite_extension.list_raw_messages("cancel-resume")
+    assert [type(record.message) for record in records] == [UserMessage, AssistantMessage, ToolMessage]
+    cancelled_result = records[-1].message
+    assert isinstance(cancelled_result, ToolMessage)
+    assert cancelled_result.tool_call_id == "wait-1"
+    assert cancelled_result.success is False
+    assert '"cancelled": true' in cancelled_result.content
+
+    result = await agent.run("Continue after stopping")
+
+    assert result.content == "Resumed safely"
+    restored = model.requests[-1].messages
+    assistant_index = next(
+        index for index, message in enumerate(restored) if isinstance(message, AssistantMessage) and message.tool_calls
+    )
+    assert isinstance(restored[assistant_index + 1], ToolMessage)
+    assert restored[assistant_index + 1].tool_call_id == "wait-1"
+
+
+async def test_restore_omits_legacy_incomplete_tool_batch_without_mutating_raw_log(sqlite_extension):
+    storage = sqlite_extension.storage
+    await storage.append("legacy", "request-1", UserMessage(content="Original request"))
+    await storage.append(
+        "legacy",
+        "request-1",
+        AssistantMessage(tool_calls=(ToolCall("missing-result", "add", {"left": 1, "right": 2}),)),
+    )
+    await storage.append("legacy", "request-2", UserMessage(content="Previously failed retry"))
+
+    class CapturingModel(AnswerModel):
+        def __init__(self) -> None:
+            super().__init__("Recovered")
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            async for event in super().stream(request):
+                yield event
+
+    model = CapturingModel()
+    agent = await Agent.create(model, config=AgentConfig("legacy"), extensions=[sqlite_extension])
+
+    await agent.run("Try again")
+
+    assert not any(
+        isinstance(message, AssistantMessage) and message.tool_calls for message in model.requests[0].messages
+    )
+    assert [record.message for record in sqlite_extension.list_raw_messages("legacy")][:3] == [
+        UserMessage(content="Original request"),
+        AssistantMessage(tool_calls=(ToolCall("missing-result", "add", {"left": 1, "right": 2}),)),
+        UserMessage(content="Previously failed retry"),
+    ]
 
 
 async def test_compaction_writes_snapshot_without_rewriting_raw_log(sqlite_extension):

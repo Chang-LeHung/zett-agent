@@ -142,6 +142,7 @@ from .model import (
     ModelUsage,
     ReasoningEffort,
     RetryOptions,
+    ServerToolDefinition,
     ToolCallDelta,
     ToolDefinition,
 )
@@ -321,6 +322,7 @@ __all__ = [
     "ModelResponse",
     "ModelUsage",
     "ReasoningEffort",
+    "ServerToolDefinition",
     "RetryOptions",
     "ToolCallDelta",
     "ToolDefinition",

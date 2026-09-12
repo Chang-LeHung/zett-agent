@@ -157,20 +157,7 @@ class GoogleProvider(RetryingProvider):
                 contents.append(types.Content(role="model" if message.role == "assistant" else "user", parts=parts))
         config = types.GenerateContentConfig(
             system_instruction="\n\n".join(system) or None,
-            tools=[
-                types.Tool(
-                    function_declarations=[
-                        types.FunctionDeclaration(
-                            name=tool.name,
-                            description=tool.description,
-                            parameters_json_schema=dict(tool.parameters),
-                        )
-                        for tool in request.tools
-                    ]
-                )
-            ]
-            if request.tools
-            else None,
+            tools=self._google_tools(types, request),
             thinking_config=types.ThinkingConfig(
                 thinking_budget=_reasoning_effort_to_budget(request.reasoning_effort),
                 include_thoughts=True,
@@ -245,3 +232,27 @@ class GoogleProvider(RetryingProvider):
                 usage=usage,
             )
         )
+
+    @staticmethod
+    def _google_tools(types: Any, request: ModelRequest) -> list[Any] | None:
+        """Build local function declarations and native Google server tools."""
+        tools: list[Any] = []
+        if request.tools:
+            tools.append(
+                types.Tool(
+                    function_declarations=[
+                        types.FunctionDeclaration(
+                            name=tool.name,
+                            description=tool.description,
+                            parameters_json_schema=dict(tool.parameters),
+                        )
+                        for tool in request.tools
+                    ]
+                )
+            )
+        for tool in request.server_tools:
+            try:
+                tools.append(types.Tool.model_validate({tool.type: dict(tool.configuration)}))
+            except ValueError as error:
+                raise ProviderResponseError(f"Unsupported Google server tool type: {tool.type}") from error
+        return tools or None

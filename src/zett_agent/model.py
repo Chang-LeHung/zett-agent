@@ -33,6 +33,58 @@ class ToolDefinition:
 
 
 @dataclass(frozen=True, slots=True)
+class ServerToolDefinition:
+    """Opaque provider-hosted tool configuration for one model request.
+
+    Unlike :class:`ToolDefinition`, a server tool is executed by the selected
+    provider or gateway. The Agent must not dispatch it through its local tool
+    loop or append a client-authored ``ToolMessage`` for it.
+
+    ``type`` is the exact provider protocol discriminator, such as
+    ``web_search``, ``web_search_20260318``, or ``openrouter:web_fetch``.
+    ``configuration`` contains the remaining provider-specific fields. Keeping
+    that configuration opaque avoids pretending that differently shaped and
+    versioned server tools are interchangeable across providers.
+
+    Examples:
+        Configure OpenRouter web fetch::
+
+            ServerToolDefinition(
+                type="openrouter:web_fetch",
+                configuration={
+                    "parameters": {
+                        "max_uses": 4,
+                        "allowed_domains": ["docs.python.org"],
+                    }
+                },
+            )
+
+        Configure Anthropic web search::
+
+            ServerToolDefinition(
+                type="web_search_20260318",
+                configuration={"name": "web_search", "max_uses": 5},
+            )
+
+    .. note::
+        Provider adapters validate whether they understand the requested type.
+        A compatible gateway may accept types that the first-party provider
+        does not, so this core model intentionally does not use a closed enum.
+    """
+
+    #: Exact tool type expected by the selected provider protocol.
+    type: str
+    #: Provider-specific fields merged beside ``type`` in the wire payload.
+    configuration: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.type.strip():
+            raise ValueError("Server tool type cannot be empty")
+        if "type" in self.configuration:
+            raise ValueError("Server tool configuration cannot override type")
+
+
+@dataclass(frozen=True, slots=True)
 class ModelRequest:
     """Complete provider-neutral input for one model step.
 
@@ -53,6 +105,7 @@ class ModelRequest:
                     UserMessage(content="What is 20 + 22?"),
                 ],
                 tools=[add.definition],
+                server_tools=[ServerToolDefinition(type="web_search")],
                 reasoning_effort=ReasoningEffort.LOW,
             )
 
@@ -69,6 +122,8 @@ class ModelRequest:
     messages: Sequence[AnyMessage]
     #: Tools exposed for this model step; empty means no tool definitions.
     tools: Sequence[ToolDefinition] = ()
+    #: Provider-hosted tools that bypass the Agent's local tool executor.
+    server_tools: Sequence[ServerToolDefinition] = ()
     #: Desired reasoning level; provider capabilities determine its mapping.
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
 

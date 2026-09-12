@@ -39,6 +39,7 @@ from ..model import (
     ModelUsage,
     ReasoningEffort,
     RetryOptions,
+    ServerToolDefinition,
     ToolCallDelta,
     ToolDefinition,
     validate_retry,
@@ -184,6 +185,11 @@ def _tools_to_openai_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, 
             }
         )
     return rendered
+
+
+def _server_tools_to_payload(tools: Sequence[ServerToolDefinition]) -> list[dict[str, Any]]:
+    """Render opaque server tools without treating them as local functions."""
+    return [{"type": tool.type, **dict(tool.configuration)} for tool in tools]
 
 
 @dataclass
@@ -395,12 +401,15 @@ class _OpenAIStyleProvider(RetryingProvider):
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "tools": _tools_to_openai_payload(request.tools),
+            "tools": [
+                *_tools_to_openai_payload(request.tools),
+                *_server_tools_to_payload(request.server_tools),
+            ],
             "stream": True,
             "stream_options": {"include_usage": True},
         }
         payload.update(self._provider_specific_request_fields(request))
-        if not request.tools:
+        if not request.tools and not request.server_tools:
             payload.pop("tools")
         if self.temperature is not None:
             payload["temperature"] = self.temperature

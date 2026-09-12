@@ -99,6 +99,9 @@ class OllamaProvider(RetryingProvider):
 
     @retry_model_stream
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        if request.server_tools:
+            requested = ", ".join(tool.type for tool in request.server_tools)
+            raise ProviderResponseError(f"Ollama does not support provider-hosted server tools: {requested}")
         messages: list[dict[str, Any]] = []
         for message in request.messages:
             match message.role:

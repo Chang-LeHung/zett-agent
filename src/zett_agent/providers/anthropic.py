@@ -25,6 +25,7 @@ from ..model import (
     ModelUsage,
     ReasoningEffort,
     RetryOptions,
+    ServerToolDefinition,
     ToolCallDelta,
     ToolDefinition,
     validate_retry,
@@ -53,6 +54,11 @@ def _tools_to_anthropic_payload(tools: Sequence[ToolDefinition]) -> list[dict[st
             }
         )
     return rendered
+
+
+def _server_tools_to_anthropic_payload(tools: Sequence[ServerToolDefinition]) -> list[dict[str, Any]]:
+    """Render Anthropic server tools using their versioned native schemas."""
+    return [{"type": tool.type, **dict(tool.configuration)} for tool in tools]
 
 
 def _to_anthropic_content_blocks(message: Any, *, model: str | None = None) -> list[dict[str, Any]]:
@@ -208,7 +214,10 @@ class AnthropicProvider(RetryingProvider):
             "model": self.model,
             "system": "\n\n".join(system),
             "messages": messages,
-            "tools": _tools_to_anthropic_payload(request.tools),
+            "tools": [
+                *_tools_to_anthropic_payload(request.tools),
+                *_server_tools_to_anthropic_payload(request.server_tools),
+            ],
             "max_tokens": 4096,
             "stream": True,
         }

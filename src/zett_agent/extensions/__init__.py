@@ -78,6 +78,14 @@ from .plan_mode import (
     PlanModeExitedEvent,
     PlanModeExtension,
 )
+from .server_tools import (
+    AnthropicServerToolExtension,
+    DeepSeekServerToolExtension,
+    GoogleServerToolExtension,
+    OpenAIServerToolExtension,
+    OpenRouterServerToolExtension,
+    ServerToolExtension,
+)
 from .session_persistence import SessionPersistenceExtension
 from .skill import (
     DEFAULT_SKILL_ROOTS,

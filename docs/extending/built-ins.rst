@@ -54,6 +54,9 @@ SteeringExtension remain Agent-owned built-ins and must not be registered again.
    * - McpExtension
      - Register remote or subprocess MCP tools.
      - Trust and resource ownership remain application responsibilities.
+   * - Provider ServerToolExtension variants
+     - Enable a capability executed by the selected model provider.
+     - The tool type and endpoint protocol must be compatible; no local executor runs.
 
 Try the examples rather than enabling everything
 ----------------------------------------------------

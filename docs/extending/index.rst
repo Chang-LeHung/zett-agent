@@ -13,6 +13,7 @@ subclass Agent or implement another model/tool loop.
    events
    state
    model-adapter
+   server-tools
    storage-adapter
    built-ins
 

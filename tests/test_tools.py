@@ -3,7 +3,7 @@ from typing import Annotated
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
-from zett_agent import render_tool_guidance, tool
+from zett_agent import get_tool_guidelines, get_tool_snippet, render_tool_guidance, tool
 
 
 class Item(BaseModel):
@@ -88,8 +88,7 @@ def test_result_serialization_supports_models():
 
 
 def test_tool_docstring_supplies_description_args_snippet_and_guidelines():
-    @tool
-    def documented(query: str, limit: int = 10) -> str:
+    def search_knowledge(query: str, limit: int = 10) -> str:
         """Search stored knowledge.
 
         Args:
@@ -106,6 +105,13 @@ def test_tool_docstring_supplies_description_args_snippet_and_guidelines():
         """
         return query
 
+    assert get_tool_snippet(search_knowledge) == 'documented(query="agents", limit=5)'
+    assert get_tool_guidelines(search_knowledge) == (
+        "Use a narrow query first.",
+        "Increase limit only when needed.",
+    )
+
+    documented = tool(search_knowledge)
     assert documented.description == "Search stored knowledge."
     assert (
         documented.parameters["properties"]["query"]["description"] == "Text to search for across titles and content."
@@ -117,10 +123,47 @@ def test_tool_docstring_supplies_description_args_snippet_and_guidelines():
     prompt = render_tool_guidance([documented])
     assert prompt.index("# Tool snippets") < prompt.index("# Tool guidelines")
     assert documented.snippet in prompt
-    assert "# Tool guidelines\n## documented" in prompt
+    assert "# Tool guidelines\n## search_knowledge" in prompt
     assert "- Use a narrow query first." in prompt
     assert "- Increase limit only when needed." in prompt
-    assert prompt.count("## documented") == 1
+    assert prompt.count("## search_knowledge") == 1
+
+
+def test_tool_prompt_metadata_helpers_read_an_undecorated_function():
+    def inspect_value(value: int) -> int:
+        """Inspect one value.
+
+        Snippet:
+            inspect_value(value=1)
+
+        Guidelines:
+            - Inspect first.
+            - Then report.
+        """
+        return value
+
+    assert get_tool_snippet(inspect_value) == "inspect_value(value=1)"
+    assert get_tool_guidelines(inspect_value) == ("Inspect first.", "Then report.")
+
+    registered = tool(inspect_value)
+    assert render_tool_guidance([]) == ""
+    assert render_tool_guidance([registered]) == (
+        "# Tool snippets\n"
+        "- inspect_value: inspect_value(value=1)\n\n"
+        "# Tool guidelines\n"
+        "## inspect_value\n"
+        "- Inspect first.\n"
+        "- Then report."
+    )
+
+
+def test_tool_prompt_metadata_helpers_return_empty_values_for_missing_sections():
+    def plain(value: int) -> int:
+        """Return one value."""
+        return value
+
+    assert get_tool_snippet(plain) == ""
+    assert get_tool_guidelines(plain) == ()
 
 
 def test_tool_docstring_rejects_unknown_argument_documentation():

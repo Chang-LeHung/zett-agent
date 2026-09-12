@@ -146,6 +146,95 @@ def _parse_tool_docstring(function: Callable[..., Any]) -> _ToolDocumentation:
     return _ToolDocumentation(description, parameter_descriptions, snippet, guidelines)
 
 
+def get_tool_snippet(function: Callable[..., Any]) -> str:
+    """Extract the ``Snippet`` section from a function docstring.
+
+    Args:
+        function: Undecorated Python function whose docstring follows the tool
+            documentation format.
+
+    Returns:
+        The normalized snippet, or an empty string when the section is absent.
+    """
+    return _parse_tool_docstring(function).snippet
+
+
+def get_tool_guidelines(function: Callable[..., Any]) -> tuple[str, ...]:
+    """Extract immutable ``Guidelines`` entries from a function docstring.
+
+    Args:
+        function: Undecorated Python function whose docstring follows the tool
+            documentation format.
+    """
+    return _parse_tool_docstring(function).guidelines
+
+
+def _build_input_schema(
+    function: Callable[..., Any], documentation: _ToolDocumentation
+) -> tuple[type[Any], tuple[str, ...], dict[str, Any]]:
+    """Build the validator and JSON schema for one typed function."""
+    hints = get_type_hints(function, include_extras=True)
+    fields: dict[str, tuple[Any, Any]] = {}
+    for parameter in inspect.signature(function).parameters.values():
+        if parameter.kind not in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY):
+            raise ValueError("Tools accept only named parameters")
+        if parameter.name not in hints:
+            raise ValueError(f"Missing annotation for {parameter.name}")
+        default = ... if parameter.default is inspect.Parameter.empty else parameter.default
+        fields[parameter.name] = (hints[parameter.name], default)
+
+    inputs = create_model("ToolInput", __config__=ConfigDict(extra="forbid"), **fields)
+    parameters = inputs.model_json_schema()
+    unknown_parameters = documentation.parameter_descriptions.keys() - fields.keys()
+    if unknown_parameters:
+        unknown = ", ".join(sorted(unknown_parameters))
+        raise ValueError(f"Docstring Args contains unknown parameters: {unknown}")
+    for parameter, description in documentation.parameter_descriptions.items():
+        parameters["properties"][parameter]["description"] = description
+    return inputs, tuple(fields), parameters
+
+
+def _resolve_guidelines(documentation: _ToolDocumentation, configured: str | Sequence[str] | None) -> tuple[str, ...]:
+    """Resolve explicit decorator guidance before docstring guidance."""
+    match configured:
+        case None:
+            return documentation.guidelines
+        case str():
+            return (configured,)
+        case _:
+            return tuple(configured)
+
+
+def _build_agent_tool(
+    function: Callable[..., Any],
+    *,
+    name: str | None,
+    snippet: str | None,
+    guidelines: str | Sequence[str] | None,
+    execution_mode: ToolExecutionMode,
+) -> AgentTool:
+    """Create an AgentTool from one function and decorator overrides."""
+    documentation = _parse_tool_docstring(function)
+    inputs, field_names, parameters = _build_input_schema(function, documentation)
+
+    async def invoke(**arguments: Any) -> Any:
+        parsed = inputs.model_validate(arguments)
+        values = {field: getattr(parsed, field) for field in field_names}
+        if inspect.iscoroutinefunction(function):
+            return await function(**values)
+        return await asyncio.to_thread(function, **values)
+
+    return AgentTool(
+        name=name or function.__name__,
+        description=documentation.description,
+        parameters=parameters,
+        handler=invoke,
+        guidelines=_resolve_guidelines(documentation, guidelines),
+        snippet=snippet if snippet is not None else documentation.snippet,
+        execution_mode=execution_mode,
+    )
+
+
 def tool(
     function: Callable[..., Any] | None = None,
     *,
@@ -190,46 +279,12 @@ def tool(
                 return path
     """
 
-    def decorate(function: Callable[..., Any]) -> AgentTool:
-        documentation = _parse_tool_docstring(function)
-        hints = get_type_hints(function, include_extras=True)
-        fields = {}
-        for parameter in inspect.signature(function).parameters.values():
-            if parameter.kind not in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY):
-                raise ValueError("Tools accept only named parameters")
-            if parameter.name not in hints:
-                raise ValueError(f"Missing annotation for {parameter.name}")
-            default = ... if parameter.default is inspect.Parameter.empty else parameter.default
-            fields[parameter.name] = (hints[parameter.name], default)
-        inputs = create_model("ToolInput", __config__=ConfigDict(extra="forbid"), **fields)
-        parameters = inputs.model_json_schema()
-        unknown_parameters = documentation.parameter_descriptions.keys() - fields.keys()
-        if unknown_parameters:
-            unknown = ", ".join(sorted(unknown_parameters))
-            raise ValueError(f"Docstring Args contains unknown parameters: {unknown}")
-        for parameter, description in documentation.parameter_descriptions.items():
-            parameters["properties"][parameter]["description"] = description
-
-        async def invoke(**arguments: Any) -> Any:
-            parsed = inputs.model_validate(arguments)
-            values = {field: getattr(parsed, field) for field in fields}
-            if inspect.iscoroutinefunction(function):
-                return await function(**values)
-            return await asyncio.to_thread(function, **values)
-
-        if guidelines is None:
-            resolved_guidelines = documentation.guidelines
-        elif isinstance(guidelines, str):
-            resolved_guidelines = (guidelines,)
-        else:
-            resolved_guidelines = tuple(guidelines)
-        return AgentTool(
-            name=name or function.__name__,
-            description=documentation.description,
-            parameters=parameters,
-            handler=invoke,
-            guidelines=resolved_guidelines,
-            snippet=snippet if snippet is not None else documentation.snippet,
+    def decorate(target: Callable[..., Any]) -> AgentTool:
+        return _build_agent_tool(
+            target,
+            name=name,
+            snippet=snippet,
+            guidelines=guidelines,
             execution_mode=execution_mode,
         )
 
@@ -237,13 +292,18 @@ def tool(
 
 
 def render_tool_guidance(tools: Sequence[AgentTool]) -> str:
-    """Render all snippets first, followed by all usage guidelines."""
+    """Render grouped tool metadata for insertion into a system prompt.
+
+    Snippets are presented together so the model can scan the available call
+    shapes first. Guidelines follow in one named group per tool, which avoids
+    repeating a tool name for every rule.
+    """
     snippets = [f"- {registered.name}: {registered.snippet}" for registered in tools if registered.snippet]
-    guideline_groups = []
-    for registered in tools:
-        items = [f"- {guideline}" for guideline in registered.guidelines if guideline]
-        if items:
-            guideline_groups.append(f"## {registered.name}\n" + "\n".join(items))
+    guideline_groups = [
+        f"## {registered.name}\n" + "\n".join(f"- {guideline}" for guideline in registered.guidelines)
+        for registered in tools
+        if registered.guidelines
+    ]
     sections = []
     if snippets:
         sections.append("# Tool snippets\n" + "\n".join(snippets))

@@ -1,6 +1,6 @@
 """Public tool framework and built-in coding tools."""
 
-from .base import AgentTool, ToolExecutionMode, render_tool_guidance, tool
+from .base import AgentTool, ToolExecutionMode, get_tool_guidelines, get_tool_snippet, render_tool_guidance, tool
 from .coding import (
     DeleteFileResult,
     GlobResult,
@@ -34,6 +34,8 @@ __all__ = [
     "glob",
     "grep",
     "read_file",
+    "get_tool_guidelines",
+    "get_tool_snippet",
     "render_tool_guidance",
     "replace_in_file",
     "run_shell",

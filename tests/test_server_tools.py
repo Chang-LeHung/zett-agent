@@ -8,7 +8,24 @@ from typing import Any
 import httpx
 import pytest
 
-from zett_agent import ModelEventType, ModelRequest, ServerToolDefinition, ToolDefinition, UserMessage
+from zett_agent import (
+    Agent,
+    AgentConfig,
+    AgentEventType,
+    AgentProtocolError,
+    AssistantMessage,
+    ModelEvent,
+    ModelEventType,
+    ModelRequest,
+    ModelResponse,
+    ServerToolCall,
+    ServerToolDefinition,
+    ServerToolInputDelta,
+    ServerToolResult,
+    ToolDefinition,
+    UserMessage,
+    tool,
+)
 from zett_agent.providers import (
     AnthropicProvider,
     GoogleProvider,
@@ -34,6 +51,14 @@ def test_server_tool_definition_preserves_opaque_configuration() -> None:
 
     assert tool.type == "openrouter:web_fetch"
     assert tool.configuration == {"parameters": {"max_uses": 3}}
+
+
+def test_server_tool_call_distinguishes_streaming_input_from_complete_empty_input() -> None:
+    pending = ServerToolCall("hosted-1", "web_fetch")
+    complete_empty = ServerToolCall("hosted-2", "web_search", {})
+
+    assert pending.input is None
+    assert complete_empty.input == {}
 
 
 @pytest.mark.parametrize(
@@ -142,6 +167,130 @@ async def test_anthropic_provider_sends_versioned_server_tool_unchanged() -> Non
     assert events[-1].response.message.content == "done"
 
 
+async def test_anthropic_provider_streams_server_tool_lifecycle_without_local_tool_call() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_anthropic_sse(
+                [
+                    {
+                        "type": "message_start",
+                        "message": {
+                            "usage": {"input_tokens": 3, "output_tokens": 0},
+                        },
+                    },
+                    {
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {
+                            "type": "server_tool_use",
+                            "id": "srvtoolu_1",
+                            "name": "web_fetch",
+                            "input": {},
+                        },
+                    },
+                    {
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {
+                            "type": "input_json_delta",
+                            "partial_json": '{"url":"https://example.com"}',
+                        },
+                    },
+                    {"type": "content_block_stop", "index": 0},
+                    {
+                        "type": "content_block_start",
+                        "index": 1,
+                        "content_block": {
+                            "type": "web_fetch_tool_result",
+                            "tool_use_id": "srvtoolu_1",
+                            "content": {
+                                "type": "web_fetch_result",
+                                "url": "https://example.com",
+                                "content": {
+                                    "type": "document",
+                                    "source": {"type": "text", "media_type": "text/plain", "data": "Example"},
+                                },
+                            },
+                        },
+                    },
+                    {"type": "content_block_stop", "index": 1},
+                    {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 2}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler))
+    try:
+        events = [event async for event in provider.stream(ModelRequest(messages=(UserMessage(content="Fetch"),)))]
+    finally:
+        await provider.aclose()
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_INPUT_DELTA,
+        ModelEventType.SERVER_TOOL_COMPLETED,
+        ModelEventType.RESPONSE,
+    ]
+    assert events[0].server_tool_call == ServerToolCall("srvtoolu_1", "web_fetch")
+    assert events[1].server_tool_input_delta == ServerToolInputDelta("srvtoolu_1", '{"url":"https://example.com"}')
+    assert events[2].server_tool_result == ServerToolResult(
+        "srvtoolu_1",
+        "web_fetch",
+        {
+            "type": "web_fetch_result",
+            "url": "https://example.com",
+            "content": {
+                "type": "document",
+                "source": {"type": "text", "media_type": "text/plain", "data": "Example"},
+            },
+        },
+    )
+    assert events[-1].response is not None
+    assert events[-1].response.message.tool_calls == ()
+
+
+async def test_anthropic_provider_exposes_server_tool_result_error_as_event() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_anthropic_sse(
+                [
+                    {"type": "message_start", "message": {"usage": {}}},
+                    {
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {
+                            "type": "web_search_tool_result",
+                            "tool_use_id": "srvtoolu_failed",
+                            "content": {"type": "web_search_tool_result_error", "error_code": "unavailable"},
+                        },
+                    },
+                    {"type": "content_block_stop", "index": 0},
+                    {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler))
+    try:
+        events = [event async for event in provider.stream(ModelRequest(messages=()))]
+    finally:
+        await provider.aclose()
+
+    failed = next(event for event in events if event.type == ModelEventType.SERVER_TOOL_FAILED)
+    assert failed.server_tool_result == ServerToolResult(
+        "srvtoolu_failed",
+        "web_search",
+        {"type": "web_search_tool_result_error", "error_code": "unavailable"},
+        "unavailable",
+    )
+
+
 def test_google_provider_maps_native_server_tool_to_sdk_type() -> None:
     from google.genai import types
 
@@ -163,6 +312,125 @@ def test_google_provider_rejects_unknown_server_tool_before_request() -> None:
 
     with pytest.raises(ProviderResponseError, match="Unsupported Google server tool type"):
         GoogleProvider._google_tools(types, request)
+
+
+def test_google_provider_maps_completed_hosted_tool_metadata_once() -> None:
+    from google.genai import types
+
+    from zett_agent.providers.google import _google_server_tool_events
+
+    candidate = types.Candidate(
+        grounding_metadata=types.GroundingMetadata(web_search_queries=["zettelkasten"]),
+        url_context_metadata=types.UrlContextMetadata(
+            url_metadata=[
+                types.UrlMetadata(
+                    retrieved_url="https://example.com",
+                    url_retrieval_status=types.UrlRetrievalStatus.URL_RETRIEVAL_STATUS_SUCCESS,
+                )
+            ]
+        ),
+    )
+    seen: set[str] = set()
+
+    events, sequence = _google_server_tool_events(candidate, sequence=0, seen=seen)
+    duplicate_events, duplicate_sequence = _google_server_tool_events(candidate, sequence=sequence, seen=seen)
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_COMPLETED,
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_COMPLETED,
+    ]
+    assert events[0].server_tool_call is not None
+    assert events[0].server_tool_call.name == "google_search"
+    assert events[2].server_tool_call is not None
+    assert events[2].server_tool_call.input == {"url": "https://example.com"}
+    assert sequence == 2
+    assert duplicate_events == []
+    assert duplicate_sequence == sequence
+
+
+async def test_agent_forwards_server_tools_without_running_same_named_local_tool() -> None:
+    local_calls = 0
+
+    @tool
+    def web_fetch(url: str) -> str:
+        """Fetch a URL locally.
+
+        Args:
+            url: Absolute URL to fetch.
+
+        Guidelines:
+            - Use only for an explicit local fetch.
+        """
+        nonlocal local_calls
+        local_calls += 1
+        return url
+
+    class Model:
+        async def stream(self, request: ModelRequest):
+            call = ServerToolCall("hosted-1", "web_fetch", {"url": "https://example.com"})
+            yield ModelEvent.server_tool_started(call)
+            yield ModelEvent.server_tool_completed(ServerToolResult(call.id, call.name, {"status": 200}))
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Fetched")))
+
+    agent = await Agent.create(
+        Model(),
+        config=AgentConfig(session_id="server-tool-session"),
+        tools=(web_fetch,),
+    )
+    events = [event async for event in agent.stream("Fetch it")]
+
+    assert [event.type for event in events if event.type.value.startswith("server_tool_")] == [
+        AgentEventType.SERVER_TOOL_STARTED,
+        AgentEventType.SERVER_TOOL_COMPLETED,
+    ]
+    assert local_calls == 0
+    assert not any(event.type in {AgentEventType.TOOL_STARTED, AgentEventType.TOOL_COMPLETED} for event in events)
+
+
+@pytest.mark.parametrize(
+    ("model_events", "message"),
+    [
+        (
+            [ModelEvent.server_tool_input(ServerToolInputDelta("hosted-1", "{}"))],
+            "input requires its matching start",
+        ),
+        (
+            [ModelEvent.server_tool_completed(ServerToolResult("hosted-1", "web_fetch"))],
+            "result requires its matching start",
+        ),
+        (
+            [
+                ModelEvent.server_tool_started(ServerToolCall("hosted-1", "web_fetch")),
+                ModelEvent.server_tool_started(ServerToolCall("hosted-1", "web_fetch")),
+            ],
+            "started more than once",
+        ),
+        (
+            [
+                ModelEvent.server_tool_started(ServerToolCall("hosted-1", "web_fetch")),
+                ModelEvent.completed(ModelResponse(AssistantMessage(content="premature"))),
+            ],
+            "before server tools completed",
+        ),
+    ],
+)
+async def test_agent_rejects_invalid_server_tool_lifecycle(
+    model_events: list[ModelEvent],
+    message: str,
+) -> None:
+    class Model:
+        async def stream(self, request: ModelRequest):
+            for event in model_events:
+                yield event
+            if not model_events or model_events[-1].type != ModelEventType.RESPONSE:
+                yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
+
+    agent = await Agent.create(Model(), config=AgentConfig(session_id="invalid-server-tool"))
+
+    with pytest.raises(AgentProtocolError, match=message):
+        _ = [event async for event in agent.stream("Fetch it")]
 
 
 async def test_ollama_provider_rejects_server_tools_without_network_io() -> None:

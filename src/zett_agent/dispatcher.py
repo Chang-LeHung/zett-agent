@@ -94,6 +94,18 @@ class AgentEventDispatcher(SyncMethodsMixin):
     async def on_tool_call_delta_event(self, event: AgentEvent) -> None:
         """Handle a streamed tool-call fragment."""
 
+    async def on_server_tool_started_event(self, event: AgentEvent) -> None:
+        """Handle the start of a provider-hosted tool invocation."""
+
+    async def on_server_tool_input_delta_event(self, event: AgentEvent) -> None:
+        """Handle a provider-hosted tool input fragment."""
+
+    async def on_server_tool_completed_event(self, event: AgentEvent) -> None:
+        """Handle successful provider-hosted tool completion."""
+
+    async def on_server_tool_failed_event(self, event: AgentEvent) -> None:
+        """Handle a structured provider-hosted tool failure."""
+
     async def on_model_completed_event(self, event: AgentEvent) -> None:
         """Handle the complete model response."""
 

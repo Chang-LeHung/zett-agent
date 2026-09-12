@@ -957,6 +957,33 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                             phase=state.phase,
                             tool_call_delta=event.tool_call_delta,
                         )
+                    case ModelEventType.SERVER_TOOL_STARTED:
+                        if event.server_tool_call is None:
+                            raise AgentProtocolError("Missing server-tool call")
+                        yield AgentEvent(
+                            AgentEventType.SERVER_TOOL_STARTED,
+                            session_id=config.session_id,
+                            phase=state.phase,
+                            server_tool_call=event.server_tool_call,
+                        )
+                    case ModelEventType.SERVER_TOOL_INPUT_DELTA:
+                        if event.server_tool_input_delta is None:
+                            raise AgentProtocolError("Missing server-tool input delta")
+                        yield AgentEvent(
+                            AgentEventType.SERVER_TOOL_INPUT_DELTA,
+                            session_id=config.session_id,
+                            phase=state.phase,
+                            server_tool_input_delta=event.server_tool_input_delta,
+                        )
+                    case ModelEventType.SERVER_TOOL_COMPLETED | ModelEventType.SERVER_TOOL_FAILED:
+                        if event.server_tool_result is None:
+                            raise AgentProtocolError("Missing server-tool result")
+                        yield AgentEvent(
+                            AgentEventType(event.type.value),
+                            session_id=config.session_id,
+                            phase=state.phase,
+                            server_tool_result=event.server_tool_result,
+                        )
                     case ModelEventType.RESPONSE:
                         if event.response is None:
                             raise AgentProtocolError("Missing model response")

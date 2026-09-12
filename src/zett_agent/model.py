@@ -85,6 +85,65 @@ class ServerToolDefinition:
 
 
 @dataclass(frozen=True, slots=True)
+class ServerToolCall:
+    """Provider-executed tool invocation exposed for observation only.
+
+    Unlike a local :class:`ToolCall`, this call must never be dispatched by the
+    Agent or answered with a client-authored ``ToolMessage``. ``input`` may be
+    incomplete on the start event when the provider streams its JSON later.
+    """
+
+    #: Provider-assigned invocation identifier, or a stable adapter-generated ID.
+    id: str
+    #: Provider tool name such as ``web_fetch``, ``web_search``, or ``url_context``.
+    name: str
+    #: Complete input when already available; None while input is still streaming.
+    input: Mapping[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise ValueError("Server tool call ID cannot be empty")
+        if not self.name.strip():
+            raise ValueError("Server tool call name cannot be empty")
+
+
+@dataclass(frozen=True, slots=True)
+class ServerToolInputDelta:
+    """One streamed input fragment for a provider-executed tool invocation."""
+
+    #: Invocation identifier matching :attr:`ServerToolCall.id`.
+    call_id: str
+    #: Partial serialized JSON; it is not necessarily valid by itself.
+    delta: str
+
+    def __post_init__(self) -> None:
+        if not self.call_id.strip():
+            raise ValueError("Server tool input call ID cannot be empty")
+        if not self.delta:
+            raise ValueError("Server tool input delta cannot be empty")
+
+
+@dataclass(frozen=True, slots=True)
+class ServerToolResult:
+    """Terminal output from a tool executed inside the provider."""
+
+    #: Invocation identifier matching :attr:`ServerToolCall.id`.
+    call_id: str
+    #: Provider tool name matching the corresponding start event.
+    name: str
+    #: Provider result payload; its shape remains tool-specific.
+    output: Any = None
+    #: Stable provider error code when the hosted tool failed.
+    error_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.call_id.strip():
+            raise ValueError("Server tool result call ID cannot be empty")
+        if not self.name.strip():
+            raise ValueError("Server tool result name cannot be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class ModelRequest:
     """Complete provider-neutral input for one model step.
 
@@ -285,6 +344,10 @@ class ModelEventType(StrEnum):
     TEXT_DELTA = "text_delta"
     REASONING_DELTA = "reasoning_delta"
     TOOL_CALL_DELTA = "tool_call_delta"
+    SERVER_TOOL_STARTED = "server_tool_started"
+    SERVER_TOOL_INPUT_DELTA = "server_tool_input_delta"
+    SERVER_TOOL_COMPLETED = "server_tool_completed"
+    SERVER_TOOL_FAILED = "server_tool_failed"
     RESPONSE = "response"
 
 
@@ -295,17 +358,20 @@ class ModelEvent:
     .. zett-diagram:: model-stream
 
         +---------------------+
-        | Text deltas         |-------+
-        +---------------------+       |
-                                      |
-        +---------------------+       |       +------------------------------------+
-        | Reasoning deltas    |-------+------>| one terminal ModelResponse         |
-        +---------------------+       |       +------------------------------------+
-                                      |                         |
-        +---------------------+       |                         v
-        | Tool-call deltas    |-------+       +------------------------------------+
-        +---------------------+               | message + usage + finish reason    |
-                                              +------------------------------------+
+        | Text deltas         |----------+
+        +---------------------+          |
+                                         |
+        +---------------------+          |
+        | Reasoning deltas    |----------+
+        +---------------------+          |
+                                         |     +------------------------------+
+        +---------------------+          +---->| terminal ModelResponse       |
+        | Tool-call deltas    |----------+     | message + usage + finish     |
+        +---------------------+          |     +------------------------------+
+                                         |
+        +---------------------+          |
+        | Server-tool events  |----------+
+        +---------------------+
 
     Examples:
         A minimal deterministic model can stream text and then return the same
@@ -332,6 +398,12 @@ class ModelEvent:
     delta: str = ""
     #: Partial tool identifier/name/arguments for TOOL_CALL_DELTA events.
     tool_call_delta: ToolCallDelta | None = None
+    #: Hosted invocation identity for a server-tool start event.
+    server_tool_call: ServerToolCall | None = None
+    #: Hosted incremental input associated with an earlier start event.
+    server_tool_input_delta: ServerToolInputDelta | None = None
+    #: Hosted terminal result for server-tool completion or failure events.
+    server_tool_result: ServerToolResult | None = None
     #: Complete final response, present only for RESPONSE events.
     response: ModelResponse | None = None
 
@@ -349,6 +421,26 @@ class ModelEvent:
     def tool_call(cls, delta: ToolCallDelta) -> ModelEvent:
         """Create one tool-call fragment event; this does not execute a tool."""
         return cls(ModelEventType.TOOL_CALL_DELTA, tool_call_delta=delta)
+
+    @classmethod
+    def server_tool_started(cls, call: ServerToolCall) -> ModelEvent:
+        """Expose the start of one provider-executed tool invocation."""
+        return cls(ModelEventType.SERVER_TOOL_STARTED, server_tool_call=call)
+
+    @classmethod
+    def server_tool_input(cls, delta: ServerToolInputDelta) -> ModelEvent:
+        """Expose an incremental hosted-tool JSON input fragment."""
+        return cls(ModelEventType.SERVER_TOOL_INPUT_DELTA, server_tool_input_delta=delta)
+
+    @classmethod
+    def server_tool_completed(cls, result: ServerToolResult) -> ModelEvent:
+        """Expose successful provider-side tool completion."""
+        return cls(ModelEventType.SERVER_TOOL_COMPLETED, server_tool_result=result)
+
+    @classmethod
+    def server_tool_failed(cls, result: ServerToolResult) -> ModelEvent:
+        """Expose provider-side tool failure without converting it to a transport error."""
+        return cls(ModelEventType.SERVER_TOOL_FAILED, server_tool_result=result)
 
     @classmethod
     def completed(cls, response: ModelResponse) -> ModelEvent:

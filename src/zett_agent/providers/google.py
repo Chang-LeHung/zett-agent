@@ -24,6 +24,8 @@ from ..model import (
     ModelResponse,
     ModelUsage,
     RetryOptions,
+    ServerToolCall,
+    ServerToolResult,
     ToolCallDelta,
     validate_retry,
 )
@@ -177,12 +179,21 @@ class GoogleProvider(RetryingProvider):
         replay: list[dict[str, Any]] = []
         usage = ModelUsage()
         finish_reason = None
+        server_tool_sequence = 0
+        seen_server_tool_metadata: set[str] = set()
         stream = await self._client.aio.models.generate_content_stream(
             model=self.model, contents=contents, config=config
         )
         try:
             async for chunk in stream:
                 for candidate in (chunk.candidates or [])[:1]:
+                    server_events, server_tool_sequence = _google_server_tool_events(
+                        candidate,
+                        sequence=server_tool_sequence,
+                        seen=seen_server_tool_metadata,
+                    )
+                    for server_event in server_events:
+                        yield server_event
                     for part in candidate.content.parts if candidate.content and candidate.content.parts else []:
                         replay.append(part.model_dump(exclude_none=True))
                         if part.text:
@@ -256,3 +267,63 @@ class GoogleProvider(RetryingProvider):
             except ValueError as error:
                 raise ProviderResponseError(f"Unsupported Google server tool type: {tool.type}") from error
         return tools or None
+
+
+def _google_server_tool_events(candidate: Any, *, sequence: int, seen: set[str]) -> tuple[list[ModelEvent], int]:
+    """Normalize completed Google Search and URL Context metadata.
+
+    Generate Content exposes these hosted operations only when result metadata
+    reaches the candidate, rather than as a live call lifecycle. The adapter
+    therefore emits adjacent start/completion events at that boundary and
+    deduplicates metadata repeated by later streaming chunks.
+    """
+    events: list[ModelEvent] = []
+    grounding = getattr(candidate, "grounding_metadata", None)
+    if grounding is not None:
+        payload = grounding.model_dump(exclude_none=True)
+        # Grounding metadata may be repeated or enriched by later stream chunks;
+        # it still represents one hosted search operation for this model step.
+        fingerprint = "google_search"
+        if fingerprint not in seen:
+            seen.add(fingerprint)
+            call = ServerToolCall(
+                id=f"google-search-{sequence}",
+                name="google_search",
+                input={"queries": list(payload.get("web_search_queries", ()))},
+            )
+            sequence += 1
+            events.extend(
+                (
+                    ModelEvent.server_tool_started(call),
+                    ModelEvent.server_tool_completed(ServerToolResult(call.id, call.name, payload)),
+                )
+            )
+
+    url_context = getattr(candidate, "url_context_metadata", None)
+    if url_context is not None:
+        metadata = url_context.model_dump(exclude_none=True)
+        for item in metadata.get("url_metadata", ()):
+            url = str(item.get("retrieved_url", ""))
+            fingerprint = f"url_context:{url or json.dumps(item, sort_keys=True, default=str)}"
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+            raw_status = item.get("url_retrieval_status", "URL_RETRIEVAL_STATUS_UNSPECIFIED")
+            status = str(getattr(raw_status, "value", raw_status))
+            call = ServerToolCall(id=f"url-context-{sequence}", name="url_context", input={"url": url})
+            sequence += 1
+            result = ServerToolResult(
+                call.id,
+                call.name,
+                item,
+                None if status == "URL_RETRIEVAL_STATUS_SUCCESS" else status,
+            )
+            events.extend(
+                (
+                    ModelEvent.server_tool_started(call),
+                    ModelEvent.server_tool_completed(result)
+                    if result.error_code is None
+                    else ModelEvent.server_tool_failed(result),
+                )
+            )
+    return events, sequence

@@ -25,7 +25,10 @@ from ..model import (
     ModelUsage,
     ReasoningEffort,
     RetryOptions,
+    ServerToolCall,
     ServerToolDefinition,
+    ServerToolInputDelta,
+    ServerToolResult,
     ToolCallDelta,
     ToolDefinition,
     validate_retry,
@@ -244,6 +247,8 @@ class AnthropicProvider(RetryingProvider):
         reasoning = ""
         finish_reason = None
         streams: dict[int, _ToolCallAccumulator] = {}
+        server_streams: dict[int, _ToolCallAccumulator] = {}
+        server_initial_inputs: dict[int, dict[str, Any]] = {}
         usage = ModelUsage()
         replay: dict[int, dict[str, Any]] = {}
 
@@ -295,6 +300,13 @@ class AnthropicProvider(RetryingProvider):
                                 partial = delta.get("partial_json", "")
                                 if not partial:
                                     continue
+                                stream = server_streams.get(index)
+                                if stream is not None:
+                                    stream.argument_buffer += partial
+                                    yield ModelEvent.server_tool_input(
+                                        ServerToolInputDelta(stream.call_id, partial),
+                                    )
+                                    continue
                                 stream = streams.setdefault(index, _ToolCallAccumulator(index=index))
                                 stream.append(ToolCallDelta(index=index, arguments_delta=partial))
                                 yield ModelEvent.tool_call(ToolCallDelta(index=index, arguments_delta=partial))
@@ -312,6 +324,26 @@ class AnthropicProvider(RetryingProvider):
                                 yield ModelEvent.tool_call(
                                     ToolCallDelta(index=index, id_delta=stream.call_id, name_delta=stream.name)
                                 )
+                            case "server_tool_use":
+                                call_id = str(block.get("id", ""))
+                                name = str(block.get("name", ""))
+                                initial_input = block.get("input")
+                                input_data = initial_input if isinstance(initial_input, dict) else {}
+                                stream = _ToolCallAccumulator(index=index, call_id=call_id, name=name)
+                                server_streams[index] = stream
+                                server_initial_inputs[index] = input_data
+                                yield ModelEvent.server_tool_started(ServerToolCall(call_id, name, input_data or None))
+                            case str(block_type) if block_type.endswith("_tool_result"):
+                                call_id = str(block.get("tool_use_id", ""))
+                                name = block_type.removesuffix("_tool_result")
+                                output = block.get("content")
+                                error_code = _anthropic_server_tool_error(output)
+                                result = ServerToolResult(call_id, name, output, error_code)
+                                yield (
+                                    ModelEvent.server_tool_failed(result)
+                                    if error_code is not None
+                                    else ModelEvent.server_tool_completed(result)
+                                )
                             case _:
                                 pass
                     case "content_block_stop":
@@ -320,6 +352,13 @@ class AnthropicProvider(RetryingProvider):
                             replay[index]["input"] = _parse_tool_arguments(
                                 streams[index].argument_buffer,
                                 index=index,
+                            )
+                        if index in server_streams:
+                            stream = server_streams[index]
+                            replay[index]["input"] = (
+                                _parse_tool_arguments(stream.argument_buffer, index=index)
+                                if stream.argument_buffer
+                                else server_initial_inputs[index]
                             )
                     case "message_delta":
                         delta = data.get("delta", {})
@@ -351,3 +390,14 @@ class AnthropicProvider(RetryingProvider):
                 usage=usage,
             )
         )
+
+
+def _anthropic_server_tool_error(output: Any) -> str | None:
+    """Return Anthropic's structured hosted-tool error code, when present."""
+    if not isinstance(output, dict):
+        return None
+    output_type = output.get("type")
+    if not isinstance(output_type, str) or not output_type.endswith("_error"):
+        return None
+    code = output.get("error_code")
+    return str(code) if code else output_type

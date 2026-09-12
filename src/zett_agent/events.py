@@ -9,7 +9,15 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from .exceptions import AgentProtocolError
 from .messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage, UserMessage
-from .model import ModelEvent, ModelEventType, ModelResponse, ToolCallDelta
+from .model import (
+    ModelEvent,
+    ModelEventType,
+    ModelResponse,
+    ServerToolCall,
+    ServerToolInputDelta,
+    ServerToolResult,
+    ToolCallDelta,
+)
 
 if TYPE_CHECKING:
     from .extensions.events import (
@@ -39,6 +47,10 @@ class AgentEventType(StrEnum):
     TEXT_DELTA = "text_delta"
     REASONING_DELTA = "reasoning_delta"
     TOOL_CALL_DELTA = "tool_call_delta"
+    SERVER_TOOL_STARTED = "server_tool_started"
+    SERVER_TOOL_INPUT_DELTA = "server_tool_input_delta"
+    SERVER_TOOL_COMPLETED = "server_tool_completed"
+    SERVER_TOOL_FAILED = "server_tool_failed"
     MODEL_COMPLETED = "model_completed"
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"
@@ -253,6 +265,7 @@ class ModelOutputTracker:
     content_completed: ContentCompletedEvent | None = None
     _finished: bool = False
     _tools_started: bool = False
+    _server_tools: dict[str, ServerToolCall] = field(default_factory=dict)
 
     async def observe(self, context: PhaseContext, event: ModelEvent) -> tuple[AgentEventType, ...]:
         """Publish extension boundaries and return their ordered UI event types."""
@@ -290,9 +303,32 @@ class ModelOutputTracker:
                 if self.reasoning_started is not None and self.reasoning_completed is None:
                     await self._complete_reasoning(context)
                     boundaries.append(AgentEventType.REASONING_COMPLETED)
+            case ModelEventType.SERVER_TOOL_STARTED:
+                if event.server_tool_call is None:
+                    raise AgentProtocolError("Missing server-tool call")
+                if event.server_tool_call.id in self._server_tools:
+                    raise AgentProtocolError(f"Server tool {event.server_tool_call.id!r} started more than once")
+                self._server_tools[event.server_tool_call.id] = event.server_tool_call
+                if self.reasoning_started is not None and self.reasoning_completed is None:
+                    await self._complete_reasoning(context)
+                    boundaries.append(AgentEventType.REASONING_COMPLETED)
+            case ModelEventType.SERVER_TOOL_INPUT_DELTA:
+                if event.server_tool_input_delta is None:
+                    raise AgentProtocolError("Missing server-tool input delta")
+                if event.server_tool_input_delta.call_id not in self._server_tools:
+                    raise AgentProtocolError("Server-tool input requires its matching start event")
+            case ModelEventType.SERVER_TOOL_COMPLETED | ModelEventType.SERVER_TOOL_FAILED:
+                if event.server_tool_result is None:
+                    raise AgentProtocolError("Missing server-tool result")
+                active = self._server_tools.pop(event.server_tool_result.call_id, None)
+                if active is None or active.name != event.server_tool_result.name:
+                    raise AgentProtocolError("Server-tool result requires its matching start event")
             case ModelEventType.RESPONSE:
                 if event.response is None:
                     raise AgentProtocolError("Missing model response")
+                if self._server_tools:
+                    pending = ", ".join(sorted(self._server_tools))
+                    raise AgentProtocolError(f"Model response arrived before server tools completed: {pending}")
                 if self.reasoning_started is not None and self.reasoning_completed is None:
                     await self._complete_reasoning(context)
                     boundaries.append(AgentEventType.REASONING_COMPLETED)
@@ -366,6 +402,10 @@ class AgentEvent:
         TEXT_DELTA                 delta
         TOOL_STARTED               tool_calls
         TOOL_COMPLETED/FAILED      tool_calls, message, optional error
+        SERVER_TOOL_STARTED        server_tool_call
+        SERVER_TOOL_INPUT_DELTA    server_tool_input_delta
+        SERVER_TOOL_COMPLETED      server_tool_result
+        SERVER_TOOL_FAILED         server_tool_result
         MODEL_COMPLETED            response
         RUN_COMPLETED              message
         CUSTOM                     name, payload
@@ -403,6 +443,12 @@ class AgentEvent:
     #: Complete invocations associated with a tool event. Current execution emits
     #: one item per event; the list shape also supports future concurrent batches.
     tool_calls: list[ToolCall] = field(default_factory=list)
+    #: Provider-hosted invocation. It is observable but never locally executed.
+    server_tool_call: ServerToolCall | None = None
+    #: Provider-hosted incremental input, correlated by call ID.
+    server_tool_input_delta: ServerToolInputDelta | None = None
+    #: Provider-hosted terminal output or structured failure.
+    server_tool_result: ServerToolResult | None = None
     #: Final model response, including usage.
     response: ModelResponse | None = None
     #: Tool result or final assistant answer.

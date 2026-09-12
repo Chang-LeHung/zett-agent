@@ -8,6 +8,7 @@ from zett_agent import (
     Agent,
     AgentConfig,
     AgentEventType,
+    AgentPhase,
     AssistantMessage,
     ModelEvent,
     ModelRequest,
@@ -104,7 +105,8 @@ async def test_parallel_tools_run_first_together_then_serial_tools() -> None:
         ["serial"],
     ]
     results = [message for message in model.requests[1].messages if isinstance(message, ToolMessage)]
-    assert [message.tool_call_id for message in results] == ["parallel-1", "parallel-2", "serial"]
+    assert {message.tool_call_id for message in results[:2]} == {"parallel-1", "parallel-2"}
+    assert results[-1].tool_call_id == "serial"
     assert all(request.parallel_tool_call for request in model.requests)
 
 
@@ -205,6 +207,70 @@ async def test_parallel_failure_is_returned_without_cancelling_sibling_or_serial
         AgentEventType.TOOL_COMPLETED,
         AgentEventType.TOOL_COMPLETED,
     ]
+
+
+async def test_parallel_results_stream_in_completion_order_with_same_named_calls_and_failure() -> None:
+    releases = {name: asyncio.Event() for name in ("slow", "fast", "failed")}
+    all_started = asyncio.Event()
+    started = 0
+
+    @tool
+    async def inspect(name: str, fail: bool = False) -> str:
+        """Inspect one independently released input.
+
+        Args:
+            name: Release gate name.
+            fail: Whether this invocation should fail.
+
+        Snippet:
+            inspect(name="fast")
+
+        Guidelines:
+            - Use for independent completion-order tests.
+        """
+        nonlocal started
+        started += 1
+        if started == 3:
+            all_started.set()
+        await releases[name].wait()
+        if fail:
+            raise RuntimeError("expected failure")
+        return name
+
+    model = ToolBatchModel(
+        (
+            ToolCall("slow-id", "inspect", {"name": "slow"}),
+            ToolCall("fast-id", "inspect", {"name": "fast"}),
+            ToolCall("failed-id", "inspect", {"name": "failed", "fail": True}),
+        )
+    )
+    agent = await Agent.create(model, config=AgentConfig("completion-order"), tools=[inspect], extensions=[])
+    stream = agent.stream("run")
+
+    async def release_in_order() -> None:
+        await asyncio.wait_for(all_started.wait(), timeout=1)
+        for name in ("fast", "failed", "slow"):
+            releases[name].set()
+            await asyncio.sleep(0.01)
+
+    release_task = asyncio.create_task(release_in_order())
+    events = [event async for event in stream]
+    await release_task
+
+    terminal = [event for event in events if event.type in (AgentEventType.TOOL_COMPLETED, AgentEventType.TOOL_FAILED)]
+    assert [event.tool_calls[0].id for event in terminal] == ["fast-id", "failed-id", "slow-id"]
+    assert [event.type for event in terminal] == [
+        AgentEventType.TOOL_COMPLETED,
+        AgentEventType.TOOL_FAILED,
+        AgentEventType.TOOL_COMPLETED,
+    ]
+    assert [event.phase for event in terminal] == [
+        AgentPhase.RUNNING_TOOL,
+        AgentPhase.RUNNING_TOOL,
+        AgentPhase.READY,
+    ]
+    results = [message for message in model.requests[1].messages if isinstance(message, ToolMessage)]
+    assert [message.tool_call_id for message in results] == ["fast-id", "failed-id", "slow-id"]
 
 
 def test_tools_default_to_parallel_and_reject_invalid_execution_mode() -> None:

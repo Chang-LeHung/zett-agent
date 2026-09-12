@@ -1102,7 +1102,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         context: AgentContext,
         calls: Sequence[ToolCall],
     ) -> AsyncIterator[AgentEvent]:
-        """Run one parallel batch, then finalize its results in call order."""
+        """Run one parallel batch and stream each result as its handler finishes."""
         for call in calls:
             await self._notify_before_tool(context, call)
             async with aclosing(self._before_tool_events(context, call)) as preprocessing:
@@ -1117,19 +1117,21 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             tool_calls=list(calls),
         )
         tasks = [asyncio.create_task(self._invoke_tool(context, call)) for call in calls]
+        remaining = len(tasks)
         try:
-            invocations = await asyncio.gather(*tasks)
+            for completed in asyncio.as_completed(tasks):
+                invocation = await completed
+                remaining -= 1
+                if remaining == 0:
+                    await self._finish_tool_execution(context)
+                async with aclosing(self._finalize_tool(context, invocation)) as events:
+                    async for event in events:
+                        yield event
         except BaseException:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
-        await self._finish_tool_execution(context)
-
-        for invocation in invocations:
-            async with aclosing(self._finalize_tool(context, invocation)) as events:
-                async for event in events:
-                    yield event
 
     async def _execute_serial_tools(
         self,
@@ -1209,7 +1211,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         context: AgentContext,
         invocation: _ToolInvocation,
     ) -> AsyncIterator[AgentEvent]:
-        """Publish one completed invocation in deterministic model-call order."""
+        """Publish one completed invocation and append its result to context."""
         call, result, error = invocation.call, invocation.result, invocation.error
         await self._notify_after_tool(context, call, result, error)
         await context.append_message(result, invocation.timing)

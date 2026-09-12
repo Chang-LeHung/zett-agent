@@ -253,10 +253,12 @@ class AgentPhaseTransitionMixin:
 class ModelOutputTracker:
     """Validate and publish output boundaries for one model call.
 
-    Nonempty deltas open a segment once. Content or tool arguments close
-    reasoning; reasoning cannot resume afterwards. The final response closes
-    content and seals the tracker. Completion requires a matching open segment.
-    Failure and cancellation do not synthesize successful completion events.
+    Nonempty deltas open a segment once. Content or local tool arguments close
+    reasoning; reasoning cannot resume afterwards. Provider-hosted tools remain
+    inside one model generation and may be followed by more reasoning, so their
+    lifecycle does not close that segment. The final response closes content and
+    seals the tracker. Completion requires a matching open segment. Failure and
+    cancellation do not synthesize successful completion events.
     """
 
     reasoning_started: ReasoningStartedEvent | None = None
@@ -309,9 +311,6 @@ class ModelOutputTracker:
                 if event.server_tool_call.id in self._server_tools:
                     raise AgentProtocolError(f"Server tool {event.server_tool_call.id!r} started more than once")
                 self._server_tools[event.server_tool_call.id] = event.server_tool_call
-                if self.reasoning_started is not None and self.reasoning_completed is None:
-                    await self._complete_reasoning(context)
-                    boundaries.append(AgentEventType.REASONING_COMPLETED)
             case ModelEventType.SERVER_TOOL_INPUT_DELTA:
                 if event.server_tool_input_delta is None:
                     raise AgentProtocolError("Missing server-tool input delta")

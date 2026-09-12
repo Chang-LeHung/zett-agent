@@ -20,6 +20,7 @@ from ..model import (
     RetryOptions,
     ToolCallDelta,
     ToolDefinition,
+    validate_response,
     validate_retry,
 )
 from .base import ProviderResponseError, RetryingProvider, retry_model_stream
@@ -48,6 +49,7 @@ class OllamaProvider(RetryingProvider):
         model: Model name installed or available on the target Ollama server.
         transport: Optional HTTPX transport for custom routing or tests.
         base_url: Ollama server root; defaults to localhost port 11434.
+        response: Must remain false; this adapter uses Ollama's chat endpoint.
         retry: Backoff policy for failures before the first streamed event.
 
     Note:
@@ -79,12 +81,17 @@ class OllamaProvider(RetryingProvider):
         transport: httpx.AsyncBaseTransport | None = None,
         *,
         base_url: str = "http://localhost:11434",
+        response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
         from ollama import AsyncClient
 
+        validate_response(response)
+        if response:
+            raise ValueError("OllamaProvider does not support the Responses API")
         validate_retry(retry)
         self.retry = retry
+        self.response = response
         self.model = model
         self._client = AsyncClient(
             host=base_url,

@@ -185,7 +185,7 @@ class ModelRequest:
     server_tools: Sequence[ServerToolDefinition] = ()
     #: Desired reasoning level; provider capabilities determine its mapping.
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
-    #: Optional name of the single tool the provider must call for schema-bound output.
+    #: Optional local function name or registered server-tool type the provider must call.
     tool_choice: str | None = None
     #: Whether the provider may return more than one local tool call in one response.
     #:
@@ -237,6 +237,12 @@ def validate_retry(retry: RetryOptions) -> None:
     """Reject invalid model configuration before opening network clients."""
     if not isinstance(retry, RetryOptions):
         raise ValueError("retry must be a RetryOptions instance")
+
+
+def validate_response(response: bool) -> None:
+    """Require an explicit boolean for selecting the model transport API."""
+    if not isinstance(response, bool):
+        raise ValueError("response must be a boolean")
 
 
 @dataclass(frozen=True, slots=True)
@@ -485,6 +491,9 @@ class AgentModel(Protocol):
     #: Model-owned backoff policy; max_retries=0 disables retries.
     #: This configuration never belongs to ModelRequest.
     retry: RetryOptions = RetryOptions()
+    #: Whether this adapter uses a Responses-style endpoint instead of its
+    #: provider's traditional message or chat-completions endpoint.
+    response: bool = False
 
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         """Stream deltas and finish with exactly one response event.

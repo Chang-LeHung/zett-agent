@@ -42,9 +42,11 @@ from ..model import (
     ServerToolDefinition,
     ToolCallDelta,
     ToolDefinition,
+    validate_response,
     validate_retry,
 )
 from ..sync_runtime import SyncMethodsMixin
+from .responses import responses_input, responses_reasoning, responses_tools, stream_responses
 
 
 class ProviderError(AgentError):
@@ -318,6 +320,7 @@ class RetryingProvider(SyncMethodsMixin):
     """
 
     retry: RetryOptions = DEFAULT_RETRY_OPTIONS
+    response: bool = False
 
     @staticmethod
     def _retryable(error: BaseException) -> bool:
@@ -381,14 +384,17 @@ class _OpenAIStyleProvider(RetryingProvider):
         base_url: str,
         transport: httpx.AsyncBaseTransport | None = None,
         temperature: float | None = None,
+        response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
         validate_retry(retry)
+        validate_response(response)
         self.retry = retry
         if not api_key:
             raise ValueError("api_key is required")
         self.model = model
         self.temperature = temperature
+        self.response = response
         self._http_client = httpx.AsyncClient(
             transport=transport,
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
@@ -397,6 +403,8 @@ class _OpenAIStyleProvider(RetryingProvider):
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=self._http_client, max_retries=0)
 
     async def _request(self, request: ModelRequest) -> Any:
+        if self.response:
+            return await self._request_response(request)
         messages = [_message_to_openai_payload(message) for message in request.messages]
         payload: dict[str, Any] = {
             "model": self.model,
@@ -434,6 +442,41 @@ class _OpenAIStyleProvider(RetryingProvider):
                 case _:
                     raise ProviderResponseError("Provider stream request failed") from error
 
+    async def _request_response(self, request: ModelRequest) -> Any:
+        """Open a stateless Responses API stream for OpenAI or DeepSeek."""
+        tools = responses_tools(request.tools, request.server_tools)
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "input": responses_input(request.messages, provider=self.provider_name, model=self.model),
+            "stream": True,
+            "store": False,
+            "parallel_tool_calls": request.parallel_tool_call,
+        }
+        if tools:
+            payload["tools"] = tools
+        if self.temperature is not None:
+            payload["temperature"] = self.temperature
+        if request.tool_choice:
+            server_types = {tool.type for tool in request.server_tools}
+            payload["tool_choice"] = (
+                {"type": request.tool_choice}
+                if request.tool_choice in server_types
+                else {"type": "function", "name": request.tool_choice}
+            )
+        reasoning = responses_reasoning(request.reasoning_effort)
+        if reasoning is not None:
+            payload["reasoning"] = reasoning
+        try:
+            return await self._client.responses.create(**payload)  # type: ignore[misc]
+        except APIStatusError as error:
+            match error.status_code:
+                case 401:
+                    raise ProviderAuthError("Provider rejected API credential") from error
+                case 400 | 422 | 500:
+                    raise ProviderResponseError("Provider returned an invalid Responses stream") from error
+                case _:
+                    raise ProviderResponseError("Provider Responses request failed") from error
+
     def _provider_specific_request_fields(self, request: ModelRequest) -> dict[str, Any]:
         return (
             {}
@@ -450,6 +493,17 @@ class _OpenAIStyleProvider(RetryingProvider):
 
     @retry_model_stream
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        if self.response:
+            response = await self._request(request)
+            try:
+                async for event in stream_responses(response, provider=self.provider_name, model=self.model):
+                    yield event
+            except (RuntimeError, TypeError, ValueError, json.JSONDecodeError) as error:
+                raise ProviderResponseError(str(error)) from error
+            finally:
+                await response.close()
+            return
+
         text = ""
         reasoning = ""
         streams: dict[int, _ToolCallAccumulator] = {}

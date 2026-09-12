@@ -15,6 +15,7 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         transport: Optional HTTPX transport for custom routing or tests.
         base_url: API root; None uses the default DeepSeek v1 endpoint.
         temperature: Optional provider sampling temperature.
+        response: Use DeepSeek's Responses-compatible endpoint instead of Chat Completions.
         retry: Model-owned retry/backoff policy; never restarts an emitted stream.
 
     Note:
@@ -52,14 +53,16 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         *,
         base_url: str | None = None,
         temperature: float | None = None,
+        response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
         super().__init__(
             model=model,
             api_key=api_key,
-            base_url=base_url or "https://api.deepseek.com/v1",
+            base_url=base_url or ("https://api.deepseek.com" if response else "https://api.deepseek.com/v1"),
             transport=transport,
             temperature=temperature,
+            response=response,
             retry=retry,
         )
         self.provider_name = "deepseek"

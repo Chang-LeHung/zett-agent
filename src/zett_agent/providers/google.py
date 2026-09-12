@@ -27,6 +27,7 @@ from ..model import (
     ServerToolCall,
     ServerToolResult,
     ToolCallDelta,
+    validate_response,
     validate_retry,
 )
 from .base import ProviderResponseError, RetryingProvider, _reasoning_effort_to_budget, retry_model_stream
@@ -39,6 +40,7 @@ class GoogleProvider(RetryingProvider):
         model: Google model identifier used for content generation.
         api_key: API credential supplied by the application.
         transport: Optional HTTPX transport for test isolation or custom routing.
+        response: Must remain false; this adapter uses Google GenerateContent.
         retry: Retry/backoff policy, applied before any model event is emitted.
 
     Note:
@@ -73,15 +75,20 @@ class GoogleProvider(RetryingProvider):
         api_key: str,
         transport: httpx.AsyncBaseTransport | None = None,
         *,
+        response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
         from google import genai
         from google.genai import types
 
+        validate_response(response)
+        if response:
+            raise ValueError("GoogleProvider does not support the Responses API")
         if not api_key:
             raise ValueError("api_key is required")
         validate_retry(retry)
         self.retry = retry
+        self.response = response
         self.model = model
         self._http_client = httpx.AsyncClient(
             transport=transport,

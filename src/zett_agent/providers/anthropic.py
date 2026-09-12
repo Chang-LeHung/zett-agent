@@ -31,6 +31,7 @@ from ..model import (
     ServerToolResult,
     ToolCallDelta,
     ToolDefinition,
+    validate_response,
     validate_retry,
 )
 from .base import (
@@ -137,6 +138,7 @@ class AnthropicProvider(RetryingProvider):
         api_key: API credential supplied by the application.
         base_url: API root, defaulting to the official Anthropic endpoint.
         transport: Optional HTTPX transport for isolated tests or custom routing.
+        response: Must remain false; this adapter uses Anthropic Messages API.
         retry: Exponential backoff for transient failures before output starts.
 
     Note:
@@ -174,12 +176,17 @@ class AnthropicProvider(RetryingProvider):
         base_url: str = "https://api.anthropic.com",
         transport: httpx.AsyncBaseTransport | None = None,
         *,
+        response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
+        validate_response(response)
+        if response:
+            raise ValueError("AnthropicProvider does not support the Responses API")
         if not api_key:
             raise ValueError("api_key is required")
         validate_retry(retry)
         self.retry = retry
+        self.response = response
         self.model = model
         self._http_client = httpx.AsyncClient(
             transport=transport,

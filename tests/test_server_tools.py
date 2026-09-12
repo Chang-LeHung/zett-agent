@@ -389,6 +389,28 @@ async def test_agent_forwards_server_tools_without_running_same_named_local_tool
     assert not any(event.type in {AgentEventType.TOOL_STARTED, AgentEventType.TOOL_COMPLETED} for event in events)
 
 
+async def test_reasoning_can_continue_after_a_provider_hosted_tool() -> None:
+    class Model:
+        async def stream(self, request: ModelRequest):
+            call = ServerToolCall("hosted-1", "web_search", {"query": "zettelkasten"})
+            yield ModelEvent.reasoning("Choose a query. ")
+            yield ModelEvent.server_tool_started(call)
+            yield ModelEvent.server_tool_completed(ServerToolResult(call.id, call.name, {"results": []}))
+            yield ModelEvent.reasoning("Review the sources.")
+            yield ModelEvent.text("Done")
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Done", reasoning="Full reasoning")))
+
+    agent = await Agent.create(Model(), config=AgentRunConfig("hosted-reasoning"))
+    events = [event async for event in agent.stream("Research")]
+
+    assert [event.type for event in events if event.type == AgentEventType.REASONING_DELTA] == [
+        AgentEventType.REASONING_DELTA,
+        AgentEventType.REASONING_DELTA,
+    ]
+    assert [event.type for event in events].count(AgentEventType.REASONING_STARTED) == 1
+    assert [event.type for event in events].count(AgentEventType.REASONING_COMPLETED) == 1
+
+
 @pytest.mark.parametrize(
     ("model_events", "message"),
     [

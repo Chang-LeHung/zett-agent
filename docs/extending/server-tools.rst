@@ -49,15 +49,24 @@ Choose the extension that matches the endpoint
      - ``web_search``
      - DeepSeek Responses API; not legacy Chat Completions.
 
-OpenAIProvider and DeepSeekProvider currently implement Chat Completions. Their
-extensions are provider-neutral declarations for a Responses-capable adapter;
-they do not silently switch transport protocols. This keeps endpoint selection
-explicit and avoids changing response semantics when a provider changes.
+OpenAIProvider and DeepSeekProvider use Chat Completions by default. Construct
+either adapter with ``response=True`` to use its Responses endpoint and enable
+its hosted tools explicitly::
 
-OpenAI and DeepSeek currently publish no separate ``web_fetch`` type. OpenAI's
-hosted web-search workflow retrieves relevant pages itself; DeepSeek currently
-documents search only. The defaults intentionally use provider-supported types
-instead of sending an invented fetch discriminator.
+    model = OpenAIProvider(
+        model="gpt-5",
+        api_key=os.environ["OPENAI_API_KEY"],
+        response=True,
+    )
+
+The Responses adapter sends complete history on every request. It preserves
+provider output items for later function-result turns and maps hosted-tool
+start/completion records into the common server-tool event lifecycle. Available
+tool types still depend on the selected provider endpoint and model.
+
+OpenAI and DeepSeek publish no separate ``web_fetch`` type. Their hosted
+web-search workflow retrieves relevant pages itself. The defaults intentionally
+use documented types instead of sending an invented fetch discriminator.
 
 Allow protocol evolution
 -----------------------------

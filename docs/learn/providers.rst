@@ -12,11 +12,11 @@ Choose an adapter
      - Endpoint
      - Application responsibility
    * - :class:`~zett_agent.OpenAIProvider`
-     - OpenAI-compatible chat API
-     - Model name and API key; optional base URL
+     - Chat Completions or Responses API
+     - Model name and API key; optional base URL and ``response=True``
    * - :class:`~zett_agent.DeepSeekProvider`
-     - DeepSeek OpenAI-style API
-     - Model name and API key
+     - DeepSeek Chat Completions or Responses API
+     - Model name and API key; optional ``response=True``
    * - :class:`~zett_agent.AnthropicProvider`
      - Anthropic-style API
      - Model name, API key, optional base URL

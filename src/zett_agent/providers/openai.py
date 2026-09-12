@@ -15,6 +15,7 @@ class OpenAIProvider(_OpenAIStyleProvider):
         transport: Optional HTTPX transport, useful for isolated tests.
         base_url: Compatible API root; None uses the official OpenAI v1 endpoint.
         temperature: Optional sampling temperature passed to the provider.
+        response: Use the Responses API instead of Chat Completions.
         retry: Exponential backoff applied before the first emitted event only.
 
     Note:
@@ -55,6 +56,7 @@ class OpenAIProvider(_OpenAIStyleProvider):
         *,
         base_url: str | None = None,
         temperature: float | None = None,
+        response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
         super().__init__(
@@ -63,6 +65,7 @@ class OpenAIProvider(_OpenAIStyleProvider):
             base_url=base_url or "https://api.openai.com/v1",
             transport=transport,
             temperature=temperature,
+            response=response,
             retry=retry,
         )
         self.provider_name = "openai"

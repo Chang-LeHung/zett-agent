@@ -76,13 +76,15 @@ async def test_hooks_run_for_each_call_in_order_before_tool_execution():
     assert [event.type for event in relevant] == [
         AgentEventType.CUSTOM,
         AgentEventType.CUSTOM,
+        AgentEventType.CUSTOM,
+        AgentEventType.CUSTOM,
         AgentEventType.TOOL_STARTED,
-    ] * 2
+    ]
     assert all(event.phase == AgentPhase.READY for event in relevant if event.type == AgentEventType.CUSTOM)
     tool_events = [
         event for event in events if event.type in (AgentEventType.TOOL_STARTED, AgentEventType.TOOL_COMPLETED)
     ]
-    assert [[call.id for call in event.tool_calls] for event in tool_events] == [["a"], ["a"], ["b"], ["b"]]
+    assert [[call.id for call in event.tool_calls] for event in tool_events] == [["a", "b"], ["a"], ["b"]]
     assert executed == [True, True]
 
 

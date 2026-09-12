@@ -165,8 +165,8 @@ async def create_agent(
         extensions: Lifecycle extensions. None keeps default memory and tool
             guidance; an explicit sequence replaces those defaults.
         reasoning_effort: Default reasoning level, overridable per request.
-        parallel_tool_call: Allow supported providers and parallel-marked local
-            tools to use parallel calls. Individual tools default to serial.
+        parallel_tool_call: Allow supported providers and local tools to use
+            parallel calls. Individual tools may explicitly require serial execution.
         max_iterations: Maximum model calls for each user or internal message.
         max_internal_messages: Maximum internal continuations per request.
         event_dispatcher: Optional callbacks awaited in stream order.

@@ -329,7 +329,6 @@ async def test_multiple_questions_complete_end_to_end_in_model_order():
     ] == [
         AgentEventType.TOOL_STARTED,
         AgentEventType.TOOL_COMPLETED,
-        AgentEventType.TOOL_STARTED,
         AgentEventType.TOOL_COMPLETED,
     ]
     tool_messages = [message for message in model.requests[1].messages if isinstance(message, ToolMessage)]

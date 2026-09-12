@@ -103,14 +103,17 @@ async def test_steering_skips_remaining_tools_and_persists_matching_results(tmp_
                     agent.emit_external_event,
                     ExternalEvent("steering_message", {"session_id": "s", "request_id": "r", "content": "new task"}),
                 )
-        assert executed == ([] if boundary == "model" else ["a"])
+        assert executed == ([] if boundary == "model" else ["a", "b"])
         assert model.requests[-1].messages[-1] == UserMessage(content="new task")
         results = [message for message in model.requests[-1].messages if isinstance(message, ToolMessage)]
         assert [message.tool_call_id for message in results] == ["a", "b"]
-        assert results[-1].success is False
-        assert "Superseded" in results[-1].content
+        if boundary == "model":
+            assert results[-1].success is False
+            assert "Superseded" in results[-1].content
+        else:
+            assert all(result.success for result in results)
         skipped = [event for event in events if event.type == AgentEventType.TOOL_SKIPPED]
-        assert len(skipped) == (2 if boundary == "model" else 1)
+        assert len(skipped) == (2 if boundary == "model" else 0)
         assert all(event.phase == AgentPhase.READY for event in skipped)
         assert sum(event.type == AgentEventType.STEERING_STARTED for event in events) == 1
         assert sum(event.type == AgentEventType.STEERING_COMPLETED for event in events) == 1

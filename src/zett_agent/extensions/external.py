@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
+from ..tools.base import current_tool_call_id
 from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
 
@@ -172,7 +173,7 @@ class ExternalEventExtension(AgentExtension):
         self._response_event_names = frozenset(names)
         self._correlation_field = correlation_field
         self._pending: dict[tuple[str, str], _PendingExternalEvent] = {}
-        self._accepted: dict[AgentContext, ExternalEvent] = {}
+        self._accepted: dict[tuple[AgentContext, str], ExternalEvent] = {}
         self._pending_lock = Lock()
 
     @asynccontextmanager
@@ -205,7 +206,7 @@ class ExternalEventExtension(AgentExtension):
         try:
             yield
             response = await pending.future
-            self._accepted[context] = response
+            self._accepted[(context, correlation_id)] = response
         finally:
             with self._pending_lock:
                 self._pending.pop(key, None)
@@ -213,12 +214,13 @@ class ExternalEventExtension(AgentExtension):
                 pending.future.cancel()
 
     def _take_external_event(self, context: AgentContext) -> ExternalEvent:
-        """Pop this context's single staged response exactly once inside its tool.
+        """Pop this invocation's staged response exactly once inside its tool.
 
         Call only after _wait_for_external_event has finished successfully.
         Raises RuntimeError if no response is staged or it was already consumed.
         """
-        response = self._accepted.pop(context, None)
+        correlation_id = current_tool_call_id()
+        response = self._accepted.pop((context, correlation_id), None) if correlation_id is not None else None
         if response is None:
             raise RuntimeError("Tool executed without an accepted external response")
         return response
@@ -294,7 +296,9 @@ class ExternalEventExtension(AgentExtension):
 
     def _discard_staged(self, context: AgentContext) -> None:
         """Remove responses that can no longer be consumed by a tool."""
-        self._accepted.pop(context, None)
+        stale = [key for key in self._accepted if key[0] is context]
+        for key in stale:
+            self._accepted.pop(key, None)
 
     @staticmethod
     def _run_on_future_loop(future: asyncio.Future[Any], callback: Callable[[], None]) -> None:

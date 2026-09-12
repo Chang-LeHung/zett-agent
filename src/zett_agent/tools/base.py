@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, get_type_hints
@@ -12,6 +13,23 @@ from pydantic import ConfigDict, TypeAdapter, create_model
 
 from ..model import ToolDefinition
 from ..sync_runtime import SyncMethodsMixin
+
+_CURRENT_TOOL_CALL_ID: ContextVar[str | None] = ContextVar("zett_agent_tool_call_id", default=None)
+
+
+def _bind_tool_call(call_id: str) -> Token[str | None]:
+    """Bind one invocation ID to its isolated asyncio task context."""
+    return _CURRENT_TOOL_CALL_ID.set(call_id)
+
+
+def _reset_tool_call(token: Token[str | None]) -> None:
+    """Restore the task's previous invocation identity."""
+    _CURRENT_TOOL_CALL_ID.reset(token)
+
+
+def current_tool_call_id() -> str | None:
+    """Return the tool call currently executing in this task, when present."""
+    return _CURRENT_TOOL_CALL_ID.get()
 
 
 class ToolExecutionMode(StrEnum):
@@ -33,7 +51,7 @@ class AgentTool(SyncMethodsMixin):
     handler: Callable[..., Awaitable[Any]]
     guidelines: tuple[str, ...]
     snippet: str = ""
-    execution_mode: ToolExecutionMode = ToolExecutionMode.SERIAL
+    execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL
 
     def __post_init__(self) -> None:
         if not self.description.strip():
@@ -134,7 +152,7 @@ def tool(
     name: str | None = None,
     snippet: str | None = None,
     guidelines: str | Sequence[str] | None = None,
-    execution_mode: ToolExecutionMode = ToolExecutionMode.SERIAL,
+    execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
 ):
     """Turn a typed function and its structured docstring into an AgentTool.
 
@@ -144,7 +162,8 @@ def tool(
         snippet: Optional usage snippet overriding the docstring section.
         guidelines: Optional model guidance overriding docstring Guidelines.
         execution_mode: Whether the local handler must run serially or may run
-            concurrently with other parallel handlers. The safe default is serial.
+            concurrently with other parallel handlers. The default is parallel;
+            use SERIAL for handlers that require exclusive ordered execution.
 
     Returns:
         An AgentTool for direct decoration, or a decorator when configured first.

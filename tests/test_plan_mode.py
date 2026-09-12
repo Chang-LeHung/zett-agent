@@ -375,7 +375,12 @@ async def test_active_plan_mode_executes_filesystem_and_shell_tools(tmp_path, mo
         AssistantMessage(content="Updated plan"),
     )
     plan_mode = PlanModeExtension()
-    agent = await Agent.create(model, config=AgentConfig("plan-tools"), extensions=[plan_mode])
+    agent = await Agent.create(
+        model,
+        config=AgentConfig("plan-tools"),
+        extensions=[plan_mode],
+        parallel_tool_call=False,
+    )
     await run_with_decision(agent, approved=True)
 
     await agent.run("Maintain the planning artifact")

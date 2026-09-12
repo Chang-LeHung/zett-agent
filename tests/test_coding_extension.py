@@ -83,6 +83,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
         model,
         config=AgentConfig("files"),
         extensions=[ToolGuidelinesExtension(), CodingExtension()],
+        parallel_tool_call=False,
     )
     await agent.run("Edit and search a file")
     environment_messages = [

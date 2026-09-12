@@ -62,7 +62,7 @@ async def test_parallel_tools_run_first_together_then_serial_tools() -> None:
         running -= 1
         return name
 
-    @tool
+    @tool(execution_mode=ToolExecutionMode.SERIAL)
     async def mutate(name: str) -> str:
         """Mutate one ordered input.
 
@@ -172,7 +172,7 @@ async def test_parallel_failure_is_returned_without_cancelling_sibling_or_serial
             raise RuntimeError(name)
         return name
 
-    @tool
+    @tool(execution_mode=ToolExecutionMode.SERIAL)
     def finish() -> str:
         """Finish serial work.
 
@@ -207,7 +207,7 @@ async def test_parallel_failure_is_returned_without_cancelling_sibling_or_serial
     ]
 
 
-def test_tools_default_to_serial_and_reject_invalid_execution_mode() -> None:
+def test_tools_default_to_parallel_and_reject_invalid_execution_mode() -> None:
     @tool
     def default_tool() -> str:
         """Return a value.
@@ -220,7 +220,7 @@ def test_tools_default_to_serial_and_reject_invalid_execution_mode() -> None:
         """
         return "ok"
 
-    assert default_tool.execution_mode is ToolExecutionMode.SERIAL
+    assert default_tool.execution_mode is ToolExecutionMode.PARALLEL
     with pytest.raises(ValueError, match="ToolExecutionMode"):
         default_tool.execution_mode = "parallel"  # type: ignore[assignment]
         default_tool.__post_init__()

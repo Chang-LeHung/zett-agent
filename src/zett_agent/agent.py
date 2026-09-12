@@ -26,6 +26,7 @@ from .model import (
 )
 from .sync_runtime import SyncMethodsMixin
 from .tools import AgentTool, ToolExecutionMode
+from .tools.base import _bind_tool_call, _reset_tool_call
 
 if TYPE_CHECKING:
     from .extensions.base import AgentExtension
@@ -303,8 +304,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         | AssistantMessage     |
         +----------------------+
 
-    Tools are serial by default. When parallel calling is enabled, explicitly
-    parallel tools from one model response run together before serial tools.
+    Tools are parallel by default. When parallel calling is enabled, parallel
+    tools from one model response run together before explicitly serial tools.
     Hooks, Raw Log appends, and completion events remain ordered. Streaming
     deltas are display data; only the final :class:`ModelResponse` is appended
     as an assistant message.
@@ -377,7 +378,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 None installs defaults; an empty sequence omits optional defaults.
             reasoning_effort: Default provider-neutral reasoning level.
             parallel_tool_call: Allow providers to return multiple tool calls
-                and concurrently execute tools explicitly marked parallel.
+                and concurrently execute tools not explicitly marked serial.
             max_iterations: Model-call budget per user/internal message.
             max_internal_messages: Internal input budget per request; zero disables it.
 
@@ -1171,15 +1172,19 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         started_at = datetime.now(UTC)
         started_ns = monotonic_ns()
         error = None
+        token = _bind_tool_call(call.id)
         try:
-            registered = context.tools.get(call.name)
-            if registered is None:
-                raise ValueError(f"Unknown tool: {call.name}")
-            output = await registered(call.arguments)
-            content = registered.serialize_result(output)
-        except Exception as tool_error:
-            error = tool_error
-            content = json.dumps({"error": str(tool_error)})
+            try:
+                registered = context.tools.get(call.name)
+                if registered is None:
+                    raise ValueError(f"Unknown tool: {call.name}")
+                output = await registered(call.arguments)
+                content = registered.serialize_result(output)
+            except Exception as tool_error:
+                error = tool_error
+                content = json.dumps({"error": str(tool_error)})
+        finally:
+            _reset_tool_call(token)
         completed_ns = monotonic_ns()
         completed_at = datetime.now(UTC)
         result = ToolMessage(

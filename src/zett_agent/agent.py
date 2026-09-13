@@ -473,6 +473,38 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         with self._sessions_lock:
             return self._states.get(session_id)
 
+    @property
+    def pending(self) -> bool:
+        """Return whether this Agent owns at least one unfinished request.
+
+        A request becomes pending when stream execution claims its session and
+        remains pending through model calls, tools, external waits, and terminal
+        hooks. Success, failure, cancellation, and explicit stream closure all
+        clear it. Concurrent sessions keep the value true until the last one
+        exits.
+        """
+        with self._sessions_lock:
+            return bool(self._active_configs)
+
+    def is_conflict(self, session_id: str) -> bool:
+        """Return whether another request currently owns ``session_id``.
+
+        ``run()`` and ``stream()`` use the same check while atomically claiming
+        the session, so concurrent callers cannot both start work for one
+        conversation. Requests for different sessions remain independent.
+
+        Args:
+            session_id: Non-empty conversation identity to inspect.
+
+        Raises:
+            ValueError: If ``session_id`` is empty.
+        """
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id cannot be empty")
+        with self._sessions_lock:
+            previous = self._states.get(session_id)
+            return session_id in self._active_configs or bool(previous and not previous.phase.accepts_new_request)
+
     def emit_external_event(self, event: ExternalEvent, *, config: AgentRunConfig | None = None) -> list[str]:
         """Broadcast config and event separately; return accepting extension names.
 
@@ -775,12 +807,14 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             context.register_tool(registered)
         with self._sessions_lock:
             previous = self._states.get(config.session_id)
-            if config.session_id in self._active_configs or (previous and not previous.phase.accepts_new_request):
+            if self.is_conflict(config.session_id):
                 phase = previous.phase.value if previous is not None else "active"
                 raise AgentProtocolError(f"Agent cannot start a new request while its current phase is {phase!r}")
             self._active_configs[config.session_id] = config
             self._states[config.session_id] = state
             self.state = state
+        for extension in self.extensions:
+            extension._request_started(context)
         return context
 
     async def _open_request(self, context: AgentRunContext) -> None:
@@ -1084,6 +1118,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         """Clear only this request's inboxes and release its session for reuse."""
         self._steering_extension.close(context)
         self._internal_message_extension.close(context)
+        for extension in self.extensions:
+            extension._request_finished(context)
         with self._sessions_lock:
             self._active_configs.pop(context.config.session_id, None)
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
+from threading import Lock
 from typing import TYPE_CHECKING
 
 from ..events import AgentEvent, AgentEventType
@@ -13,6 +15,17 @@ if TYPE_CHECKING:
     from ..model import ModelRequest, ModelResponse
     from .events import ExtensionEvent
     from .external import ExternalEvent
+
+
+@dataclass(slots=True)
+class _PendingRequests:
+    """Thread-safe active-request identities owned by one extension instance."""
+
+    contexts: set[AgentRunContext] = field(default_factory=set)
+    lock: Lock = field(default_factory=Lock)
+
+
+_PENDING_TRACKER_CREATION_LOCK = Lock()
 
 
 class AgentSetupHooksMixin:
@@ -367,6 +380,41 @@ class AgentExtension(
     """
 
     priority: int = 100
+
+    @property
+    def pending(self) -> bool:
+        """Return whether this extension is participating in an active request.
+
+        The Agent updates this state for every registered extension, including
+        extensions whose hooks are currently idle. One extension instance may
+        be shared by multiple Agents and sessions; ``pending`` remains true
+        until all requests using that instance have finished, failed, or been
+        cancelled. Persistent data retained between requests does not count.
+        """
+        tracker = self._pending_request_tracker()
+        with tracker.lock:
+            return bool(tracker.contexts)
+
+    def _request_started(self, context: AgentRunContext) -> None:
+        """Record one active request; called only by the Agent runtime."""
+        tracker = self._pending_request_tracker()
+        with tracker.lock:
+            tracker.contexts.add(context)
+
+    def _request_finished(self, context: AgentRunContext) -> None:
+        """Forget one terminal request without affecting concurrent sessions."""
+        tracker = self._pending_request_tracker()
+        with tracker.lock:
+            tracker.contexts.discard(context)
+
+    def _pending_request_tracker(self) -> _PendingRequests:
+        """Lazily allocate tracking because subclasses need not call super().__init__."""
+        with _PENDING_TRACKER_CREATION_LOCK:
+            tracker = getattr(self, "_extension_pending_requests", None)
+            if tracker is None:
+                tracker = _PendingRequests()
+                self._extension_pending_requests = tracker
+            return tracker
 
     @property
     def name(self) -> str:

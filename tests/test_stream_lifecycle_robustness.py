@@ -213,6 +213,8 @@ async def test_many_sessions_overlap_and_cleanup_without_cross_session_messages(
     tasks = [asyncio.create_task(agent.run(str(i), config=AgentRunConfig(str(i)))) for i in range(count)]
     try:
         await asyncio.wait_for(ready.wait(), 3)
+        assert agent.pending
+        assert all(extension.pending for extension in agent.extensions)
         assert len(agent._active_configs) == count
         release.set()
         results = await asyncio.wait_for(asyncio.gather(*tasks), 3)
@@ -220,6 +222,8 @@ async def test_many_sessions_overlap_and_cleanup_without_cross_session_messages(
             assert result.content == str(i)
             assert [m.content for m in agent.get_state(str(i)).messages] == [str(i)] * 2
         assert agent._active_configs == {}
+        assert not agent.pending
+        assert all(not extension.pending for extension in agent.extensions)
         assert agent._steering_extension._inboxes == {}
         assert agent._internal_message_extension._inboxes == {}
     finally:
@@ -227,3 +231,120 @@ async def test_many_sessions_overlap_and_cleanup_without_cross_session_messages(
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def test_pending_clears_after_failure_and_cancellation() -> None:
+    entered = asyncio.Event()
+
+    class BlockingModel:
+        async def stream(self, request):
+            entered.set()
+            await asyncio.Event().wait()
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="unreachable")))
+
+    extension = AgentExtension()
+    agent = await Agent.create(BlockingModel(), config=AgentRunConfig("pending"), extensions=[extension])
+    assert not agent.pending
+    assert not extension.pending
+
+    task = asyncio.create_task(agent.run("wait"))
+    await asyncio.wait_for(entered.wait(), 1)
+    assert agent.pending
+    assert extension.pending
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not agent.pending
+    assert not extension.pending
+
+    class FailingModel:
+        async def stream(self, request):
+            raise RuntimeError("provider failed")
+            yield
+
+    failed_extension = AgentExtension()
+    failed_agent = await Agent.create(
+        FailingModel(),
+        config=AgentRunConfig("failed-pending"),
+        extensions=[failed_extension],
+    )
+    with pytest.raises(RuntimeError, match="provider failed"):
+        await failed_agent.run("fail")
+    assert not failed_agent.pending
+    assert not failed_extension.pending
+
+
+async def test_shared_extension_stays_pending_until_every_agent_request_finishes() -> None:
+    entered = [asyncio.Event(), asyncio.Event()]
+    release = [asyncio.Event(), asyncio.Event()]
+
+    class IndexedModel:
+        def __init__(self, index: int) -> None:
+            self.index = index
+
+        async def stream(self, request):
+            entered[self.index].set()
+            await release[self.index].wait()
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
+
+    shared = AgentExtension()
+    first = await Agent.create(IndexedModel(0), config=AgentRunConfig("first"), extensions=[shared])
+    second = await Agent.create(IndexedModel(1), config=AgentRunConfig("second"), extensions=[shared])
+    tasks = [asyncio.create_task(first.run("one")), asyncio.create_task(second.run("two"))]
+    try:
+        await asyncio.wait_for(asyncio.gather(*(event.wait() for event in entered)), 1)
+        assert first.pending
+        assert second.pending
+        assert shared.pending
+
+        release[0].set()
+        await asyncio.wait_for(tasks[0], 1)
+        assert not first.pending
+        assert second.pending
+        assert shared.pending
+
+        release[1].set()
+        await asyncio.wait_for(tasks[1], 1)
+        assert not second.pending
+        assert not shared.pending
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def test_same_session_conflict_is_reported_and_released_after_run() -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingModel:
+        async def stream(self, request):
+            entered.set()
+            await release.wait()
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
+
+    agent = await Agent.create(BlockingModel(), config=AgentRunConfig("same-session"), extensions=[])
+    assert not agent.is_conflict("same-session")
+    assert not agent.is_conflict("another-session")
+    with pytest.raises(ValueError, match="session_id cannot be empty"):
+        agent.is_conflict("  ")
+
+    first = asyncio.create_task(agent.run("first"))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        assert agent.is_conflict("same-session")
+        assert not agent.is_conflict("another-session")
+        with pytest.raises(AgentProtocolError, match="cannot start a new request"):
+            await agent.run("conflicting")
+        assert agent.pending
+
+        release.set()
+        assert (await asyncio.wait_for(first, 1)).content == "done"
+        assert not agent.is_conflict("same-session")
+        assert (await agent.run("after-release")).content == "done"
+    finally:
+        if not first.done():
+            first.cancel()
+        await asyncio.gather(first, return_exceptions=True)

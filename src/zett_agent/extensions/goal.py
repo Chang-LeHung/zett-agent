@@ -147,7 +147,7 @@ class GoalExtension(AgentExtension):
         self,
         definition: SubAgentDefinition | None = None,
         *,
-        max_iterations: int = 8,
+        max_iterations: int = 36,
         max_decision_retries: int = 3,
     ) -> None:
         if isinstance(max_iterations, bool) or not isinstance(max_iterations, int) or max_iterations < 1:
@@ -185,10 +185,12 @@ class GoalExtension(AgentExtension):
         key = (context.config.session_id, context.config.request_id)
         with self._armed_lock:
             armed = key in self._armed_requests
-            if armed:
-                self._armed_requests.remove(key)
         if not armed:
             return
+        # Keep the selection armed for the complete request lifecycle. Terminal
+        # callbacks remove it together with _runs; consuming it here would lose
+        # Goal Mode before a model/tool failure or cancellation is finalized.
+        self._runs[context] = _GoalRun()
         if message is None:
             raise AgentProtocolError("Goal Mode requires a user message")
         goal = message.text.strip()
@@ -210,7 +212,7 @@ class GoalExtension(AgentExtension):
         """Release request-local state when cancellation bypasses run callbacks."""
         match event:
             case RunCancelledEvent():
-                self._runs.pop(context, None)
+                self._finish_run(context)
 
     async def after_model_events(
         self,
@@ -351,9 +353,18 @@ class GoalExtension(AgentExtension):
     async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Release request-local goal state after verified success."""
         _ = result
-        self._runs.pop(context, None)
+        self._finish_run(context)
 
     async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Release request-local goal state after any failed request."""
         _ = error
-        self._runs.pop(context, None)
+        self._finish_run(context)
+
+    def _finish_run(self, context: AgentRunContext) -> None:
+        """Clear one activated selection only when its request reaches a terminal path."""
+        run = self._runs.pop(context, None)
+        if run is None:
+            return
+        key = (context.config.session_id, context.config.request_id)
+        with self._armed_lock:
+            self._armed_requests.discard(key)

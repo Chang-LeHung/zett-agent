@@ -143,7 +143,7 @@ async def test_incomplete_result_is_injected_then_verified_with_hidden_child_eve
     assert "Run the test suite" in internal.content
     details = internal.attributes["goal_extension"]
     assert details["iteration"] == 1
-    assert details["max_iterations"] == 8
+    assert details["max_iterations"] == 36
     assert details["max_decision_retries"] == 3
     assert details["raw_content"] == original.content
     transformed = primary.requests[0].messages[-1]
@@ -223,6 +223,39 @@ async def test_goal_mode_can_be_armed_before_agent_initialization() -> None:
     assert len(evaluator.requests) == 2
 
 
+async def test_event_received_during_normal_run_is_reserved_for_the_next_run() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class DelayedPrimary(PrimaryModel):
+        async def stream(self, request):
+            if not self.requests:
+                started.set()
+                await release.wait()
+            async for event in super().stream(request):
+                yield event
+
+    config = AgentRunConfig("session", request_id="reused-request")
+    evaluator = EvaluatorModel(decision(True))
+    extension = GoalExtension(definition(evaluator))
+    agent = await Agent.create(
+        DelayedPrimary("Normal answer", "Goal answer"),
+        config=config,
+        extensions=[extension],
+    )
+
+    normal = asyncio.create_task(agent.run("Normal input"))
+    await asyncio.wait_for(started.wait(), 1)
+    enable_goal_mode(agent, config)
+    release.set()
+    assert (await normal).content == "Normal answer"
+    assert (config.session_id, config.request_id) in extension._armed_requests
+
+    assert (await agent.run("Selected input")).content == "Goal answer"
+    assert len(evaluator.requests) == 2
+    assert extension._armed_requests == set()
+
+
 async def test_goal_mode_rejects_empty_text_and_cleans_state() -> None:
     extension = GoalExtension(definition(EvaluatorModel()))
     agent = await Agent.create(
@@ -236,6 +269,7 @@ async def test_goal_mode_rejects_empty_text_and_cleans_state() -> None:
         await agent.run("    ")
 
     assert extension._runs == {}
+    assert extension._armed_requests == set()
 
 
 async def test_multimodal_goal_preserves_raw_content_copy_and_images() -> None:
@@ -631,11 +665,13 @@ async def test_goal_state_is_cleared_when_parent_request_is_cancelled() -> None:
     enable_goal_mode(agent, AgentRunConfig("parent-session"))
     task = asyncio.create_task(consume())
     await started.wait()
+    assert ("parent-session", None) in extension._armed_requests
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
 
     assert extension._runs == {}
+    assert extension._armed_requests == set()
 
 
 def test_goal_extension_coexists_with_agent_owned_internal_extension() -> None:

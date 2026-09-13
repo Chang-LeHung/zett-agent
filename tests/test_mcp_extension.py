@@ -3,6 +3,7 @@
 import asyncio
 import json
 import socket
+import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -123,7 +124,10 @@ async def running_http_server(app: Any) -> AsyncGenerator[str, None]:
         listener.close()
 
 
-async def test_streamable_http_configuration_sends_headers_to_a_real_mcp_server(tmp_path):
+async def test_streamable_http_configuration_sends_headers_to_a_real_mcp_server(tmp_path, monkeypatch):
+    # Loopback E2E traffic must not follow a developer's HTTP(S)_PROXY.
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
+    monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
     expected_header = "Bearer e2e-secret"
     mcp_server = MCPServer("zett-agent-header-e2e")
 
@@ -185,6 +189,136 @@ async def test_streamable_http_configuration_sends_headers_to_a_real_mcp_server(
     assert app.received[0] is None
     assert len(app.received) >= 2
     assert all(value == expected_header.encode() for value in app.received[1:])
+
+
+async def test_stdio_configuration_runs_a_real_mcp_server(tmp_path):
+    server_path = tmp_path / "stdio_server.py"
+    server_path.write_text(
+        """from mcp.server.mcpserver import MCPServer
+
+server = MCPServer("zett-agent-stdio-e2e")
+
+@server.tool()
+def echo(text: str) -> dict[str, str]:
+    \"\"\"Echo text through the stdio transport.\"\"\"
+    return {"echo": text}
+
+server.run()
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "local": {
+                        "command": sys.executable,
+                        "args": [str(server_path)],
+                        "cwd": str(tmp_path),
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class EchoModel:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                message = AssistantMessage(tool_calls=(ToolCall("stdio-call", "local__echo", {"text": "hello"}),))
+            else:
+                tool_result = next(item for item in request.messages if isinstance(item, ToolMessage))
+                message = AssistantMessage(content=f"MCP returned {tool_result.content}")
+            yield ModelEvent.completed(ModelResponse(message))
+
+    model = EchoModel()
+    extension = McpExtension(config_path=config_path)
+    agent = await Agent.create(model, config=AgentRunConfig("mcp-stdio-e2e"), extensions=[extension])
+
+    answer = await agent.run("Call the local MCP tool")
+
+    assert json.loads(answer.content.removeprefix("MCP returned ")) == {"echo": "hello"}
+    assert {tool.name for tool in model.requests[0].tools} == {"local__echo"}
+    assert extension.servers == (McpStdioServer("local", sys.executable, (str(server_path),), None, str(tmp_path)),)
+
+
+async def test_explicit_stdio_configuration_passes_args_env_and_cwd_to_real_server(tmp_path):
+    working_directory = tmp_path / "workspace"
+    working_directory.mkdir()
+    server_path = tmp_path / "process_server.py"
+    server_path.write_text(
+        """import os
+import sys
+
+from mcp.server.mcpserver import MCPServer
+
+server = MCPServer("zett-agent-stdio-process-e2e")
+configured_argument = sys.argv[1]
+
+@server.tool()
+def inspect_process() -> dict[str, str]:
+    \"\"\"Return process settings received from the MCP client.\"\"\"
+    return {
+        "argument": configured_argument,
+        "environment": os.environ["ZETT_MCP_E2E"],
+        "cwd": os.getcwd(),
+    }
+
+server.run()
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "servers": {
+                    "runtime": {
+                        "type": "stdio",
+                        "command": sys.executable,
+                        "args": [str(server_path), "configured-argument"],
+                        "env": {"ZETT_MCP_E2E": "configured-environment"},
+                        "cwd": str(working_directory),
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class ProcessModel:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                message = AssistantMessage(tool_calls=(ToolCall("process-call", "runtime__inspect_process", {}),))
+            else:
+                tool_result = next(item for item in request.messages if isinstance(item, ToolMessage))
+                message = AssistantMessage(content=tool_result.content)
+            yield ModelEvent.completed(ModelResponse(message))
+
+    model = ProcessModel()
+    agent = await Agent.create(
+        model,
+        config=AgentRunConfig("mcp-stdio-process-e2e"),
+        extensions=[McpExtension(config_path=config_path)],
+    )
+
+    answer = await agent.run("Inspect the MCP child process")
+
+    assert json.loads(answer.content) == {
+        "argument": "configured-argument",
+        "environment": "configured-environment",
+        "cwd": str(working_directory),
+    }
+    assert {tool.name for tool in model.requests[0].tools} == {"runtime__inspect_process"}
 
 
 async def test_mcp_extension_discovers_all_pages_executes_tool_and_closes_on_success():
@@ -442,6 +576,34 @@ def test_mcp_extension_loads_default_streamable_http_configuration(monkeypatch, 
     )
 
 
+def test_mcp_configuration_loads_explicit_and_inferred_stdio_servers(tmp_path):
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "implicit": {"command": "uvx", "args": ["implicit-server"]},
+                    "explicit": {
+                        "type": "stdio",
+                        "command": "python",
+                        "args": ["server.py", "--quiet"],
+                        "env": {"TOKEN": "secret"},
+                        "cwd": "/tmp/project",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    configuration = McpConfiguration.from_file(config_path)
+
+    assert configuration.servers == (
+        McpStdioServer("implicit", "uvx", ("implicit-server",)),
+        McpStdioServer("explicit", "python", ("server.py", "--quiet"), {"TOKEN": "secret"}, "/tmp/project"),
+    )
+
+
 def test_mcp_extension_without_arguments_allows_a_missing_default_configuration(monkeypatch, tmp_path):
     config_path = tmp_path / "missing.json"
     monkeypatch.setattr(mcp_module, "DEFAULT_MCP_CONFIG_PATH", config_path)
@@ -484,7 +646,8 @@ def test_mcp_extension_merges_custom_configuration_and_explicit_servers(tmp_path
         ({"servers": {}, "mcpServers": {}}, "must use exactly one"),
         ({"servers": []}, "'servers' must be a JSON object"),
         ({"servers": {"docs": []}}, "server 'docs' must be a JSON object"),
-        ({"servers": {"docs": {"type": "stdio", "url": "https://docs.test"}}}, "Streamable HTTP"),
+        ({"servers": {"docs": {"type": "stdio", "url": "https://docs.test"}}}, "string command"),
+        ({"servers": {"docs": {"type": "websocket", "url": "wss://docs.test"}}}, "unsupported transport"),
         ({"servers": {"docs": {"type": "streamable-http", "url": 42}}}, "string URL"),
         (
             {"servers": {"docs": {"type": "streamable-http", "url": "https://docs.test", "headers": []}}},
@@ -502,6 +665,11 @@ def test_mcp_extension_merges_custom_configuration_and_explicit_servers(tmp_path
             },
             "string value",
         ),
+        ({"servers": {"local": {"command": "python", "args": "server.py"}}}, "array of strings"),
+        ({"servers": {"local": {"command": "python", "args": [1]}}}, "array of strings"),
+        ({"servers": {"local": {"command": "python", "env": []}}}, "object with string values"),
+        ({"servers": {"local": {"command": "python", "env": {"TOKEN": 42}}}}, "object with string values"),
+        ({"servers": {"local": {"command": "python", "cwd": []}}}, "cwd must be a string"),
     ],
 )
 def test_load_mcp_servers_rejects_invalid_configuration(tmp_path, payload, message):

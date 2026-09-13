@@ -23,6 +23,7 @@ from .events import ExtensionEvent, RunCancelledEvent
 DEFAULT_MCP_CONFIG_PATH = Path("~/.zett/mcp.json")
 DEFAULT_MCP_SERVER_KEYS = ("servers", "mcpServers")
 _STREAMABLE_HTTP_TYPES = frozenset({"streamable", "streamable-http", "streamable_http", "http"})
+_STDIO_TYPES = frozenset({"stdio"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +93,7 @@ class McpConfiguration:
     depending on a particular client's file convention.
     """
 
-    servers: tuple[McpHttpServer, ...] = ()
+    servers: tuple[McpServer, ...] = ()
 
     @classmethod
     def from_file(
@@ -138,21 +139,36 @@ class McpConfiguration:
         if not isinstance(entries, dict):
             raise ValueError(f"MCP configuration '{root_key}' must be a JSON object")
 
-        servers: list[McpHttpServer] = []
+        servers: list[McpServer] = []
         for name, entry in entries.items():
-            servers.append(cls._parse_http_server(name, entry))
+            servers.append(cls._parse_server(name, entry))
         return cls(tuple(servers))
 
     @staticmethod
-    def _parse_http_server(name: object, entry: object) -> McpHttpServer:
-        """Validate one named Streamable HTTP server entry."""
+    def _parse_server(name: object, entry: object) -> McpServer:
+        """Validate one named HTTP or stdio server entry."""
         if not isinstance(name, str):
             raise ValueError("MCP server names must be strings")
         if not isinstance(entry, dict):
             raise ValueError(f"MCP server {name!r} must be a JSON object")
         transport = entry.get("type", entry.get("transport"))
-        if not isinstance(transport, str) or transport.lower() not in _STREAMABLE_HTTP_TYPES:
-            raise ValueError(f"MCP server {name!r} must use a Streamable HTTP transport")
+        # Most editor-generated stdio configurations omit ``type`` because a
+        # command unambiguously identifies the transport.
+        if transport is None and "command" in entry:
+            transport = "stdio"
+        if not isinstance(transport, str):
+            raise ValueError(f"MCP server {name!r} must define a string transport type")
+        match transport.lower():
+            case value if value in _STREAMABLE_HTTP_TYPES:
+                return McpConfiguration._parse_http_server(name, entry)
+            case value if value in _STDIO_TYPES:
+                return McpConfiguration._parse_stdio_server(name, entry)
+            case _:
+                raise ValueError(f"MCP server {name!r} uses unsupported transport {transport!r}")
+
+    @staticmethod
+    def _parse_http_server(name: str, entry: dict[str, object]) -> McpHttpServer:
+        """Validate one named Streamable HTTP server entry."""
         url = entry.get("url")
         if not isinstance(url, str):
             raise ValueError(f"MCP server {name!r} must define a string URL")
@@ -160,6 +176,32 @@ class McpConfiguration:
         if not isinstance(headers, dict):
             raise ValueError(f"MCP server {name!r} headers must be a JSON object")
         return McpHttpServer(name=name, url=url, headers=headers)
+
+    @staticmethod
+    def _parse_stdio_server(name: str, entry: dict[str, object]) -> McpStdioServer:
+        """Validate one named child-process server without invoking a shell."""
+        command = entry.get("command")
+        if not isinstance(command, str):
+            raise ValueError(f"MCP stdio server {name!r} must define a string command")
+        raw_args = entry.get("args", [])
+        if not isinstance(raw_args, list) or not all(isinstance(item, str) for item in raw_args):
+            raise ValueError(f"MCP stdio server {name!r} args must be an array of strings")
+        raw_env = entry.get("env")
+        if raw_env is not None and (
+            not isinstance(raw_env, dict)
+            or not all(isinstance(key, str) and isinstance(value, str) for key, value in raw_env.items())
+        ):
+            raise ValueError(f"MCP stdio server {name!r} env must be an object with string values")
+        cwd = entry.get("cwd")
+        if cwd is not None and not isinstance(cwd, str):
+            raise ValueError(f"MCP stdio server {name!r} cwd must be a string")
+        return McpStdioServer(
+            name=name,
+            command=command,
+            args=tuple(raw_args),
+            env=raw_env,
+            cwd=cwd,
+        )
 
 
 class McpClient(Protocol):
@@ -208,8 +250,8 @@ class McpExtension(AgentExtension):
             )
 
         ``mcp.json`` accepts either ``servers`` or the ecosystem-compatible
-        ``mcpServers`` key. This first configuration-file format intentionally
-        supports only Streamable HTTP transports::
+        ``mcpServers`` key. Streamable HTTP and local stdio transports may be
+        declared together::
 
             {
               "servers": {
@@ -220,6 +262,12 @@ class McpExtension(AgentExtension):
                     "Authorization": "Bearer token",
                     "X-Tenant-ID": "tenant-1"
                   }
+                },
+                "local": {
+                  "command": "uvx",
+                  "args": ["some-mcp-server"],
+                  "env": {"TOKEN": "secret"},
+                  "cwd": "/path/to/project"
                 }
               }
             }

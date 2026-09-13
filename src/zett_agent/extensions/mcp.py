@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import AbstractAsyncContextManager, AsyncExitStack
+import json
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
 from mcp import Client, StdioServerParameters
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import create_mcp_http_client
 from mcp_types import CallToolResult, ListToolsResult, Tool
 
 from ..agent import AgentRunContext
@@ -16,6 +19,10 @@ from ..messages import AssistantMessage
 from ..tools import AgentTool
 from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
+
+DEFAULT_MCP_CONFIG_PATH = Path("~/.zett/mcp.json")
+DEFAULT_MCP_SERVER_KEYS = ("servers", "mcpServers")
+_STREAMABLE_HTTP_TYPES = frozenset({"streamable", "streamable-http", "streamable_http", "http"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,15 +33,24 @@ class McpHttpServer:
         name: Unique server namespace used when registering its tools.
         url: Non-empty Streamable HTTP endpoint; credentials/routing are the
             application's responsibility.
+        headers: HTTP headers sent during handshake, tool calls, streaming,
+            and session termination. The mapping is excluded from ``repr`` so
+            authorization values are not accidentally written to logs.
     """
 
     name: str
     url: str
+    headers: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         _validate_server_name(self.name)
         if not self.url.strip():
             raise ValueError("MCP server URL cannot be empty")
+        for key, value in self.headers.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("MCP HTTP header names must be non-empty strings")
+            if not isinstance(value, str):
+                raise ValueError(f"MCP HTTP header {key!r} must have a string value")
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +83,85 @@ class McpStdioServer:
 type McpServer = McpHttpServer | McpStdioServer
 
 
+@dataclass(frozen=True, slots=True)
+class McpConfiguration:
+    """Validated MCP servers loaded from a JSON configuration document.
+
+    MCP clients use both ``servers`` and ``mcpServers`` as their root key.
+    Keeping that variation here prevents transport registration code from
+    depending on a particular client's file convention.
+    """
+
+    servers: tuple[McpHttpServer, ...] = ()
+
+    @classmethod
+    def from_file(
+        cls,
+        path: str | Path,
+        *,
+        server_keys: Sequence[str] = DEFAULT_MCP_SERVER_KEYS,
+    ) -> McpConfiguration:
+        """Read and validate one UTF-8 JSON configuration file.
+
+        Args:
+            path: File containing the MCP server mapping.
+            server_keys: Accepted root keys in precedence-independent order.
+                Exactly one of these keys may occur in the document.
+        """
+        resolved_path = Path(path).expanduser().resolve()
+        try:
+            payload = json.loads(resolved_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise ValueError(f"Invalid MCP configuration JSON in {resolved_path}: {error}") from error
+        return cls.from_mapping(payload, server_keys=server_keys)
+
+    @classmethod
+    def from_mapping(
+        cls,
+        payload: object,
+        *,
+        server_keys: Sequence[str] = DEFAULT_MCP_SERVER_KEYS,
+    ) -> McpConfiguration:
+        """Parse a server mapping under one of the configured root keys."""
+        if not isinstance(payload, dict):
+            raise ValueError("MCP configuration root must be a JSON object")
+        accepted_keys = _validate_server_keys(server_keys)
+        keys = [key for key in accepted_keys if key in payload]
+        if len(keys) > 1:
+            rendered = ", ".join(repr(key) for key in accepted_keys)
+            raise ValueError(f"MCP configuration must use exactly one of {rendered}")
+        if not keys:
+            rendered = ", ".join(repr(key) for key in accepted_keys)
+            raise ValueError(f"MCP configuration must contain one of {rendered}")
+        root_key = keys[0]
+        entries = payload[root_key]
+        if not isinstance(entries, dict):
+            raise ValueError(f"MCP configuration '{root_key}' must be a JSON object")
+
+        servers: list[McpHttpServer] = []
+        for name, entry in entries.items():
+            servers.append(cls._parse_http_server(name, entry))
+        return cls(tuple(servers))
+
+    @staticmethod
+    def _parse_http_server(name: object, entry: object) -> McpHttpServer:
+        """Validate one named Streamable HTTP server entry."""
+        if not isinstance(name, str):
+            raise ValueError("MCP server names must be strings")
+        if not isinstance(entry, dict):
+            raise ValueError(f"MCP server {name!r} must be a JSON object")
+        transport = entry.get("type", entry.get("transport"))
+        if not isinstance(transport, str) or transport.lower() not in _STREAMABLE_HTTP_TYPES:
+            raise ValueError(f"MCP server {name!r} must use a Streamable HTTP transport")
+        url = entry.get("url")
+        if not isinstance(url, str):
+            raise ValueError(f"MCP server {name!r} must define a string URL")
+        headers = entry.get("headers", {})
+        if not isinstance(headers, dict):
+            raise ValueError(f"MCP server {name!r} headers must be a JSON object")
+        return McpHttpServer(name=name, url=url, headers=headers)
+
+
 class McpClient(Protocol):
     """Small client surface consumed by McpExtension."""
 
@@ -97,27 +192,73 @@ class McpExtension(AgentExtension):
     Examples:
         Usage::
 
+            # With no arguments, load Streamable HTTP servers from
+            # ~/.zett/mcp.json when that file exists.
+            extension = McpExtension()
+
+            # A custom path and explicit server definitions may be used
+            # independently or merged.
             extension = McpExtension(
-                [
+                servers=[
                     McpHttpServer(name="docs", url="http://127.0.0.1:8000/mcp"),
                     McpStdioServer(name="local", command="python", args=("server.py",)),
-                ]
+                ],
+                config_path="./mcp.json",
+                server_keys=("servers", "mcpServers"),
             )
+
+        ``mcp.json`` accepts either ``servers`` or the ecosystem-compatible
+        ``mcpServers`` key. This first configuration-file format intentionally
+        supports only Streamable HTTP transports::
+
+            {
+              "servers": {
+                "docs": {
+                  "type": "streamable-http",
+                  "url": "https://docs.example.com/mcp",
+                  "headers": {
+                    "Authorization": "Bearer token",
+                    "X-Tenant-ID": "tenant-1"
+                  }
+                }
+              }
+            }
     """
 
     priority = 70
 
     def __init__(
         self,
-        servers: Sequence[McpServer],
+        servers: Sequence[McpServer] | None = None,
         *,
+        config_path: str | Path | None = None,
+        server_keys: Sequence[str] = DEFAULT_MCP_SERVER_KEYS,
         namespace_tools: bool = True,
         client_factory: McpClientFactory | None = None,
     ) -> None:
-        names = [server.name for server in servers]
+        self.server_keys = _validate_server_keys(server_keys)
+        configured_servers: tuple[McpServer, ...] = ()
+        resolved_config_path: Path | None = None
+        if config_path is not None:
+            resolved_config_path = Path(config_path).expanduser().resolve()
+            configured_servers = McpConfiguration.from_file(
+                resolved_config_path,
+                server_keys=self.server_keys,
+            ).servers
+        elif servers is None:
+            resolved_config_path = DEFAULT_MCP_CONFIG_PATH.expanduser().resolve()
+            if resolved_config_path.is_file():
+                configured_servers = McpConfiguration.from_file(
+                    resolved_config_path,
+                    server_keys=self.server_keys,
+                ).servers
+
+        resolved_servers = (*configured_servers, *(servers or ()))
+        names = [server.name for server in resolved_servers]
         if len(set(names)) != len(names):
             raise ValueError("MCP server names must be unique")
-        self.servers = tuple(servers)
+        self.servers = resolved_servers
+        self.config_path = resolved_config_path
         self.namespace_tools = namespace_tools
         self._client_factory = client_factory or _default_client_factory
         self._requests: dict[AgentRunContext, _McpRequest] = {}
@@ -188,6 +329,8 @@ async def _list_all_tools(client: McpClient) -> AsyncIterator[Tool]:
 
 def _default_client_factory(server: McpServer) -> AbstractAsyncContextManager[McpClient]:
     match server:
+        case McpHttpServer(headers=headers) if headers:
+            return _authenticated_http_client(server)
         case McpHttpServer(url=url):
             return Client(url)
         case McpStdioServer(command=command, args=args, env=env, cwd=cwd):
@@ -200,6 +343,15 @@ def _default_client_factory(server: McpServer) -> AbstractAsyncContextManager[Mc
             return Client(parameters)
 
 
+@asynccontextmanager
+async def _authenticated_http_client(server: McpHttpServer) -> AsyncGenerator[McpClient, None]:
+    """Connect Streamable HTTP with SDK-owned timeouts and caller headers."""
+    async with create_mcp_http_client(headers=dict(server.headers)) as http_client:
+        transport = streamable_http_client(server.url, http_client=http_client)
+        async with Client(transport) as client:
+            yield client
+
+
 def _mcp_result_text(result: CallToolResult) -> str:
     return "\n".join(part.text for part in result.content if getattr(part, "type", None) == "text")
 
@@ -209,3 +361,15 @@ def _validate_server_name(name: str) -> None:
         raise ValueError("MCP server name cannot be empty")
     if "__" in name:
         raise ValueError("MCP server name cannot contain '__'")
+
+
+def _validate_server_keys(server_keys: Sequence[str]) -> tuple[str, ...]:
+    """Normalize configurable JSON root keys and reject ambiguous input."""
+    keys = tuple(server_keys)
+    if not keys:
+        raise ValueError("MCP server keys cannot be empty")
+    if any(not isinstance(key, str) or not key.strip() for key in keys):
+        raise ValueError("MCP server keys must be non-empty strings")
+    if len(set(keys)) != len(keys):
+        raise ValueError("MCP server keys must be unique")
+    return keys

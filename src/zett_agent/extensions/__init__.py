@@ -46,7 +46,17 @@ from .goal import (
 )
 from .internal_message import INTERNAL_MESSAGE_EVENT_NAME, InternalMessageExtension
 from .jsonl import JSONLExtension
-from .mcp import McpClient, McpClientFactory, McpExtension, McpHttpServer, McpServer, McpStdioServer
+from .mcp import (
+    DEFAULT_MCP_CONFIG_PATH,
+    DEFAULT_MCP_SERVER_KEYS,
+    McpClient,
+    McpClientFactory,
+    McpConfiguration,
+    McpExtension,
+    McpHttpServer,
+    McpServer,
+    McpStdioServer,
+)
 from .memory import InMemoryMessageAccumulator
 from .persistence import (
     BaseSessionPersistenceExtension,

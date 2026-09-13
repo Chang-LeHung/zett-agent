@@ -31,6 +31,7 @@ from ..model import (
     validate_retry,
 )
 from .base import ProviderResponseError, RetryingProvider, _reasoning_effort_to_budget, retry_model_stream
+from .tool_images import expand_tool_images
 
 
 class GoogleProvider(RetryingProvider):
@@ -114,7 +115,7 @@ class GoogleProvider(RetryingProvider):
 
         system: list[str] = []
         contents: list[types.Content] = []
-        for message in request.messages:
+        for message in expand_tool_images(request.messages):
             match message.role:
                 case "agent":
                     parts = [types.Part.from_text(text=message.content)]

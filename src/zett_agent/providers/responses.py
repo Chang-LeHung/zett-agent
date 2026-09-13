@@ -29,12 +29,13 @@ from ..model import (
     ToolCallDelta,
     ToolDefinition,
 )
+from .tool_images import expand_tool_images
 
 
 def responses_input(messages: Sequence[AnyMessage], *, provider: str, model: str) -> list[dict[str, Any]]:
     """Render complete local history as stateless Responses API input items."""
     items: list[dict[str, Any]] = []
-    for message in messages:
+    for message in expand_tool_images(messages):
         match message.role:
             case "system":
                 items.append({"role": "system", "content": message.content})

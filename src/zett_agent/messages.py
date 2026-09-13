@@ -235,15 +235,22 @@ class ToolMessage(Message):
     Attributes:
         tool_call_id: Identifier of the assistant call answered by this message.
         name: Invoked tool name.
-        content: Serialized result or failure text passed to the model.
+        content: Serialized result, failure text, or ordered text/image content blocks.
         success: Whether execution succeeded; false also covers skipped calls.
     """
 
     role: ClassVar[MessageRole] = MessageRole.TOOL
     tool_call_id: str
     name: str
-    content: str
+    content: UserContent
     success: bool = True
+
+    @property
+    def text(self) -> str:
+        """Plain text for search indexes; encoded image data stays in content."""
+        if isinstance(self.content, str):
+            return self.content
+        return "\n".join(part.text for part in self.content if isinstance(part, TextContent))
 
 
 @dataclass(slots=True, kw_only=True)

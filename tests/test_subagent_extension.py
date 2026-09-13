@@ -126,7 +126,7 @@ async def test_explore_subagent_runs_end_to_end_in_a_persisted_child_session(sto
             for message in request.messages
         )
     )
-    assert {definition.name for definition in child_request.tools} == {"read_file", "glob", "grep"}
+    assert {definition.name for definition in child_request.tools} == {"read_file", "read_image", "glob", "grep"}
     assert child_request.reasoning_effort == ReasoningEffort.LOW
 
     parent_follow_up = model.requests[-1]

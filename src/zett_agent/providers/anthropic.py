@@ -45,6 +45,7 @@ from .base import (
     _ToolCallAccumulator,
     retry_model_stream,
 )
+from .tool_images import expand_tool_images
 
 
 def _tools_to_anthropic_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
@@ -203,7 +204,7 @@ class AnthropicProvider(RetryingProvider):
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         messages: list[dict[str, Any]] = []
         system: list[str] = []
-        for message in request.messages:
+        for message in expand_tool_images(request.messages):
             match message.role:
                 case "system":
                     system.append(message.content)

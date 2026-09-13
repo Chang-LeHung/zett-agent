@@ -28,8 +28,8 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
             yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
 
     expected = {
-        True: {"read_file", "glob", "grep"},
-        False: {"read_file", "glob", "grep", "write_file", "replace_in_file", "delete_file"},
+        True: {"read_file", "read_image", "glob", "grep"},
+        False: {"read_file", "read_image", "glob", "grep", "write_file", "replace_in_file", "delete_file"},
     }
     for read_only, tool_names in expected.items():
         model = Model()
@@ -111,7 +111,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
 
     await agent.run("Another request", config=AgentRunConfig("other-files"))
     for request in model.requests:
-        assert {definition.name for definition in request.tools} == {call.name for call in calls}
+        assert {definition.name for definition in request.tools} == {call.name for call in calls} | {"read_image"}
         guidance = "\n".join(message.content for message in request.messages if isinstance(message, SystemMessage))
         assert all(f"## {call.name}" in guidance for call in calls)
     assert agent.tools == {}

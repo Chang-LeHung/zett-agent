@@ -1244,7 +1244,18 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 if registered is None:
                     raise ValueError(f"Unknown tool: {call.name}")
                 output = await registered(call.arguments)
-                content = registered.serialize_result(output)
+                from .messages import ImageContent, TextContent
+
+                if isinstance(output, (ImageContent, TextContent)):
+                    content = [output]
+                elif (
+                    isinstance(output, list)
+                    and output
+                    and all(isinstance(part, (ImageContent, TextContent)) for part in output)
+                ):
+                    content = output
+                else:
+                    content = registered.serialize_result(output)
             except Exception as tool_error:
                 error = tool_error
                 content = json.dumps({"error": str(tool_error)})

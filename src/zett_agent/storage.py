@@ -634,7 +634,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                     request_id=request_id,
                     sequence=sequence + 1,
                     role=int(kind),
-                    content=message.text if isinstance(message, UserMessage) else message.content,
+                    content=message.text if isinstance(message, (UserMessage, ToolMessage)) else message.content,
                     tool_name=message.name if isinstance(message, ToolMessage) else None,
                     message_json=encode_messages([message]),
                     metadata_json=encoded_metadata,

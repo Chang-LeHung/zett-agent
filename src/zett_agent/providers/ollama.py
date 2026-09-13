@@ -24,6 +24,7 @@ from ..model import (
     validate_retry,
 )
 from .base import ProviderResponseError, RetryingProvider, retry_model_stream
+from .tool_images import expand_tool_images
 
 
 def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
@@ -110,7 +111,7 @@ class OllamaProvider(RetryingProvider):
             requested = ", ".join(tool.type for tool in request.server_tools)
             raise ProviderResponseError(f"Ollama does not support provider-hosted server tools: {requested}")
         messages: list[dict[str, Any]] = []
-        for message in request.messages:
+        for message in expand_tool_images(request.messages):
             match message.role:
                 case "agent":
                     messages.append({"role": "user", "content": message.content})

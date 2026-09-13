@@ -47,6 +47,7 @@ from ..model import (
 )
 from ..sync_runtime import SyncMethodsMixin
 from .responses import responses_input, responses_reasoning, responses_tools, stream_responses
+from .tool_images import expand_tool_images
 
 
 class ProviderError(AgentError):
@@ -405,7 +406,8 @@ class _OpenAIStyleProvider(RetryingProvider):
     async def _request(self, request: ModelRequest) -> Any:
         if self.response:
             return await self._request_response(request)
-        messages = [_message_to_openai_payload(message) for message in request.messages]
+        source_messages = expand_tool_images(request.messages)
+        messages = [_message_to_openai_payload(message) for message in source_messages]
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -424,7 +426,7 @@ class _OpenAIStyleProvider(RetryingProvider):
         if request.tool_choice:
             payload["tool_choice"] = {"type": "function", "function": {"name": request.tool_choice}}
         if self.provider_name == "deepseek":
-            for source, target in zip(request.messages, messages, strict=True):
+            for source, target in zip(source_messages, messages, strict=True):
                 if isinstance(source, AssistantMessage) and source.reasoning is not None:
                     target["reasoning_content"] = source.reasoning
         extra_body = self._provider_specific_request_extra_fields(request)

@@ -18,6 +18,7 @@ from .coding import (
     run_shell,
     write_file,
 )
+from .images import read_image
 
 __all__ = [
     "AgentTool",
@@ -34,6 +35,7 @@ __all__ = [
     "glob",
     "grep",
     "read_file",
+    "read_image",
     "get_tool_guidelines",
     "get_tool_snippet",
     "render_tool_guidance",

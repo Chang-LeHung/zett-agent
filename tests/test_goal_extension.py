@@ -7,6 +7,7 @@ import pytest
 
 from zett_agent import (
     GOAL_EVALUATION_TOOL_NAME,
+    GOAL_MODE_EVENT_NAME,
     Agent,
     AgentEventType,
     AgentExtension,
@@ -16,6 +17,7 @@ from zett_agent import (
     AgentRunConfig,
     AssistantMessage,
     CodingExtension,
+    ExternalEvent,
     GoalEvaluation,
     GoalExtension,
     ImageContent,
@@ -34,6 +36,11 @@ from zett_agent import (
     default_goal_subagent,
     tool,
 )
+
+
+def enable_goal_mode(agent: Agent, config: AgentRunConfig) -> None:
+    """Select Goal Mode once for one future request."""
+    assert agent.emit_external_event(ExternalEvent(GOAL_MODE_EVENT_NAME, {}), config=config) == ["GoalExtension"]
 
 
 def decision(
@@ -115,13 +122,14 @@ async def test_incomplete_result_is_injected_then_verified_with_hidden_child_eve
         private_deltas=True,
     )
     extension = GoalExtension(definition(evaluator))
-    original = UserMessage(content="/goal Implement and test", attributes={"source": "editor"})
+    original = UserMessage(content="Implement and test", attributes={"source": "editor"})
     agent = await Agent.create(
         primary,
         config=AgentRunConfig(session_id="parent-session"),
         extensions=[extension],
     )
 
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
     events = [event async for event in agent.stream(original)]
 
     assert events[-1].type is AgentEventType.RUN_COMPLETED
@@ -144,16 +152,16 @@ async def test_incomplete_result_is_injected_then_verified_with_hidden_child_eve
     assert "Target:\nImplement and test" in transformed.content
     assert transformed.attributes["source"] == "editor"
     assert transformed.attributes["goal_extension"] == {
-        "raw_content": "/goal Implement and test",
+        "raw_content": "Implement and test",
         "target": "Implement and test",
     }
-    assert original.content == "/goal Implement and test"
+    assert original.content == "Implement and test"
     assert sum(event.type is AgentEventType.INTERNAL_MESSAGE_STARTED for event in events) == 1
     assert sum(event.type is AgentEventType.INTERNAL_MESSAGE_COMPLETED for event in events) == 1
     assert extension._runs == {}
 
 
-@pytest.mark.parametrize("message", ["Hello", "/goal", " /goal Work", "/Goal Work", "Explain /goal mode"])
+@pytest.mark.parametrize("message", ["Hello", "/goal", " /goal Work", "/goal Work", "Explain /goal mode"])
 async def test_non_goal_messages_bypass_evaluator(message: str) -> None:
     primary = PrimaryModel("Normal answer")
     evaluator = EvaluatorModel()
@@ -168,7 +176,54 @@ async def test_non_goal_messages_bypass_evaluator(message: str) -> None:
     assert evaluator.requests == []
 
 
-async def test_goal_command_rejects_empty_text_and_cleans_state() -> None:
+async def test_external_selection_matches_exact_request_and_is_consumed_once() -> None:
+    primary = PrimaryModel("Wrong request", "Wrong session", "Goal answer", "Normal again")
+    evaluator = EvaluatorModel(decision(True))
+    extension = GoalExtension(definition(evaluator))
+    agent = await Agent.create(
+        primary,
+        config=AgentRunConfig(session_id="default"),
+        extensions=[extension],
+    )
+    selected = AgentRunConfig("selected-session", request_id="selected-request")
+
+    assert agent.emit_external_event(ExternalEvent("another_event", {}), config=selected) == []
+    enable_goal_mode(agent, selected)
+    enable_goal_mode(agent, selected)
+    assert await agent.run(
+        "Same session, wrong request",
+        config=AgentRunConfig("selected-session", request_id="other-request"),
+    ) == AssistantMessage(content="Wrong request")
+    assert await agent.run(
+        "Same request, wrong session",
+        config=AgentRunConfig("other-session", request_id="selected-request"),
+    ) == AssistantMessage(content="Wrong session")
+
+    assert (await agent.run("Implement the selected goal", config=selected)).content == "Goal answer"
+    assert len(evaluator.requests) == 2
+    transformed = primary.requests[2].messages[-1]
+    assert isinstance(transformed, UserMessage)
+    assert "Target:\nImplement the selected goal" in transformed.text
+
+    assert (await agent.run("Ordinary next request", config=selected)).content == "Normal again"
+    assert len(evaluator.requests) == 2
+    assert primary.requests[3].messages[-1].text == "Ordinary next request"
+
+
+async def test_goal_mode_can_be_armed_before_agent_initialization() -> None:
+    config = AgentRunConfig("future-session", request_id="future-request")
+    evaluator = EvaluatorModel(decision(True))
+    agent = Agent(PrimaryModel("Done"), extensions=[GoalExtension(definition(evaluator))])
+
+    assert agent.emit_external_event(ExternalEvent(GOAL_MODE_EVENT_NAME, {})) == []
+    enable_goal_mode(agent, config)
+    await agent.initialize(config=config)
+
+    assert (await agent.run("Future goal")).content == "Done"
+    assert len(evaluator.requests) == 2
+
+
+async def test_goal_mode_rejects_empty_text_and_cleans_state() -> None:
     extension = GoalExtension(definition(EvaluatorModel()))
     agent = await Agent.create(
         PrimaryModel("unused"),
@@ -176,8 +231,9 @@ async def test_goal_command_rejects_empty_text_and_cleans_state() -> None:
         extensions=[extension],
     )
 
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
     with pytest.raises(AgentProtocolError, match="non-empty goal text"):
-        await agent.run("/goal    ")
+        await agent.run("    ")
 
     assert extension._runs == {}
 
@@ -185,7 +241,7 @@ async def test_goal_command_rejects_empty_text_and_cleans_state() -> None:
 async def test_multimodal_goal_preserves_raw_content_copy_and_images() -> None:
     original = UserMessage(
         content=[
-            TextContent("/goal Explain this diagram"),
+            TextContent("Explain this diagram"),
             ImageContent(ImageUrlSource("https://example.com/diagram.png")),
         ],
         attributes={"attachment": "diagram"},
@@ -201,6 +257,7 @@ async def test_multimodal_goal_preserves_raw_content_copy_and_images() -> None:
         extensions=[GoalExtension(definition(evaluator))],
     )
 
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
     await agent.run(original)
 
     internal = primary.requests[1].messages[-1]
@@ -240,7 +297,8 @@ async def test_default_definition_reuses_parent_model_and_coding_extensions() ->
         extensions=[GoalExtension()],
     )
 
-    await agent.run("/goal Complete the task")
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
+    await agent.run("Complete the task")
 
     child_request = next(request for request in model.requests if request.tool_choice is None and request.tools)
     names = {item.name for item in child_request.tools}
@@ -275,7 +333,8 @@ async def test_custom_definition_controls_model_effort_extensions_and_iteration_
         extensions=[GoalExtension(configured)],
     )
 
-    await agent.run("/goal Verify it")
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
+    await agent.run("Verify it")
 
     assert evaluator.requests[0].reasoning_effort is ReasoningEffort.MINIMAL
     assert GOAL_EVALUATION_TOOL_NAME in {item.name for item in evaluator.requests[0].tools}
@@ -299,8 +358,9 @@ async def test_goal_continuation_limit_is_exact_and_cleans_state() -> None:
         max_internal_messages=10,
     )
 
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
     with pytest.raises(AgentIterationLimitError, match="after 2 continuation iterations"):
-        await agent.run("/goal Never complete")
+        await agent.run("Never complete")
 
     assert len(primary.requests) == 3
     assert len(evaluator.requests) == 6
@@ -358,8 +418,9 @@ async def test_child_agent_without_report_is_rejected() -> None:
         extensions=[extension],
     )
 
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
     with pytest.raises(AgentProtocolError, match="after 4 attempts"):
-        await agent.run("/goal Verify this")
+        await agent.run("Verify this")
 
     assert len(evaluator.requests) == 4
     assert "You completed without submitting" not in evaluator.requests[0].messages[-1].text
@@ -396,7 +457,8 @@ async def test_missing_decisions_are_retried_until_one_is_reported() -> None:
         extensions=[GoalExtension(definition(evaluator), max_decision_retries=3)],
     )
 
-    result = await agent.run("/goal Verify this")
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
+    result = await agent.run("Verify this")
 
     assert result.content == "Parent result"
     assert evaluator.runs == 3
@@ -463,7 +525,8 @@ async def test_decision_retry_preserves_session_and_tool_evidence(history, tmp_p
             extensions=[GoalExtension(child)],
             config=AgentRunConfig(session_id="parent"),
         )
-        assert (await agent.run("/goal Verify tests")).content == "Done"
+        enable_goal_mode(agent, AgentRunConfig("parent"))
+        assert (await agent.run("Verify tests")).content == "Done"
         assert len(observer.sessions) == 2
         assert len(set(observer.sessions)) == 1
         dialogue = [message for message in evaluator.requests[2].messages if not message.role == "system"]
@@ -495,8 +558,9 @@ async def test_zero_decision_retries_runs_only_initial_attempt() -> None:
         extensions=[GoalExtension(definition(evaluator), max_decision_retries=0)],
     )
 
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
     with pytest.raises(AgentProtocolError, match="after 1 attempts"):
-        await agent.run("/goal Verify this")
+        await agent.run("Verify this")
 
     assert evaluator.calls == 1
 
@@ -537,7 +601,8 @@ async def test_tool_call_candidate_is_not_evaluated_until_parent_final_answer() 
         extensions=[GoalExtension(definition(evaluator))],
     )
 
-    await agent.run("/goal Use the tool")
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
+    await agent.run("Use the tool")
 
     assert len(evaluator.requests) == 2
 
@@ -560,9 +625,10 @@ async def test_goal_state_is_cleared_when_parent_request_is_cancelled() -> None:
     )
 
     async def consume() -> None:
-        async for _ in agent.stream("/goal Goal"):
+        async for _ in agent.stream("Goal"):
             pass
 
+    enable_goal_mode(agent, AgentRunConfig("parent-session"))
     task = asyncio.create_task(consume())
     await started.wait()
     task.cancel()

@@ -4,9 +4,12 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from zett_agent import (
+    GOAL_MODE_EVENT_NAME,
     AgentEvent,
     AgentEventDispatcher,
+    AgentRunConfig,
     AssistantMessage,
+    ExternalEvent,
     GoalExtension,
     ModelEvent,
     ModelRequest,
@@ -76,10 +79,16 @@ async def main() -> None:
         system_prompt="Inspect evidence and call report_goal_evaluation.",
         model=reviewer,
     )
+    config = AgentRunConfig(session_id="goal-example", request_id="request-1")
     client = await create_agent(
-        DraftModel(), extensions=[GoalExtension(definition, max_iterations=2)], event_dispatcher=GoalEvents()
+        DraftModel(),
+        config=config,
+        extensions=[GoalExtension(definition, max_iterations=2)],
+        event_dispatcher=GoalEvents(),
     )
-    result = await client.run("/goal Implement the change with tests")
+    accepted = client.agent.emit_external_event(ExternalEvent(GOAL_MODE_EVENT_NAME, {}), config=config)
+    assert accepted == ["GoalExtension"]
+    result = await client.run("Implement the change with tests", config=config)
     assert reviewer.reviews == 2
     print(result.content)
 

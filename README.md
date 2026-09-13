@@ -207,8 +207,8 @@ on_tool -> on_state -> on_message -> append_message -> before_run -> model
 ```
 
 `on_state` restores history and injects system instructions. `on_message` may
-replace `context.input_message` to expand commands such as `/goal` before the
-input is appended. The runtime publishes the transformed message once through
+replace `context.input_message` to apply a mode selected through an external
+event before the input is appended. The runtime publishes the transformed message once through
 `MessageAppendedEvent`; `before_run` sees the finalized input in state.messages.
 
 The system prompt enters each fresh `state.messages` before `on_state` runs.

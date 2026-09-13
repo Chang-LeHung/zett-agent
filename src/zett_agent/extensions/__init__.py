@@ -38,8 +38,8 @@ from .events import (
 from .external import ExternalEvent, ExternalEventExtension
 from .file_system import FileSystemExtension
 from .goal import (
-    GOAL_COMMAND_PREFIX,
     GOAL_EVALUATION_TOOL_NAME,
+    GOAL_MODE_EVENT_NAME,
     GoalEvaluation,
     GoalExtension,
     default_goal_subagent,

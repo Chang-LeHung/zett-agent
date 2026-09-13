@@ -1,7 +1,9 @@
 Iterate toward a goal
 =========================
 
-A private evaluator reports incomplete and then achieved. This demonstrates control flow, not real-model evaluation quality.
+A ``goal_mode`` external event selects one future request. A private evaluator
+then reports incomplete and finally achieved. This demonstrates control flow,
+not real-model evaluation quality.
 
 Run it
 ----------

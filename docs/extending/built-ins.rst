@@ -43,8 +43,8 @@ SteeringExtension remain Agent-owned built-ins and must not be registered again.
      - Summarize older complete turns before a model step.
      - Token estimates and model context limits must be configured appropriately.
    * - GoalExtension
-     - Continue explicit /goal work after private evaluation.
-     - Bounded internal continuations and decision retries.
+     - Continue externally selected Goal Mode work after private evaluation.
+     - UI arms one exact session/request before starting it; selection is one-shot.
    * - SubAgentExtension
      - Delegate to configured child profiles.
      - Models, tools, and persistence live in each definition.

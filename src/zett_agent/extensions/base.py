@@ -59,7 +59,7 @@ class AgentSetupHooksMixin:
     async def on_message(self, context: AgentRunContext) -> None:
         """Transform context.input_message after state restoration, before append.
 
-        Replace the pending UserMessage to implement commands such as /goal.
+        Replace the pending UserMessage to implement externally selected modes.
         Do not append or persist it here: the runtime appends the final message
         exactly once after all input hooks finish. before_run sees that message
         in state.messages and persistence subscribers have already received it.

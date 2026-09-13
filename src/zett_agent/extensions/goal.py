@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass
+from threading import Lock
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -19,11 +20,12 @@ from ..tools import tool
 from .base import AgentExtension
 from .coding import CodingExtension
 from .events import ExtensionEvent, InternalMessageEvent, RunCancelledEvent
+from .external import ExternalEvent
 from .memory import InMemoryMessageAccumulator
 from .subagent import SubAgentDefinition
 from .tool_guidelines import ToolGuidelinesExtension
 
-GOAL_COMMAND_PREFIX = "/goal "
+GOAL_MODE_EVENT_NAME = "goal_mode"
 GOAL_EVALUATION_TOOL_NAME = "report_goal_evaluation"
 
 GoalSummary = Annotated[str, Field(min_length=1, max_length=8_000)]
@@ -88,7 +90,7 @@ def default_goal_subagent(model: AgentModel) -> SubAgentDefinition:
 
 
 class GoalExtension(AgentExtension):
-    """Continue ``/goal`` requests until a private evaluator accepts the result.
+    """Continue externally selected Goal Mode requests until verification passes.
 
     This extension does not implement another agent loop. It creates the normal
     :class:`Agent` using a :class:`SubAgentDefinition`, exactly like delegated
@@ -97,8 +99,14 @@ class GoalExtension(AgentExtension):
     extensions, reasoning effort, and model-iteration limit all come from the
     definition and can be replaced as one unit.
 
-    During ``on_message()``, the command is replaced with an explicit Goal Mode
-    prompt before it reaches the model or Raw Log. The transformed UserMessage
+    An application first sends a ``goal_mode`` :class:`ExternalEvent` with the
+    :class:`AgentRunConfig` of a future request. The extension arms that exact
+    session/request identity. When the matching request reaches ``on_message()``,
+    its complete user input becomes the goal and is replaced with an explicit
+    Goal Mode prompt before it reaches the model or Raw Log. Selection is
+    consumed once; unrelated sessions and request IDs remain in normal mode.
+
+    The transformed UserMessage
     keeps a deep copy of its original content under
     ``attributes["goal_extension"]["raw_content"]``. Evaluator AgentEvents remain
     private. An incomplete decision becomes an ``AgentMessage`` published through
@@ -130,7 +138,9 @@ class GoalExtension(AgentExtension):
                 extensions=[GoalExtension(definition, max_iterations=8, max_decision_retries=3)],
                 max_internal_messages=8,
             )
-            result = await agent.run("/goal Implement the feature and verify its tests.")
+            config = AgentRunConfig(session_id="session-42", request_id="request-7")
+            agent.emit_external_event(ExternalEvent(GOAL_MODE_EVENT_NAME, {}), config=config)
+            result = await agent.run("Implement the feature and verify its tests.", config=config)
     """
 
     def __init__(
@@ -152,17 +162,38 @@ class GoalExtension(AgentExtension):
         self.max_iterations = max_iterations
         self.max_decision_retries = max_decision_retries
         self._runs: dict[AgentRunContext, _GoalRun] = {}
+        self._armed_requests: set[tuple[str, str | None]] = set()
+        self._armed_lock = Lock()
+
+    def accept(self, config: AgentRunConfig | None, event: ExternalEvent) -> bool:
+        """Arm Goal Mode once for the next request matching ``config``.
+
+        The event payload is intentionally application-owned and ignored. Mode
+        routing comes only from the separately supplied AgentRunConfig, avoiding
+        duplicate or conflicting session identifiers inside the payload.
+        Repeating the same event before consumption is idempotent.
+        """
+        if event.name != GOAL_MODE_EVENT_NAME or config is None:
+            return False
+        with self._armed_lock:
+            self._armed_requests.add((config.session_id, config.request_id))
+        return True
 
     async def on_message(self, context: AgentRunContext) -> None:
-        """Recognize ``/goal`` followed by a space and inject the execution prompt."""
+        """Consume a matching external selection and inject the Goal Mode prompt."""
         message = context.input_message
-        run = _GoalRun()
-        self._runs[context] = run
-        if message is None or not self._starts_goal_mode(message):
+        key = (context.config.session_id, context.config.request_id)
+        with self._armed_lock:
+            armed = key in self._armed_requests
+            if armed:
+                self._armed_requests.remove(key)
+        if not armed:
             return
-        goal = message.text.removeprefix(GOAL_COMMAND_PREFIX).strip()
+        if message is None:
+            raise AgentProtocolError("Goal Mode requires a user message")
+        goal = message.text.strip()
         if not goal:
-            raise AgentProtocolError("/goal requires non-empty goal text")
+            raise AgentProtocolError("Goal Mode requires non-empty goal text")
         raw_content = deepcopy(message.content)
         attributes = deepcopy(message.attributes)
         attributes["goal_extension"] = {
@@ -173,8 +204,7 @@ class GoalExtension(AgentExtension):
             content=self._goal_prompt(goal, message),
             attributes=attributes,
         )
-        run.goal = goal
-        run.raw_content = raw_content
+        self._runs[context] = _GoalRun(goal=goal, raw_content=raw_content)
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Release request-local state when cancellation bypasses run callbacks."""
@@ -225,17 +255,6 @@ class GoalExtension(AgentExtension):
         )
         if False:
             yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="goal_evaluation")
-
-    @staticmethod
-    def _starts_goal_mode(message: UserMessage) -> bool:
-        """Require the command at the beginning of the first textual content."""
-        if isinstance(message.content, str):
-            return message.content.startswith(GOAL_COMMAND_PREFIX)
-        return bool(
-            message.content
-            and isinstance(message.content[0], TextContent)
-            and message.content[0].text.startswith(GOAL_COMMAND_PREFIX)
-        )
 
     @staticmethod
     def _goal_prompt(goal: str, message: UserMessage) -> UserContent:

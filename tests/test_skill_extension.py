@@ -1,6 +1,8 @@
 """Skill discovery, prompt injection, and full instruction loading."""
 
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -28,18 +30,79 @@ def write_skill(root, directory: str, content: str):
     return path.resolve()
 
 
-def test_skill_extension_discovers_default_workspace_roots(tmp_path, monkeypatch):
+def test_skill_extension_discovers_default_user_roots(tmp_path, monkeypatch):
+    isolated_home = tmp_path / "home"
+    isolated_home.mkdir()
+    monkeypatch.setenv("HOME", str(isolated_home))
     monkeypatch.chdir(tmp_path)
     for root in DEFAULT_SKILL_ROOTS:
+        client = Path(root).parts[-2].removeprefix(".")
         write_skill(
-            tmp_path / root,
+            isolated_home / Path(root).relative_to("~"),
             "example",
-            f"---\nname: {root.removeprefix('.')}\ndescription: Skill from {root}.\n---\nBody",
+            f"---\nname: {client}\ndescription: Skill from {root}.\n---\nBody",
         )
 
     extension = SkillExtension()
 
     assert [skill.name for skill in extension.skills] == ["agent", "claude", "cursor", "zett"]
+
+
+async def test_skill_extension_loads_user_skill_from_default_zett_directory_and_cleans_up(tmp_path, monkeypatch):
+    complete = """---
+name: home-review
+description: Review code using the user-level workflow.
+---
+# Home review
+
+Inspect every changed file and run focused checks.
+"""
+
+    class Model:
+        def __init__(self):
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                message = AssistantMessage(
+                    tool_calls=(ToolCall("home-skill-1", READ_SKILL_TOOL_NAME, {"name": "home-review"}),)
+                )
+            else:
+                message = AssistantMessage(content="User skill loaded")
+            yield ModelEvent.completed(ModelResponse(message))
+
+    with TemporaryDirectory(prefix="zett-agent-skill-e2e-") as temporary_home:
+        home = Path(temporary_home)
+        skill_path = write_skill(home / ".zett" / "skills", "home-review", complete)
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        with monkeypatch.context() as isolated:
+            isolated.setenv("HOME", str(home))
+            isolated.chdir(workspace)
+            model = Model()
+            extension = SkillExtension()
+            agent = await Agent.create(
+                model,
+                config=AgentRunConfig("home-skill-e2e"),
+                extensions=[extension, ToolGuidelinesExtension()],
+            )
+
+            answer = await agent.run("Use my review skill")
+
+            assert answer.content == "User skill loaded"
+            assert extension.skills == (SkillFileParser().parse(skill_path),)
+            assert [tool.name for tool in model.requests[0].tools] == [READ_SKILL_TOOL_NAME]
+            catalog = next(
+                message.content
+                for message in model.requests[0].messages
+                if isinstance(message, SystemMessage) and message.content.startswith("# Available skills")
+            )
+            assert f"home-review: Review code using the user-level workflow. (file: {skill_path})" in catalog
+            result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
+            assert json.loads(result.content) == complete
+
+    assert not home.exists()
 
 
 async def test_skill_extension_advertises_metadata_and_loads_complete_file(tmp_path):

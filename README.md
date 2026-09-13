@@ -452,10 +452,11 @@ both sections to the system instructions.
 ## Skills and MCP
 
 `SkillExtension` discovers `SKILL.md` files recursively below its roots. With
-no arguments it searches `.zett`, `.agent`, `.claude`, and `.cursor` relative
-to the current working directory. Explicit roots replace these defaults. Skill
-names and resolved files are deduplicated; the first configured root has
-precedence. `SkillFileParser` validates UTF-8 content, closed front matter,
+no arguments it searches `~/.zett/skills`, `~/.agent/skills`,
+`~/.claude/skills`, and `~/.cursor/skills`. Explicit roots replace these
+defaults and can be used to opt into project-local skills. Skill names and
+resolved files are deduplicated; the first configured root has precedence.
+`SkillFileParser` validates UTF-8 content, closed front matter,
 required `name` and `description` fields, a normalized lowercase skill name,
 and a non-empty Markdown body. Invalid files are skipped without stopping
 discovery. The extension injects a small system catalog containing each skill

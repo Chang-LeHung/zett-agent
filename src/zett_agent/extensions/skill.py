@@ -14,7 +14,12 @@ from .base import AgentExtension
 
 SKILL_FILE_NAME = "SKILL.md"
 READ_SKILL_TOOL_NAME = "read_skill"
-DEFAULT_SKILL_ROOTS = (".zett", ".agent", ".claude", ".cursor")
+DEFAULT_SKILL_ROOTS = (
+    "~/.zett/skills",
+    "~/.agent/skills",
+    "~/.claude/skills",
+    "~/.cursor/skills",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,10 +101,12 @@ class SkillFileParser:
 class SkillExtension(AgentExtension):
     """Advertise valid local skills and register a tool that reads one in full.
 
-    With no roots, discovery searches ``.zett``, ``.agent``, ``.claude``, and
-    ``.cursor`` under the current working directory. The system message contains
-    only each skill's name, description, and location. Complete instructions
-    enter context only after the model explicitly calls ``read_skill``.
+    With no roots, discovery searches the user-level ``~/.zett/skills``,
+    ``~/.agent/skills``, ``~/.claude/skills``, and ``~/.cursor/skills``
+    directories. The system message contains only each skill's name,
+    description, and location. Complete instructions enter context only after
+    the model explicitly calls ``read_skill``. Pass ``roots`` explicitly when
+    an application also wants project-local skills.
 
     Examples:
         Usage::

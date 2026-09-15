@@ -18,6 +18,9 @@ from .base import (
     AgentRunHooksMixin,
     AgentSetupHooksMixin,
     AgentToolHooksMixin,
+    MiddlewareHook,
+    ModelRequestNext,
+    ToolCallNext,
 )
 from .coding import CodingExtension
 from .compaction import CompactionExtension

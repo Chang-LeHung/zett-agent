@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..events import AgentEvent, AgentEventType
 
 if TYPE_CHECKING:
     from ..agent import AgentRunConfig, AgentRunContext
     from ..messages import AssistantMessage, ToolCall, ToolMessage
-    from ..model import ModelRequest, ModelResponse
+    from ..model import ModelEvent, ModelRequest, ModelResponse
     from .events import ExtensionEvent
     from .external import ExternalEvent
 
@@ -26,6 +27,52 @@ class _PendingRequests:
 
 
 _PENDING_TRACKER_CREATION_LOCK = Lock()
+
+
+type ModelRequestNext = Callable[[ModelRequest], AsyncIterator[ModelEvent]]
+type ToolCallNext = Callable[[], Awaitable[Any]]
+
+
+class MiddlewareHook:
+    """Wrap provider requests and local tool handlers for one extension.
+
+    Every :class:`AgentExtension` inherits these hooks. Extensions form an
+    onion in their existing priority order: the first extension is outermost
+    and the last extension is closest to the provider or tool handler.
+
+    One extension instance may serve concurrent sessions and parallel tool
+    calls. Keep request-local data in local variables or on ``context``, not
+    mutable instance attributes without synchronization.
+    """
+
+    async def on_model_request(
+        self,
+        context: AgentRunContext,
+        request: ModelRequest,
+        call_next: ModelRequestNext,
+    ) -> AsyncIterator[ModelEvent]:
+        """Wrap one provider request and its complete streamed response.
+
+        Pass ``request`` (or a dataclass replacement) to ``call_next``. The
+        default closes the inner stream so cancellation reaches the provider.
+        """
+        async with aclosing(call_next(request)) as events:
+            async for event in events:
+                yield event
+
+    async def on_tool_call(
+        self,
+        context: AgentRunContext,
+        call: ToolCall,
+        call_next: ToolCallNext,
+    ) -> Any:
+        """Wrap one registered local tool handler and return its raw result.
+
+        An extension may adjust ``call.arguments``, return without calling the
+        next layer, transform its result, or raise into normal tool-failure
+        handling.
+        """
+        return await call_next()
 
 
 class AgentSetupHooksMixin:
@@ -234,6 +281,7 @@ class AgentEventHooksMixin:
 
 
 class AgentExtension(
+    MiddlewareHook,
     AgentSetupHooksMixin,
     AgentRunHooksMixin,
     AgentModelHooksMixin,
@@ -293,6 +341,7 @@ class AgentExtension(
                              v                                                                            |
         +-----------------------------------------+                                                       |
         | MODEL STEP                              |                                                       |
+        | on_model_request() -> provider           |                                                       |
         | append AssistantMessage                 |                                                       |
         | after_model() / after_model_events()    |                                                       |
         +-----------------------------------------+                                                       |
@@ -302,7 +351,8 @@ class AgentExtension(
         | HAS TOOL CALLS?                         |-- yes --->| TOOL STEP                           |     |
         +-----------------------------------------+           | before_tool()                       |     |
                              |                                | before_tool_events()                |     |
-                             |                                | execute -> after_tool()             |-----+
+                             |                                | on_tool_call() -> handler           |     |
+                             |                                | after_tool()                         |-----+
                              |                                | append ToolMessage / TOOL_*         |     |
                              | no                             | after_tool_events()                 |     |
                              |                                +-------------------------------------+     |
@@ -373,8 +423,9 @@ class AgentExtension(
     on_error(), after_run(), and on_success(). Errors raised by subscribers after
     a terminal phase was committed do not change that terminal phase.
 
-    Setup, run, model, tool, and event hooks are supplied by their corresponding
-    Mixins. Subclasses override only the hooks they need; defaults are no-ops.
+    Setup, run, model, tool, event, and middleware hooks are supplied by their
+    corresponding base classes. Subclasses override only the hooks they need;
+    lifecycle defaults are no-ops and middleware defaults call the next layer.
     External events are independent from a request's internal [E] notifications:
     callers emit them through the Agent instead of addressing an extension.
     """

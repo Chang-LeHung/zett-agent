@@ -17,6 +17,7 @@ from .json_types import JsonValue, json_object
 from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from .model import (
     AgentModel,
+    ModelEvent,
     ModelEventType,
     ModelRequest,
     ModelResponse,
@@ -29,7 +30,7 @@ from .tools import AgentTool, ToolExecutionMode
 from .tools.base import _bind_tool_call, _reset_tool_call
 
 if TYPE_CHECKING:
-    from .extensions.base import AgentExtension
+    from .extensions.base import AgentExtension, ModelRequestNext, ToolCallNext
     from .extensions.events import ExtensionEvent, MessageTiming
     from .extensions.external import ExternalEvent
 
@@ -376,6 +377,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             tools: Static tool definitions with unique names.
             extensions: Unique named extensions sorted by ascending priority.
                 None installs defaults; an empty sequence omits optional defaults.
+                Their inherited middleware hooks wrap model requests and local
+                tool handlers in the same priority order.
             reasoning_effort: Default provider-neutral reasoning level.
             parallel_tool_call: Allow providers to return multiple tool calls
                 and concurrently execute tools not explicitly marked serial.
@@ -433,7 +436,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 raise ValueError(f"Duplicate extension name: {name!r}")
             names.add(name)
         # Python's sort is stable, so extensions sharing a priority preserve the
-        # caller's registration order. Every lifecycle path uses this tuple.
+        # caller's registration order. Lifecycle and middleware paths both use
+        # this tuple, giving extensions one shared and predictable ordering.
         self.extensions = tuple(sorted(configured_extensions, key=lambda extension: extension.priority))
         self.system_prompt = system_prompt
         self.reasoning_effort = reasoning_effort
@@ -561,7 +565,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             config: Initial session identity used when requests omit config.
             system_prompt: Initial instructions for every fresh request state.
             tools: Static tools registered before extension setup.
-            extensions: Optional lifecycle extensions; None keeps defaults.
+            extensions: Optional lifecycle and middleware extensions; None keeps
+                defaults.
             reasoning_effort: Default reasoning level for future requests.
             parallel_tool_call: Enable provider and local parallel tool calls.
             max_iterations: Maximum model calls per user/internal input.
@@ -961,7 +966,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         model = context.model
         if model is None:
             raise AgentProtocolError("The request context has no model")
-        async with aclosing(model.stream(request)) as events:
+        async with aclosing(self._stream_model_with_middleware(context, request, model)) as events:
             async for event in events:
                 if response is not None:
                     raise AgentProtocolError("Model emitted events after its final response")
@@ -1229,8 +1234,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                         yield event
                 return
 
-    @staticmethod
-    async def _invoke_tool(context: AgentRunContext, call: ToolCall) -> _ToolInvocation:
+    async def _invoke_tool(self, context: AgentRunContext, call: ToolCall) -> _ToolInvocation:
         """Run only a handler concurrently; lifecycle hooks remain serialized."""
         from .extensions.events import MessageTiming
 
@@ -1243,7 +1247,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 registered = context.tools.get(call.name)
                 if registered is None:
                     raise ValueError(f"Unknown tool: {call.name}")
-                output = await registered(call.arguments)
+                output = await self._call_tool_with_middleware(context, call, registered)
                 from .messages import ImageContent, TextContent
 
                 if isinstance(output, (ImageContent, TextContent)):
@@ -1279,6 +1283,53 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 duration_ns=max(0, completed_ns - started_ns),
             ),
         )
+
+    def _stream_model_with_middleware(
+        self,
+        context: AgentRunContext,
+        request: ModelRequest,
+        model: AgentModel,
+    ) -> AsyncIterator[ModelEvent]:
+        """Build one request middleware chain with registration order outside-in."""
+        call_next: ModelRequestNext = model.stream
+        for extension in reversed(self.extensions):
+            inner = call_next
+
+            def wrapped(
+                next_request: ModelRequest,
+                *,
+                hook: AgentExtension = extension,
+                next_handler: ModelRequestNext = inner,
+            ) -> AsyncIterator[ModelEvent]:
+                return hook.on_model_request(context, next_request, next_handler)
+
+            call_next = wrapped
+        return call_next(request)
+
+    async def _call_tool_with_middleware(
+        self,
+        context: AgentRunContext,
+        call: ToolCall,
+        registered: AgentTool,
+    ) -> object:
+        """Build one tool middleware chain independently for each invocation task."""
+
+        async def invoke_handler() -> object:
+            return await registered(call.arguments)
+
+        call_next: ToolCallNext = invoke_handler
+        for extension in reversed(self.extensions):
+            inner = call_next
+
+            async def wrapped(
+                *,
+                hook: AgentExtension = extension,
+                next_handler: ToolCallNext = inner,
+            ) -> object:
+                return await hook.on_tool_call(context, call, next_handler)
+
+            call_next = wrapped
+        return await call_next()
 
     async def _finalize_tool(
         self,

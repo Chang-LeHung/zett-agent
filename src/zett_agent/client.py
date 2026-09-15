@@ -162,8 +162,8 @@ async def create_agent(
         config: Stable session identity; omitted to generate a new UUIDv7 ID.
         system_prompt: Initial instructions rebuilt before each request.
         tools: Explicit typed tools available to the runtime.
-        extensions: Lifecycle extensions. None keeps default memory and tool
-            guidance; an explicit sequence replaces those defaults.
+        extensions: Lifecycle and middleware extensions. None keeps default
+            memory and tool guidance; an explicit sequence replaces those defaults.
         reasoning_effort: Default reasoning level, overridable per request.
         parallel_tool_call: Allow supported providers and local tools to use
             parallel calls. Individual tools may explicitly require serial execution.

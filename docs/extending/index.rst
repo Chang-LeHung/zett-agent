@@ -10,6 +10,7 @@ subclass Agent or implement another model/tool loop.
 
    first-extension
    hooks
+   middleware
    events
    state
    model-adapter

@@ -171,8 +171,8 @@ Its hooks are grouped in `extensions/base.py` by responsibility:
 
 - `AgentSetupHooksMixin` prepares request tools and messages.
 - `AgentRunHooksMixin` observes the complete request and terminal outcome.
-- `AgentModelHooksMixin` wraps primary model calls.
-- `AgentToolHooksMixin` wraps tool calls.
+- `AgentModelHooksMixin` observes primary model calls.
+- `AgentToolHooksMixin` observes tool calls.
 - `AgentEventHooksMixin` emits streaming events and receives published events.
 
 `AgentExtension` combines these groups and provides no-op defaults, so an
@@ -213,6 +213,43 @@ event before the input is appended. The runtime publishes the transformed messag
 
 The system prompt enters each fresh `state.messages` before `on_state` runs.
 Model requests read the state messages directly.
+
+## Middleware
+
+Every `AgentExtension` also inherits `MiddlewareHook`. Override its middleware
+methods when an extension must wrap the actual provider request or local tool
+handler rather than merely observe a lifecycle boundary:
+
+```python
+from contextlib import aclosing
+from dataclasses import replace
+
+from zett_agent import AgentExtension, SystemMessage
+
+
+class AuditExtension(AgentExtension):
+    async def on_model_request(self, context, request, call_next):
+        request = replace(
+            request,
+            messages=(*request.messages, SystemMessage(content="Audit enabled.")),
+        )
+        async with aclosing(call_next(request)) as events:
+            async for event in events:
+                yield event
+
+    async def on_tool_call(self, context, call, call_next):
+        return await call_next()
+
+
+agent = await Agent.create(model, config=config, extensions=[AuditExtension()])
+```
+
+Extensions use their existing priority order for middleware too; the first is
+the outermost layer. Model middleware can
+replace `ModelRequest` and observe streaming events. Tool middleware can adjust
+`call.arguments`, return a cached result without calling `call_next`, or raise an
+exception that becomes a failed `ToolMessage`. Extension instances may run
+concurrently across sessions and parallel tool calls.
 
 By default, each Agent creates its own `InMemoryMessageAccumulator` and
 `ToolGuidelinesExtension`, so `Agent(model, tools=[add])` enables both. Passing

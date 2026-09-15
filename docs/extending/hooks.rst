@@ -3,8 +3,9 @@ Lifecycle hook reference
 
 All hooks receive :class:`~zett_agent.AgentRunContext` unless noted. An ordinary
 async hook returns None. The four ``*_events`` hooks are async generators yielding
-AgentEvent. ``accept`` is synchronous and returns bool. Default implementations
-are no-ops; override only what your extension needs.
+AgentEvent. ``accept`` is synchronous and returns bool. Lifecycle defaults are
+no-ops; middleware defaults transparently call the next layer. Override only
+what your extension needs.
 
 Setup hooks
 ---------------
@@ -59,6 +60,23 @@ Model and tool hooks
      - Before one tool call. A raised exception fails the request before execution.
    * - :meth:`~zett_agent.AgentExtension.after_tool`
      - Tool execution has finished but ToolMessage is not appended yet. Inspect the separate error argument and modify the result before context and persistence receive it.
+
+Middleware hooks
+----------------
+
+.. list-table:: Wrap the operation instead of observing one side of it
+   :header-rows: 1
+
+   * - Hook
+     - Boundary and constraints
+   * - :meth:`~zett_agent.AgentExtension.on_model_request`
+     - Wraps the provider stream. Pass a ModelRequest to ``call_next`` and close the returned iterator when leaving early.
+   * - :meth:`~zett_agent.AgentExtension.on_tool_call`
+     - Wraps one registered local tool handler. It may adjust arguments, transform or short-circuit the result, or raise a normal tool failure.
+
+These hooks use the same extension priority ordering as lifecycle hooks, with
+lower priorities forming the outer middleware layers. Provider-hosted tools run
+inside ``on_model_request`` and do not use the local ``on_tool_call`` boundary.
 
 Event-producing hooks
 -------------------------

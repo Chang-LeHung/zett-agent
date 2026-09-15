@@ -99,6 +99,11 @@ worker-thread adaptation. Await ``context.publish(event)`` and
 ``context.append_message(...)`` as usual. Extensions do not expose ``.sync()``;
 their external-event ``accept`` method remains synchronous.
 
+The :class:`~zett_agent.MiddlewareHook` inherited by every extension uses the
+same rule. Its model and tool wrappers run on the Agent event loop, including
+when the extension is registered through ``SyncAgent`` or
+``create_agent_sync``.
+
 AgentRunContext and the internal ModelOutputTracker also remain async-only;
 they are runtime implementation objects, not independent synchronous entry points.
 

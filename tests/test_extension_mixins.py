@@ -7,11 +7,13 @@ from zett_agent import (
     AgentRunHooksMixin,
     AgentSetupHooksMixin,
     AgentToolHooksMixin,
+    MiddlewareHook,
 )
 
 
 def test_agent_extension_composes_each_hook_group_once() -> None:
     assert AgentExtension.__bases__ == (
+        MiddlewareHook,
         AgentSetupHooksMixin,
         AgentRunHooksMixin,
         AgentModelHooksMixin,
@@ -28,6 +30,7 @@ def test_agent_extension_default_priority_is_one_hundred() -> None:
 
 def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
     groups = {
+        MiddlewareHook: {"on_model_request", "on_tool_call"},
         AgentSetupHooksMixin: {"on_tool", "on_state", "on_message"},
         AgentRunHooksMixin: {"before_run", "after_run", "on_success", "on_error"},
         AgentModelHooksMixin: {"before_model", "after_model"},
@@ -67,4 +70,6 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
         "after_tool_events",
         "on_event",
         "accept",
+        "on_model_request",
+        "on_tool_call",
     }

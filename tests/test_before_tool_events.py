@@ -1,4 +1,6 @@
-"""Pre-tool event ordering, protocol validation, and cancellation cleanup."""
+"""Pre-tool queue emission ordering, validation, and cancellation cleanup."""
+
+import asyncio
 
 import pytest
 
@@ -51,15 +53,15 @@ async def test_hooks_run_for_each_call_in_order_before_tool_execution():
 
         async def before_tool(self, context, call):
             order.append((call.id, self.name, "hook"))
-
-        async def before_tool_events(self, context, call):
             assert context.state.phase == AgentPhase.READY
             order.append((call.id, self.name, "events"))
-            yield AgentEvent(
-                AgentEventType.CUSTOM,
-                context.config.session_id,
-                name=self.name,
-                payload={"call": call.id},
+            await context.emit(
+                AgentEvent(
+                    AgentEventType.CUSTOM,
+                    context.config.session_id,
+                    name=self.name,
+                    payload={"call": call.id},
+                )
             )
 
     agent = await Agent.create(
@@ -70,7 +72,7 @@ async def test_hooks_run_for_each_call_in_order_before_tool_execution():
     )
     events = [event async for event in agent.stream("run")]
     assert order == [
-        (call, name, kind) for call in ("a", "b") for kind in ("hook", "events") for name in ("one", "two")
+        (call, name, kind) for call in ("a", "b") for name in ("one", "two") for kind in ("hook", "events")
     ]
     relevant = [event for event in events if event.type in (AgentEventType.CUSTOM, AgentEventType.TOOL_STARTED)]
     assert [event.type for event in relevant] == [
@@ -101,17 +103,22 @@ def test_agent_event_tool_call_lists_are_not_shared_between_events():
 @pytest.mark.parametrize("mode", ["close", "invalid", "error"])
 async def test_pre_tool_interruption_closes_hook_without_executing_tool(mode):
     executed, closed = [], []
+    blocker = asyncio.Event()
 
     class Extension(AgentExtension):
-        async def before_tool_events(self, context, call):
+        async def before_tool(self, context, call):
             try:
                 if mode == "error":
                     raise ValueError("preparation failed")
-                yield AgentEvent(
-                    AgentEventType.MODEL_STARTED if mode == "invalid" else AgentEventType.CUSTOM,
-                    context.config.session_id,
-                    name="preparation" if mode != "invalid" else None,
+                await context.emit(
+                    AgentEvent(
+                        AgentEventType.MODEL_STARTED if mode == "invalid" else AgentEventType.CUSTOM,
+                        context.config.session_id,
+                        name=None if mode == "invalid" else "preparation",
+                    )
                 )
+                if mode == "close":
+                    await blocker.wait()
             finally:
                 closed.append(True)
 

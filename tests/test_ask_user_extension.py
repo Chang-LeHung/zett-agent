@@ -159,14 +159,9 @@ def test_external_event_extension_rejects_consuming_without_a_response() -> None
 
 async def test_ask_user_ignores_other_tool_calls() -> None:
     extension = AskUserExtension()
-    events = [
-        event
-        async for event in extension.before_tool_events(
-            _context(),
-            ToolCall("call-1", "another_tool", {}),
-        )
-    ]
-    assert events == []
+    context = _context()
+    await extension.before_tool(context, ToolCall("call-1", "another_tool", {}))
+    assert context.event_queue.empty
 
 
 async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():

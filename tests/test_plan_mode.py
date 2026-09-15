@@ -70,8 +70,8 @@ async def test_enter_completion_is_emitted_even_without_another_model_iteration(
     assert any(event.type is AgentEventType.TOOL_COMPLETED for event in events), [
         (event.type, event.error) for event in events
     ]
-    completed = next(i for i, event in enumerate(events) if event.type is AgentEventType.TOOL_COMPLETED)
-    assert events[completed + 1].name == PLAN_MODE_ENTERED_EVENT_NAME
+    entered = next(i for i, event in enumerate(events) if event.name == PLAN_MODE_ENTERED_EVENT_NAME)
+    assert events[entered + 1].type is AgentEventType.TOOL_COMPLETED
     assert sum(event.type is AgentEventType.MODEL_STARTED for event in events) == 1
     assert plan_mode._entered_events == set()
 
@@ -181,8 +181,8 @@ async def test_model_proposal_waits_for_approval_then_enters_plan_mode():
     assert event_types.index((AgentEventType.CUSTOM, ENTER_PLAN_MODE_EVENT_NAME)) < event_types.index(
         (AgentEventType.TOOL_STARTED, None)
     )
-    assert event_types.index((AgentEventType.TOOL_COMPLETED, None)) < event_types.index(
-        (AgentEventType.CUSTOM, PLAN_MODE_ENTERED_EVENT_NAME)
+    assert event_types.index((AgentEventType.CUSTOM, PLAN_MODE_ENTERED_EVENT_NAME)) < event_types.index(
+        (AgentEventType.TOOL_COMPLETED, None)
     )
     assert [event.payload for event in events if event.name == PLAN_MODE_ENTERED_EVENT_NAME] == [
         {"session_id": "planning", "active": True}
@@ -432,8 +432,8 @@ async def test_model_submits_plan_and_approved_exit_restores_normal_mode():
     assert event_types.index((AgentEventType.CUSTOM, EXIT_PLAN_MODE_EVENT_NAME)) < event_types.index(
         (AgentEventType.TOOL_STARTED, None)
     )
-    assert event_types.index((AgentEventType.TOOL_COMPLETED, None)) < event_types.index(
-        (AgentEventType.CUSTOM, PLAN_MODE_EXITED_EVENT_NAME)
+    assert event_types.index((AgentEventType.CUSTOM, PLAN_MODE_EXITED_EVENT_NAME)) < event_types.index(
+        (AgentEventType.TOOL_COMPLETED, None)
     )
 
     restored_tools = {tool.name for tool in model.requests[3].tools}

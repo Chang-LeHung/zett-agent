@@ -173,7 +173,7 @@ Its hooks are grouped in `extensions/base.py` by responsibility:
 - `AgentRunHooksMixin` observes the complete request and terminal outcome.
 - `AgentModelHooksMixin` observes primary model calls.
 - `AgentToolHooksMixin` observes tool calls.
-- `AgentEventHooksMixin` emits streaming events and receives published events.
+- `AgentEventHooksMixin` receives internal extension events and external input.
 
 `AgentExtension` combines these groups and provides no-op defaults, so an
 extension only overrides the hooks it needs.
@@ -181,10 +181,10 @@ extension only overrides the hooks it needs.
 `extensions/` keeps each concrete extension in its own module;
 `extensions/events.py` defines internal notification events.
 Available hooks are `on_tool`, `on_state`, `on_message`, `before_run`, `before_model`,
-`before_model_events`, `after_model`, `before_tool`, `after_tool`, `after_run`,
+`after_model`, `before_tool`, `after_tool`, `after_run`,
 `on_success`, `on_error`, and `on_event`. Hooks run sequentially in extension
-priority order, with registration order breaking ties. `before_model_events` is
-an async event stream for visible pre-model work such as compaction.
+priority order, with registration order breaking ties. A hook publishes visible
+progress with `await context.emit(event)`; only `Agent.stream()` yields events.
 
 `on_success(context, result)` runs once per successful request, after all
 `after_run` hooks and before `RUN_COMPLETED` is emitted. It does not run for

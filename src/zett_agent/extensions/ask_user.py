@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -75,7 +74,7 @@ class AskUserExtension(ExternalEventExtension):
                 | ask_user ToolCall            |                              |                              |
                 +------------------------------>                              |                              |
                 |                              |                              |                              |
-                |                              | before_tool_events()         |                              |
+                |                              | before_tool()                |                              |
                 |                              +------------------------------>                              |
                 |                              |                              |                              |
                 |                              |                              | AskUserEvent                 |
@@ -160,7 +159,7 @@ class AskUserExtension(ExternalEventExtension):
         """Register a request-scoped ask_user tool bound to this context."""
         context.register_tool(self._build_tool(context))
 
-    async def before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+    async def before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
         """Emit AskUserEvent, then wait for the matching external response."""
         if call.name != ASK_USER_TOOL_NAME:
             return
@@ -171,7 +170,7 @@ class AskUserExtension(ExternalEventExtension):
             return
 
         async with self._wait_for_external_event(context, call.id):
-            yield AskUserEvent(context.config.session_id, call, request)
+            await context.emit(AskUserEvent(context.config.session_id, call, request))
 
     def _build_tool(self, context: AgentRunContext) -> AgentTool:
         """Create a validated tool whose result belongs to this request context."""

@@ -13,9 +13,9 @@ All three are called events, but their destinations and delivery rules differ.
      - Consumer
      - Delivery
    * - AgentEvent
-     - Runtime or event-producing hook
+     - Runtime or lifecycle hook using context.emit
      - UI / AgentEventDispatcher
-     - Async stream, in order
+     - Request queue drained by Agent.stream, in order
    * - ExtensionEvent
      - context.publish(event)
      - Every extension's on_event by default, or one named extension

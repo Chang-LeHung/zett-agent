@@ -92,8 +92,8 @@ blocks that calling thread until it completes.
 Extension hooks, callbacks, and models
 --------------------------------------------
 
-Extension lifecycle hooks use ``async def``, including async generators for
-event-producing hooks. SyncAgent runs them on its background event loop with
+Extension lifecycle hooks use ordinary ``async def`` functions. They send UI
+events through ``await context.emit(...)``. SyncAgent runs them on its background event loop with
 the original :class:`~zett_agent.AgentRunContext`, without a proxy or automatic
 worker-thread adaptation. Await ``context.publish(event)`` and
 ``context.append_message(...)`` as usual. Extensions do not expose ``.sync()``;
@@ -104,7 +104,7 @@ same rule. Its model and tool wrappers run on the Agent event loop, including
 when the extension is registered through ``SyncAgent`` or
 ``create_agent_sync``.
 
-AgentRunContext and the internal ModelOutputTracker also remain async-only;
+AgentRunContext, AgentEventQueue, and the internal ModelOutputTracker remain async-only;
 they are runtime implementation objects, not independent synchronous entry points.
 
 Application-side dispatcher callbacks also use ``async def``:

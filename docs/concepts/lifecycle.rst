@@ -39,17 +39,13 @@ One model/tool cycle
           |
    before_model(context, request)
           |
-   before_model_events(context, request)   may yield CUSTOM / compaction events
-          |
    refresh ModelRequest -> MODEL_STARTED -> deltas -> final ModelResponse
           |
    append AssistantMessage -> after_model() -> MODEL_COMPLETED
           |
-   after_model_events()
-          |
           +-- no tool calls --> check steering/internal inputs --> final answer
           |
-          +-- tool calls --> before_tool() -> before_tool_events()
+          +-- tool calls --> before_tool()
                                       |
                                 TOOL_STARTED
                                       |
@@ -61,13 +57,17 @@ One model/tool cycle
                                       |
                           TOOL_COMPLETED / TOOL_FAILED
                                       |
-                              after_tool_events()
-                                      |
                           steering check / next tool / model
 
 Hooks and their exact purpose are catalogued in :doc:`../extending/hooks`.
 The :class:`~zett_agent.AgentExtension` reference also includes the complete
 state diagram with internal notifications and exceptional paths.
+
+Lifecycle hooks emit visible progress with ``await context.emit(event)``. All
+internal work writes to the request's :class:`~zett_agent.AgentEventQueue`; the
+outer :meth:`~zett_agent.Agent.stream` is the only AgentEvent async generator.
+It drains events in order until RUN_COMPLETED and cancels the producer if the
+caller closes the stream early.
 
 Exceptional paths
 ---------------------

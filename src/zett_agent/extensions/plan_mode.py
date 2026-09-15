@@ -1,6 +1,5 @@
 """Model-proposed Plan Mode with explicit external user confirmation."""
 
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -189,7 +188,7 @@ class PlanModeExtension(ExternalEventExtension):
     """Require user approval for model-proposed entry and exit transitions.
 
     The model sees ``enter_plan_mode`` only while the current session is outside
-    Plan Mode. Its Tool Call pauses in ``before_tool_events()`` and emits an
+    Plan Mode. Its Tool Call pauses in ``before_tool()`` and emits an
     ``enter_plan_mode`` event. The extension activates the mode only after
     ``Agent.emit_external_event()`` delivers a matching
     ``enter_plan_mode_response`` with ``approved=true``.
@@ -203,7 +202,7 @@ class PlanModeExtension(ExternalEventExtension):
                 | enter_plan_mode(reason)      |                              |                              |
                 +------------------------------>                              |                              |
                 |                              |                              |                              |
-                |                              | before_tool_events()         |                              |
+                |                              | before_tool()                |                              |
                 |                              +------------------------------>                              |
                 |                              |                              |                              |
                 |                              |                              | EnterPlanModeEvent           |
@@ -323,13 +322,13 @@ class PlanModeExtension(ExternalEventExtension):
             self._restore_normal_mode(context, baseline)
             baseline.plan_applied = False
 
-    async def after_tool_events(
+    async def after_tool(
         self,
         context: AgentRunContext,
         call: ToolCall,
         result: ToolMessage,
         error: Exception | None,
-    ) -> AsyncIterator[AgentEvent]:
+    ) -> None:
         """Apply approved transitions and notify the UI after the tool completes.
 
         Confirmation requests still precede execution so the UI can approve or
@@ -341,12 +340,12 @@ class PlanModeExtension(ExternalEventExtension):
         session_id = context.config.session_id
         if session_id in self._entered_events:
             self._entered_events.remove(session_id)
-            yield PlanModeEnteredEvent(session_id)
+            await context.emit(PlanModeEnteredEvent(session_id))
         if session_id in self._exited_events:
             self._exited_events.remove(session_id)
-            yield PlanModeExitedEvent(session_id)
+            await context.emit(PlanModeExitedEvent(session_id))
 
-    async def before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+    async def _wait_before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
         """Pause valid transition Tool Calls until their responses arrive."""
 
         match call.name:
@@ -360,7 +359,7 @@ class PlanModeExtension(ExternalEventExtension):
                     call.id,
                     response_event_name=ENTER_PLAN_MODE_RESPONSE_EVENT_NAME,
                 ):
-                    yield EnterPlanModeEvent(context.config.session_id, call, request)
+                    await context.emit(EnterPlanModeEvent(context.config.session_id, call, request))
             case name if name == EXIT_PLAN_MODE_TOOL_NAME:
                 try:
                     request = ExitPlanModeRequest.model_validate(call.arguments)
@@ -371,7 +370,7 @@ class PlanModeExtension(ExternalEventExtension):
                     call.id,
                     response_event_name=EXIT_PLAN_MODE_RESPONSE_EVENT_NAME,
                 ):
-                    yield ExitPlanModeEvent(context.config.session_id, call, request)
+                    await context.emit(ExitPlanModeEvent(context.config.session_id, call, request))
             case _:
                 return
 
@@ -382,6 +381,7 @@ class PlanModeExtension(ExternalEventExtension):
             raise AgentProtocolError(f"Tool {call.name!r} is not allowed in Plan Mode")
         if not self.is_plan_mode(context.config.session_id) and call.name == EXIT_PLAN_MODE_TOOL_NAME:
             raise AgentProtocolError("Cannot exit Plan Mode while it is not active")
+        await self._wait_before_tool(context, call)
 
     async def after_run(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Release request-local restoration state after success."""

@@ -48,14 +48,6 @@ async def test_each_hook_and_provider_receive_latest_messages_and_tools(effort):
             context.state.messages.append(SystemMessage(content="before-model change"))
             context.register_tool(probe)
 
-        async def before_model_events(self, context, request):
-            seen.append(request)
-            assert request.messages[-1].content == "second hook change"
-            assert [item.name for item in request.tools] == ["probe"]
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="preparing")
-            context.state.messages[:] = [SystemMessage(content="replacement context")]
-            context.tools.clear()
-
     class Second(AgentExtension):
         priority = 20
 
@@ -63,15 +55,12 @@ async def test_each_hook_and_provider_receive_latest_messages_and_tools(effort):
             seen.append(request)
             assert request.messages[-1].content == "before-model change"
             assert [item.name for item in request.tools] == ["probe"]
-            context.state.messages.append(SystemMessage(content="second hook change"))
-
-        async def before_model_events(self, context, request):
-            seen.append(request)
-            assert [item.content for item in request.messages] == ["replacement context"]
-            assert not request.tools
-            context.state.messages.append(SystemMessage(content="last hook change"))
-            if False:
-                yield
+            await context.emit(AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="preparing"))
+            context.state.messages[:] = [
+                SystemMessage(content="replacement context"),
+                SystemMessage(content="last hook change"),
+            ]
+            context.tools.clear()
 
     class Model:
         async def stream(self, request):
@@ -84,8 +73,8 @@ async def test_each_hook_and_provider_receive_latest_messages_and_tools(effort):
     agent = await Agent.create(Model(), config=AgentRunConfig("fresh"), extensions=[Second(), First()])
     events = [event async for event in agent.stream("hello", reasoning_effort=effort)]
     assert events[-1].message.content == "done"
-    assert len(seen) == 5
-    assert len({id(request) for request in seen}) == 5
+    assert len(seen) == 3
+    assert len({id(request) for request in seen}) == 3
     assert seen[0].messages[-1].content == "hello"
     assert not seen[0].tools
 
@@ -95,11 +84,8 @@ async def test_failed_preprocessing_never_calls_provider(streaming):
     class Reject(AgentExtension):
         async def before_model(self, context, request):
             assert request.messages[-1].content == "hello"
-            if not streaming:
-                raise ValueError("rejected request")
-
-        async def before_model_events(self, context, request):
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="checking")
+            if streaming:
+                await context.emit(AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="checking"))
             raise ValueError("rejected request")
 
     class Model:

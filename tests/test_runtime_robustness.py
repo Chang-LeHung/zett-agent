@@ -107,8 +107,8 @@ async def test_agent_rejects_incomplete_terminal_model_events(event, message):
 
 async def test_agent_rejects_extension_events_outside_the_pre_model_protocol():
     class InvalidExtension(AgentExtension):
-        async def before_model_events(self, context, request):
-            yield AgentEvent(AgentEventType.MODEL_STARTED, context.config.session_id)
+        async def before_model(self, context, request):
+            await context.emit(AgentEvent(AgentEventType.CUSTOM, "another-session", name="invalid"))
 
     agent = await Agent.create(
         EventModel(ModelEvent.completed(ModelResponse(AssistantMessage(content="unused")))),
@@ -116,7 +116,7 @@ async def test_agent_rejects_extension_events_outside_the_pre_model_protocol():
         extensions=[InvalidExtension()],
     )
 
-    with pytest.raises(AgentProtocolError, match="unsupported pre-model event"):
+    with pytest.raises(AgentProtocolError, match="another session"):
         await agent.run("Trigger invalid extension event")
 
     assert agent.state.phase == AgentPhase.FAILED

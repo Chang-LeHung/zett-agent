@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import Callable, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass
 
@@ -95,8 +95,8 @@ class CompactionExtension(AgentExtension):
         encoding = tiktoken.get_encoding("o200k_base")
         return sum(len(encoding.encode_ordinary(repr(message))) for message in messages)
 
-    async def before_model_events(self, context: AgentRunContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
-        """Stream compaction state while atomically replacing older context.
+    async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
+        """Emit compaction state while atomically replacing older context.
 
         The incoming request describes the primary call. The summarizer uses
         its own request and reasoning effort; context changes are reflected in
@@ -122,9 +122,11 @@ class CompactionExtension(AgentExtension):
         # Do not repeatedly summarize a checkpoint with no new completed turns.
         if all(isinstance(message, CompactedMessage) for message in older):
             return
-        yield AgentEvent(
-            AgentEventType.COMPACTION_STARTED,
-            session_id=context.config.session_id,
+        await context.emit(
+            AgentEvent(
+                AgentEventType.COMPACTION_STARTED,
+                session_id=context.config.session_id,
+            )
         )
         summary_request = ModelRequest(
             messages=(
@@ -157,16 +159,20 @@ class CompactionExtension(AgentExtension):
                             raise AgentProtocolError("Compaction model returned a missing response")
                         response = event.response
                     case ModelEventType.TEXT_DELTA:
-                        yield AgentEvent(
-                            AgentEventType.COMPACTION_TEXT_DELTA,
-                            session_id=context.config.session_id,
-                            delta=event.delta,
+                        await context.emit(
+                            AgentEvent(
+                                AgentEventType.COMPACTION_TEXT_DELTA,
+                                session_id=context.config.session_id,
+                                delta=event.delta,
+                            )
                         )
                     case ModelEventType.REASONING_DELTA:
-                        yield AgentEvent(
-                            AgentEventType.COMPACTION_REASONING_DELTA,
-                            session_id=context.config.session_id,
-                            delta=event.delta,
+                        await context.emit(
+                            AgentEvent(
+                                AgentEventType.COMPACTION_REASONING_DELTA,
+                                session_id=context.config.session_id,
+                                delta=event.delta,
+                            )
                         )
                     case ModelEventType.TOOL_CALL_DELTA:
                         raise AgentProtocolError("Compaction model cannot call tools")
@@ -179,10 +185,12 @@ class CompactionExtension(AgentExtension):
             )
         )
         if self.count_tokens([summary]) >= self.count_tokens(older):
-            yield AgentEvent(
-                AgentEventType.COMPACTION_COMPLETED,
-                session_id=context.config.session_id,
-                applied=False,
+            await context.emit(
+                AgentEvent(
+                    AgentEventType.COMPACTION_COMPLETED,
+                    session_id=context.config.session_id,
+                    applied=False,
+                )
             )
             return
         messages[:] = [*instructions, summary, *recent]
@@ -194,9 +202,11 @@ class CompactionExtension(AgentExtension):
             summary=summary.content,
         )
         await context.publish(compacted)
-        yield AgentEvent(
-            AgentEventType.COMPACTION_COMPLETED,
-            session_id=context.config.session_id,
-            compaction=compacted,
-            applied=True,
+        await context.emit(
+            AgentEvent(
+                AgentEventType.COMPACTION_COMPLETED,
+                session_id=context.config.session_id,
+                compaction=compacted,
+                applied=True,
+            )
         )

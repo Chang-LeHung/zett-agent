@@ -61,11 +61,11 @@ class ExternalEventExtension(AgentExtension):
     Lifecycle::
 
         +---------------------------+     +---------------------------+
-        | before_tool_events()      |     | UI / external caller      |
+        | before_tool()             |     | UI / external caller      |
         +---------------------------+     +---------------------------+
         | enter async with:         |     |                           |
         | register pending Future   |     |                           |
-        | yield CUSTOM event        |---->| display question          |
+        | context.emit(CUSTOM)      |---->| display question          |
         | leave body: await Future  |     | emit_external_event(      |
         |                           |<----|     event, config=config) |
         | accept(): claim response, |     +---------------------------+
@@ -80,14 +80,12 @@ class ExternalEventExtension(AgentExtension):
         | validate and return result|
         +---------------------------+
 
-    Entering the async context registers the wait BEFORE the UI event is yielded,
+    Entering the async context registers the wait BEFORE the UI event is emitted,
     so even an immediate response is safe. The await happens when leaving the
     async-with body, not on entry. It suspends this task without blocking other
     sessions. The tool executes only after the response has been staged.
 
     Example::
-
-        from collections.abc import AsyncIterator
 
         from zett_agent import (
             AgentRunContext, AgentEvent, AgentEventType, ExternalEventExtension,
@@ -120,18 +118,16 @@ class ExternalEventExtension(AgentExtension):
 
                 context.register_tool(confirm)
 
-            async def before_tool_events(
-                self, context: AgentRunContext, call: ToolCall
-            ) -> AsyncIterator[AgentEvent]:
+            async def before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
                 if call.name != "confirm":
                     return
                 async with self._wait_for_external_event(context, call.id):
-                    yield AgentEvent(
+                    await context.emit(AgentEvent(
                         AgentEventType.CUSTOM,
                         session_id=context.config.session_id,
                         name="confirmation_requested",
                         payload={"tool_call_id": call.id, "question": "Proceed?"},
-                    )
+                    ))
 
     Usage::
 

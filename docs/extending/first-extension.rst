@@ -53,12 +53,13 @@ Step 3: emit a UI progress event
 
 .. literalinclude:: ../_examples/custom_extension.py
    :language: python
-   :pyobject: NoteExtension.before_model_events
+   :pyobject: NoteExtension.before_model
 
-The hook is an async generator, not an async function returning an event. It runs
-before each model call, so a tool round trip produces two progress events. Use a
-namespaced custom name such as ``note.model_step`` and a small payload suitable
-for your UI transport. Yielding CUSTOM does not change the Agent phase.
+The hook is an ordinary async function. It runs before each model call, so a tool
+round trip produces two progress events. Use a namespaced custom name such as
+``note.model_step`` and a small payload suitable for your UI transport.
+``await context.emit(...)`` preserves hook ordering; CUSTOM does not change the
+Agent phase.
 
 Step 4: clean up every terminal path
 ----------------------------------------

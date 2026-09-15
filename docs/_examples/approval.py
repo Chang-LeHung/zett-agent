@@ -50,15 +50,17 @@ class ApprovalExtension(ExternalEventExtension):
 
         context.register_tool(request_approval)
 
-    async def before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
+    async def before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
         if call.name != "request_approval":
             return
         async with self._wait_for_external_event(context, call.id):
-            yield AgentEvent(
-                AgentEventType.CUSTOM,
-                session_id=context.config.session_id,
-                name="approval.requested",
-                payload={"tool_call_id": call.id, "action": call.arguments["action"]},
+            await context.emit(
+                AgentEvent(
+                    AgentEventType.CUSTOM,
+                    session_id=context.config.session_id,
+                    name="approval.requested",
+                    payload={"tool_call_id": call.id, "action": call.arguments["action"]},
+                )
             )
         # Leaving the async-with body waits for the routed external response.
 

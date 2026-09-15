@@ -37,10 +37,6 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
         AgentToolHooksMixin: {"before_tool", "after_tool"},
         AgentEventHooksMixin: {
             "accept",
-            "before_model_events",
-            "before_tool_events",
-            "after_model_events",
-            "after_tool_events",
             "on_event",
         },
     }
@@ -64,10 +60,6 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
         "after_model",
         "before_tool",
         "after_tool",
-        "before_model_events",
-        "before_tool_events",
-        "after_model_events",
-        "after_tool_events",
         "on_event",
         "accept",
         "on_model_request",

@@ -29,9 +29,10 @@ hooks may replace messages; inspect priorities and the :doc:`lifecycle <../conce
 My custom event never reaches the UI
 ----------------------------------------
 
-``context.publish`` broadcasts ExtensionEvent internally. For UI output, yield
-an AgentEvent from one of the four event-producing hooks. A normal async hook
-returns None, not an event. See :doc:`../extending/events`.
+``context.publish`` broadcasts ExtensionEvent internally. For UI output, call
+``await context.emit(AgentEvent(...))`` from a lifecycle hook. The hook still
+returns None; ``Agent.stream`` alone yields the queued event. See
+:doc:`../extending/events`.
 
 Approval remains pending
 ----------------------------

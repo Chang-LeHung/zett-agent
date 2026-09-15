@@ -57,7 +57,7 @@ DIAGRAMS = {
     participant Extension
     participant UI
     Model->>Agent: ask_user ToolCall
-    Agent->>Extension: before_tool_events()
+    Agent->>Extension: before_tool() + context.emit()
     Extension-->>UI: AskUserEvent
     Note over Agent,Extension: waiting before TOOL_STARTED
     UI->>Extension: ExternalEvent via accept()
@@ -73,7 +73,7 @@ DIAGRAMS = {
     participant Extension
     participant UI
     Model->>Agent: enter_plan_mode(reason)
-    Agent->>Extension: before_tool_events()
+    Agent->>Extension: before_tool() + context.emit()
     Extension-->>UI: EnterPlanModeEvent
     UI->>Extension: ExternalEvent(approved)
     Extension-->>Agent: resume tool lifecycle
@@ -85,10 +85,10 @@ DIAGRAMS = {
         "Agent and extension lifecycle",
         """flowchart TD
     request[NEW REQUEST] --> setup["SETUP<br/>on_tool() / on_state()<br/>on_message() / append UserMessage<br/>before_run()"]
-    setup --> premodel["PRE-MODEL<br/>before_model() / before_model_events()<br/>optional compaction"]
-    premodel --> model["MODEL STEP<br/>append AssistantMessage<br/>after_model() / MODEL_COMPLETED<br/>after_model_events()"]
+    setup --> premodel["PRE-MODEL<br/>before_model()<br/>optional compaction via context.emit()"]
+    premodel --> model["MODEL STEP<br/>append AssistantMessage<br/>after_model() / MODEL_COMPLETED"]
     model --> calls[Has tool calls?]
-    calls -- yes --> tools["TOOL STEP<br/>before_tool() / before_tool_events()<br/>execute / after_tool()<br/>append ToolMessage / TOOL_* / after_tool_events()"]
+    calls -- yes --> tools["TOOL STEP<br/>before_tool()<br/>execute / after_tool()<br/>append ToolMessage / TOOL_*"]
     tools --> premodel
     calls -- no --> inbox[Steering or internal input?]
     inbox -- yes --> continuation[Append selected input]

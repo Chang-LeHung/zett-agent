@@ -207,10 +207,10 @@ async def test_close_during_compaction_synchronously_closes_extension_generator(
     cancelled = []
 
     class Compaction(AgentExtension):
-        async def before_model_events(self, context, request):
+        async def before_model(self, context, request):
             try:
-                yield AgentEvent(AgentEventType.COMPACTION_STARTED, context.config.session_id)
-                yield AgentEvent(AgentEventType.COMPACTION_COMPLETED, context.config.session_id)
+                await context.emit(AgentEvent(AgentEventType.COMPACTION_STARTED, context.config.session_id))
+                await asyncio.Event().wait()
             finally:
                 closed.append(True)
 

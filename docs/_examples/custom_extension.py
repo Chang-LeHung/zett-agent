@@ -69,13 +69,15 @@ class NoteExtension(AgentExtension):
         # The Agent appends input after all on_message hooks. Do not append here.
         self.active[context] = 0
 
-    async def before_model_events(self, context: AgentRunContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
+    async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
         self.active[context] += 1
-        yield AgentEvent(
-            AgentEventType.CUSTOM,
-            session_id=context.config.session_id,
-            name="note.model_step",
-            payload={"step": self.active[context]},
+        await context.emit(
+            AgentEvent(
+                AgentEventType.CUSTOM,
+                session_id=context.config.session_id,
+                name="note.model_step",
+                payload={"step": self.active[context]},
+            )
         )
 
     async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:

@@ -6,6 +6,7 @@ from .agent import (
 )
 from .client import AgentClient, create_agent
 from .dispatcher import AgentEventDispatcher
+from .event_queue import AgentEventQueue
 from .events import (
     AgentEvent,
     AgentEventType,
@@ -295,6 +296,7 @@ __all__ = [
     "CompactionEvent",
     "ExtensionEvent",
     "AgentEvent",
+    "AgentEventQueue",
     "AgentEventType",
     "AgentPhase",
     "AgentPhaseTransitionMixin",

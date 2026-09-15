@@ -21,12 +21,12 @@ async def test_custom_events_preserve_name_payload_order_and_phase(payload, comp
     custom = AgentEvent(AgentEventType.CUSTOM, "session", name="progress", payload=payload)
 
     class Extension(AgentExtension):
-        async def before_model_events(self, context, request):
+        async def before_model(self, context, request):
             if compacting:
-                yield AgentEvent(AgentEventType.COMPACTION_STARTED, "session")
-            yield custom
+                await context.emit(AgentEvent(AgentEventType.COMPACTION_STARTED, "session"))
+            await context.emit(custom)
             if compacting:
-                yield AgentEvent(AgentEventType.COMPACTION_COMPLETED, "session", applied=False)
+                await context.emit(AgentEvent(AgentEventType.COMPACTION_COMPLETED, "session", applied=False))
 
     class Model:
         async def stream(self, request):

@@ -11,6 +11,7 @@ from threading import RLock
 from time import monotonic_ns
 from typing import TYPE_CHECKING, Self, overload
 
+from .event_queue import AgentEventQueue
 from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
 from .exceptions import AgentIterationLimitError, AgentProtocolError
 from .json_types import JsonValue, json_object
@@ -203,6 +204,49 @@ class AgentRunContext:
     # Provider-hosted tools registered for this request, keyed by wire type.
     # They are sent to the model but never dispatched by the local tool loop.
     server_tools: dict[str, ServerToolDefinition] = field(default_factory=dict)
+    # One request-owned channel. Internal code emits here; only Agent.stream
+    # consumes it and exposes an async iterator to callers.
+    event_queue: AgentEventQueue = field(default_factory=AgentEventQueue)
+
+    async def emit(self, event: AgentEvent) -> None:
+        """Queue one extension-owned CUSTOM or compaction event for the caller."""
+        if event.type not in {
+            AgentEventType.CUSTOM,
+            AgentEventType.COMPACTION_STARTED,
+            AgentEventType.COMPACTION_TEXT_DELTA,
+            AgentEventType.COMPACTION_REASONING_DELTA,
+            AgentEventType.COMPACTION_COMPLETED,
+        }:
+            raise AgentProtocolError(f"Extensions cannot emit runtime-owned event type {event.type.value!r}")
+        await self._emit(event)
+
+    async def _emit_runtime(self, event: AgentEvent) -> None:
+        """Queue one core-owned event without exposing runtime event ownership."""
+        await self._emit(event)
+
+    async def _emit(self, event: AgentEvent) -> None:
+        """Validate, phase-stamp, and enqueue one outward event."""
+        if event.session_id != self.config.session_id:
+            raise AgentProtocolError("Agent event belongs to another session")
+        match event.type:
+            case AgentEventType.COMPACTION_STARTED:
+                await AgentPhaseTransitionMixin._transition_phase(
+                    self,
+                    AgentPhase.COMPACTING,
+                    expected=(AgentPhase.READY,),
+                )
+            case AgentEventType.COMPACTION_TEXT_DELTA | AgentEventType.COMPACTION_REASONING_DELTA:
+                AgentPhaseTransitionMixin._require_phase(self.state, AgentPhase.COMPACTING)
+            case AgentEventType.COMPACTION_COMPLETED:
+                await AgentPhaseTransitionMixin._transition_phase(
+                    self,
+                    AgentPhase.READY,
+                    expected=(AgentPhase.COMPACTING,),
+                )
+            case _:
+                pass
+        event.phase = self.state.phase
+        await self.event_queue.put(event)
 
     def register_tool(self, tool: AgentTool) -> None:
         """Register one request-scoped tool while rejecting ambiguous names."""
@@ -760,19 +804,41 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         if not isinstance(allow_parallel, bool):
             raise ValueError("parallel_tool_call must be a boolean")
         context = self._prepare_request_context(config, model, metadata, tags, user_message)
+        context.event_queue.enable_acknowledgements()
+        producer = asyncio.create_task(self._run_request(context, effort, allow_parallel))
+        try:
+            while True:
+                event = await context.event_queue.get()
+                yield event
+                context.event_queue.acknowledge()
+                if event.type is AgentEventType.RUN_COMPLETED:
+                    await producer
+                    return
+        finally:
+            if not producer.done():
+                producer.cancel()
+            await asyncio.gather(producer, return_exceptions=True)
+
+    async def _run_request(
+        self,
+        context: AgentRunContext,
+        reasoning_effort: ReasoningEffort,
+        parallel_tool_call: bool,
+    ) -> None:
+        """Produce one run into its queue and own every terminal cleanup path."""
         try:
             await self._open_request(context)
-            async with aclosing(self._stream_loop(context, effort, allow_parallel)) as events:
-                async for event in events:
-                    yield event
-        except (asyncio.CancelledError, GeneratorExit) as cancellation:
+            await self._run_loop(context, reasoning_effort, parallel_tool_call)
+        except asyncio.CancelledError as cancellation:
             await self._handle_request_cancellation(context, cancellation)
+            await context.event_queue.fail(cancellation)
             raise
         except Exception as error:
             await self._handle_request_failure(context, error)
-            raise
+            await context.event_queue.fail(error)
         finally:
             self._release_request(context)
+            await context.event_queue.close()
 
     def _prepare_request_context(
         self,
@@ -838,13 +904,13 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         await context.append_message(context.input_message, MessageTiming.instant())
         await self._notify_before_run(context)
 
-    async def _stream_loop(
+    async def _run_loop(
         self,
         context: AgentRunContext,
         reasoning_effort: ReasoningEffort,
         parallel_tool_call: bool,
-    ) -> AsyncIterator[AgentEvent]:
-        """Alternate model and tool steps, processing queued inputs before completion."""
+    ) -> None:
+        """Alternate model and tool steps while emitting into the run queue."""
         from .extensions.events import MessageTiming
 
         config, state = context.config, context.state
@@ -855,32 +921,27 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             if message_iterations >= self.max_iterations:
                 raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
             message_iterations += 1
-            response = None
-            async with aclosing(self._stream_model_step(context, reasoning_effort, parallel_tool_call)) as model_events:
-                async for event in model_events:
-                    if event.type == AgentEventType.MODEL_COMPLETED:
-                        response = event.response
-                    yield event
-            if response is None:
-                raise AgentProtocolError("Model step ended without a completed response")
+            response = await self._run_model_step(context, reasoning_effort, parallel_tool_call)
             if not response.message.tool_calls:
                 if active_input is not None:
                     internal = isinstance(active_input, AgentMessage)
-                    yield AgentEvent(
-                        AgentEventType.INTERNAL_MESSAGE_COMPLETED if internal else AgentEventType.STEERING_COMPLETED,
-                        session_id=config.session_id,
-                        phase=state.phase,
-                        message=response.message,
-                        internal_message=active_input if internal else None,
-                        steering_message=active_input if isinstance(active_input, UserMessage) else None,
+                    await context._emit_runtime(
+                        AgentEvent(
+                            AgentEventType.INTERNAL_MESSAGE_COMPLETED
+                            if internal
+                            else AgentEventType.STEERING_COMPLETED,
+                            session_id=config.session_id,
+                            phase=state.phase,
+                            message=response.message,
+                            internal_message=active_input if internal else None,
+                            steering_message=active_input if isinstance(active_input, UserMessage) else None,
+                        )
                     )
                     active_input = None
 
                 steering, next_input = self._select_pending_input(context)
                 if steering is not None:
-                    async with aclosing(self._start_steering(context, steering)) as steering_events:
-                        async for event in steering_events:
-                            yield event
+                    await self._start_steering(context, steering)
                     active_input = steering
                     message_iterations = 0
                     continue
@@ -891,11 +952,13 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                         )
                     processed_internal_messages += 1
                     message_iterations = 0
-                    yield AgentEvent(
-                        AgentEventType.INTERNAL_MESSAGE_STARTED,
-                        session_id=config.session_id,
-                        phase=state.phase,
-                        internal_message=next_input,
+                    await context._emit_runtime(
+                        AgentEvent(
+                            AgentEventType.INTERNAL_MESSAGE_STARTED,
+                            session_id=config.session_id,
+                            phase=state.phase,
+                            internal_message=next_input,
+                        )
                     )
                     await context.append_message(next_input, MessageTiming.instant())
                     active_input = next_input
@@ -904,40 +967,39 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 await self._notify_after_run(context, response.message)
                 await self._notify_on_success(context, response.message)
                 await self._complete_request(context)
-                yield AgentEvent(
-                    AgentEventType.RUN_COMPLETED,
-                    session_id=config.session_id,
-                    phase=state.phase,
-                    message=response.message,
+                await context._emit_runtime(
+                    AgentEvent(
+                        AgentEventType.RUN_COMPLETED,
+                        session_id=config.session_id,
+                        phase=state.phase,
+                        message=response.message,
+                    )
                 )
                 return
 
             steering = self._steering_extension.take(context)
             if steering is not None:
-                async with aclosing(
-                    self._start_steering(context, steering, response.message.tool_calls, active_input)
-                ) as steering_events:
-                    async for event in steering_events:
-                        yield event
+                await self._start_steering(context, steering, response.message.tool_calls, active_input)
                 active_input = steering
                 message_iterations = 0
                 continue
 
-            async with aclosing(
-                self._execute_tools(context, response.message.tool_calls, parallel_tool_call, active_input)
-            ) as tool_events:
-                async for event in tool_events:
-                    if event.type == AgentEventType.STEERING_STARTED:
-                        active_input = event.steering_message
-                        message_iterations = 0
-                    yield event
+            steering = await self._execute_tools(
+                context,
+                response.message.tool_calls,
+                parallel_tool_call,
+                active_input,
+            )
+            if steering is not None:
+                active_input = steering
+                message_iterations = 0
 
-    async def _stream_model_step(
+    async def _run_model_step(
         self,
         context: AgentRunContext,
         reasoning_effort: ReasoningEffort,
         parallel_tool_call: bool,
-    ) -> AsyncIterator[AgentEvent]:
+    ) -> ModelResponse:
         """Run preprocessing and one model call, validate its stream, and persist output."""
         config, state = context.config, context.state
         request = ModelRequest(
@@ -949,18 +1011,15 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         )
         await self._notify_before_model(context, request)
 
-        async with aclosing(self._before_model_events(context, request)) as preprocessing:
-            async for event in preprocessing:
-                await self._apply_extension_event_phase(context, event)
-                yield event
-
         request = self._refresh_model_request(context, request)
         model_started = await self._start_model_generation(context)
         output_tracker = ModelOutputTracker()
-        yield AgentEvent(
-            AgentEventType.MODEL_STARTED,
-            session_id=config.session_id,
-            phase=state.phase,
+        await context._emit_runtime(
+            AgentEvent(
+                AgentEventType.MODEL_STARTED,
+                session_id=config.session_id,
+                phase=state.phase,
+            )
         )
         response = None
         model = context.model
@@ -971,57 +1030,69 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 if response is not None:
                     raise AgentProtocolError("Model emitted events after its final response")
                 for boundary in await output_tracker.observe(context, event):
-                    yield AgentEvent(boundary, session_id=config.session_id, phase=state.phase)
+                    await context._emit_runtime(AgentEvent(boundary, session_id=config.session_id, phase=state.phase))
                 match event.type:
                     case ModelEventType.TEXT_DELTA:
-                        yield AgentEvent(
-                            AgentEventType.TEXT_DELTA,
-                            session_id=config.session_id,
-                            phase=state.phase,
-                            delta=event.delta,
+                        await context._emit_runtime(
+                            AgentEvent(
+                                AgentEventType.TEXT_DELTA,
+                                session_id=config.session_id,
+                                phase=state.phase,
+                                delta=event.delta,
+                            )
                         )
                     case ModelEventType.REASONING_DELTA:
-                        yield AgentEvent(
-                            AgentEventType.REASONING_DELTA,
-                            session_id=config.session_id,
-                            phase=state.phase,
-                            delta=event.delta,
+                        await context._emit_runtime(
+                            AgentEvent(
+                                AgentEventType.REASONING_DELTA,
+                                session_id=config.session_id,
+                                phase=state.phase,
+                                delta=event.delta,
+                            )
                         )
                     case ModelEventType.TOOL_CALL_DELTA:
                         if event.tool_call_delta is None:
                             raise AgentProtocolError("Missing tool-call delta")
-                        yield AgentEvent(
-                            AgentEventType.TOOL_CALL_DELTA,
-                            session_id=config.session_id,
-                            phase=state.phase,
-                            tool_call_delta=event.tool_call_delta,
+                        await context._emit_runtime(
+                            AgentEvent(
+                                AgentEventType.TOOL_CALL_DELTA,
+                                session_id=config.session_id,
+                                phase=state.phase,
+                                tool_call_delta=event.tool_call_delta,
+                            )
                         )
                     case ModelEventType.SERVER_TOOL_STARTED:
                         if event.server_tool_call is None:
                             raise AgentProtocolError("Missing server-tool call")
-                        yield AgentEvent(
-                            AgentEventType.SERVER_TOOL_STARTED,
-                            session_id=config.session_id,
-                            phase=state.phase,
-                            server_tool_call=event.server_tool_call,
+                        await context._emit_runtime(
+                            AgentEvent(
+                                AgentEventType.SERVER_TOOL_STARTED,
+                                session_id=config.session_id,
+                                phase=state.phase,
+                                server_tool_call=event.server_tool_call,
+                            )
                         )
                     case ModelEventType.SERVER_TOOL_INPUT_DELTA:
                         if event.server_tool_input_delta is None:
                             raise AgentProtocolError("Missing server-tool input delta")
-                        yield AgentEvent(
-                            AgentEventType.SERVER_TOOL_INPUT_DELTA,
-                            session_id=config.session_id,
-                            phase=state.phase,
-                            server_tool_input_delta=event.server_tool_input_delta,
+                        await context._emit_runtime(
+                            AgentEvent(
+                                AgentEventType.SERVER_TOOL_INPUT_DELTA,
+                                session_id=config.session_id,
+                                phase=state.phase,
+                                server_tool_input_delta=event.server_tool_input_delta,
+                            )
                         )
                     case ModelEventType.SERVER_TOOL_COMPLETED | ModelEventType.SERVER_TOOL_FAILED:
                         if event.server_tool_result is None:
                             raise AgentProtocolError("Missing server-tool result")
-                        yield AgentEvent(
-                            AgentEventType(event.type.value),
-                            session_id=config.session_id,
-                            phase=state.phase,
-                            server_tool_result=event.server_tool_result,
+                        await context._emit_runtime(
+                            AgentEvent(
+                                AgentEventType(event.type.value),
+                                session_id=config.session_id,
+                                phase=state.phase,
+                                server_tool_result=event.server_tool_result,
+                            )
                         )
                     case ModelEventType.RESPONSE:
                         if event.response is None:
@@ -1037,16 +1108,15 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             response.usage,
         )
         await self._notify_after_model(context, response)
-        yield AgentEvent(
-            AgentEventType.MODEL_COMPLETED,
-            session_id=config.session_id,
-            phase=state.phase,
-            response=response,
+        await context._emit_runtime(
+            AgentEvent(
+                AgentEventType.MODEL_COMPLETED,
+                session_id=config.session_id,
+                phase=state.phase,
+                response=response,
+            )
         )
-
-        async with aclosing(self._after_model_events(context, response)) as events:
-            async for event in events:
-                yield event
+        return response
 
     def _select_pending_input(self, context: AgentRunContext) -> tuple[UserMessage | None, AgentMessage | None]:
         """Reserve steering first, or internal input, without a queue-closing race."""
@@ -1134,7 +1204,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         calls: Sequence[ToolCall],
         parallel_tool_call: bool,
         active_input: AgentMessage | UserMessage | None = None,
-    ) -> AsyncIterator[AgentEvent]:
+    ) -> UserMessage | None:
         parallel_calls: list[ToolCall] = []
         serial_calls: list[ToolCall] = []
         for call in calls:
@@ -1149,40 +1219,31 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 serial_calls.append(call)
 
         if parallel_calls:
-            async with aclosing(self._execute_parallel_tools(context, parallel_calls)) as events:
-                async for event in events:
-                    yield event
+            await self._execute_parallel_tools(context, parallel_calls)
             steering = self._steering_extension.take(context)
             if steering is not None:
-                async with aclosing(
-                    self._start_steering(context, steering, serial_calls, active_input)
-                ) as steering_events:
-                    async for event in steering_events:
-                        yield event
-                return
+                await self._start_steering(context, steering, serial_calls, active_input)
+                return steering
 
-        async with aclosing(self._execute_serial_tools(context, serial_calls, active_input)) as events:
-            async for event in events:
-                yield event
+        return await self._execute_serial_tools(context, serial_calls, active_input)
 
     async def _execute_parallel_tools(
         self,
         context: AgentRunContext,
         calls: Sequence[ToolCall],
-    ) -> AsyncIterator[AgentEvent]:
-        """Run one parallel batch and stream each result as its handler finishes."""
+    ) -> None:
+        """Run one parallel batch and emit each result as its handler finishes."""
         for call in calls:
             await self._notify_before_tool(context, call)
-            async with aclosing(self._before_tool_events(context, call)) as preprocessing:
-                async for event in preprocessing:
-                    yield event
 
         await self._start_tool_execution(context)
-        yield AgentEvent(
-            AgentEventType.TOOL_STARTED,
-            session_id=context.config.session_id,
-            phase=context.state.phase,
-            tool_calls=list(calls),
+        await context._emit_runtime(
+            AgentEvent(
+                AgentEventType.TOOL_STARTED,
+                session_id=context.config.session_id,
+                phase=context.state.phase,
+                tool_calls=list(calls),
+            )
         )
         tasks = [asyncio.create_task(self._invoke_tool(context, call)) for call in calls]
         remaining = len(tasks)
@@ -1192,9 +1253,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 remaining -= 1
                 if remaining == 0:
                     await self._finish_tool_execution(context)
-                async with aclosing(self._finalize_tool(context, invocation)) as events:
-                    async for event in events:
-                        yield event
+                await self._finalize_tool(context, invocation)
         except BaseException:
             for task in tasks:
                 task.cancel()
@@ -1206,33 +1265,27 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         context: AgentRunContext,
         calls: Sequence[ToolCall],
         active_input: AgentMessage | UserMessage | None,
-    ) -> AsyncIterator[AgentEvent]:
+    ) -> UserMessage | None:
         """Run serial calls one at a time and stop at a steering boundary."""
         for index, call in enumerate(calls):
             await self._notify_before_tool(context, call)
-            async with aclosing(self._before_tool_events(context, call)) as preprocessing:
-                async for event in preprocessing:
-                    yield event
             await self._start_tool_execution(context)
-            yield AgentEvent(
-                AgentEventType.TOOL_STARTED,
-                session_id=context.config.session_id,
-                phase=context.state.phase,
-                tool_calls=[call],
+            await context._emit_runtime(
+                AgentEvent(
+                    AgentEventType.TOOL_STARTED,
+                    session_id=context.config.session_id,
+                    phase=context.state.phase,
+                    tool_calls=[call],
+                )
             )
             invocation = await self._invoke_tool(context, call)
             await self._finish_tool_execution(context)
-            async with aclosing(self._finalize_tool(context, invocation)) as events:
-                async for event in events:
-                    yield event
+            await self._finalize_tool(context, invocation)
             steering = self._steering_extension.take(context)
             if steering is not None:
-                async with aclosing(
-                    self._start_steering(context, steering, calls[index + 1 :], active_input)
-                ) as steering_events:
-                    async for event in steering_events:
-                        yield event
-                return
+                await self._start_steering(context, steering, calls[index + 1 :], active_input)
+                return steering
+        return None
 
     async def _invoke_tool(self, context: AgentRunContext, call: ToolCall) -> _ToolInvocation:
         """Run only a handler concurrently; lifecycle hooks remain serialized."""
@@ -1335,22 +1388,21 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self,
         context: AgentRunContext,
         invocation: _ToolInvocation,
-    ) -> AsyncIterator[AgentEvent]:
+    ) -> None:
         """Publish one completed invocation and append its result to context."""
         call, result, error = invocation.call, invocation.result, invocation.error
         await self._notify_after_tool(context, call, result, error)
         await context.append_message(result, invocation.timing)
-        yield AgentEvent(
-            AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
-            session_id=context.config.session_id,
-            phase=context.state.phase,
-            tool_calls=[call],
-            message=result,
-            error=error,
+        await context._emit_runtime(
+            AgentEvent(
+                AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
+                session_id=context.config.session_id,
+                phase=context.state.phase,
+                tool_calls=[call],
+                message=result,
+                error=error,
+            )
         )
-        async with aclosing(self._after_tool_events(context, call, result, error)) as events:
-            async for event in events:
-                yield event
 
     async def _start_steering(
         self,
@@ -1358,7 +1410,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         message: UserMessage,
         pending_calls: Sequence[ToolCall] = (),
         active_input: AgentMessage | UserMessage | None = None,
-    ) -> AsyncIterator[AgentEvent]:
+    ) -> None:
         """Finish pending tool protocol entries before appending urgent user input.
 
         Skipped calls are never invoked and do not trigger execution hooks. Their
@@ -1369,12 +1421,14 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
 
         if active_input is not None:
             internal = isinstance(active_input, AgentMessage)
-            yield AgentEvent(
-                AgentEventType.INTERNAL_MESSAGE_INTERRUPTED if internal else AgentEventType.STEERING_INTERRUPTED,
-                session_id=context.config.session_id,
-                phase=context.state.phase,
-                internal_message=active_input if internal else None,
-                steering_message=active_input if isinstance(active_input, UserMessage) else None,
+            await context._emit_runtime(
+                AgentEvent(
+                    AgentEventType.INTERNAL_MESSAGE_INTERRUPTED if internal else AgentEventType.STEERING_INTERRUPTED,
+                    session_id=context.config.session_id,
+                    phase=context.state.phase,
+                    internal_message=active_input if internal else None,
+                    steering_message=active_input if isinstance(active_input, UserMessage) else None,
+                )
             )
         for call in pending_calls:
             result = ToolMessage(
@@ -1384,78 +1438,29 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 success=False,
             )
             await context.append_message(result, MessageTiming.instant())
-            yield AgentEvent(
-                AgentEventType.TOOL_SKIPPED,
-                session_id=context.config.session_id,
-                phase=context.state.phase,
-                tool_calls=[call],
-                message=result,
+            await context._emit_runtime(
+                AgentEvent(
+                    AgentEventType.TOOL_SKIPPED,
+                    session_id=context.config.session_id,
+                    phase=context.state.phase,
+                    tool_calls=[call],
+                    message=result,
+                )
             )
         await context.append_message(message, MessageTiming.instant())
-        yield AgentEvent(
-            AgentEventType.STEERING_STARTED,
-            session_id=context.config.session_id,
-            phase=context.state.phase,
-            steering_message=message,
+        await context._emit_runtime(
+            AgentEvent(
+                AgentEventType.STEERING_STARTED,
+                session_id=context.config.session_id,
+                phase=context.state.phase,
+                steering_message=message,
+            )
         )
-
-    async def _apply_extension_event_phase(self, context: AgentRunContext, event: AgentEvent) -> None:
-        """Validate and apply phase transitions represented by extension events."""
-        match event.type:
-            case AgentEventType.COMPACTION_STARTED:
-                await self._start_compaction(context)
-            case AgentEventType.COMPACTION_TEXT_DELTA | AgentEventType.COMPACTION_REASONING_DELTA:
-                self._require_phase(context.state, AgentPhase.COMPACTING)
-            case AgentEventType.COMPACTION_COMPLETED:
-                await self._finish_compaction(context)
-            case AgentEventType.CUSTOM:
-                pass
-            case _:
-                raise AgentProtocolError(f"Extension emitted unsupported pre-model event: {event.type.value!r}")
-        event.phase = context.state.phase
-
-    async def _before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
-        """Forward custom events and close each extension iterator on exit."""
-        for extension in self.extensions:
-            async with aclosing(extension.before_tool_events(context, call)) as events:
-                async for event in events:
-                    if event.type != AgentEventType.CUSTOM:
-                        raise AgentProtocolError(f"Extension emitted unsupported pre-tool event: {event.type.value!r}")
-                    event.phase = context.state.phase
-                    yield event
 
     async def _notify_on_tool(self, context: AgentRunContext) -> None:
         """Let every extension register request-scoped tools in priority order."""
         for extension in self.extensions:
             await extension.on_tool(context)
-
-    async def _after_model_events(self, context: AgentRunContext, response: ModelResponse) -> AsyncIterator[AgentEvent]:
-        for extension in self.extensions:
-            async with aclosing(extension.after_model_events(context, response)) as events:
-                async for event in events:
-                    self._validate_post_operation_event(context, event)
-                    yield event
-
-    async def _after_tool_events(
-        self,
-        context: AgentRunContext,
-        call: ToolCall,
-        result: ToolMessage,
-        error: Exception | None,
-    ) -> AsyncIterator[AgentEvent]:
-        for extension in self.extensions:
-            async with aclosing(extension.after_tool_events(context, call, result, error)) as events:
-                async for event in events:
-                    self._validate_post_operation_event(context, event)
-                    yield event
-
-    @staticmethod
-    def _validate_post_operation_event(context: AgentRunContext, event: AgentEvent) -> None:
-        """Do not let a post-operation hook impersonate runtime or other-session events."""
-        if event.type is not AgentEventType.CUSTOM:
-            raise AgentProtocolError("Post-operation hooks may emit only CUSTOM events")
-        if event.session_id != context.config.session_id:
-            raise AgentProtocolError("Post-operation event belongs to another session")
 
     async def _notify_on_state(self, context: AgentRunContext) -> None:
         """Restore history and system instructions before input conversion."""
@@ -1488,14 +1493,6 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
     async def _notify_before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
         for extension in self.extensions:
             await extension.before_model(context, self._refresh_model_request(context, request))
-
-    async def _before_model_events(self, context: AgentRunContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
-        for extension in self.extensions:
-            async with aclosing(
-                extension.before_model_events(context, self._refresh_model_request(context, request))
-            ) as events:
-                async for event in events:
-                    yield event
 
     async def _notify_after_model(self, context: AgentRunContext, response: ModelResponse) -> None:
         for extension in self.extensions:

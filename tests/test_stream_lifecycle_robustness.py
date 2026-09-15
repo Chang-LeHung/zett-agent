@@ -91,7 +91,7 @@ async def test_every_lifecycle_hook_failure_releases_session_and_allows_retry(ho
     assert (await asyncio.wait_for(agent.run("retry"), 2)).content == "done"
 
 
-@pytest.mark.parametrize("hook", ["before_model_events", "before_tool_events"])
+@pytest.mark.parametrize("hook", ["before_model", "before_tool"])
 @pytest.mark.parametrize("cancel", [True, False])
 async def test_event_generator_failure_runs_finally_and_preserves_error(hook, cancel):
     finalized = []
@@ -104,7 +104,7 @@ async def test_event_generator_failure_runs_finally_and_preserves_error(hook, ca
         if self.enabled:
             self.enabled = False
             try:
-                yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="progress")
+                await context.emit(AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="progress"))
                 raise failure
             finally:
                 finalized.append(True)

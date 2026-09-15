@@ -1,11 +1,10 @@
 Lifecycle hook reference
 ============================
 
-All hooks receive :class:`~zett_agent.AgentRunContext` unless noted. An ordinary
-async hook returns None. The four ``*_events`` hooks are async generators yielding
-AgentEvent. ``accept`` is synchronous and returns bool. Lifecycle defaults are
-no-ops; middleware defaults transparently call the next layer. Override only
-what your extension needs.
+All hooks receive :class:`~zett_agent.AgentRunContext` unless noted. Lifecycle
+hooks are ordinary async functions returning None. ``accept`` is synchronous and
+returns bool. Lifecycle defaults are no-ops; middleware defaults transparently
+call the next layer. Override only what your extension needs.
 
 Setup hooks
 ---------------
@@ -78,30 +77,22 @@ These hooks use the same extension priority ordering as lifecycle hooks, with
 lower priorities forming the outer middleware layers. Provider-hosted tools run
 inside ``on_model_request`` and do not use the local ``on_tool_call`` boundary.
 
-Event-producing hooks
--------------------------
+Emitting outward events
+--------------------------
 
-.. list-table:: Yield, do not return, AgentEvent objects
-   :header-rows: 1
+Any lifecycle hook may publish visible progress with
+``await context.emit(AgentEvent(...))``. The event enters the request-owned queue
+at that exact point in hook priority order. Internal runtime methods and
+extensions never expose nested AgentEvent async generators; only
+:meth:`~zett_agent.Agent.stream` drains the queue and yields to callers.
 
-   * - Hook
-     - Ordering
-   * - :meth:`~zett_agent.AgentExtension.before_model_events`
-     - Receives context and an updated ModelRequest after before_model. Supports CUSTOM and the compaction lifecycle.
-   * - :meth:`~zett_agent.AgentExtension.after_model_events`
-     - After after_model and MODEL_COMPLETED, before tool dispatch or final-answer handling.
-   * - :meth:`~zett_agent.AgentExtension.before_tool_events`
-     - After before_tool, before TOOL_STARTED. Use for UI approval or preparation progress.
-   * - :meth:`~zett_agent.AgentExtension.after_tool_events`
-     - After after_tool and TOOL_COMPLETED/TOOL_FAILED; receives the same separate error argument before steering selection or another tool.
+Custom output does not become a phase transition simply because its payload says
+"working". Do not synthesize MODEL_STARTED, TOOL_STARTED, or terminal events that
+are owned by the core loop. Use ``context.publish`` instead for internal
+extension-to-extension notifications that should not reach the UI.
 
-Skipped or cancelled tools do not trigger after_tool_events. Custom output is
-produced while the request is READY; it does not become a phase transition simply
-because its payload says "working". Do not synthesize MODEL_STARTED or completion
-events that are owned by the core loop.
-
-Both before-model hooks receive ``(context, request)``. The runtime refreshes
-request messages and both tool registries before each extension and again before
+``before_model`` receives ``(context, request)``. The runtime refreshes request
+messages and both tool registries before each extension and again before
 the provider call. Request fields are frozen; edit ``context.state.messages``,
 ``context.tools``, or ``context.server_tools`` to affect subsequent hooks and the
 provider. The supplied request is a shallow view at entry, not a live view of

@@ -4,12 +4,12 @@ Emit events and accept user input
 Send progress to a UI
 -------------------------
 
-Use an event-producing hook when work needs visible progress. Here the payload
+Use ``context.emit`` from a lifecycle hook when work needs visible progress. Here the payload
 contains a model-step counter from the first-extension tutorial:
 
 .. literalinclude:: ../_examples/custom_extension.py
    :language: python
-   :pyobject: NoteExtension.before_model_events
+   :pyobject: NoteExtension.before_model
 
 The application receives the exact event through ``on_custom_event``. Choose a
 stable namespaced name and document payload keys as an application protocol.
@@ -47,7 +47,7 @@ owns the tool schema, outbound event, and validation of the returned answer.
    :language: python
    :pyobject: ApprovalExtension
 
-The wait is registered **before** the event is yielded, so an immediate UI reply
+The wait is registered **before** the event is emitted, so an immediate UI reply
 is safe. The async-with exit waits for the response; it does not block the event
 loop. Only after the reply is staged does the actual tool execute and consume it.
 

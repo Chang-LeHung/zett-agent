@@ -41,16 +41,26 @@ class Collector(AgentExtension):
         self.events = []
 
     async def on_event(self, context, event):
-        self.events.append(event)
+        if isinstance(event, CompactionEvent):
+            self.events.append(event)
 
 
 def context(messages):
-    return AgentRunContext(AgentRunConfig(session_id="test"), AgentState(messages=messages), {}, (Collector(),))
+    return AgentRunContext(
+        AgentRunConfig(session_id="test"),
+        AgentState(messages=messages, phase=AgentPhase.READY),
+        {},
+        (Collector(),),
+    )
 
 
 async def compact(extension, state):
     request = ModelRequest(messages=tuple(state.state.messages))
-    return [event async for event in extension.before_model_events(state, request)]
+    await extension.before_model(state, request)
+    events = []
+    while not state.event_queue.empty:
+        events.append(await state.event_queue.get())
+    return events
 
 
 async def test_compaction_preserves_instructions_and_whole_tool_turn():

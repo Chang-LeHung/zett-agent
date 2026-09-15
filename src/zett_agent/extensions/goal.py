@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass
 from threading import Lock
@@ -11,7 +10,6 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..agent import Agent, AgentRunConfig, AgentRunContext
-from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentIterationLimitError, AgentProtocolError
 from ..ids import new_uuid7
 from ..messages import AgentMessage, AssistantMessage, ImageContent, TextContent, UserContent, UserMessage
@@ -214,11 +212,11 @@ class GoalExtension(AgentExtension):
             case RunCancelledEvent():
                 self._finish_run(context)
 
-    async def after_model_events(
+    async def after_model(
         self,
         context: AgentRunContext,
         response: ModelResponse,
-    ) -> AsyncIterator[AgentEvent]:
+    ) -> None:
         """Privately evaluate a candidate answer and enqueue one continuation."""
         if response.message.tool_calls:
             return
@@ -255,8 +253,6 @@ class GoalExtension(AgentExtension):
                 )
             )
         )
-        if False:
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="goal_evaluation")
 
     @staticmethod
     def _goal_prompt(goal: str, message: UserMessage) -> UserContent:

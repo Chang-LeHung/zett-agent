@@ -1,4 +1,6 @@
-"""Post-operation event hooks preserve ordering, validation, and cleanup."""
+"""Ordinary lifecycle hooks emit through the request-owned event queue."""
+
+import asyncio
 
 import pytest
 
@@ -36,20 +38,20 @@ def work() -> str:
 
 
 @pytest.mark.parametrize("failed", [False, True])
-async def test_post_hooks_follow_completion_in_priority_order(failed):
+async def test_lifecycle_hooks_emit_in_priority_order(failed):
     class Observer(AgentExtension):
         def __init__(self, name, priority):
             self.name, self.priority = name, priority
 
-        async def after_model_events(self, context, response):
+        async def after_model(self, context, response):
             assert context.state.messages[-1] is response.message
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name=f"model-{self.name}")
+            await context.emit(AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name=f"model-{self.name}"))
 
-        async def after_tool_events(self, context, call, result, error):
+        async def after_tool(self, context, call, result, error):
             assert result.success is not failed
             assert (error is not None) is failed
             assert context.state.phase is AgentPhase.READY
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name=f"tool-{self.name}")
+            await context.emit(AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name=f"tool-{self.name}"))
 
     agent = await Agent.create(
         Model(),
@@ -58,17 +60,18 @@ async def test_post_hooks_follow_completion_in_priority_order(failed):
         extensions=[Observer("late", 200), Observer("early", 10)],
     )
     events = [event async for event in agent.stream("go")]
-    for i, event in enumerate(events):
+    for index, event in enumerate(events):
         if event.type is AgentEventType.MODEL_COMPLETED:
-            assert [e.name for e in events[i + 1 : i + 3]] == ["model-early", "model-late"]
+            assert [item.name for item in events[index - 2 : index]] == ["model-early", "model-late"]
         if event.type in (AgentEventType.TOOL_COMPLETED, AgentEventType.TOOL_FAILED):
-            assert [e.name for e in events[i + 1 : i + 3]] == ["tool-early", "tool-late"]
+            assert [item.name for item in events[index - 2 : index]] == ["tool-early", "tool-late"]
 
 
-@pytest.mark.parametrize("hook", ["after_model_events", "after_tool_events"])
-@pytest.mark.parametrize("mode", ["close", "error", "wrong_type", "wrong_session"])
-async def test_post_hook_failures_and_close_release_resources(hook, mode):
+@pytest.mark.parametrize("hook", ["after_model", "after_tool"])
+@pytest.mark.parametrize("mode", ["close", "error", "wrong_session"])
+async def test_emitting_hook_failures_and_close_release_resources(hook, mode):
     finalized = []
+    blocker = asyncio.Event()
 
     class Observer(AgentExtension):
         enabled = True
@@ -80,11 +83,15 @@ async def test_post_hook_failures_and_close_release_resources(hook, mode):
         try:
             if mode == "error":
                 raise RuntimeError("hook failed")
-            yield AgentEvent(
-                AgentEventType.MODEL_COMPLETED if mode == "wrong_type" else AgentEventType.CUSTOM,
-                "other" if mode == "wrong_session" else context.config.session_id,
-                name="post",
+            await context.emit(
+                AgentEvent(
+                    AgentEventType.CUSTOM,
+                    "other" if mode == "wrong_session" else context.config.session_id,
+                    name="post",
+                )
             )
+            if mode == "close":
+                await blocker.wait()
         finally:
             finalized.append(True)
 

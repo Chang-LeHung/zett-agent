@@ -8,8 +8,6 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
-from ..events import AgentEvent, AgentEventType
-
 if TYPE_CHECKING:
     from ..agent import AgentRunConfig, AgentRunContext
     from ..messages import AssistantMessage, ToolCall, ToolMessage
@@ -190,7 +188,7 @@ class AgentToolHooksMixin:
 
 
 class AgentEventHooksMixin:
-    """Hooks for streaming, internal notifications, and external input."""
+    """Hooks for internal notifications and external input."""
 
     def accept(self, config: AgentRunConfig | None, event: ExternalEvent) -> bool:
         """Handle one external event and report whether it was accepted.
@@ -204,77 +202,6 @@ class AgentEventHooksMixin:
         broadcast result; returning False does not stop later receivers.
         """
         return False
-
-    async def before_model_events(self, context: AgentRunContext, request: ModelRequest) -> AsyncIterator[AgentEvent]:
-        """Stream extension-owned events before a primary model request.
-
-        This hook is intended for visible preprocessing operations such as
-        context compaction. CUSTOM events do not change the request phase.
-        Request contains the latest messages, tool definitions, and reasoning
-        effort at hook entry, including changes made by earlier hooks. After
-        changing context, use context itself for the updated values; the supplied
-        request is not a live view. The next hook receives a rebuilt request.
-
-        Examples:
-            Usage::
-
-                yield AgentEvent(
-                    AgentEventType.CUSTOM,
-                    session_id=context.config.session_id,
-                    name="retrieval_progress",
-                    payload={"completed": 3, "total": 10},
-                )
-        """
-        if False:
-            yield AgentEvent(AgentEventType.MODEL_STARTED, context.config.session_id)
-
-    async def after_model_events(self, context: AgentRunContext, response: ModelResponse) -> AsyncIterator[AgentEvent]:
-        """Stream CUSTOM events after after_model and MODEL_COMPLETED.
-
-        The response is already appended. Hooks run in priority order in READY,
-        before tool dispatch or final-answer handling. Errors fail the request;
-        closing the stream closes the hook iterator and runs its finally block.
-        """
-        if False:
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
-
-    async def after_tool_events(
-        self,
-        context: AgentRunContext,
-        call: ToolCall,
-        result: ToolMessage,
-        error: Exception | None,
-    ) -> AsyncIterator[AgentEvent]:
-        """Stream CUSTOM events after after_tool and TOOL_COMPLETED/TOOL_FAILED.
-
-        ``error`` is the same original execution exception passed to after_tool,
-        or None after success. Skipped or cancelled tools do not call this hook.
-        Events are emitted before steering selection or the next tool; execution
-        remains in READY.
-        """
-        if False:
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id)
-
-    async def before_tool_events(self, context: AgentRunContext, call: ToolCall) -> AsyncIterator[AgentEvent]:
-        """Stream CUSTOM events after before_tool and before each tool starts.
-
-        Hooks run in priority order while the request remains READY. Equal
-        priorities retain registration order. Hook failures abort the request
-        before tool execution. Closing the consumer closes this iterator so its
-        finally blocks can release resources.
-
-        Examples:
-            Usage::
-
-                yield AgentEvent(
-                    AgentEventType.CUSTOM,
-                    session_id=context.config.session_id,
-                    name="tool_preparation",
-                    payload={"tool_call_id": call.id},
-                )
-        """
-        if False:
-            yield AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="example")
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Process a published notification; inspect its concrete type with match."""
@@ -334,8 +261,7 @@ class AgentExtension(
                              v
         +-----------------------------------------+
         | PRE-MODEL                               |<------------------------------------------------------+
-        | before_model()                          |                                                       |
-        | before_model_events() / compaction      |                                                       |
+        | before_model() / compaction             |                                                       |
         +-----------------------------------------+                                                       |
                              |                                                                            |
                              v                                                                            |
@@ -343,18 +269,16 @@ class AgentExtension(
         | MODEL STEP                              |                                                       |
         | on_model_request() -> provider           |                                                       |
         | append AssistantMessage                 |                                                       |
-        | after_model() / after_model_events()    |                                                       |
+        | after_model()                           |                                                       |
         +-----------------------------------------+                                                       |
                              |                                                                            |
                              v                                                                            |
         +-----------------------------------------+           +-------------------------------------+     |
         | HAS TOOL CALLS?                         |-- yes --->| TOOL STEP                           |     |
         +-----------------------------------------+           | before_tool()                       |     |
-                             |                                | before_tool_events()                |     |
                              |                                | on_tool_call() -> handler           |     |
                              |                                | after_tool()                         |-----+
                              |                                | append ToolMessage / TOOL_*         |     |
-                             | no                             | after_tool_events()                 |     |
                              |                                +-------------------------------------+     |
                              |                                                                            |
                              |                                                                            |
@@ -409,12 +333,12 @@ class AgentExtension(
     to MODEL STEP with a fresh iteration budget. An active internal/steering input
     emits ``*_INTERRUPTED`` when superseded, or ``*_COMPLETED`` after a final answer.
 
-    before_model_events() can stream CUSTOM or compaction events; compaction
-    enters COMPACTING and returns to READY. before_tool_events() streams CUSTOM
-    events in READY. These AgentEvents reach the caller; [E] marks an awaited,
-    sequential delivery through the separate async on_event() hook, not a
-    synchronous Python callback. AgentRunContext.publish broadcasts by default or
-    routes to one named extension when ``target`` is supplied.
+    Extensions emit outward events with ``await context.emit(event)`` from an
+    ordinary async lifecycle hook. Compaction events enter COMPACTING and return
+    to READY. Only Agent.stream consumes the request event queue and yields to
+    callers. [E] marks awaited, sequential delivery through the separate async
+    on_event() hook. AgentRunContext.publish broadcasts by default or routes to
+    one named extension when ``target`` is supplied.
 
     Tool execution errors become failed ToolMessages and still run after_tool(),
     which receives the original exception separately and can modify the message

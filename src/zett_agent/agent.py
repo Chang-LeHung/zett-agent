@@ -810,6 +810,13 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             while True:
                 event = await context.event_queue.get()
                 yield event
+                # Acknowledge only after the caller asks for the next event: the
+                # producer then stays parked between events for as long as the
+                # caller handles the current one. A caller that stops early (a UI
+                # stop, a dropped client) therefore cancels the producer before it
+                # starts the next model call or tool, instead of inside one.
+                # Releasing earlier would let it finish work nobody asked for.
+                # AgentEventQueue documents why this replaces a bounded queue.
                 context.event_queue.acknowledge()
                 if event.type is AgentEventType.RUN_COMPLETED:
                     await producer

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import aclosing
 from copy import deepcopy
@@ -1183,7 +1182,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 ToolMessage(
                     tool_call_id=call.id,
                     name=call.name,
-                    content=json.dumps({"cancelled": True, "reason": "Request cancelled before tool completion"}),
+                    content="Request cancelled before tool completion",
                     success=False,
                 ),
                 MessageTiming.instant(),
@@ -1449,7 +1448,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             result = ToolMessage(
                 tool_call_id=call.id,
                 name=call.name,
-                content=json.dumps({"skipped": True, "reason": "Superseded by a steering message"}),
+                content="Superseded by a steering message",
                 success=False,
             )
             await context.append_message(result, MessageTiming.instant())

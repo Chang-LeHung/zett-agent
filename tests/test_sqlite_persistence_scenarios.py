@@ -198,7 +198,7 @@ async def test_cancelled_tool_turn_is_persisted_as_provider_complete_and_can_res
     assert isinstance(cancelled_result, ToolMessage)
     assert cancelled_result.tool_call_id == "wait-1"
     assert cancelled_result.success is False
-    assert '"cancelled": true' in cancelled_result.content
+    assert cancelled_result.content == "Request cancelled before tool completion"
 
     result = await agent.run("Continue after stopping")
 

@@ -928,6 +928,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             if message_iterations >= self.max_iterations:
                 raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
             message_iterations += 1
+            await self._notify_before_turn(context)
             response = await self._run_model_step(context, reasoning_effort, parallel_tool_call)
             if not response.message.tool_calls:
                 if active_input is not None:
@@ -946,6 +947,9 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     )
                     active_input = None
 
+                # The answer ends this turn: close the turn before the runtime
+                # decides whether the request continues with new input.
+                await self._notify_after_turn(context, response.message)
                 steering, next_input = self._select_pending_input(context)
                 if steering is not None:
                     await self._start_steering(context, steering)
@@ -987,6 +991,9 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             steering = self._steering_extension.take(context)
             if steering is not None:
                 await self._start_steering(context, steering, response.message.tool_calls, active_input)
+                # Steering skipped the requested tools; their skipped results are
+                # appended, so the turn closes before the next turn begins.
+                await self._notify_after_turn(context, response.message)
                 active_input = steering
                 message_iterations = 0
                 continue
@@ -997,6 +1004,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 parallel_tool_call,
                 active_input,
             )
+            await self._notify_after_turn(context, response.message)
             if steering is not None:
                 active_input = steering
                 message_iterations = 0
@@ -1482,6 +1490,16 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
     async def _notify_before_run(self, context: AgentRunContext) -> None:
         for extension in self.extensions:
             await extension.before_run(context)
+
+    async def _notify_before_turn(self, context: AgentRunContext) -> None:
+        """Announce the start of one model/tool turn before its model call."""
+        for extension in self.extensions:
+            await extension.before_turn(context)
+
+    async def _notify_after_turn(self, context: AgentRunContext, result: AssistantMessage) -> None:
+        """Announce the end of one model/tool turn once its tools are settled."""
+        for extension in self.extensions:
+            await extension.after_turn(context, result)
 
     @staticmethod
     def _refresh_model_request(context: AgentRunContext, request: ModelRequest) -> ModelRequest:

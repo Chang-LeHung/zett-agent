@@ -43,6 +43,19 @@ Request hooks
    * - :meth:`~zett_agent.AgentExtension.on_error`
      - A non-cancellation request error is being propagated. Release failure state.
 
+Turn hooks
+--------------
+
+.. list-table:: A request runs one turn per model/tool cycle
+   :header-rows: 1
+
+   * - Hook
+     - Boundary and constraints
+   * - :meth:`~zett_agent.AgentExtension.before_turn`
+     - After before_run, or after the previous turn's after_turn; before compaction, before_model, and the provider call. Messages or tools edited here shape this turn only.
+   * - :meth:`~zett_agent.AgentExtension.after_turn`
+     - The turn's AssistantMessage and every ToolMessage it requested are appended and published. Receives the assistant message that opened the turn, including when its tool calls failed or steering superseded them. The final answer closes its turn before after_run.
+
 Model and tool hooks
 ------------------------
 

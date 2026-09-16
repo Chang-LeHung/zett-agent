@@ -7,6 +7,7 @@ from zett_agent import (
     AgentRunHooksMixin,
     AgentSetupHooksMixin,
     AgentToolHooksMixin,
+    AgentTurnHooksMixin,
     MiddlewareHook,
 )
 
@@ -16,6 +17,7 @@ def test_agent_extension_composes_each_hook_group_once() -> None:
         MiddlewareHook,
         AgentSetupHooksMixin,
         AgentRunHooksMixin,
+        AgentTurnHooksMixin,
         AgentModelHooksMixin,
         AgentToolHooksMixin,
         AgentEventHooksMixin,
@@ -33,6 +35,7 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
         MiddlewareHook: {"on_model_request", "on_tool_call"},
         AgentSetupHooksMixin: {"on_tool", "on_state", "on_message"},
         AgentRunHooksMixin: {"before_run", "after_run", "on_success", "on_error"},
+        AgentTurnHooksMixin: {"before_turn", "after_turn"},
         AgentModelHooksMixin: {"before_model", "after_model"},
         AgentToolHooksMixin: {"before_tool", "after_tool"},
         AgentEventHooksMixin: {
@@ -56,6 +59,8 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
         "after_run",
         "on_success",
         "on_error",
+        "before_turn",
+        "after_turn",
         "before_model",
         "after_model",
         "before_tool",

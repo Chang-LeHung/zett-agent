@@ -22,7 +22,7 @@ retain registration order. Extensions must have unique names, including built-in
              |
         before_run()
              |
-        model/tool loop
+        turn 1..n    before_turn() -> model step -> tools -> after_turn()
              |
         after_run() -> on_success() -> COMPLETED -> RUN_COMPLETED
 
@@ -35,6 +35,8 @@ One model/tool cycle
 
 .. code-block:: text
 
+   before_turn()
+          |
    assemble initial ModelRequest
           |
    before_model(context, request)
@@ -43,7 +45,7 @@ One model/tool cycle
           |
    append AssistantMessage -> after_model() -> MODEL_COMPLETED
           |
-          +-- no tool calls --> check steering/internal inputs --> final answer
+          +-- no tool calls --> after_turn() --> check steering/internal inputs --> final answer
           |
           +-- tool calls --> before_tool()
                                       |
@@ -58,6 +60,8 @@ One model/tool cycle
                           TOOL_COMPLETED / TOOL_FAILED
                                       |
                           steering check / next tool / model
+                                      |
+                                 after_turn()
 
 Hooks and their exact purpose are catalogued in :doc:`../extending/hooks`.
 The :class:`~zett_agent.AgentExtension` reference also includes the complete

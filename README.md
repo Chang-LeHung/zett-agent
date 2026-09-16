@@ -180,11 +180,18 @@ extension only overrides the hooks it needs.
 
 `extensions/` keeps each concrete extension in its own module;
 `extensions/events.py` defines internal notification events.
-Available hooks are `on_tool`, `on_state`, `on_message`, `before_run`, `before_model`,
-`after_model`, `before_tool`, `after_tool`, `after_run`,
-`on_success`, `on_error`, and `on_event`. Hooks run sequentially in extension
-priority order, with registration order breaking ties. A hook publishes visible
-progress with `await context.emit(event)`; only `Agent.stream()` yields events.
+Available hooks are `on_tool`, `on_state`, `on_message`, `before_run`, `before_turn`,
+`before_model`, `after_model`, `before_tool`, `after_tool`, `after_turn`,
+`after_run`, `on_success`, `on_error`, and `on_event`. Hooks run sequentially in
+extension priority order, with registration order breaking ties. A hook
+publishes visible progress with `await context.emit(event)`; only
+`Agent.stream()` yields events.
+
+`before_turn(context)` and `after_turn(context, result)` bracket one model/tool
+turn: one model call plus every tool invocation it requested. A request runs one
+turn per model/tool cycle, so `after_turn` fires with each tool-calling message
+and once more for the final answer, before `after_run`. Later turns come from
+steering or queued internal input that continues the same request.
 
 `on_success(context, result)` runs once per successful request, after all
 `after_run` hooks and before `RUN_COMPLETED` is emitted. It does not run for
@@ -200,10 +207,12 @@ Register additional tools through `context.register_tool(tool)` in `on_tool`.
 All tool hooks finish before state hooks, so tool guidance includes the complete
 registry. Model schemas and execution use the same registry.
 
-Request setup runs in this order:
+Request setup and turns run in this order:
 
 ```text
-on_tool -> on_state -> on_message -> append_message -> before_run -> model
+on_tool -> on_state -> on_message -> append_message -> before_run
+        -> [before_turn -> before_model -> model -> tools -> after_turn] * n
+        -> after_run
 ```
 
 `on_state` restores history and injects system instructions. `on_message` may

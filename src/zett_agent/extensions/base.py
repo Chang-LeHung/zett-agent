@@ -138,6 +138,48 @@ class AgentRunHooksMixin:
         """Run before an agent error is propagated to the caller."""
 
 
+class AgentTurnHooksMixin:
+    """Hooks around one model/tool turn inside a request.
+
+    A turn is one primary model call plus every tool invocation that call
+    requested. One request runs one or more turns::
+
+        before_run() -> [before_turn() -> model step -> tools -> after_turn()] * n -> after_run()
+
+    Later turns follow steering or queued internal input that continues the same
+    request. A request that uses no tools, receives no further input, and is not
+    steered has exactly one turn, whose turn hooks sit between before_run and
+    after_run.
+    """
+
+    async def before_turn(self, context: AgentRunContext) -> None:
+        """Run before this turn's model call.
+
+        Runs after before_run() on the first turn and after the previous turn's
+        after_turn() on later ones. Model request assembly, compaction, and
+        before_model() follow this hook, so context edited here reaches the
+        provider.
+        """
+
+    async def after_turn(self, context: AgentRunContext, result: AssistantMessage) -> None:
+        """Run once the turn's assistant message and tool results are settled.
+
+        ``result`` is the assistant message that opened the turn: either the
+        final answer, or the tool-calling message whose ToolMessages were
+        appended. Every requested call is settled first, including calls that
+        failed, and calls that steering skipped, which arrive as unsuccessful or
+        skipped ToolMessages.
+
+        Steering that interrupts a turn is accepted while the runtime settles
+        that batch, so its UserMessage is already appended when this hook runs
+        and the steering turn follows as the next turn.
+
+        A turn that never completed, because the request failed or was
+        cancelled, has no after_turn call; use on_error and RunCancelledEvent for
+        those paths.
+        """
+
+
 class AgentModelHooksMixin:
     """Hooks immediately before and after each primary model invocation."""
 
@@ -211,6 +253,7 @@ class AgentExtension(
     MiddlewareHook,
     AgentSetupHooksMixin,
     AgentRunHooksMixin,
+    AgentTurnHooksMixin,
     AgentModelHooksMixin,
     AgentToolHooksMixin,
     AgentEventHooksMixin,
@@ -260,14 +303,15 @@ class AgentExtension(
                              |
                              v
         +-----------------------------------------+
-        | PRE-MODEL                               |<------------------------------------------------------+
+        | TURN START (PRE-MODEL)                  |<------------------------------------------------------+
+        | before_turn()                           |                                                       |
         | before_model() / compaction             |                                                       |
         +-----------------------------------------+                                                       |
                              |                                                                            |
                              v                                                                            |
         +-----------------------------------------+                                                       |
         | MODEL STEP                              |                                                       |
-        | on_model_request() -> provider           |                                                       |
+        | on_model_request() -> provider          |                                                       |
         | append AssistantMessage                 |                                                       |
         | after_model()                           |                                                       |
         +-----------------------------------------+                                                       |
@@ -277,10 +321,17 @@ class AgentExtension(
         | HAS TOOL CALLS?                         |-- yes --->| TOOL STEP                           |     |
         +-----------------------------------------+           | before_tool()                       |     |
                              |                                | on_tool_call() -> handler           |     |
-                             |                                | after_tool()                         |-----+
+                             |                                | after_tool()                         |----+
                              |                                | append ToolMessage / TOOL_*         |     |
+                             |                                | after_turn()                        |     |
                              |                                +-------------------------------------+     |
                              |                                                                            |
+                             |                                                                            |
+                             v                                                                            |
+        +-----------------------------------------+                                                       |
+        | TURN END                                |                                                       |
+        | after_turn()                            |                                                       |
+        +-----------------------------------------+                                                       |
                              |                                                                            |
                              v                                                                            |
         +-----------------------------------------+           +-------------------------------------+     |
@@ -320,7 +371,10 @@ class AgentExtension(
     All on_tool() hooks finish before on_state() restores history and system
     instructions. All on_state() hooks finish before on_message() transforms
     context.input_message. The runtime then appends and publishes the transformed
-    UserMessage exactly once, followed by before_run(). Each hook
+    UserMessage exactly once, followed by before_run(). Each turn then runs
+    before_turn(), one model step, every requested tool, and after_turn() before
+    the runtime looks for steering or queued internal input. Because the final
+    answer ends its own turn, after_turn() precedes after_run(). Each hook
     runs by ascending priority; equal priorities retain registration order. The
     right return line runs after every tool in the response has been processed,
     or after one AgentMessage is appended with a fresh iteration budget.
@@ -347,11 +401,12 @@ class AgentExtension(
     on_error(), after_run(), and on_success(). Errors raised by subscribers after
     a terminal phase was committed do not change that terminal phase.
 
-    Setup, run, model, tool, event, and middleware hooks are supplied by their
-    corresponding base classes. Subclasses override only the hooks they need;
-    lifecycle defaults are no-ops and middleware defaults call the next layer.
-    External events are independent from a request's internal [E] notifications:
-    callers emit them through the Agent instead of addressing an extension.
+    Setup, run, turn, model, tool, event, and middleware hooks are supplied by
+    their corresponding base classes. Subclasses override only the hooks they
+    need; lifecycle defaults are no-ops and middleware defaults call the next
+    layer. External events are independent from a request's internal [E]
+    notifications: callers emit them through the Agent instead of addressing an
+    extension.
     """
 
     priority: int = 100

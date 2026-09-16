@@ -85,12 +85,13 @@ DIAGRAMS = {
         "Agent and extension lifecycle",
         """flowchart TD
     request[NEW REQUEST] --> setup["SETUP<br/>on_tool() / on_state()<br/>on_message() / append UserMessage<br/>before_run()"]
-    setup --> premodel["PRE-MODEL<br/>before_model()<br/>optional compaction via context.emit()"]
+    setup --> premodel["TURN START<br/>before_turn() / before_model()<br/>optional compaction via context.emit()"]
     premodel --> model["MODEL STEP<br/>append AssistantMessage<br/>after_model() / MODEL_COMPLETED"]
     model --> calls[Has tool calls?]
-    calls -- yes --> tools["TOOL STEP<br/>before_tool()<br/>execute / after_tool()<br/>append ToolMessage / TOOL_*"]
+    calls -- yes --> tools["TOOL STEP<br/>before_tool()<br/>execute / after_tool()<br/>append ToolMessage / TOOL_*<br/>after_turn()"]
     tools --> premodel
-    calls -- no --> inbox[Steering or internal input?]
+    calls -- no --> turnend["TURN END<br/>after_turn()"]
+    turnend --> inbox[Steering or internal input?]
     inbox -- yes --> continuation[Append selected input]
     continuation --> premodel
     inbox -- no --> success["SUCCESS<br/>after_run() / on_success()<br/>COMPLETED / RUN_COMPLETED"]

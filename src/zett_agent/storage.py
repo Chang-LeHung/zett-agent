@@ -1,16 +1,20 @@
+import asyncio
 import base64
 import json
-from collections.abc import Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime
 from enum import IntEnum
 from pathlib import Path
+from weakref import WeakKeyDictionary
 
 from pydantic import TypeAdapter
-from sqlalchemy import Index, Integer, String, Text, create_engine, delete, func, select
+from sqlalchemy import Index, Integer, String, Text, delete, func, select
 from sqlalchemy.engine import URL
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.pool import NullPool
 
 from .extensions.compaction import CompactedMessage
 from .extensions.events import MessageTiming
@@ -186,14 +190,18 @@ class SQLiteSessionStorage(SyncMethodsMixin):
     Message metadata and tags live in each Raw Log message JSON envelope. Only
     compaction creates snapshots.
 
+    Every storage operation is asynchronous and runs on SQLAlchemy's asyncio
+    SQLite driver, so persistence never blocks the Agent event loop. The file
+    path is prepared during construction; ORM tables are created by the first
+    awaited call, which keeps construction usable before a loop exists.
+
     Args:
         path: SQLite file path. None uses ``~/.zett-agent/sessions.sqlite3``.
-            Parent directories and ORM tables are created during construction.
+            Parent directories are created during construction.
 
     Note:
-        Methods named async still perform synchronous local SQLAlchemy work.
-        Close the owned connection pool explicitly. Tests must pass a temporary
-        file and never use the default user database.
+        Close the owned connection pool with ``await storage.close()``. Tests
+        must pass a temporary file and never use the default user database.
 
     Examples:
         Use a temporary database in tests::
@@ -204,10 +212,10 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             with TemporaryDirectory() as directory:
                 storage = SQLiteSessionStorage(Path(directory) / "sessions.sqlite3")
                 try:
-                    session = storage.create_session(title="Documentation review")
-                    assert storage.get_session(session.id) == session
+                    session = await storage.create_session(title="Documentation review")
+                    assert await storage.get_session(session.session_id) == session
                 finally:
-                    storage.close()
+                    await storage.close()
 
     .. zett-diagram:: session-view
 
@@ -236,19 +244,45 @@ class SQLiteSessionStorage(SyncMethodsMixin):
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path is not None else Path.home() / ".zett-agent" / "sessions.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.engine = create_engine(URL.create("sqlite", database=str(self.path)))
-        Base.metadata.create_all(self.engine)
+        # NullPool keeps every connection inside the loop that opened it. One
+        # instance may therefore serve an application loop, a SyncRuntime thread,
+        # and a test portal without sharing loop-bound pooled connections.
+        self.engine = create_async_engine(
+            URL.create("sqlite+aiosqlite", database=str(self.path)),
+            poolclass=NullPool,
+        )
+        self._sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+        self._schema_ready = False
+        self._schema_locks: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = WeakKeyDictionary()
 
-    @contextmanager
-    def _session_scope(self):
-        with Session(self.engine) as session, session.begin():
+    async def _ensure_schema(self) -> None:
+        """Create ORM tables once, before the first awaited statement.
+
+        Schema creation needs the asynchronous engine, so it cannot happen in
+        the constructor that callers use before an event loop exists. Every
+        statement goes through a session scope, which therefore owns this
+        barrier; ``create_all`` is itself idempotent.
+        """
+        if self._schema_ready:
+            return
+        async with self._schema_locks.setdefault(asyncio.get_running_loop(), asyncio.Lock()):
+            if self._schema_ready:
+                return
+            async with self.engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+            self._schema_ready = True
+
+    @asynccontextmanager
+    async def _session_scope(self) -> AsyncIterator[AsyncSession]:
+        await self._ensure_schema()
+        async with self._sessions() as session, session.begin():
             yield session
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Release the connection pool without deleting stored data."""
-        self.engine.dispose()
+        await self.engine.dispose()
 
-    def create_session(
+    async def create_session(
         self,
         *,
         session_id: str | None = None,
@@ -271,8 +305,8 @@ class SQLiteSessionStorage(SyncMethodsMixin):
         if normalized_agent_name is not None and (not normalized_agent_name or len(normalized_agent_name) > 64):
             raise ValueError("Agent name must contain between 1 and 64 characters")
         now = datetime.now(UTC)
-        with self._session_scope() as session:
-            if session.get(AgentSessionModel, resolved_id) is not None:
+        async with self._session_scope() as session:
+            if await session.get(AgentSessionModel, resolved_id) is not None:
                 raise ValueError(f"Session already exists: {resolved_id}")
             row = AgentSessionModel(
                 id=resolved_id,
@@ -283,10 +317,10 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 updated_at=now,
             )
             session.add(row)
-            session.flush()
-            return self._summary(session, row)
+            await session.flush()
+            return await self._summary(session, row)
 
-    def list_raw_messages(
+    async def list_raw_messages(
         self,
         session_id: str,
         *,
@@ -323,24 +357,24 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             raise ValueError("limit must be positive")
         if offset < 0:
             raise ValueError("offset cannot be negative")
-        with self._session_scope() as session:
+        async with self._session_scope() as session:
             statement = select(RawLogMessageModel).where(
                 RawLogMessageModel.session_id == session_id,
                 RawLogMessageModel.sequence > after_sequence,
             )
             if through_sequence is not None:
                 statement = statement.where(RawLogMessageModel.sequence <= through_sequence)
-            rows = session.scalars(statement.order_by(RawLogMessageModel.sequence).offset(offset).limit(limit))
+            rows = await session.scalars(statement.order_by(RawLogMessageModel.sequence).offset(offset).limit(limit))
             return [self._record(row) for row in rows]
 
-    def list_sessions(self, *, limit: int = 100, offset: int = 0) -> list[SessionSummary]:
+    async def list_sessions(self, *, limit: int = 100, offset: int = 0) -> list[SessionSummary]:
         """Return one page of root and subagent sessions by latest activity."""
         if limit < 1:
             raise ValueError("limit must be positive")
         if offset < 0:
             raise ValueError("offset cannot be negative")
-        with self._session_scope() as session:
-            rows = session.execute(
+        async with self._session_scope() as session:
+            rows = await session.execute(
                 select(
                     AgentSessionModel.id.label("session_id"),
                     AgentSessionModel.parent_session_id,
@@ -376,23 +410,23 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 for row in rows
             ]
 
-    def count_messages(self, session_id: str) -> int:
+    async def count_messages(self, session_id: str) -> int:
         """Count immutable raw messages without reconstructing their payloads."""
-        with self._session_scope() as session:
+        async with self._session_scope() as session:
             return int(
-                session.scalar(
+                await session.scalar(
                     select(func.count(RawLogMessageModel.id)).where(RawLogMessageModel.session_id == session_id)
                 )
                 or 0
             )
 
-    def get_session(self, session_id: str) -> SessionSummary | None:
+    async def get_session(self, session_id: str) -> SessionSummary | None:
         """Return one session's storage metadata without loading its messages."""
-        with self._session_scope() as session:
-            row = session.get(AgentSessionModel, session_id)
-            return self._summary(session, row) if row is not None else None
+        async with self._session_scope() as session:
+            row = await session.get(AgentSessionModel, session_id)
+            return await self._summary(session, row) if row is not None else None
 
-    def update_session(
+    async def update_session(
         self,
         session_id: str,
         *,
@@ -413,8 +447,8 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             raise ValueError("Session title must contain between 1 and 200 characters")
         if normalized_agent_name is not None and (not normalized_agent_name or len(normalized_agent_name) > 64):
             raise ValueError("Agent name must contain between 1 and 64 characters")
-        with self._session_scope() as session:
-            row = session.get(AgentSessionModel, session_id)
+        async with self._session_scope() as session:
+            row = await session.get(AgentSessionModel, session_id)
             if row is None:
                 return None
             if normalized_title is not None:
@@ -422,14 +456,16 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             if normalized_agent_name is not None:
                 row.agent_name = normalized_agent_name
             row.updated_at = datetime.now(UTC)
-            session.flush()
-            return self._summary(session, row)
+            await session.flush()
+            return await self._summary(session, row)
 
     @staticmethod
-    def _summary(session: Session, row: AgentSessionModel) -> SessionSummary:
+    async def _summary(session: AsyncSession, row: AgentSessionModel) -> SessionSummary:
         """Hydrate one session ORM row and its message count into a read model."""
         message_count = int(
-            session.scalar(select(func.count(RawLogMessageModel.id)).where(RawLogMessageModel.session_id == row.id))
+            await session.scalar(
+                select(func.count(RawLogMessageModel.id)).where(RawLogMessageModel.session_id == row.id)
+            )
             or 0
         )
         return SessionSummary(
@@ -442,17 +478,17 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             updated_at=row.updated_at.replace(tzinfo=UTC),
         )
 
-    def delete_session(self, session_id: str) -> bool:
+    async def delete_session(self, session_id: str) -> bool:
         """Explicitly delete raw messages and snapshots owned by one session."""
-        with self._session_scope() as session:
-            message_count = session.execute(
-                delete(RawLogMessageModel).where(RawLogMessageModel.session_id == session_id)
+        async with self._session_scope() as session:
+            message_count = (
+                await session.execute(delete(RawLogMessageModel).where(RawLogMessageModel.session_id == session_id))
             ).rowcount
-            snapshot_count = session.execute(
-                delete(ContextSnapshotModel).where(ContextSnapshotModel.session_id == session_id)
+            snapshot_count = (
+                await session.execute(delete(ContextSnapshotModel).where(ContextSnapshotModel.session_id == session_id))
             ).rowcount
-            session_count = session.execute(
-                delete(AgentSessionModel).where(AgentSessionModel.id == session_id)
+            session_count = (
+                await session.execute(delete(AgentSessionModel).where(AgentSessionModel.id == session_id))
             ).rowcount
             return bool(message_count or snapshot_count or session_count)
 
@@ -495,17 +531,17 @@ class SQLiteSessionStorage(SyncMethodsMixin):
         )
 
     @staticmethod
-    def _sequence(session: Session, session_id: str) -> int:
+    async def _sequence(session: AsyncSession, session_id: str) -> int:
         return (
-            session.scalar(
+            await session.scalar(
                 select(func.max(RawLogMessageModel.sequence)).where(RawLogMessageModel.session_id == session_id)
             )
             or 0
         )
 
     @staticmethod
-    def _latest(session: Session, session_id: str) -> ContextSnapshotModel | None:
-        return session.scalar(
+    async def _latest(session: AsyncSession, session_id: str) -> ContextSnapshotModel | None:
+        return await session.scalar(
             select(ContextSnapshotModel)
             .where(ContextSnapshotModel.session_id == session_id)
             .order_by(ContextSnapshotModel.version.desc())
@@ -538,12 +574,12 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             A typed SessionView containing the snapshot and ordered raw tail.
             An unknown session produces an empty view without creating records.
         """
-        with self._session_scope() as session:
-            session_row = session.get(AgentSessionModel, session_id)
-            snapshot_row = self._latest(session, session_id)
+        async with self._session_scope() as session:
+            session_row = await session.get(AgentSessionModel, session_id)
+            snapshot_row = await self._latest(session, session_id)
             snapshot = self._snapshot_record(snapshot_row) if snapshot_row is not None else None
             compacted_through_sequence = snapshot.compacted_through_sequence if snapshot is not None else 0
-            rows = session.scalars(
+            rows = await session.scalars(
                 select(RawLogMessageModel)
                 .where(
                     RawLogMessageModel.session_id == session_id,
@@ -601,10 +637,10 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             raise ValueError("Model usage belongs only to assistant messages")
         encoded_metadata = _encode_context_data(metadata, field_name="Message metadata")
         encoded_tags = _encode_context_data(tags, field_name="Message tags", nonempty_keys=True)
-        with self._session_scope() as session:
-            sequence = self._sequence(session, session_id)
+        async with self._session_scope() as session:
+            sequence = await self._sequence(session, session_id)
             now = datetime.now(UTC)
-            session_row = session.get(AgentSessionModel, session_id)
+            session_row = await session.get(AgentSessionModel, session_id)
             if session_row is None:
                 session_row = AgentSessionModel(
                     id=session_id,
@@ -657,7 +693,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                     updated_at=now,
                 )
             )
-            session.flush()
+            await session.flush()
             return sequence + 1
 
     async def snapshot(
@@ -687,12 +723,12 @@ class SQLiteSessionStorage(SyncMethodsMixin):
         Note:
             This operation never changes or deletes original Raw Log messages.
         """
-        with self._session_scope() as session:
-            latest = self._latest(session, session_id)
+        async with self._session_scope() as session:
+            latest = await self._latest(session, session_id)
             version = latest.version if latest else 0
             if version != expected_version:
                 raise ValueError("Snapshot conflict; reload the session")
-            latest_raw_sequence = self._sequence(session, session_id)
+            latest_raw_sequence = await self._sequence(session, session_id)
             if compacted_through_sequence < 1 or compacted_through_sequence > latest_raw_sequence:
                 raise ValueError("Snapshot boundary must identify an existing Raw Log message")
             if latest is not None and compacted_through_sequence <= latest.compacted_through_sequence:
@@ -708,5 +744,5 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 updated_at=now,
             )
             session.add(row)
-            session.flush()
+            await session.flush()
             return self._snapshot_record(row)

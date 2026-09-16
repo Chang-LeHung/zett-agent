@@ -88,9 +88,9 @@ async def main() -> None:
             await client.run("Remember this")
             assert extension.storage.operations == ["load", "append:user", "append:assistant"]
             print(", ".join(extension.storage.operations))
-            assert len(database.list_raw_messages("audit")) == 2
+            assert len(await database.list_raw_messages("audit")) == 2
         finally:
-            database.close()
+            await database.close()
 
 
 if __name__ == "__main__":

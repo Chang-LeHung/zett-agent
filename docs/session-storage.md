@@ -18,7 +18,7 @@ agent = await Agent.create(
     ],
 )
 await agent.run("Hello")
-history.close()
+await history.close()
 ```
 
 Storage defaults to `~/.zett-agent/sessions.sqlite3`. Pass an explicit filesystem
@@ -72,9 +72,12 @@ The latest version is active, so no mutable is_active flag is needed.
 Restore `snapshot.messages_json` followed by raw entries with
 `sequence > snapshot.base_sequence`. Never interpret compacted list offsets as
 raw-log positions. Raw messages and snapshots retain their complete typed runtime
-envelopes. `list_raw_messages()` exposes typed, paginated Raw Log records for history UIs and
-auditing. `delete_session()` explicitly removes both table ranges for a session.
-Storage can be closed and reopened without depending on a Zett process.
+envelopes. `await storage.list_raw_messages()` exposes typed, paginated Raw Log
+records for history UIs and auditing. `await storage.delete_session()` explicitly
+removes both table ranges for a session. Storage runs on SQLAlchemy's asyncio
+SQLite driver with a null pool, so every operation leaves the event loop free and
+connections never cross loops. Close it with `await storage.close()`. Storage can
+be closed and reopened without depending on a Zett process.
 
 Tests use temporary SQLite databases. Existing Zett application data is not
 migrated or deleted. Raw assistant messages are emitted on complete model responses.

@@ -47,11 +47,14 @@ def main() -> None:
                     for event in events:
                         if event.type is AgentEventType.RUN_COMPLETED:
                             assert event.message.content == "Turn 2: Remember this"
-            records = history.list_raw_messages("sync-example")
-            assert [record.message.role for record in records] == ["user", "assistant", "user", "assistant"]
+            # Storage is asynchronous; a plain function reaches it through the sync view.
+            with history.storage.sync() as database:
+                records = database.list_raw_messages("sync-example")
+                assert [record.message.role for record in records] == ["user", "assistant", "user", "assistant"]
             print("Synchronous history persisted")
         finally:
-            history.close()
+            with history.storage.sync() as database:
+                database.close()
 
 
 if __name__ == "__main__":

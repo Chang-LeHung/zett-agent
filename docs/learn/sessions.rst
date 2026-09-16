@@ -31,10 +31,15 @@ demo's deletion. Never run destructive cleanup on the default user database.
 Raw Log versus model context
 --------------------------------
 
-* Use ``list_raw_messages`` for the conversation UI. It returns original messages
-  in sequence order, including tools and internal agent input.
-* Use ``load`` / SessionView for model context: latest checkpoint plus its raw tail.
+* Use ``await storage.list_raw_messages(...)`` for the conversation UI. It returns
+  original messages in sequence order, including tools and internal agent input.
+* Use ``await storage.load(...)`` / SessionView for model context: latest
+  checkpoint plus its raw tail.
 * Compaction creates a new snapshot; it does not rewrite Raw Log history.
+
+Every storage method is asynchronous because the SQLite work runs on SQLAlchemy's
+asyncio driver. Synchronous entry points reach the same instance through
+``with storage.sync() as database:``.
 
 ``after_sequence`` is exclusive; ``through_sequence`` is inclusive. ``offset``
 and ``limit`` apply after filtering. Session listings are ordered by latest

@@ -174,7 +174,7 @@ async def test_external_internal_message_continues_loop_and_persists_complete_hi
         "internal question",
     ]
 
-    records = persistence.list_raw_messages("session-1")
+    records = await persistence.list_raw_messages("session-1")
     assert [record.message.role.value for record in records] == ["user", "assistant", "agent", "assistant"]
     assert [record.message.content for record in records] == [
         "initial question",
@@ -182,7 +182,7 @@ async def test_external_internal_message_continues_loop_and_persists_complete_hi
         "internal question",
         "internal answer",
     ]
-    persistence.close()
+    await persistence.close()
 
 
 async def test_internal_internal_message_event_queues_messages_in_publish_order() -> None:

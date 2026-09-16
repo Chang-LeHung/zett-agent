@@ -69,13 +69,13 @@ async def main() -> None:
                 extensions=[persistence, SubAgentExtension([definition]), ToolGuidelinesExtension()],
             )
             print((await client.run("Review the design")).content)
-            sessions = persistence.list_sessions()
+            sessions = await persistence.list_sessions()
             children = [session for session in sessions if session.parent_session_id == "parent"]
             assert len(sessions) == 2 and len(children) == 1
             assert children[0].session_id != "parent"
             print("Two isolated sessions; child links to parent")
         finally:
-            persistence.close()
+            await persistence.close()
 
 
 if __name__ == "__main__":

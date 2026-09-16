@@ -1,12 +1,13 @@
 """Short integration scenarios against a disposable real SQLite database."""
 
 import asyncio
+import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from pathlib import Path
 from uuid import UUID
 
 import pytest
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 from zett_agent import (
     Agent,
@@ -23,7 +24,15 @@ from zett_agent import (
     tool,
 )
 from zett_agent.extensions.compaction import CompactedMessage
-from zett_agent.storage import AgentSessionModel, ContextSnapshotModel, MessageKind, RawLogMessageModel
+from zett_agent.storage import MessageKind
+
+
+@contextmanager
+def sqlite_file(path: Path) -> Iterator[sqlite3.Connection]:
+    """Read the storage file directly; the async DBAPI has no sync counterpart."""
+    with closing(sqlite3.connect(path)) as connection:
+        connection.row_factory = sqlite3.Row
+        yield connection
 
 
 class AnswerModel:
@@ -68,14 +77,14 @@ def add(left: int, right: int) -> int:
 
 
 @pytest.fixture
-def sqlite_extension(tmp_path: Path):
+async def sqlite_extension(tmp_path: Path):
     """Own one real SQLite file and remove it after every scenario."""
     path = tmp_path / "persistence-scenario.sqlite3"
     extension = SQLiteSessionExtension(path)
     try:
         yield extension
     finally:
-        extension.close()
+        await extension.close()
         path.unlink(missing_ok=True)
 
 
@@ -97,7 +106,7 @@ async def test_successful_turn_writes_valid_session_and_raw_log_rows(sqlite_exte
         metadata={"source": "integration-test"},
         tags={"kind": "test"},
     )
-    sqlite_extension.update_session("session", title="SQLite scenario", agent_name="test-agent")
+    await sqlite_extension.update_session("session", title="SQLite scenario", agent_name="test-agent")
 
     view = await sqlite_extension.storage.load("session")
     assert view.messages == [user_message, AssistantMessage(content="Stored answer")]
@@ -112,10 +121,10 @@ async def test_successful_turn_writes_valid_session_and_raw_log_rows(sqlite_exte
         ),
     ]
     assert (view.title, view.agent_name) == ("SQLite scenario", "test-agent")
-    with Session(sqlite_extension.storage.engine) as session:
-        rows = list(session.scalars(select(RawLogMessageModel).order_by(RawLogMessageModel.sequence)))
-        assert [row.sequence for row in rows] == [1, 2]
-        assert all(UUID(row.id).version == 7 and row.created_at == row.updated_at for row in rows)
+    with sqlite_file(sqlite_extension.storage.path) as connection:
+        rows = connection.execute("select id, sequence, created_at, updated_at from raw_messages").fetchall()
+        assert [row["sequence"] for row in rows] == [1, 2]
+        assert all(UUID(row["id"]).version == 7 and row["created_at"] == row["updated_at"] for row in rows)
 
 
 async def test_complete_tool_turn_preserves_roles_and_session_view(sqlite_extension):
@@ -137,7 +146,7 @@ async def test_complete_tool_turn_preserves_roles_and_session_view(sqlite_extens
         ToolMessage(tool_call_id="add-1", name="add", content="5"),
         AssistantMessage(content="The result is 5"),
     ]
-    records = sqlite_extension.list_raw_messages("tool-session")
+    records = await sqlite_extension.list_raw_messages("tool-session")
     view = await sqlite_extension.storage.load("tool-session")
 
     assert result == expected_messages[-1]
@@ -145,15 +154,15 @@ async def test_complete_tool_turn_preserves_roles_and_session_view(sqlite_extens
     assert view.snapshot is None
     assert view.raw_tail == records
     assert view.messages == expected_messages
-    with Session(sqlite_extension.storage.engine) as session:
-        rows = list(session.scalars(select(RawLogMessageModel).order_by(RawLogMessageModel.sequence)))
-        assert [row.role for row in rows] == [
+    with sqlite_file(sqlite_extension.storage.path) as connection:
+        rows = connection.execute("select role, sequence from raw_messages").fetchall()
+        assert [row["role"] for row in rows] == [
             int(MessageKind.USER),
             int(MessageKind.ASSISTANT),
             int(MessageKind.TOOL),
             int(MessageKind.ASSISTANT),
         ]
-        assert [row.sequence for row in rows] == [1, 2, 3, 4]
+        assert [row["sequence"] for row in rows] == [1, 2, 3, 4]
 
 
 async def test_cancelled_tool_turn_is_persisted_as_provider_complete_and_can_resume(sqlite_extension):
@@ -192,7 +201,7 @@ async def test_cancelled_tool_turn_is_persisted_as_provider_complete_and_can_res
     with pytest.raises(asyncio.CancelledError):
         await first
 
-    records = sqlite_extension.list_raw_messages("cancel-resume")
+    records = await sqlite_extension.list_raw_messages("cancel-resume")
     assert [type(record.message) for record in records] == [UserMessage, AssistantMessage, ToolMessage]
     cancelled_result = records[-1].message
     assert isinstance(cancelled_result, ToolMessage)
@@ -239,7 +248,8 @@ async def test_restore_omits_legacy_incomplete_tool_batch_without_mutating_raw_l
     assert not any(
         isinstance(message, AssistantMessage) and message.tool_calls for message in model.requests[0].messages
     )
-    assert [record.message for record in sqlite_extension.list_raw_messages("legacy")][:3] == [
+    records = await sqlite_extension.list_raw_messages("legacy")
+    assert [record.message for record in records][:3] == [
         UserMessage(content="Original request"),
         AssistantMessage(tool_calls=(ToolCall("missing-result", "add", {"left": 1, "right": 2}),)),
         UserMessage(content="Previously failed retry"),
@@ -262,17 +272,19 @@ async def test_compaction_writes_snapshot_without_rewriting_raw_log(sqlite_exten
 
     await agent.run("Current question")
 
-    with Session(storage.engine) as session:
-        raw_rows = list(session.scalars(select(RawLogMessageModel).order_by(RawLogMessageModel.sequence)))
-        snapshots = list(session.scalars(select(ContextSnapshotModel)))
-        assert [row.content for row in raw_rows] == [
+    with sqlite_file(storage.path) as connection:
+        raw_rows = connection.execute("select content from raw_messages order by sequence").fetchall()
+        snapshots = connection.execute(
+            "select compacted_through_sequence from session_snapshots order by version"
+        ).fetchall()
+        assert [row["content"] for row in raw_rows] == [
             original.content,
             "Old answer",
             "Current question",
             "Current answer",
         ]
         assert len(snapshots) == 1
-        assert snapshots[0].compacted_through_sequence == 2
+        assert snapshots[0]["compacted_through_sequence"] == 2
 
 
 async def test_delete_session_explicitly_cleans_all_sqlite_rows(sqlite_extension):
@@ -280,12 +292,12 @@ async def test_delete_session_explicitly_cleans_all_sqlite_rows(sqlite_extension
     await storage.append("session", "request", UserMessage(content="Delete me"))
     await storage.snapshot("session", CompactedMessage(content="Checkpoint"), 1, 0)
 
-    assert sqlite_extension.delete_session("session") is True
+    assert await sqlite_extension.delete_session("session") is True
 
-    with Session(storage.engine) as session:
-        assert session.scalar(select(func.count(AgentSessionModel.id))) == 0
-        assert session.scalar(select(func.count(RawLogMessageModel.id))) == 0
-        assert session.scalar(select(func.count(ContextSnapshotModel.id))) == 0
+    with sqlite_file(storage.path) as connection:
+        assert connection.execute("select count(*) from agent_sessions").fetchone()[0] == 0
+        assert connection.execute("select count(*) from raw_messages").fetchone()[0] == 0
+        assert connection.execute("select count(*) from session_snapshots").fetchone()[0] == 0
 
 
 async def test_update_session_title_returns_summary_and_preserves_history(sqlite_extension):
@@ -299,9 +311,9 @@ async def test_update_session_title_returns_summary_and_preserves_history(sqlite
         metadata={"owner": "test"},
         tags={"kind": "root"},
     )
-    original = storage.list_raw_messages("session")
+    original = await storage.list_raw_messages("session")
 
-    updated = sqlite_extension.update_session(
+    updated = await sqlite_extension.update_session(
         "session",
         title="  Renamed session  ",
         agent_name="  review-agent  ",
@@ -311,25 +323,25 @@ async def test_update_session_title_returns_summary_and_preserves_history(sqlite
     assert updated.title == "Renamed session"
     assert updated.agent_name == "review-agent"
     assert updated.message_count == 1
-    assert sqlite_extension.get_session("session") == updated
+    assert await sqlite_extension.get_session("session") == updated
     assert (await storage.load("session")).title == "Renamed session"
-    assert storage.list_raw_messages("session") == original
-    assert sqlite_extension.get_session("missing") is None
-    assert sqlite_extension.update_session("missing", title="Valid title") is None
+    assert await storage.list_raw_messages("session") == original
+    assert await sqlite_extension.get_session("missing") is None
+    assert await sqlite_extension.update_session("missing", title="Valid title") is None
 
 
 @pytest.mark.parametrize("title", ["", "   ", "x" * 201])
-def test_update_session_rejects_invalid_titles(sqlite_extension, title):
+async def test_update_session_rejects_invalid_titles(sqlite_extension, title):
     with pytest.raises(ValueError, match="Session title"):
-        sqlite_extension.update_session("session", title=title)
+        await sqlite_extension.update_session("session", title=title)
 
 
 @pytest.mark.parametrize("agent_name", ["", "   ", "x" * 65])
-def test_update_session_rejects_invalid_agent_names(sqlite_extension, agent_name):
+async def test_update_session_rejects_invalid_agent_names(sqlite_extension, agent_name):
     with pytest.raises(ValueError, match="Agent name"):
-        sqlite_extension.update_session("session", agent_name=agent_name)
+        await sqlite_extension.update_session("session", agent_name=agent_name)
 
 
-def test_update_session_requires_at_least_one_field(sqlite_extension):
+async def test_update_session_requires_at_least_one_field(sqlite_extension):
     with pytest.raises(ValueError, match="At least one"):
-        sqlite_extension.update_session("session")
+        await sqlite_extension.update_session("session")

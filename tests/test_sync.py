@@ -226,15 +226,16 @@ def test_sync_model_tool_and_sqlite_history(tmp_path):
     try:
         with SyncAgent(ToolModel(), tools=[double], extensions=[storage], config=AgentRunConfig("stored")) as agent:
             assert agent.run("calculate").content.endswith("calculate")
-        records = storage.list_raw_messages("stored")
-        assert [r.message.role for r in records] == ["user", "assistant", "tool", "assistant"]
         with storage.storage.sync() as db:
+            records = db.list_raw_messages("stored")
+            assert [r.message.role for r in records] == ["user", "assistant", "tool", "assistant"]
             view = db.load("stored")
             assert [m.role for m in view.messages] == ["user", "assistant", "tool", "assistant"]
         with double.sync() as invoke:
             assert invoke({"value": 7}) == 14
     finally:
-        storage.close()
+        with storage.storage.sync() as db:
+            db.close()
 
 
 def test_sync_agent_uses_async_hooks_with_original_context():

@@ -67,7 +67,7 @@ async def test_concurrent_sessions_restore_only_their_own_history(tmp_path, pers
             await agent.run(name, config=AgentRunConfig(name), metadata={"owner": name})
             assert [m.content for m in agent.get_state(name).messages] == [name] * 4
             if persistent:
-                records = extension.list_raw_messages(name)
+                records = await extension.list_raw_messages(name)
                 assert [r.message.role for r in records] == ["user", "assistant"] * 2
                 assert all(r.session_id == name and r.metadata == {"owner": name} for r in records)
                 view = await extension.storage.load(name)
@@ -80,7 +80,7 @@ async def test_concurrent_sessions_restore_only_their_own_history(tmp_path, pers
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         if persistent:
-            extension.close()
+            await extension.close()
 
 
 async def test_concurrent_sessions_can_override_the_default_model():
@@ -136,11 +136,12 @@ async def test_cancel_one_waiting_session_does_not_cancel_other(tmp_path):
         assert remaining[-1].message.content.endswith('"b-only"}}')
         assert storage._requests == {}
         assert ask._pending == {}
-        assert all("b-only" not in r.message.content for r in storage.list_raw_messages("a"))
+        stored = await storage.list_raw_messages("a")
+        assert all("b-only" not in r.message.content for r in stored)
     finally:
         for stream in streams.values():
             await stream.aclose()
-        storage.close()
+        await storage.close()
 
 
 async def test_todo_cleanup_and_plan_baselines_are_session_local():

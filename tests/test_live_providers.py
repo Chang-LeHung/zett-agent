@@ -166,7 +166,7 @@ async def test_live_compaction_persists_snapshot_and_answers_from_summary(tmp_pa
         assert view.snapshot is not None
         assert view.snapshot.compacted_through_sequence == 2
         assert [record.sequence for record in view.raw_tail] == [3, 4]
-        assert history.storage.count_messages(session_id) == 4
+        assert await history.storage.count_messages(session_id) == 4
     finally:
-        history.close()
+        await history.close()
         await provider.aclose()

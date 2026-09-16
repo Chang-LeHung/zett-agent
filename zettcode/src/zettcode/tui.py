@@ -529,7 +529,7 @@ class ZettCodeTUI:
             case "/use":
                 self.transcript.append("\nUsage: /use <session-id>")
             case "/sessions":
-                sessions = self.runtime.persistence.list_sessions(limit=30)
+                sessions = await self.runtime.persistence.list_sessions(limit=30)
                 if not sessions:
                     self.transcript.append("\nNo persisted sessions.")
                 for session in sessions:

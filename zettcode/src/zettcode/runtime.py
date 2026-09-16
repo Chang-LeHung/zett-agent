@@ -62,7 +62,7 @@ class ZettCodeRuntime:
         os.chdir(config.workspace)
         config.database.parent.mkdir(parents=True, exist_ok=True)
         persistence = SQLiteSessionExtension(config.database)
-        recent = persistence.list_sessions(limit=1)
+        recent = await persistence.list_sessions(limit=1)
         session_id = config.session_id or (recent[0].session_id if recent else new_uuid7())
         match config.provider:
             case ProviderName.DEEPSEEK:
@@ -100,7 +100,7 @@ class ZettCodeRuntime:
             )
         except BaseException:
             await model.aclose()
-            persistence.close()
+            await persistence.close()
             raise
         return cls(config, client, persistence, model, session_id)
 
@@ -118,4 +118,4 @@ class ZettCodeRuntime:
     async def aclose(self) -> None:
         """Release all resources owned by this runtime."""
         await self.model.aclose()
-        self.persistence.close()
+        await self.persistence.close()

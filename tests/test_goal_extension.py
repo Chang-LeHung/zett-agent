@@ -569,11 +569,11 @@ async def test_decision_retry_preserves_session_and_tool_evidence(history, tmp_p
         assert "Original goal:" in dialogue[0].text
         assert "Continue from your existing findings" in dialogue[-1].text
         if storage is not None:
-            assert len(storage.list_sessions()) == 1
-            assert len(storage.list_raw_messages(observer.sessions[0])) == 8
+            assert len(await storage.list_sessions()) == 1
+            assert len(await storage.list_raw_messages(observer.sessions[0])) == 8
     finally:
         if storage is not None:
-            storage.close()
+            await storage.close()
 
 
 async def test_zero_decision_retries_runs_only_initial_attempt() -> None:

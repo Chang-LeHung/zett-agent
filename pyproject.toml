@@ -18,6 +18,8 @@ classifiers = [
 ]
 dependencies = [
   "sqlalchemy>=2.0,<3",
+  "aiosqlite>=0.20,<1",
+  "greenlet>=3,<4",
   "tiktoken>=0.12,<1",
   "uuid6>=2024.7.10,<2027",
   "httpx>=0.27,<1",

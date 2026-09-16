@@ -303,10 +303,18 @@ the ready-made adapter.
 Each session row stores only its identity, optional parent, display title,
 provider-neutral agent name, and timestamps. Title and agent name are storage
 metadata, not Agent runtime configuration. Read them with
-`SQLiteSessionExtension.get_session(session_id)` and change them with
-`update_session(session_id, title=..., agent_name=...)`.
-`delete_session(session_id)` explicitly removes the session, its Raw Log, and
-its snapshots.
+`await SQLiteSessionExtension.get_session(session_id)` and change them with
+`await update_session(session_id, title=..., agent_name=...)`.
+`await delete_session(session_id)` explicitly removes the session, its Raw Log,
+and its snapshots.
+
+`SQLiteSessionStorage` runs on SQLAlchemy's asyncio SQLite driver, so every
+storage method is asynchronous and never blocks the Agent event loop:
+`create_session`, `get_session`, `update_session`, `delete_session`,
+`list_sessions`, `count_messages`, `list_raw_messages`, `load`, `append`,
+`snapshot`, and `close`. Synchronous callers, including a plain script or a
+blocking TUI, use `with storage.sync() as database:` and call the same methods
+without `await`.
 
 `run()` and `stream()` accept JSON-compatible `metadata` and `tags` as
 request-scoped extension context:

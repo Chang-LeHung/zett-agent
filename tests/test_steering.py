@@ -118,7 +118,7 @@ async def test_steering_skips_remaining_tools_and_persists_matching_results(tmp_
         assert sum(event.type == AgentEventType.STEERING_STARTED for event in events) == 1
         assert sum(event.type == AgentEventType.STEERING_COMPLETED for event in events) == 1
         assert events[-1].type == AgentEventType.RUN_COMPLETED
-        records = persistence.list_raw_messages("s")
+        records = await persistence.list_raw_messages("s")
         assert [record.message.role.value for record in records] == [
             "user",
             "assistant",
@@ -131,7 +131,7 @@ async def test_steering_skips_remaining_tools_and_persists_matching_results(tmp_
         assert restored.messages[-2] == UserMessage(content="new task")
         assert not agent.emit_external_event(ExternalEvent("steering_message", {"session_id": "s", "content": "late"}))
     finally:
-        persistence.close()
+        await persistence.close()
 
 
 async def test_steering_precedes_internal_and_new_steering_interrupts_active_internal():

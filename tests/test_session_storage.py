@@ -1,9 +1,11 @@
 import json
+import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
+from pathlib import Path
 from uuid import UUID
 
 import pytest
-from sqlalchemy import inspect, select
-from sqlalchemy.orm import Session
 
 from zett_agent import (
     Agent,
@@ -25,20 +27,38 @@ from zett_agent import (
 )
 from zett_agent.extensions.compaction import CompactedMessage
 from zett_agent.storage import (
-    AgentSessionModel,
-    ContextSnapshotModel,
-    RawLogMessageModel,
     SQLiteSessionStorage,
     decode_messages,
     encode_messages,
 )
 
 
+@contextmanager
+def sqlite_file(path: Path) -> Iterator[sqlite3.Connection]:
+    """Read the storage file with the driver-independent stdlib API.
+
+    The asynchronous engine owns an aiosqlite DBAPI that has no synchronous
+    counterpart, so schema and row assertions use their own connection.
+    """
+    with closing(sqlite3.connect(path)) as connection:
+        connection.row_factory = sqlite3.Row
+        try:
+            yield connection
+        finally:
+            # Assertions may also rewrite rows to simulate corrupt storage.
+            connection.commit()
+
+
+def table_columns(path: Path, table: str) -> set[str]:
+    with sqlite_file(path) as connection:
+        return {row[1] for row in connection.execute(f"pragma table_info({table})")}
+
+
 @pytest.fixture
-def storage(tmp_path):
+async def storage(tmp_path):
     storage = SQLiteSessionStorage(tmp_path / "sessions.sqlite3")
     yield storage
-    storage.close()
+    await storage.close()
 
 
 class Model:
@@ -55,7 +75,7 @@ async def test_storage_reopens_without_application_database(tmp_path):
     path = tmp_path / "nested" / "agent.sqlite3"
     storage = SQLiteSessionStorage(path)
     await storage.append("session", "request", UserMessage(content="Persisted"))
-    storage.close()
+    await storage.close()
     reopened = SQLiteSessionStorage(path)
     try:
         view = await reopened.load("session")
@@ -64,7 +84,7 @@ async def test_storage_reopens_without_application_database(tmp_path):
         assert view.raw_tail[-1].sequence == 1
         assert (await reopened.load("other-session")).messages == []
     finally:
-        reopened.close()
+        await reopened.close()
 
 
 async def test_storage_persists_parent_identity_and_message_metadata(storage):
@@ -81,7 +101,7 @@ async def test_storage_persists_parent_identity_and_message_metadata(storage):
     )
 
     view = await storage.load("child")
-    summaries = {summary.session_id: summary for summary in storage.list_sessions()}
+    summaries = {summary.session_id: summary for summary in await storage.list_sessions()}
 
     assert view.parent_session_id == "parent"
     assert view.title == "Inspect session storage"
@@ -92,16 +112,20 @@ async def test_storage_persists_parent_identity_and_message_metadata(storage):
     assert summaries["child"].parent_session_id == "parent"
     assert summaries["child"].title == "Inspect session storage"
     assert summaries["child"].agent_name == "explore"
-    with Session(storage.engine) as session:
-        child = session.get(AgentSessionModel, "child")
-        assert child.parent_session_id == "parent"
-        columns = {column["name"] for column in inspect(storage.engine).get_columns("agent_sessions")}
+    with sqlite_file(storage.path) as connection:
+        parent_of_child = connection.execute(
+            "select parent_session_id from agent_sessions where id = ?", ("child",)
+        ).fetchone()
+        assert parent_of_child["parent_session_id"] == "parent"
+        columns = table_columns(storage.path, "agent_sessions")
         assert "metadata_json" not in columns
         assert "tags_json" not in columns
-        raw = session.scalar(select(RawLogMessageModel).where(RawLogMessageModel.session_id == "child"))
-        assert json.loads(raw.metadata_json) == {"subagent_type": "explore", "depth": 1}
-        assert json.loads(raw.tags_json) == {"domain": "code", "read_only": True}
-        assert set(json.loads(raw.message_json)[0]["data"]) == {"attributes", "content"}
+        raw = connection.execute(
+            "select metadata_json, tags_json, message_json from raw_messages where session_id = ?", ("child",)
+        ).fetchone()
+        assert json.loads(raw["metadata_json"]) == {"subagent_type": "explore", "depth": 1}
+        assert json.loads(raw["tags_json"]) == {"domain": "code", "read_only": True}
+        assert set(json.loads(raw["message_json"])[0]["data"]) == {"attributes", "content"}
 
     with pytest.raises(ValueError, match="parent cannot change"):
         await storage.append(
@@ -111,13 +135,14 @@ async def test_storage_persists_parent_identity_and_message_metadata(storage):
             parent_session_id="another-parent",
         )
 
-    assert all(
-        inspect(storage.engine).get_foreign_keys(table) == []
-        for table in ("agent_sessions", "raw_messages", "session_snapshots")
-    )
-    assert storage.delete_session("parent") is True
+    with sqlite_file(storage.path) as connection:
+        assert all(
+            list(connection.execute(f"pragma foreign_key_list({table})")) == []
+            for table in ("agent_sessions", "raw_messages", "session_snapshots")
+        )
+    assert await storage.delete_session("parent") is True
     assert (await storage.load("child")).parent_session_id == "parent"
-    assert storage.count_messages("child") == 1
+    assert await storage.count_messages("child") == 1
 
 
 async def test_agent_persists_provider_usage_on_each_assistant_raw_message(storage):
@@ -143,7 +168,7 @@ async def test_agent_persists_provider_usage_on_each_assistant_raw_message(stora
     )
     await agent.run("Measure this request")
 
-    records = storage.list_raw_messages("usage-session")
+    records = await storage.list_raw_messages("usage-session")
     user, assistant = records
     assert user.input_tokens is None
     assert user.total_tokens is None
@@ -156,14 +181,13 @@ async def test_agent_persists_provider_usage_on_each_assistant_raw_message(stora
     assert assistant.total_tokens == 125
     assert assistant.cache_hit_rate == pytest.approx(0.8)
 
-    columns = {column["name"] for column in inspect(storage.engine).get_columns("raw_messages")}
     assert {
         "input_tokens",
         "output_tokens",
         "cache_read_tokens",
         "cache_write_tokens",
         "reasoning_tokens",
-    } <= columns
+    } <= table_columns(storage.path, "raw_messages")
 
 
 async def test_storage_rejects_model_usage_on_non_assistant_messages(storage):
@@ -193,9 +217,10 @@ async def test_storage_updates_mutable_session_identity_without_copying_it_to_ra
     assert view.agent_name == "coding"
     assert view.raw_tail[1].metadata == {"workspace": "/tmp/project"}
     assert view.raw_tail[1].tags == {"domain": "coding"}
-    with Session(storage.engine) as session:
-        assert session.scalar(select(RawLogMessageModel.message_json).limit(1)) is not None
-        assert "Updated title" not in session.scalar(select(RawLogMessageModel.message_json).limit(1))
+    with sqlite_file(storage.path) as connection:
+        stored_message = connection.execute("select message_json from raw_messages limit 1").fetchone()[0]
+        assert stored_message is not None
+        assert "Updated title" not in stored_message
 
     with pytest.raises(ValueError, match="Session title"):
         await storage.append("invalid", "request", UserMessage(content="One"), title="")
@@ -210,12 +235,11 @@ async def test_raw_message_context_rejects_invalid_input_and_corrupt_rows(storag
         await storage.append("invalid", "request", UserMessage(content="One"), tags={"": True})
 
     await storage.append("corrupt", "request", UserMessage(content="One"), metadata={"valid": True})
-    with Session(storage.engine) as session, session.begin():
-        row = session.scalar(select(RawLogMessageModel).where(RawLogMessageModel.session_id == "corrupt"))
-        row.metadata_json = "[]"
+    with sqlite_file(storage.path) as connection:
+        connection.execute("update raw_messages set metadata_json = '[]' where session_id = 'corrupt'")
 
     with pytest.raises(ValueError, match="must be a JSON object"):
-        storage.list_raw_messages("corrupt")
+        await storage.list_raw_messages("corrupt")
 
 
 async def test_persistence_restores_a_child_parent_when_config_omits_it(storage):
@@ -237,7 +261,7 @@ async def test_persistence_restores_a_child_parent_when_config_omits_it(storage)
     await restored.run("Continue")
 
     assert restored.state.parent_session_id == "parent"
-    restored_record = storage.list_raw_messages("child")[0]
+    restored_record = (await storage.list_raw_messages("child"))[0]
     assert restored_record.metadata == {"scope": "storage"}
     assert restored_record.tags == {"domain": "code"}
     assert (await storage.load("child")).parent_session_id == "parent"
@@ -262,7 +286,7 @@ async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_pa
         agent = await Agent.create(Model("First answer"), config=AgentRunConfig("session"), extensions=[first])
         await agent.run("First question")
     finally:
-        first.close()
+        await first.close()
 
     second = SQLiteSessionExtension(path)
     model = Model("Second answer")
@@ -276,7 +300,7 @@ async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_pa
             "Second question",
         ]
     finally:
-        second.close()
+        await second.close()
 
 
 async def test_custom_persistence_extension_only_wires_its_storage(tmp_path):
@@ -284,8 +308,8 @@ async def test_custom_persistence_extension_only_wires_its_storage(tmp_path):
         def __init__(self, path):
             super().__init__(SQLiteSessionStorage(path))
 
-        def close(self) -> None:
-            self.storage.close()
+        async def close(self) -> None:
+            await self.storage.close()
 
     extension = CustomSessionExtension(tmp_path / "custom.sqlite3")
     try:
@@ -300,7 +324,7 @@ async def test_custom_persistence_extension_only_wires_its_storage(tmp_path):
             "Stored",
         ]
     finally:
-        extension.close()
+        await extension.close()
 
 
 async def test_raw_log_persists_model_output_timing(storage):
@@ -318,7 +342,7 @@ async def test_raw_log_persists_model_output_timing(storage):
     )
     await agent.run("Question")
 
-    user, assistant = storage.list_raw_messages("timed-session")
+    user, assistant = await storage.list_raw_messages("timed-session")
     assert user.duration_ns == 0
     assert user.started_at == user.completed_at
     assert assistant.duration_ns >= 0
@@ -338,16 +362,16 @@ async def test_sqlite_session_extension_lists_paginated_raw_messages(tmp_path):
         await extension.storage.append("session", "request", UserMessage(content="First"))
         await extension.storage.append("session", "request", AssistantMessage(content="Second"))
 
-        records = extension.list_raw_messages("session", limit=1, offset=1)
+        records = await extension.list_raw_messages("session", limit=1, offset=1)
 
         assert [record.sequence for record in records] == [2]
         assert [record.message for record in records] == [AssistantMessage(content="Second")]
 
         await extension.storage.append("newer", "request", UserMessage(content="Third"))
-        sessions = extension.list_sessions(limit=1, offset=1)
+        sessions = await extension.list_sessions(limit=1, offset=1)
         assert [summary.session_id for summary in sessions] == ["session"]
     finally:
-        extension.close()
+        await extension.close()
 
 
 async def test_same_agent_reloads_snapshot_and_external_tail_every_request(storage):
@@ -371,16 +395,18 @@ async def test_same_agent_reloads_snapshot_and_external_tail_every_request(stora
     second = await storage.load(session_id)
     assert second.snapshot is None
     assert second.raw_tail[-1].sequence == 5
-    with Session(storage.engine) as session:
-        rows = list(session.scalars(select(RawLogMessageModel).order_by(RawLogMessageModel.sequence)))
+    with sqlite_file(storage.path) as connection:
+        rows = connection.execute(
+            "select id, request_id, created_at, updated_at from raw_messages order by sequence"
+        ).fetchall()
         assert len(rows) == 5
         assert all(
-            UUID(row.id).version == 7 and UUID(row.request_id).version == 7
+            UUID(row["id"]).version == 7 and UUID(row["request_id"]).version == 7
             for row in rows
-            if row.request_id != "external"
+            if row["request_id"] != "external"
         )
-        assert all(row.updated_at == row.created_at for row in rows)
-        assert list(session.scalars(select(ContextSnapshotModel))) == []
+        assert all(row["updated_at"] == row["created_at"] for row in rows)
+        assert connection.execute("select count(*) from session_snapshots").fetchone()[0] == 0
     assert await storage.append(session_id, "later", UserMessage(content="Next")) == 6
 
 
@@ -391,7 +417,8 @@ async def test_configured_request_id_is_persisted(storage):
         extensions=[SessionPersistenceExtension(storage)],
     )
     await agent.run("Hello")
-    assert {record.request_id for record in storage.list_raw_messages("test-session")} == {"request-from-application"}
+    records = await storage.list_raw_messages("test-session")
+    assert {record.request_id for record in records} == {"request-from-application"}
 
 
 async def test_compaction_snapshot_keeps_raw_log_and_restores_checkpoint(storage):
@@ -415,14 +442,16 @@ async def test_compaction_snapshot_keeps_raw_log_and_restores_checkpoint(storage
     assert isinstance(view.messages[0], CompactedMessage)
     assert view.snapshot.compacted_through_sequence == 2
     assert [record.sequence for record in view.raw_tail] == [3, 4]
-    with Session(storage.engine) as session:
-        rows = list(session.scalars(select(RawLogMessageModel).order_by(RawLogMessageModel.sequence)))
+    with sqlite_file(storage.path) as connection:
+        rows = connection.execute("select content, message_json from raw_messages order by sequence").fetchall()
         assert len(rows) == 4
-        assert rows[0].content == "Old " * 500
-        snapshot = session.scalar(select(ContextSnapshotModel))
-        assert UUID(snapshot.id).version == 7
-        assert snapshot.compacted_through_sequence == 2
-        assert decode_messages(snapshot.message_json) == [view.snapshot.compacted_message]
+        assert rows[0]["content"] == "Old " * 500
+        snapshot = connection.execute(
+            "select id, compacted_through_sequence, message_json from session_snapshots"
+        ).fetchone()
+        assert UUID(snapshot["id"]).version == 7
+        assert snapshot["compacted_through_sequence"] == 2
+        assert decode_messages(snapshot["message_json"]) == [view.snapshot.compacted_message]
     assert view.messages[-1] == AssistantMessage(content="Answer")
     # A fresh Agent restores the checkpoint plus the later answer exactly once.
     restored_model = Model()
@@ -451,10 +480,12 @@ async def test_new_snapshot_advances_boundary_without_copying_raw_tail(storage):
     assert view.snapshot == second
     assert view.messages == [CompactedMessage(content="Checkpoint two"), UserMessage(content="Three")]
     assert [record.sequence for record in view.raw_tail] == [3]
-    with Session(storage.engine) as session:
-        snapshots = list(session.scalars(select(ContextSnapshotModel).order_by(ContextSnapshotModel.version)))
-        assert [snapshot.compacted_through_sequence for snapshot in snapshots] == [1, 2]
-        assert [decode_messages(snapshot.message_json) for snapshot in snapshots] == [
+    with sqlite_file(storage.path) as connection:
+        snapshots = connection.execute(
+            "select compacted_through_sequence, message_json from session_snapshots order by version"
+        ).fetchall()
+        assert [snapshot["compacted_through_sequence"] for snapshot in snapshots] == [1, 2]
+        assert [decode_messages(snapshot["message_json"]) for snapshot in snapshots] == [
             [CompactedMessage(content="Checkpoint one")],
             [CompactedMessage(content="Checkpoint two")],
         ]
@@ -488,9 +519,9 @@ def test_message_codec_rejects_values_outside_the_supported_envelope():
 async def test_load_rejects_a_corrupted_snapshot_payload(storage):
     await storage.append("session", "request", UserMessage(content="One"))
     snapshot = await storage.snapshot("session", CompactedMessage(content="Checkpoint"), 1, 0)
-    with Session(storage.engine) as session, session.begin():
-        row = session.get(ContextSnapshotModel, snapshot.id)
-        row.message_json = encode_messages([UserMessage(content="Not a checkpoint")])
+    corrupt = encode_messages([UserMessage(content="Not a checkpoint")])
+    with sqlite_file(storage.path) as connection:
+        connection.execute("update session_snapshots set message_json = ? where id = ?", (corrupt, snapshot.id))
 
     with pytest.raises(ValueError, match="exactly one CompactedMessage"):
         await storage.load("session")
@@ -501,30 +532,31 @@ async def test_lists_typed_raw_messages_and_deletes_one_session(storage):
     await storage.append("first", "request-1", AssistantMessage(content="Hi"))
     await storage.append("second", "request-2", UserMessage(content="Keep"))
 
-    records = storage.list_raw_messages("first", after_sequence=0, through_sequence=1)
+    records = await storage.list_raw_messages("first", after_sequence=0, through_sequence=1)
     assert len(records) == 1
     assert records[0].request_id == "request-1"
     assert records[0].message == UserMessage(content="Hello")
     assert records[0].created_at.tzinfo is not None
-    assert storage.count_messages("first") == 2
-    second_page = storage.list_raw_messages("first", limit=1, offset=1)
+    assert await storage.count_messages("first") == 2
+    second_page = await storage.list_raw_messages("first", limit=1, offset=1)
     assert [record.sequence for record in second_page] == [2]
     assert [record.message for record in second_page] == [AssistantMessage(content="Hi")]
-    assert storage.list_raw_messages("first", limit=1, offset=2) == []
+    assert await storage.list_raw_messages("first", limit=1, offset=2) == []
 
-    sessions = storage.list_sessions()
+    sessions = await storage.list_sessions()
     assert [(session.session_id, session.message_count) for session in sessions] == [("second", 1), ("first", 2)]
     assert all(session.created_at.tzinfo is not None and session.updated_at.tzinfo is not None for session in sessions)
-    assert len(storage.list_sessions(limit=1)) == 1
-    assert storage.list_sessions(limit=1, offset=0) == sessions[:1]
-    assert storage.list_sessions(limit=1, offset=1) == sessions[1:]
-    assert storage.list_sessions(limit=1, offset=2) == []
+    assert len(await storage.list_sessions(limit=1)) == 1
+    assert await storage.list_sessions(limit=1, offset=0) == sessions[:1]
+    assert await storage.list_sessions(limit=1, offset=1) == sessions[1:]
+    assert await storage.list_sessions(limit=1, offset=2) == []
 
-    assert storage.delete_session("first") is True
-    assert storage.list_raw_messages("first") == []
-    assert storage.count_messages("first") == 0
-    assert [record.message for record in storage.list_raw_messages("second")] == [UserMessage(content="Keep")]
-    assert storage.delete_session("missing") is False
+    assert await storage.delete_session("first") is True
+    assert await storage.list_raw_messages("first") == []
+    assert await storage.count_messages("first") == 0
+    kept = await storage.list_raw_messages("second")
+    assert [record.message for record in kept] == [UserMessage(content="Keep")]
+    assert await storage.delete_session("missing") is False
 
 
 @pytest.mark.parametrize(
@@ -536,28 +568,28 @@ async def test_lists_typed_raw_messages_and_deletes_one_session(storage):
         ({"offset": -1}, "offset"),
     ],
 )
-def test_list_raw_messages_rejects_invalid_query_options(storage, options, error):
+async def test_list_raw_messages_rejects_invalid_query_options(storage, options, error):
     with pytest.raises(ValueError, match=error):
-        storage.list_raw_messages("session", **options)
+        await storage.list_raw_messages("session", **options)
 
 
 @pytest.mark.parametrize("options,error", [({"limit": 0}, "limit"), ({"offset": -1}, "offset")])
-def test_list_sessions_rejects_invalid_query_options(storage, options, error):
+async def test_list_sessions_rejects_invalid_query_options(storage, options, error):
     with pytest.raises(ValueError, match=error):
-        storage.list_sessions(**options)
+        await storage.list_sessions(**options)
 
 
-def test_create_session_persists_an_empty_conversation(storage):
-    created = storage.create_session(session_id="empty-session", title="Empty", agent_name="Zett Agent")
+async def test_create_session_persists_an_empty_conversation(storage):
+    created = await storage.create_session(session_id="empty-session", title="Empty", agent_name="Zett Agent")
 
     assert created.session_id == "empty-session"
     assert created.title == "Empty"
     assert created.agent_name == "Zett Agent"
     assert created.message_count == 0
-    assert storage.get_session("empty-session") == created
-    assert storage.list_raw_messages("empty-session") == []
+    assert await storage.get_session("empty-session") == created
+    assert await storage.list_raw_messages("empty-session") == []
     with pytest.raises(ValueError, match="already exists"):
-        storage.create_session(session_id="empty-session")
+        await storage.create_session(session_id="empty-session")
 
 
 async def test_storage_rejects_invalid_checkpoint_writes(storage):

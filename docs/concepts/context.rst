@@ -55,8 +55,10 @@ already represented by the checkpoint. Restoring starts strictly after it, so
 summarized messages are not sent twice.
 
 Use :class:`~zett_agent.SessionView` for the restored model context and
-``list_raw_messages`` for full UI history. Request IDs correlate records but do
-not automatically make appends idempotent.
+``await storage.list_raw_messages(...)`` for full UI history. Request IDs
+correlate records but do not automatically make appends idempotent. Storage
+restoration is asynchronous: the runtime awaits the snapshot and raw tail before
+the first model call of a request.
 
 Compaction retains coherent turns
 -------------------------------------

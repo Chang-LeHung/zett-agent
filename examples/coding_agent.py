@@ -158,9 +158,9 @@ def create_prompt_session(database: Path) -> PromptSession[str]:
     )
 
 
-def print_sessions(storage: SQLiteSessionStorage, active_session_id: str) -> None:
+async def print_sessions(storage: SQLiteSessionStorage, active_session_id: str) -> None:
     """Render compact session summaries from SQLite."""
-    sessions = storage.list_sessions()
+    sessions = await storage.list_sessions()
     if not sessions:
         print("No persisted sessions.")
         return
@@ -191,10 +191,10 @@ def message_sections(message: AnyMessage) -> list[tuple[str, str]]:
             return [("content", content)]
 
 
-def print_history(storage: SQLiteSessionStorage, session_id: str, limit: int) -> None:
+async def print_history(storage: SQLiteSessionStorage, session_id: str, limit: int) -> None:
     """Print the newest raw messages while preserving their original order."""
-    offset = max(storage.count_messages(session_id) - limit, 0)
-    records = storage.list_raw_messages(session_id, limit=limit, offset=offset)
+    offset = max(await storage.count_messages(session_id) - limit, 0)
+    records = await storage.list_raw_messages(session_id, limit=limit, offset=offset)
     if not records:
         print("This session has no messages.")
         return
@@ -272,7 +272,7 @@ async def main() -> None:
 
     persistence = SQLiteSessionExtension(args.database)
     storage = persistence.storage
-    recent_sessions = storage.list_sessions(limit=1)
+    recent_sessions = await storage.list_sessions(limit=1)
     session_id = args.session or (recent_sessions[0].session_id if recent_sessions else new_uuid7())
     provider = DeepSeekProvider(args.model, api_key)
     prompt_session = create_prompt_session(args.database)
@@ -320,7 +320,7 @@ async def main() -> None:
                 command, _, argument = value.strip().partition(" ")
                 match command:
                     case "/sessions":
-                        print_sessions(storage, session_id)
+                        await print_sessions(storage, session_id)
                     case "/history":
                         try:
                             limit = int(argument) if argument else 20
@@ -329,7 +329,7 @@ async def main() -> None:
                         except ValueError:
                             print("Usage: /history [positive-limit]")
                         else:
-                            print_history(storage, session_id, limit)
+                            await print_history(storage, session_id, limit)
                     case "/new":
                         session_id = new_uuid7()
                         print(f"Started session {session_id}")
@@ -346,7 +346,7 @@ async def main() -> None:
                         print(f"Unknown command: {command}. Use /help.")
     finally:
         await provider.aclose()
-        persistence.close()
+        await persistence.close()
 
 
 if __name__ == "__main__":

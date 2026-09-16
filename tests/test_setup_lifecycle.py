@@ -44,7 +44,7 @@ async def test_restore_then_transform_then_persist_once_before_run(tmp_path, pri
 
         async def before_run(self, context):
             order.append("before_run")
-            records = storage.list_raw_messages(config.session_id)
+            records = await storage.list_raw_messages(config.session_id)
             assert [record.message.content for record in records] == ["history", "transformed"]
             assert records[-1].message == context.state.messages[-1]
 
@@ -66,7 +66,7 @@ async def test_restore_then_transform_then_persist_once_before_run(tmp_path, pri
         assert restored.messages[1].attributes == {"raw_content": "current"}
         assert original.content == "current"
     finally:
-        storage.close()
+        await storage.close()
 
 
 async def test_invalid_transformed_input_is_not_persisted(tmp_path):
@@ -87,6 +87,6 @@ async def test_invalid_transformed_input_is_not_persisted(tmp_path):
         )
         with pytest.raises(AgentProtocolError, match="must produce a UserMessage"):
             await agent.run("input")
-        assert storage.list_raw_messages("invalid") == []
+        assert await storage.list_raw_messages("invalid") == []
     finally:
-        storage.close()
+        await storage.close()

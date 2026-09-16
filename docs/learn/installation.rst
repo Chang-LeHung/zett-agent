@@ -52,7 +52,8 @@ Resource ownership
 ----------------------
 
 The caller owns provider clients and explicitly created persistence extensions.
-Await ``model.aclose()`` and call ``persistence.close()`` when finished. Closing
-a stream is different: it stops one request, not the entire provider or database.
+Await ``model.aclose()`` and ``persistence.close()`` when finished: storage I/O
+is asynchronous, so both are coroutines. Closing a stream is different: it stops
+one request, not the entire provider or database.
 
 Next: :doc:`first-agent`.

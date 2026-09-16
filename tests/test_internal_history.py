@@ -49,7 +49,7 @@ async def test_internal_messages_are_restored_from_raw_history_and_snapshot_tail
             "internal 1",
             "internal 2",
         ]
-        records = persistence.list_raw_messages("priority")
+        records = await persistence.list_raw_messages("priority")
         assert [record.message.role.value for record in records] == [
             "user",
             "assistant",
@@ -67,11 +67,11 @@ async def test_internal_messages_are_restored_from_raw_history_and_snapshot_tail
         view = await persistence.storage.load("priority")
         assert isinstance(view.messages[1], AgentMessage)
         assert view.messages[1].content == "internal 1"
-        assert len(persistence.list_raw_messages("priority")) == 6
+        assert len(await persistence.list_raw_messages("priority")) == 6
         assert sum(event.type == AgentEventType.INTERNAL_MESSAGE_STARTED for event in events) == 2
         assert sum(event.type == AgentEventType.INTERNAL_MESSAGE_COMPLETED for event in events) == 2
     finally:
-        persistence.close()
+        await persistence.close()
 
 
 def test_internal_event_rejects_user_messages():

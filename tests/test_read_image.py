@@ -92,11 +92,11 @@ async def test_image_result_survives_sqlite_reopen(tmp_path):
     try:
         await storage.append("session", "request", result)
     finally:
-        storage.close()
+        await storage.close()
     reopened = SQLiteSessionStorage(database)
     try:
         view = await reopened.load("session")
         assert view.messages == [result]
         assert view.raw_tail[0].message == result
     finally:
-        reopened.close()
+        await reopened.close()

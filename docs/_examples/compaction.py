@@ -68,7 +68,7 @@ async def main() -> None:
             original = "I prefer Python. " * 100
             await client.run(original)
             await client.run("Continue with Python and keep all the current request words in the recent context.")
-            raw = storage.list_raw_messages("compaction-demo")
+            raw = await storage.list_raw_messages("compaction-demo")
             view = await storage.storage.load("compaction-demo")
             assert len(raw) == 4 and raw[0].message.content == original
             assert view.snapshot is not None
@@ -76,7 +76,7 @@ async def main() -> None:
             assert len(view.raw_tail) == 2
             print("Raw messages: 4; checkpoint boundary: 2; raw tail: 2")
         finally:
-            storage.close()
+            await storage.close()
 
 
 if __name__ == "__main__":

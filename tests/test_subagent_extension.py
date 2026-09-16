@@ -30,14 +30,14 @@ from zett_agent import (
 
 
 @pytest.fixture
-def storage(tmp_path):
+async def storage(tmp_path):
     storage = SQLiteSessionStorage(tmp_path / "subagents.sqlite3")
     yield storage
-    storage.close()
+    await storage.close()
 
 
 @pytest.fixture
-def builtins(tmp_path, monkeypatch):
+async def builtins(tmp_path, monkeypatch):
     """Create built-in definitions without touching the user's data directory."""
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     created: list[tuple[SubAgentDefinition, ...]] = []
@@ -52,7 +52,7 @@ def builtins(tmp_path, monkeypatch):
         for definition in definitions:
             for extension in definition.extensions:
                 if isinstance(extension, SQLiteSessionExtension):
-                    extension.close()
+                    await extension.close()
 
 
 def child_storage(definitions: tuple[SubAgentDefinition, ...]) -> SQLiteSessionStorage:
@@ -150,11 +150,11 @@ async def test_explore_subagent_runs_end_to_end_in_a_persisted_child_session(sto
         "Find the session storage boundary and return one relevant path.",
         "Found the storage boundary in src/zett_agent/storage.py",
     ]
-    parent_summary = storage.list_sessions()[0]
+    parent_summary = (await storage.list_sessions())[0]
     assert parent_summary.session_id == "parent-session"
     assert parent_summary.parent_session_id is None
     assert parent_summary.message_count == 4
-    child_summary = subagent_storage.list_sessions()[0]
+    child_summary = (await subagent_storage.list_sessions())[0]
     assert child_summary.session_id == child_session_id
     assert child_summary.parent_session_id == "parent-session"
     assert child_summary.title is None
@@ -209,7 +209,7 @@ async def test_unknown_subagent_becomes_a_failed_tool_result_without_a_child_ses
     failed = next(message for message in model.requests[-1].messages if isinstance(message, ToolMessage))
     assert failed.success is False
     assert "Unknown subagent type" in failed.content
-    assert all(summary.parent_session_id is None for summary in storage.list_sessions())
+    assert all(summary.parent_session_id is None for summary in await storage.list_sessions())
 
 
 async def test_cancelling_parent_propagates_into_a_running_subagent(storage, builtins):
@@ -264,11 +264,11 @@ async def test_cancelling_parent_propagates_into_a_running_subagent(storage, bui
 
     assert agent.state.phase == AgentPhase.CANCELLED
     subagent_storage = child_storage(definitions)
-    child = next(summary for summary in subagent_storage.list_sessions() if summary.parent_session_id == "parent")
+    summaries = await subagent_storage.list_sessions()
+    child = next(summary for summary in summaries if summary.parent_session_id == "parent")
     assert child.message_count == 1
-    assert [record.message.content for record in subagent_storage.list_raw_messages(child.session_id)] == [
-        "Wait until cancelled."
-    ]
+    child_records = await subagent_storage.list_raw_messages(child.session_id)
+    assert [record.message.content for record in child_records] == ["Wait until cancelled."]
 
 
 @pytest.mark.parametrize(
@@ -408,7 +408,7 @@ async def test_custom_definition_does_not_receive_implicit_persistence(storage):
 
     await agent.run("Delegate without child persistence")
 
-    summaries = storage.list_sessions()
+    summaries = await storage.list_sessions()
     assert [summary.session_id for summary in summaries] == ["parent"]
     assert summaries[0].message_count == 4
 

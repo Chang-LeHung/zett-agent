@@ -13,7 +13,13 @@ from zett_agent import (
     create_agent,
 )
 
-from zettcode.tui import LineMetadata, Transcript, TUIEventDispatcher, _tool_preview
+from zettcode.tui import (
+    LineMetadata,
+    Transcript,
+    TUIEventDispatcher,
+    _compact_path,
+    _tool_preview,
+)
 
 
 async def test_dispatcher_preserves_stream_order_and_parallel_tool_names():
@@ -193,6 +199,16 @@ async def test_dispatcher_uses_server_tool_name():
     )
 
     assert "web_search" in transcript.text
+
+
+def test_long_workspace_path_is_compacted_from_the_left(tmp_path):
+    path = tmp_path / "a-very-long-workspace-directory" / "project"
+
+    rendered = _compact_path(path, limit=24)
+
+    assert len(rendered) == 24
+    assert rendered.startswith("…")
+    assert rendered.endswith("/project")
 
 
 def test_thinking_click_expands_and_pointer_leave_collapses():

@@ -6,10 +6,11 @@ import json
 import math
 import re
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
+from time import monotonic
 
 from wcwidth import wcwidth
-from zett_agent import ToolMessage
+from zett_agent import AgentEvent, AgentEventDispatcher, ToolMessage
 
 from .tui_framework import Span, Style, TextLine
 
@@ -28,7 +29,19 @@ DETAIL = "#a3ada6"
 FOREGROUND = "#e6e9e7"
 
 
+THINKING_BACKGROUND = "#26342b"
+
+
+ERROR = "#dc8178"
+
+
 MAX_STORED_TOOL_OUTPUT = 64_000
+
+
+TOOL_PREVIEW_ROWS = 5
+
+
+TOOL_EXPANDED_ROWS = 40
 
 
 MAX_MARKDOWN_TABLE_ROWS = 100
@@ -44,6 +57,321 @@ STYLE_DETAIL = Style(foreground=DETAIL)
 
 
 STYLE_GREEN = Style(foreground=GREEN, bold=True)
+
+
+STYLE_USER = Style(foreground="#d6ddd8", bold=True)
+
+
+STYLE_THINKING = Style(foreground="#dce8df", background=THINKING_BACKGROUND, bold=True)
+
+
+STYLE_THINKING_BODY = Style(foreground="#d1ddd4", background=THINKING_BACKGROUND)
+
+
+STYLE_ERROR = Style(foreground=ERROR, bold=True)
+
+
+@dataclass(frozen=True, slots=True)
+class LineMetadata:
+    """Interaction identity attached to one rendered transcript line."""
+
+    thinking_id: int | None = None
+    thinking_header: bool = False
+    tool_id: int | None = None
+    tool_header: bool = False
+
+
+@dataclass(slots=True)
+class TranscriptEntry:
+    """One semantic terminal block kept in AgentClient event order."""
+
+    id: int
+    kind: str
+    call_id: str = ""
+    text: str = ""
+    title: str = ""
+    detail: str = ""
+    status: str = ""
+    expanded: bool = False
+    started_at: float | None = None
+    duration_seconds: float | None = None
+
+
+@dataclass(slots=True)
+class Transcript:
+    """Structured transcript independent from terminal rendering mechanics."""
+
+    entries: list[TranscriptEntry] = field(default_factory=list)
+    _next_id: int = 1
+    animation_frame: int = 0
+
+    @property
+    def text(self) -> str:
+        return "\n".join(line.text for line in self.lines(120))
+
+    def append(self, value: str) -> None:
+        self._add("raw", text=value)
+
+    def clear(self) -> None:
+        self.entries.clear()
+
+    def begin_turn(self, prompt: str) -> None:
+        self._add("user", text=prompt)
+
+    def start_thinking(self) -> TranscriptEntry:
+        current = self._last("thinking")
+        if current is not None and current.status == "running":
+            return current
+        return self._add("thinking", title="Thinking", status="running", started_at=monotonic())
+
+    def append_thinking(self, delta: str) -> None:
+        self.start_thinking().text += delta
+
+    def complete_thinking(self) -> None:
+        current = self._last("thinking")
+        if current is None or current.status != "running":
+            return
+        current.status = "completed"
+        if current.started_at is not None:
+            current.duration_seconds = monotonic() - current.started_at
+
+    def append_answer(self, delta: str) -> None:
+        current = self.entries[-1] if self.entries else None
+        if current is None or current.kind != "answer":
+            current = self._add("answer")
+        current.text += delta
+
+    def start_tool(self, call_id: str, name: str, arguments: Mapping[str, object]) -> None:
+        self.complete_thinking()
+        self._add(
+            "tool",
+            call_id=call_id,
+            title=name,
+            detail=_arguments_preview(arguments),
+            status="running",
+            started_at=monotonic(),
+        )
+
+    def complete_tool(self, call_id: str, output: str, *, status: str = "completed") -> None:
+        entry = self._tool(call_id)
+        if entry is None:
+            return
+        entry.text = _limit_stored_output(output)
+        entry.status = status
+        if entry.started_at is not None:
+            entry.duration_seconds = monotonic() - entry.started_at
+
+    def start_server_tool(self, call_id: str, name: str) -> None:
+        self.complete_thinking()
+        self._add("server_tool", call_id=call_id, title=name, status="running", started_at=monotonic())
+
+    def complete_server_tool(self, call_id: str, output: str, *, status: str = "completed") -> None:
+        entry = next(
+            (item for item in reversed(self.entries) if item.kind == "server_tool" and item.call_id == call_id),
+            None,
+        )
+        if entry is None:
+            return
+        entry.text = _limit_stored_output(output)
+        entry.status = status
+        if entry.started_at is not None:
+            entry.duration_seconds = monotonic() - entry.started_at
+
+    def toggle_latest_thinking(self) -> bool:
+        entry = self._last("thinking")
+        if entry is None:
+            return False
+        entry.expanded = not entry.expanded
+        return True
+
+    def toggle_thinking(self, entry_id: int) -> bool:
+        entry = self._entry(entry_id)
+        if entry is None or entry.kind != "thinking":
+            return False
+        entry.expanded = not entry.expanded
+        return True
+
+    def toggle_tool(self, entry_id: int) -> bool:
+        entry = self._entry(entry_id)
+        if entry is None or entry.kind not in ("tool", "server_tool") or entry.status == "running" or not entry.text:
+            return False
+        entry.expanded = not entry.expanded
+        return True
+
+    def collapse_thinking_except(self, entry_id: int | None) -> bool:
+        changed = False
+        for entry in self.entries:
+            if entry.kind == "thinking" and entry.expanded and entry.id != entry_id:
+                entry.expanded = False
+                changed = True
+        return changed
+
+    def lines(self, width: int) -> list[TextLine]:
+        """Render semantic blocks into rich logical lines for ScrollableText."""
+        result: list[TextLine] = []
+
+        def blank() -> None:
+            result.append(TextLine())
+
+        def plain(value: str, style: Style = STYLE_NORMAL, metadata: object | None = None) -> None:
+            for line in value.split("\n"):
+                result.append(TextLine((Span(line, style),), metadata))
+
+        for entry in self.entries:
+            match entry.kind:
+                case "welcome":
+                    plain(entry.text, Style(foreground="#9fb6a6"))
+                case "user":
+                    blank()
+                    prompt_lines = entry.text.splitlines() or [""]
+                    plain(f"❯ {prompt_lines[0]}", STYLE_USER)
+                    for line in prompt_lines[1:]:
+                        plain(f"  {line}", STYLE_USER)
+                case "thinking":
+                    blank()
+                    marker = (
+                        _activity_icon(self.animation_frame)
+                        if entry.status == "running"
+                        else ("▾" if entry.expanded else "▸")
+                    )
+                    timing = _duration(entry.duration_seconds) if entry.status == "completed" else "working"
+                    metadata = LineMetadata(entry.id, thinking_header=True)
+                    style = STYLE_THINKING if entry.expanded else STYLE_GREEN
+                    if entry.status == "running":
+                        result.append(
+                            TextLine(
+                                _activity_spans(
+                                    f"  {marker} Thinking  {timing}",
+                                    self.animation_frame,
+                                    background=style.background,
+                                ),
+                                metadata,
+                            )
+                        )
+                    else:
+                        plain(f"  {marker} Thinking  {timing}", style, metadata)
+                    if entry.expanded:
+                        body_metadata = LineMetadata(entry.id)
+                        for line in entry.text.splitlines() or ["Waiting for reasoning…"]:
+                            plain(f"    {line}", STYLE_THINKING_BODY, body_metadata)
+                case "tool" | "server_tool":
+                    blank()
+                    symbol = (
+                        _activity_icon(self.animation_frame)
+                        if entry.status == "running"
+                        else {"completed": "✓", "failed": "×", "skipped": "–"}.get(entry.status, "●")
+                    )
+                    timing = f"  {_duration(entry.duration_seconds)}" if entry.duration_seconds is not None else ""
+                    style = STYLE_ERROR if entry.status == "failed" else STYLE_GREEN
+                    metadata = LineMetadata(tool_id=entry.id, tool_header=True)
+                    disclosure = (
+                        "" if entry.status == "running" or not entry.text else (" ▾" if entry.expanded else " ▸")
+                    )
+                    label = f"  {symbol} {entry.title}{entry.detail}{timing}{disclosure}"
+                    if entry.status == "running":
+                        result.append(TextLine(_activity_spans(label, self.animation_frame), metadata))
+                    else:
+                        plain(label, style, metadata)
+                    output = "Running…" if entry.status == "running" else entry.text
+                    if output:
+                        row_limit = TOOL_EXPANDED_ROWS if entry.expanded else TOOL_PREVIEW_ROWS
+                        output_lines, omitted = _bounded_visual_lines(output, max(8, width - 6), row_limit)
+                        plain(f"    └ {output_lines[0]}", STYLE_DETAIL)
+                        for line in output_lines[1:]:
+                            plain(f"      {line}", STYLE_DETAIL)
+                        if omitted:
+                            plain(f"      … {omitted} more rows · click tool to expand", STYLE_MUTED)
+                case "answer":
+                    blank()
+                    result.extend(_markdown_block_lines(entry.text, width))
+                case _:
+                    plain(entry.text, STYLE_DETAIL)
+        return result
+
+    def _add(self, kind: str, **values) -> TranscriptEntry:
+        entry = TranscriptEntry(self._next_id, kind, **values)
+        self._next_id += 1
+        self.entries.append(entry)
+        return entry
+
+    def _last(self, kind: str) -> TranscriptEntry | None:
+        return next((entry for entry in reversed(self.entries) if entry.kind == kind), None)
+
+    def _entry(self, entry_id: int) -> TranscriptEntry | None:
+        return next((entry for entry in self.entries if entry.id == entry_id), None)
+
+    def _tool(self, call_id: str) -> TranscriptEntry | None:
+        return next(
+            (entry for entry in reversed(self.entries) if entry.kind == "tool" and entry.call_id == call_id),
+            None,
+        )
+
+
+class TUIEventDispatcher(AgentEventDispatcher):
+    """Convert AgentClient callbacks into structured transcript blocks."""
+
+    def __init__(self, transcript: Transcript) -> None:
+        self.transcript = transcript
+
+    def begin_turn(self, prompt: str) -> None:
+        self.transcript.begin_turn(prompt)
+
+    async def on_compaction_started_event(self, event: AgentEvent) -> None:
+        self.transcript.append("\n  ◇ Compacting context…")
+
+    async def on_compaction_completed_event(self, event: AgentEvent) -> None:
+        status = "applied" if event.applied else "skipped"
+        self.transcript.append(f"  Context compaction {status}")
+
+    async def on_reasoning_started_event(self, event: AgentEvent) -> None:
+        self.transcript.start_thinking()
+
+    async def on_reasoning_delta_event(self, event: AgentEvent) -> None:
+        self.transcript.append_thinking(event.delta)
+
+    async def on_reasoning_completed_event(self, event: AgentEvent) -> None:
+        self.transcript.complete_thinking()
+
+    async def on_text_delta_event(self, event: AgentEvent) -> None:
+        self.transcript.complete_thinking()
+        self.transcript.append_answer(event.delta)
+
+    async def on_tool_started_event(self, event: AgentEvent) -> None:
+        for call in event.tool_calls:
+            self.transcript.start_tool(call.id, call.name, call.arguments)
+
+    async def on_tool_completed_event(self, event: AgentEvent) -> None:
+        if isinstance(event.message, ToolMessage):
+            self.transcript.complete_tool(event.message.tool_call_id, _tool_output(event.message))
+
+    async def on_tool_failed_event(self, event: AgentEvent) -> None:
+        for call in event.tool_calls:
+            output = str(event.error) if event.error is not None else "Tool failed"
+            self.transcript.complete_tool(call.id, output, status="failed")
+
+    async def on_tool_skipped_event(self, event: AgentEvent) -> None:
+        for call in event.tool_calls:
+            output = _tool_output(event.message) if isinstance(event.message, ToolMessage) else "Skipped"
+            self.transcript.complete_tool(call.id, output, status="skipped")
+
+    async def on_server_tool_started_event(self, event: AgentEvent) -> None:
+        if event.server_tool_call is not None:
+            self.transcript.start_server_tool(event.server_tool_call.id, event.server_tool_call.name)
+
+    async def on_server_tool_completed_event(self, event: AgentEvent) -> None:
+        if event.server_tool_result is not None:
+            self.transcript.complete_server_tool(
+                event.server_tool_result.call_id,
+                _serialized_output(event.server_tool_result.output),
+            )
+
+    async def on_server_tool_failed_event(self, event: AgentEvent) -> None:
+        if event.server_tool_result is not None:
+            output = event.server_tool_result.error_code or _serialized_output(event.server_tool_result.output)
+            self.transcript.complete_server_tool(event.server_tool_result.call_id, output, status="failed")
+
+    async def on_run_completed_event(self, event: AgentEvent) -> None:
+        self.transcript.complete_thinking()
 
 
 def _tool_output(message: ToolMessage) -> str:

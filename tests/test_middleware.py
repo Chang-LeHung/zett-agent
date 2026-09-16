@@ -1,7 +1,6 @@
 """Provider-request and local-tool middleware chains."""
 
 import asyncio
-import json
 from contextlib import aclosing
 from dataclasses import replace
 
@@ -127,7 +126,7 @@ async def test_tool_middleware_wraps_handler_and_can_adjust_arguments_and_result
     await agent.run("calculate")
 
     result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
-    assert json.loads(result.content) == "3:inner:outer"
+    assert result.content == "3:inner:outer"
     assert order == [
         "outer:before:calculate-1",
         "inner:before:calculate-1",
@@ -197,7 +196,7 @@ async def test_tool_middleware_isolated_for_parallel_calls_and_converts_errors_t
     }
     assert results["allowed"].success
     assert not results["blocked"].success
-    assert json.loads(results["blocked"].content) == {"error": "blocked by middleware"}
+    assert results["blocked"].content == "blocked by middleware"
 
 
 def test_sync_agent_accepts_the_same_async_middleware() -> None:

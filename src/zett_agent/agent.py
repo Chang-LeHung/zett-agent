@@ -1315,7 +1315,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     content = registered.serialize_result(output)
             except Exception as tool_error:
                 error = tool_error
-                content = json.dumps({"error": str(tool_error)})
+                content = str(tool_error)
         finally:
             _reset_tool_call(token)
         completed_ns = monotonic_ns()

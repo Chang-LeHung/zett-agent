@@ -8,93 +8,10 @@ import tempfile
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from .base import tool
 from .output import MAX_MATCH_BYTES, MAX_OUTPUT_BYTES, shell_preview, utf8_prefix
-
-
-class ReadFileResult(BaseModel):
-    """A numbered slice of one UTF-8 text file."""
-
-    path: str
-    content: str
-    start_line: int
-    end_line: int
-    total_lines: int
-    has_more: bool
-    # Resume at this one-based line/character column; None means EOF.
-    next_line: int | None = None
-    next_column: int | None = None
-    # True when the byte budget, rather than the requested range, stopped output.
-    truncated: bool = False
-
-
-class WriteFileResult(BaseModel):
-    """Result of atomically creating or replacing one UTF-8 text file."""
-
-    path: str
-    bytes_written: int
-    created: bool
-
-
-class ReplaceFileResult(BaseModel):
-    """Result of replacing exact text in one UTF-8 text file."""
-
-    path: str
-    replacements: int
-    bytes_written: int
-
-
-class DeleteFileResult(BaseModel):
-    """Result of deleting one existing regular file."""
-
-    path: str
-    deleted: bool
-
-
-class GlobResult(BaseModel):
-    """Paths matched by one relative or absolute glob pattern."""
-
-    pattern: str
-    paths: list[str]
-    truncated: bool = False
-
-
-class GrepMatch(BaseModel):
-    """One matching text line and the first match position on that line."""
-
-    path: str
-    line_number: int
-    column: int
-    text: str
-    # Original one-based column where the returned text window begins.
-    text_start_column: int = 1
-    text_truncated: bool = False
-
-
-class GrepResult(BaseModel):
-    """Text matches found across files selected by a glob pattern."""
-
-    pattern: str
-    matches: list[GrepMatch]
-    files_searched: int
-    truncated: bool = False
-
-
-class ShellResult(BaseModel):
-    """Captured result of one shell command."""
-
-    command: str
-    exit_code: int
-    stdout: str
-    stderr: str
-    timed_out: bool = False
-    output_truncated: bool = False
-    # Relative paths to full byte streams, retained only when previews truncate.
-    stdout_path: str | None = None
-    stderr_path: str | None = None
-
 
 FilePath = Annotated[
     str,
@@ -163,7 +80,7 @@ def _write_working_text(path: Path, content: str) -> None:
 
 
 @tool
-def glob(pattern: Annotated[str, Field(min_length=1)], max_results: MaxResults = 200) -> GlobResult:
+def glob(pattern: Annotated[str, Field(min_length=1)], max_results: MaxResults = 200) -> str:
     """Find paths matching a relative or absolute glob pattern.
 
     Args:
@@ -176,6 +93,7 @@ def glob(pattern: Annotated[str, Field(min_length=1)], max_results: MaxResults =
     Guidelines:
         - Use glob to discover files before reading or searching them.
         - Narrow the pattern when the result is truncated.
+        - The result lists one path per line and is empty when nothing matches.
     """
     working_directory = Path.cwd().resolve()
     root, resolved_pattern, absolute = _resolve_glob_pattern(pattern)
@@ -190,7 +108,10 @@ def glob(pattern: Annotated[str, Field(min_length=1)], max_results: MaxResults =
             break
         paths.append(rendered)
         output_bytes += size
-    return GlobResult(pattern=pattern, paths=paths, truncated=truncated)
+    result = "\n".join(paths)
+    if truncated:
+        result += "\n... [truncated; narrow the pattern or increase max_results]"
+    return result
 
 
 @tool
@@ -199,7 +120,7 @@ def grep(
     file_pattern: Annotated[str, Field(min_length=1)] = "**/*",
     case_sensitive: bool = True,
     max_results: MaxResults = 200,
-) -> GrepResult:
+) -> str:
     """Search UTF-8 text files selected by a relative or absolute glob pattern.
 
     Args:
@@ -214,7 +135,7 @@ def grep(
     Guidelines:
         - Use a narrow file_pattern to avoid scanning unrelated files.
         - Escape regular-expression characters when searching for literal text.
-        - Use read_file for surrounding context after locating a match.
+        - Each match is one path:line:text line; use read_file for surrounding context.
     """
     working_directory = Path.cwd().resolve()
     root, resolved_file_pattern, absolute = _resolve_glob_pattern(file_pattern)
@@ -224,9 +145,8 @@ def grep(
     except re.error as error:
         raise ValueError(f"Invalid regular expression: {error}") from error
 
-    matches: list[GrepMatch] = []
+    lines: list[str] = []
     output_bytes = 0
-    files_searched = 0
     truncated = False
     for candidate in sorted(root.glob(resolved_file_pattern)):
         if not candidate.is_file():
@@ -237,39 +157,34 @@ def grep(
             content = candidate.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        files_searched += 1
         for line_number, line in enumerate(content.splitlines(), start=1):
             match = expression.search(line)
             if match is None:
                 continue
-            if len(matches) == max_results:
+            if len(lines) == max_results:
                 truncated = True
                 break
             text_start = max(0, match.start() - 100) if len(line.encode("utf-8")) > MAX_MATCH_BYTES else 0
             preview = utf8_prefix(line[text_start:], MAX_MATCH_BYTES)
-            item = GrepMatch(
-                path=_matched_path(candidate, working_directory, absolute=absolute),
-                line_number=line_number,
-                column=match.start() + 1,
-                text=preview,
-                text_start_column=text_start + 1,
-                text_truncated=text_start > 0 or len(preview) < len(line),
-            )
-            size = len(item.model_dump_json().encode("utf-8"))
+            rendered = f"{_matched_path(candidate, working_directory, absolute=absolute)}:{line_number}: {preview}"
+            size = len(rendered.encode("utf-8"))
             if output_bytes + size > MAX_OUTPUT_BYTES:
                 truncated = True
                 break
-            matches.append(item)
+            lines.append(rendered)
             output_bytes += size
         if truncated:
             break
-    return GrepResult(pattern=pattern, matches=matches, files_searched=files_searched, truncated=truncated)
+    result = "\n".join(lines)
+    if truncated:
+        result += "\n... [truncated; narrow the search or increase max_results]"
+    return result
 
 
 @tool
 def read_file(
     path: FilePath, start_line: StartLine = 1, line_count: LineCount = 200, start_column: StartLine = 1
-) -> ReadFileResult:
+) -> str:
     """Read a line range from a UTF-8 text file.
 
     Args:
@@ -284,30 +199,27 @@ def read_file(
     Guidelines:
         - Use line ranges for large files.
         - Inspect the current content before editing a file.
-        - Continue with next_line and next_column when has_more is true.
+        - A trailing hint gives the next start_line and start_column when more content remains.
     """
-    working_directory, target = _resolve_file_path(path)
+    _, target = _resolve_file_path(path)
     if not target.is_file():
         raise ValueError(f"File does not exist: {path}")
     selected: list[str] = []
-    line_number, column, total_lines = 1, 1, 0
-    used, end_line = 0, 0
+    line_number, column = 1, 1
+    used = 0
     next_line = next_column = None
     truncated = False
     with target.open(encoding="utf-8") as source:
         while fragment := source.readline(4096):
-            total_lines = line_number
             if line_number >= start_line and next_line is None:
                 offset = max(0, start_column - column) if line_number == start_line else 0
                 available = fragment[offset:]
                 if line_number >= start_line + line_count:
-                    next_line, next_column = line_number, column
+                    next_line = line_number
                 elif available:
                     part = utf8_prefix(available, MAX_OUTPUT_BYTES - used)
                     selected.append(part)
                     used += len(part.encode("utf-8"))
-                    if part:
-                        end_line = line_number
                     if len(part) < len(available):
                         next_line, next_column = line_number, column + offset + len(part)
                         truncated = True
@@ -315,21 +227,16 @@ def read_file(
                 line_number, column = line_number + 1, 1
             else:
                 column += len(fragment)
-    return ReadFileResult(
-        path=_result_path(path, working_directory, target),
-        content="".join(selected),
-        start_line=start_line,
-        end_line=end_line,
-        total_lines=total_lines,
-        has_more=next_line is not None,
-        next_line=next_line,
-        next_column=next_column,
-        truncated=truncated,
-    )
+    content = "".join(selected)
+    if truncated:
+        content += f"\n... [line truncated; continue with start_line={next_line}, start_column={next_column}]"
+    elif next_line is not None:
+        content += f"\n... [more lines; continue with start_line={next_line}]"
+    return content
 
 
 @tool
-def write_file(path: FilePath, content: str, overwrite: bool = True) -> WriteFileResult:
+def write_file(path: FilePath, content: str, overwrite: bool = True) -> str:
     """Atomically write a UTF-8 text file.
 
     Args:
@@ -351,11 +258,8 @@ def write_file(path: FilePath, content: str, overwrite: bool = True) -> WriteFil
     if not overwrite and not created:
         raise ValueError(f"File already exists: {path}")
     _write_working_text(target, content)
-    return WriteFileResult(
-        path=_result_path(path, working_directory, target),
-        bytes_written=len(content.encode("utf-8")),
-        created=created,
-    )
+    result_path = _result_path(path, working_directory, target)
+    return f"Created {result_path}" if created else f"Wrote {result_path}"
 
 
 @tool
@@ -364,7 +268,7 @@ def replace_in_file(
     old_text: Annotated[str, Field(min_length=1)],
     new_text: str,
     replace_all: bool = False,
-) -> ReplaceFileResult:
+) -> str:
     """Replace exact text in a UTF-8 file, requiring one match by default.
 
     Args:
@@ -392,15 +296,12 @@ def replace_in_file(
     replacements = matches if replace_all else 1
     updated = content.replace(old_text, new_text, -1 if replace_all else 1)
     _write_working_text(target, updated)
-    return ReplaceFileResult(
-        path=_result_path(path, working_directory, target),
-        replacements=replacements,
-        bytes_written=len(updated.encode("utf-8")),
-    )
+    result_path = _result_path(path, working_directory, target)
+    return f"Replaced {replacements} occurrence{'s' if replacements != 1 else ''} in {result_path}"
 
 
 @tool
-def delete_file(path: FilePath) -> DeleteFileResult:
+def delete_file(path: FilePath) -> str:
     """Delete one regular file by relative or absolute path.
 
     Args:
@@ -419,14 +320,14 @@ def delete_file(path: FilePath) -> DeleteFileResult:
         raise ValueError(f"File does not exist: {path}")
     result_path = _result_path(path, working_directory, target)
     target.unlink()
-    return DeleteFileResult(path=result_path, deleted=True)
+    return f"Deleted {result_path}"
 
 
 @tool
 async def run_shell(
     command: Annotated[str, Field(min_length=1)],
     timeout_seconds: TimeoutSeconds = 30,
-) -> ShellResult:
+) -> str:
     """Run a shell command with captured output from the current working directory.
 
     Args:
@@ -438,9 +339,9 @@ async def run_shell(
 
     Guidelines:
         - Use only for bounded commands in a trusted working directory.
-        - Inspect exit_code and stderr before assuming the command succeeded.
+        - A non-zero exit code or a timeout is reported as an error carrying the output.
         - Output previews keep startup and final results within byte and line limits.
-        - When output_truncated is true, use read_file on stdout_path or stderr_path for omitted content.
+        - When output is truncated, read the retained files named in the hint.
     """
     if not command.strip():
         raise ValueError("Shell command cannot be blank")
@@ -479,19 +380,24 @@ async def run_shell(
     stdout, stdout_truncated = shell_preview(stdout_file)
     stderr, stderr_truncated = shell_preview(stderr_file)
     # Keep both original streams when either preview is incomplete.
-    truncated = stdout_truncated or stderr_truncated
-    result = ShellResult(
-        command=command,
-        exit_code=process.returncode if process.returncode is not None else -1,
-        stdout=stdout,
-        stderr=stderr,
-        timed_out=timed_out,
-        output_truncated=truncated,
-        stdout_path=stdout_file.relative_to(working_directory).as_posix() if truncated else None,
-        stderr_path=stderr_file.relative_to(working_directory).as_posix() if truncated else None,
-    )
-    if not truncated:
+    sections: list[str] = []
+    if stdout:
+        sections.append(stdout)
+    if stderr:
+        sections.append(f"[stderr]\n{stderr}")
+    composed = "\n".join(sections)
+    if stdout_truncated or stderr_truncated:
+        stdout_path = stdout_file.relative_to(working_directory).as_posix()
+        stderr_path = stderr_file.relative_to(working_directory).as_posix()
+        composed += f"\n... [output truncated; full streams kept at {stdout_path} and {stderr_path}]"
+    else:
         stdout_file.unlink()
         stderr_file.unlink()
         directory.rmdir()
-    return result
+    if timed_out:
+        plural = "" if timeout_seconds == 1 else "s"
+        raise RuntimeError(f"Command timed out after {timeout_seconds} second{plural}\n{composed}")
+    exit_code = process.returncode if process.returncode is not None else -1
+    if exit_code != 0:
+        raise RuntimeError(f"Command exited with code {exit_code}\n{composed}")
+    return composed

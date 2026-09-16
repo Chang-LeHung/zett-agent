@@ -565,7 +565,7 @@ async def test_decision_retry_preserves_session_and_tool_evidence(history, tmp_p
         assert len(set(observer.sessions)) == 1
         dialogue = [message for message in evaluator.requests[2].messages if not message.role == "system"]
         assert [message.role for message in dialogue] == ["user", "assistant", "tool", "assistant", "user"]
-        assert dialogue[2].content == '"Tests passed: 42"'
+        assert dialogue[2].content == "Tests passed: 42"
         assert "Original goal:" in dialogue[0].text
         assert "Continue from your existing findings" in dialogue[-1].text
         if storage is not None:

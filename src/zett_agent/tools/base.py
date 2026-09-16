@@ -87,7 +87,13 @@ class AgentTool(SyncMethodsMixin):
         return await self.handler(**arguments)
 
     def serialize_result(self, value: Any) -> str:
-        """Convert Pydantic models, dataclasses, and plain values into JSON."""
+        """Convert Pydantic models, dataclasses, and plain values into JSON.
+
+        Strings pass through unchanged so plain-text tool results reach the
+        model without JSON quoting.
+        """
+        if isinstance(value, str):
+            return value
         return json.dumps(TypeAdapter(Any).dump_python(value, mode="json"), ensure_ascii=False)
 
 

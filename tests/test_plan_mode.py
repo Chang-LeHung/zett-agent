@@ -387,13 +387,11 @@ async def test_active_plan_mode_executes_filesystem_and_shell_tools(tmp_path, mo
     await agent.run("Maintain the planning artifact")
 
     results = {
-        message.name: json.loads(message.content)
-        for message in model.requests[3].messages
-        if isinstance(message, ToolMessage)
+        message.name: message.content for message in model.requests[3].messages if isinstance(message, ToolMessage)
     }
     assert (tmp_path / "plan.md").read_text() == "# Plan"
-    assert results["read_file"]["content"] == "# Plan"
-    assert results["run_shell"]["stdout"] == "plan-mode"
+    assert results["read_file"] == "# Plan"
+    assert results["run_shell"] == "plan-mode"
     assert all(message.success for message in model.requests[3].messages if isinstance(message, ToolMessage))
 
 

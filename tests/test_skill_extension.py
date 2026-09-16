@@ -1,6 +1,5 @@
 """Skill discovery, prompt injection, and full instruction loading."""
 
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -100,7 +99,7 @@ Inspect every changed file and run focused checks.
             )
             assert f"home-review: Review code using the user-level workflow. (file: {skill_path})" in catalog
             result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
-            assert json.loads(result.content) == complete
+            assert result.content == complete
 
     assert not home.exists()
 
@@ -150,7 +149,7 @@ Read every changed file before reporting findings.
     assert str(path) in catalog
     assert "Read every changed file" not in catalog
     result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
-    assert json.loads(result.content) == complete
+    assert result.content == complete
 
 
 async def test_skill_extension_rejects_unknown_skill_without_reading_other_files(tmp_path):

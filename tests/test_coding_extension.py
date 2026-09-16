@@ -1,6 +1,5 @@
 """Coding extension integration with model schemas and tool dispatch."""
 
-import json
 from pathlib import Path
 
 from zett_agent import (
@@ -95,17 +94,15 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
     assert f'Current working directory: "{tmp_path}".' in environment_messages[0].content
     assert "Shell commands run from this directory." in environment_messages[0].content
     results = {
-        message.name: json.loads(message.content)
-        for message in model.requests[1].messages
-        if isinstance(message, ToolMessage)
+        message.name: message.content for message in model.requests[1].messages if isinstance(message, ToolMessage)
     }
-    assert results["read_file"]["content"] == "world"
-    assert results["run_shell"]["stdout"] == "coding-extension"
-    assert results["run_shell"]["exit_code"] == 0
-    assert results["replace_in_file"]["replacements"] == 1
-    assert results["glob"]["paths"] == ["note.txt"]
-    assert len(results["grep"]["matches"]) == 1
-    assert results["delete_file"] == {"path": "note.txt", "deleted": True}
+    assert results["write_file"] == "Created note.txt"
+    assert results["read_file"] == "world"
+    assert results["run_shell"] == "coding-extension"
+    assert results["replace_in_file"] == "Replaced 1 occurrence in note.txt"
+    assert results["glob"] == "note.txt"
+    assert results["grep"] == "note.txt:1: world"
+    assert results["delete_file"] == "Deleted note.txt"
     assert not (tmp_path / "note.txt").exists()
     assert all(message.success for message in model.requests[1].messages if isinstance(message, ToolMessage))
 

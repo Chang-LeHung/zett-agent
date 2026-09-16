@@ -85,6 +85,7 @@ def test_tool_definition_requires_guidelines():
 
 def test_result_serialization_supports_models():
     assert total.serialize_result(Item(amount=2)) == '{"amount": 2}'
+    assert total.serialize_result("plain text") == "plain text"
 
 
 def test_tool_docstring_supplies_description_args_snippet_and_guidelines():

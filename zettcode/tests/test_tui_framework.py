@@ -10,8 +10,10 @@ from zettcode.tui_framework import (
     ScrollableText,
     Span,
     Style,
+    TextInput,
     TextLine,
 )
+from zettcode.tui_framework.components import _layout_input
 from zettcode.tui_framework.input import InputDecoder
 
 
@@ -186,3 +188,102 @@ def test_scrollable_text_keyboard_navigation_and_drag_autoscroll():
 
     view.handle(InputEvent(EventType.KEY, key="end"), actions)
     assert view.scroll_top == 15
+
+
+def test_text_input_edits_and_submits_without_external_framework():
+    submitted = []
+    editor = TextInput(submitted.append)
+    actions = Actions()
+
+    editor.handle(InputEvent(EventType.TEXT, text="hello"), actions)
+    editor.handle(InputEvent(EventType.KEY, key="alt_enter"), actions)
+    editor.handle(InputEvent(EventType.PASTE, text="world"), actions)
+    editor.handle(InputEvent(EventType.KEY, key="enter"), actions)
+
+    assert submitted == ["hello\nworld"]
+    assert editor.text == ""
+
+
+def test_rejected_submission_preserves_editor_text():
+    editor = TextInput(lambda value: False)
+    actions = Actions()
+    editor.handle(InputEvent(EventType.TEXT, text="keep me"), actions)
+
+    editor.handle(InputEvent(EventType.KEY, key="enter"), actions)
+
+    assert editor.text == "keep me"
+
+
+def test_editor_supports_line_word_kill_yank_and_undo_shortcuts():
+    editor = TextInput(lambda value: True)
+    actions = Actions()
+    editor.handle(InputEvent(EventType.TEXT, text="alpha beta\ngamma delta"), actions)
+
+    editor.handle(InputEvent(EventType.KEY, key="ctrl_a"), actions)
+    assert editor.position == len("alpha beta\n")
+    editor.handle(InputEvent(EventType.KEY, key="ctrl_k"), actions)
+    assert editor.text == "alpha beta\n"
+    editor.handle(InputEvent(EventType.KEY, key="ctrl_y"), actions)
+    assert editor.text == "alpha beta\ngamma delta"
+    editor.handle(InputEvent(EventType.KEY, key="ctrl_z"), actions)
+    assert editor.text == "alpha beta\n"
+
+    editor.handle(InputEvent(EventType.KEY, key="ctrl_home"), actions)
+    editor.handle(InputEvent(EventType.KEY, key="ctrl_right"), actions)
+    assert editor.position == len("alpha")
+    editor.handle(InputEvent(EventType.KEY, key="d", alt=True), actions)
+    assert editor.text == "alpha\n"
+
+
+def test_editor_navigates_multiline_input_and_submission_history():
+    submitted = []
+    editor = TextInput(submitted.append)
+    actions = Actions()
+    editor.handle(InputEvent(EventType.TEXT, text="one\ntwo"), actions)
+
+    editor.handle(InputEvent(EventType.KEY, key="up"), actions)
+    assert editor.position == 3
+    editor.handle(InputEvent(EventType.KEY, key="down"), actions)
+    assert editor.position == len(editor.text)
+    editor.handle(InputEvent(EventType.KEY, key="enter"), actions)
+    editor.handle(InputEvent(EventType.TEXT, text="second command"), actions)
+    editor.handle(InputEvent(EventType.KEY, key="enter"), actions)
+
+    editor.handle(InputEvent(EventType.KEY, key="up"), actions)
+    assert editor.text == "second command"
+    editor.handle(InputEvent(EventType.KEY, key="up"), actions)
+    assert editor.text == "one\ntwo"
+    editor.handle(InputEvent(EventType.KEY, key="down"), actions)
+    assert editor.text == "second command"
+    editor.handle(InputEvent(EventType.KEY, key="down"), actions)
+    assert editor.text == ""
+
+
+def test_editor_completes_commands_in_both_directions():
+    editor = TextInput(lambda value: True, completions=("/clear", "/close", "/quit"))
+    actions = Actions()
+    editor.handle(InputEvent(EventType.TEXT, text="/cl"), actions)
+
+    editor.handle(InputEvent(EventType.KEY, key="tab"), actions)
+    assert editor.text == "/clear"
+    editor.handle(InputEvent(EventType.KEY, key="tab"), actions)
+    assert editor.text == "/close"
+    editor.handle(InputEvent(EventType.KEY, key="backtab"), actions)
+    assert editor.text == "/clear"
+
+
+def test_editor_wraps_cursor_at_the_terminal_edge():
+    lines, cursor = _layout_input("123", 3, 5, 2)
+
+    assert lines == ["123", ""]
+    assert cursor == (1, 0)
+
+
+def test_editor_expands_pasted_tabs_before_cursor_layout():
+    editor = TextInput(lambda value: True)
+    actions = Actions()
+
+    editor.handle(InputEvent(EventType.PASTE, text="\tgo\n\treturn"), actions)
+
+    assert editor.text == "    go\n    return"
+    assert editor.position == len(editor.text)

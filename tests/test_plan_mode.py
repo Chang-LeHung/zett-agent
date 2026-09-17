@@ -194,7 +194,7 @@ async def test_model_proposal_waits_for_approval_then_enters_plan_mode():
     plan_tools = {tool.name for tool in model.requests[1].tools}
     assert plan_tools == {
         "read_file",
-        "read_image",
+        "view_image",
         "write_file",
         "replace_in_file",
         "delete_file",
@@ -521,7 +521,7 @@ async def test_full_lifecycle_restores_empty_prompt_and_empty_original_tool_set(
     plan_request = model.requests[1]
     assert {tool.name for tool in plan_request.tools} == {
         "read_file",
-        "read_image",
+        "view_image",
         "write_file",
         "replace_in_file",
         "delete_file",

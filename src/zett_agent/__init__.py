@@ -185,11 +185,11 @@ from .tools import (
     glob,
     grep,
     read_file,
-    read_image,
     render_tool_guidance,
     replace_in_file,
     run_shell,
     tool,
+    view_image,
     write_file,
 )
 
@@ -364,7 +364,7 @@ __all__ = [
     "get_tool_guidelines",
     "get_tool_snippet",
     "read_file",
-    "read_image",
+    "view_image",
     "write_file",
     "replace_in_file",
     "run_shell",

@@ -48,7 +48,7 @@ class ChildModel:
     retry = RetryOptions(max_retries=0)
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        assert {tool.name for tool in request.tools} == {"read_file", "read_image", "glob", "grep"}
+        assert {tool.name for tool in request.tools} == {"read_file", "view_image", "glob", "grep"}
         yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Keep the runtime small.")))
 
 

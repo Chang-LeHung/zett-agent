@@ -2,7 +2,7 @@
 
 from .base import AgentTool, ToolExecutionMode, get_tool_guidelines, get_tool_snippet, render_tool_guidance, tool
 from .coding import delete_file, glob, grep, read_file, replace_in_file, run_shell, write_file
-from .images import read_image
+from .images import view_image
 
 __all__ = [
     "AgentTool",
@@ -11,7 +11,7 @@ __all__ = [
     "glob",
     "grep",
     "read_file",
-    "read_image",
+    "view_image",
     "get_tool_guidelines",
     "get_tool_snippet",
     "render_tool_guidance",

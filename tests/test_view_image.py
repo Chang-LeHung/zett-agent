@@ -1,7 +1,8 @@
-"""Real file reads, model-loop delivery, and lossless image tool history."""
+"""Local and remote image reads, model-loop delivery, and lossless history."""
 
 import base64
 
+import httpx
 import pytest
 
 from zett_agent import (
@@ -16,12 +17,13 @@ from zett_agent import (
     ToolCall,
     ToolMessage,
     UserMessage,
-    read_image,
+    view_image,
 )
 from zett_agent.providers.base import _message_to_openai_payload
 from zett_agent.providers.responses import responses_input
 from zett_agent.providers.tool_images import expand_tool_images
 from zett_agent.storage import decode_messages, encode_messages
+from zett_agent.tools import images as image_tools
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
 
@@ -35,7 +37,7 @@ async def test_image_tool_reaches_next_model_request_and_round_trips(tmp_path):
         async def stream(self, request):
             requests.append(request)
             message = (
-                AssistantMessage(tool_calls=(ToolCall("image-1", "read_image", {"path": str(path)}),))
+                AssistantMessage(tool_calls=(ToolCall("image-1", "view_image", {"path": str(path)}),))
                 if len(requests) == 1
                 else AssistantMessage(content="seen")
             )
@@ -55,22 +57,67 @@ async def test_image_tool_reaches_next_model_request_and_round_trips(tmp_path):
 async def test_image_validation_and_relative_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "image.dat").write_bytes(PNG)
-    assert (await read_image({"path": "image.dat"})).source.media_type == "image/png"
+    assert (await view_image({"path": "image.dat"})).source.media_type == "image/png"
     with pytest.raises(ValueError, match="limit"):
-        await read_image({"path": "image.dat", "max_bytes": 4})
+        await view_image({"path": "image.dat", "max_bytes": 4})
     (tmp_path / "fake.png").write_text("not an image")
     with pytest.raises(ValueError, match="signature"):
-        await read_image({"path": "fake.png"})
+        await view_image({"path": "fake.png"})
     with pytest.raises(FileNotFoundError):
-        await read_image({"path": "missing.png"})
+        await view_image({"path": "missing.png"})
+
+
+async def test_view_image_reads_http_url(monkeypatch):
+    requested_urls = []
+
+    def handler(request):
+        requested_urls.append(str(request.url))
+        return httpx.Response(200, content=PNG, headers={"content-type": "image/png"})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient
+
+    def client_factory(**kwargs):
+        return client(transport=transport, **kwargs)
+
+    monkeypatch.setattr(image_tools.httpx, "AsyncClient", client_factory)
+    image = await view_image({"path": "https://example.com/assets/pixel.png"})
+
+    assert requested_urls == ["https://example.com/assets/pixel.png"]
+    assert image.source.data == PNG
+    assert image.source.media_type == "image/png"
+    assert image.alt_text == "pixel.png"
+
+
+async def test_view_image_bounds_and_validates_remote_sources(monkeypatch):
+    def handler(request):
+        match request.url.path:
+            case "/too-large.png":
+                return httpx.Response(200, content=PNG)
+            case _:
+                return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient
+
+    def client_factory(**kwargs):
+        return client(transport=transport, **kwargs)
+
+    monkeypatch.setattr(image_tools.httpx, "AsyncClient", client_factory)
+    with pytest.raises(ValueError, match="limit"):
+        await view_image({"path": "https://example.com/too-large.png", "max_bytes": 4})
+    with pytest.raises(ValueError, match="Unable to download"):
+        await view_image({"path": "https://example.com/missing.png"})
+    with pytest.raises(ValueError, match="scheme"):
+        await view_image({"path": "ftp://example.com/image.png"})
 
 
 async def test_parallel_tool_images_follow_all_tool_results(tmp_path):
     path = tmp_path / "pixel.png"
     path.write_bytes(PNG)
-    image = await read_image({"path": str(path)})
+    image = await view_image({"path": str(path)})
     messages = [
-        ToolMessage(tool_call_id="1", name="read_image", content=[image]),
+        ToolMessage(tool_call_id="1", name="view_image", content=[image]),
         ToolMessage(tool_call_id="2", name="other", content="done"),
     ]
     wire = expand_tool_images(messages)
@@ -85,8 +132,8 @@ async def test_parallel_tool_images_follow_all_tool_results(tmp_path):
 async def test_image_result_survives_sqlite_reopen(tmp_path):
     image_path = tmp_path / "pixel.png"
     image_path.write_bytes(PNG)
-    image = await read_image({"path": str(image_path)})
-    result = ToolMessage(tool_call_id="image", name="read_image", content=[image])
+    image = await view_image({"path": str(image_path)})
+    result = ToolMessage(tool_call_id="image", name="view_image", content=[image])
     database = tmp_path / "history.sqlite3"
     storage = SQLiteSessionStorage(database)
     try:

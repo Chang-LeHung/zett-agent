@@ -13,6 +13,7 @@ from zett_agent import (
     ImageUrlSource,
     ModelRequest,
     OllamaProvider,
+    OpenAIProvider,
     ReasoningEffort,
     SystemMessage,
     ToolCall,
@@ -85,6 +86,34 @@ async def test_deepseek_replays_reasoning_and_uses_custom_endpoint() -> None:
         _ = [event async for event in provider.stream(ModelRequest(messages, reasoning_effort=ReasoningEffort.LOW))]
         assert captured["messages"][1]["reasoning_content"] == "Retain this"
         assert captured["reasoning_effort"] == "low"
+    finally:
+        await provider.aclose()
+
+
+async def test_openai_compatible_provider_replays_reasoning_content() -> None:
+    captured = {}
+
+    def handler(request):
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=('data: {"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'),
+        )
+
+    provider = OpenAIProvider(
+        "reasoner",
+        "test",
+        base_url="https://gateway.example/v1",
+        transport=httpx.MockTransport(handler),
+    )
+    messages = (
+        AssistantMessage(reasoning="Retain this", provider="openai", model="reasoner"),
+        UserMessage(content="Continue"),
+    )
+    try:
+        _ = [event async for event in provider.stream(ModelRequest(messages))]
+        assert captured["messages"][0]["reasoning_content"] == "Retain this"
     finally:
         await provider.aclose()
 

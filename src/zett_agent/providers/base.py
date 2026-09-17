@@ -174,6 +174,32 @@ def _message_to_openai_payload(message: AnyMessage) -> dict[str, Any]:
             raise ProviderResponseError(f"Unsupported role in message conversion: {role}")
 
 
+def _replay_reasoning_content(
+    source_messages: Sequence[AnyMessage],
+    payload_messages: Sequence[dict[str, Any]],
+    *,
+    provider_name: str,
+) -> list[dict[str, Any]]:
+    """Replay same-provider reasoning on OpenAI-compatible assistant history.
+
+    Reasoning-aware providers, including DeepSeek thinking mode, require the
+    assistant ``reasoning_content`` to be sent back on later requests. It is
+    model context that cannot be reconstructed from the final answer or tool
+    calls. Messages without provider metadata remain compatible with history
+    created before provider attribution was stored.
+
+    See https://api-docs.deepseek.com/zh-cn/guides/thinking_mode.
+    """
+    rendered = [dict(payload) for payload in payload_messages]
+    for source, target in zip(source_messages, rendered, strict=True):
+        if not isinstance(source, AssistantMessage) or source.reasoning is None:
+            continue
+        if source.provider is not None and source.provider != provider_name:
+            continue
+        target["reasoning_content"] = source.reasoning
+    return rendered
+
+
 def _tools_to_openai_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
     rendered = []
     for tool in tools:
@@ -407,7 +433,11 @@ class _OpenAIStyleProvider(RetryingProvider):
         if self.response:
             return await self._request_response(request)
         source_messages = expand_tool_images(request.messages)
-        messages = [_message_to_openai_payload(message) for message in source_messages]
+        messages = _replay_reasoning_content(
+            source_messages,
+            [_message_to_openai_payload(message) for message in source_messages],
+            provider_name=self.provider_name,
+        )
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -425,10 +455,6 @@ class _OpenAIStyleProvider(RetryingProvider):
             payload["temperature"] = self.temperature
         if request.tool_choice:
             payload["tool_choice"] = {"type": "function", "function": {"name": request.tool_choice}}
-        if self.provider_name == "deepseek":
-            for source, target in zip(source_messages, messages, strict=True):
-                if isinstance(source, AssistantMessage) and source.reasoning is not None:
-                    target["reasoning_content"] = source.reasoning
         extra_body = self._provider_specific_request_extra_fields(request)
         if extra_body:
             payload["extra_body"] = extra_body

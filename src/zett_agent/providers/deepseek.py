@@ -20,7 +20,10 @@ class DeepSeekProvider(_OpenAIStyleProvider):
 
     Note:
         Cache-hit counters are normalized into ModelUsage. Reasoning deltas
-        are emitted only when returned by the provider. Close with aclose().
+        are emitted only when returned by the provider. Returned reasoning is
+        retained in AssistantMessage and replayed as reasoning_content in later
+        requests, which is required by DeepSeek thinking mode. Close with
+        aclose().
 
     Examples:
         Select the model explicitly rather than inferring it from the key::

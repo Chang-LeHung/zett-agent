@@ -266,6 +266,14 @@ def tool(
     Raises:
         ValueError: If annotations, guidance, or documented parameter names are invalid.
 
+    Note:
+        A normal exception raised by the decorated handler is caught by the
+        Agent instead of ending the run. The Agent creates an unsuccessful
+        ``ToolMessage`` whose ``content`` is ``str(exception)``; that string is
+        what the next model request sees. The original exception object remains
+        available separately on the ``TOOL_FAILED`` event and after-tool hooks.
+        Cancellation and other ``BaseException`` subclasses are not converted.
+
     Examples:
         Register a typed function::
 

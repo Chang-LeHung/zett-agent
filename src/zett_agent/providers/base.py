@@ -9,12 +9,25 @@ from contextlib import aclosing
 from dataclasses import asdict, dataclass
 from functools import wraps
 from json import JSONDecodeError
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import truststore
 from json_repair import repair_json
 from openai import APIStatusError, AsyncOpenAI
+from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionContentPartImageParam,
+    ChatCompletionContentPartParam,
+    ChatCompletionContentPartTextParam,
+    ChatCompletionMessageFunctionToolCallParam,
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionToolMessageParam,
+    ChatCompletionToolParam,
+    ChatCompletionUserMessageParam,
+)
+from openai.types.shared_params import FunctionDefinition
 
 from ..exceptions import AgentError
 from ..messages import (
@@ -79,7 +92,7 @@ def _reasoning_effort_to_budget(effort: ReasoningEffort) -> int:
             return 32768
 
 
-def _to_model_data(payload: Any) -> dict[str, Any]:
+def _to_model_data(payload: Any) -> Mapping[str, Any]:
     if isinstance(payload, dict):
         return payload
     if hasattr(payload, "model_dump"):
@@ -98,88 +111,90 @@ def _to_model_data(payload: Any) -> dict[str, Any]:
 
 def _normalize_image_source(
     part: ImageUrlSource | ImageBytesSource, detail: ImageDetail = ImageDetail.AUTO
-) -> dict[str, Any]:
+) -> ChatCompletionContentPartImageParam:
     """Normalize a typed image source into an OpenAI-compatible content block."""
     match part:
         case ImageUrlSource(url=url):
-            return {"type": "image_url", "image_url": {"url": url, "detail": detail.value}}
+            return ChatCompletionContentPartImageParam(
+                type="image_url",
+                image_url={"url": url, "detail": detail.value},
+            )
         case ImageBytesSource(data=data, media_type=media_type):
             encoded = base64.b64encode(data).decode("ascii")
-            return {
-                "type": "image_url",
-                "image_url": {"url": f"data:{media_type};base64,{encoded}", "detail": detail.value},
-            }
+            return ChatCompletionContentPartImageParam(
+                type="image_url",
+                image_url={"url": f"data:{media_type};base64,{encoded}", "detail": detail.value},
+            )
         case _:
             raise ProviderResponseError(f"Unsupported image source type: {part!r}")
 
 
-def _message_to_openai_payload(message: AnyMessage) -> dict[str, Any]:
+def _message_to_openai_payload(message: AnyMessage) -> ChatCompletionMessageParam:
     role = message.role
     match role:
         case "agent":
-            return {"role": "user", "content": message.content}
+            return ChatCompletionUserMessageParam(role="user", content=message.content)
         case "system":
             if not isinstance(message, SystemMessage):
                 raise ProviderResponseError(f"Invalid system message data type: {type(message)!r}")
-            return {"role": "system", "content": message.content}
+            return ChatCompletionSystemMessageParam(role="system", content=message.content)
         case "user":
             if not isinstance(message, UserMessage):
                 raise ProviderResponseError(f"Invalid user message data type: {type(message)!r}")
             content = message.content
             match content:
                 case str() as text:
-                    return {"role": "user", "content": text}
+                    return ChatCompletionUserMessageParam(role="user", content=text)
                 case []:
-                    return {"role": "user", "content": ""}
+                    return ChatCompletionUserMessageParam(role="user", content="")
                 case list():
-                    parts: list[dict[str, Any]] = []
+                    parts: list[ChatCompletionContentPartParam] = []
                     for part in content:
                         match part:
                             case TextContent(text=text):
-                                parts.append({"type": "text", "text": text})
+                                parts.append(ChatCompletionContentPartTextParam(type="text", text=text))
                             case ImageContent(source=source, detail=detail):
                                 parts.append(_normalize_image_source(source, detail))
                             case _:
                                 raise ProviderResponseError(f"Unsupported user content part: {part!r}")
-                    return {"role": "user", "content": parts}
+                    return ChatCompletionUserMessageParam(role="user", content=parts)
                 case _:
                     raise ProviderResponseError(f"Unsupported user content type: {type(content)!r}")
         case "assistant":
             if not isinstance(message, AssistantMessage):
                 raise ProviderResponseError(f"Invalid assistant message data type: {type(message)!r}")
-            payload: dict[str, Any] = {"role": "assistant", "content": message.content}
+            payload = ChatCompletionAssistantMessageParam(role="assistant", content=message.content)
             if message.tool_calls:
                 payload["tool_calls"] = [
-                    {
-                        "id": call.id,
-                        "type": "function",
-                        "function": {
+                    ChatCompletionMessageFunctionToolCallParam(
+                        id=call.id,
+                        type="function",
+                        function={
                             "name": call.name,
                             "arguments": json.dumps(dict(call.arguments), ensure_ascii=False),
                         },
-                    }
+                    )
                     for call in message.tool_calls
                 ]
             return payload
         case "tool":
             if not isinstance(message, ToolMessage):
                 raise ProviderResponseError(f"Invalid tool message data type: {type(message)!r}")
-            return {
-                "role": "tool",
-                "tool_call_id": message.tool_call_id,
-                "name": message.name,
-                "content": message.content,
-            }
+            return ChatCompletionToolMessageParam(
+                role="tool",
+                tool_call_id=message.tool_call_id,
+                content=message.content,
+            )
         case _:
             raise ProviderResponseError(f"Unsupported role in message conversion: {role}")
 
 
 def _replay_reasoning_content(
     source_messages: Sequence[AnyMessage],
-    payload_messages: Sequence[dict[str, Any]],
+    payload_messages: Sequence[ChatCompletionMessageParam],
     *,
     provider_name: str,
-) -> list[dict[str, Any]]:
+) -> list[ChatCompletionMessageParam]:
     """Replay same-provider reasoning on OpenAI-compatible assistant history.
 
     Reasoning-aware providers, including DeepSeek thinking mode, require the
@@ -190,7 +205,7 @@ def _replay_reasoning_content(
 
     See https://api-docs.deepseek.com/zh-cn/guides/thinking_mode.
     """
-    rendered = [dict(payload) for payload in payload_messages]
+    rendered = [cast(ChatCompletionMessageParam, dict(payload)) for payload in payload_messages]
     for source, target in zip(source_messages, rendered, strict=True):
         if not isinstance(source, AssistantMessage) or source.reasoning is None:
             continue
@@ -200,23 +215,24 @@ def _replay_reasoning_content(
     return rendered
 
 
-def _tools_to_openai_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
-    rendered = []
+def _tools_to_openai_payload(tools: Sequence[ToolDefinition]) -> list[ChatCompletionToolParam]:
+    rendered: list[ChatCompletionToolParam] = []
     for tool in tools:
+        function: FunctionDefinition = {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": dict(tool.parameters),
+        }
         rendered.append(
             {
                 "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": dict(tool.parameters),
-                },
+                "function": function,
             }
         )
     return rendered
 
 
-def _server_tools_to_payload(tools: Sequence[ServerToolDefinition]) -> list[dict[str, Any]]:
+def _server_tools_to_payload(tools: Sequence[ServerToolDefinition]) -> list[Mapping[str, Any]]:
     """Render opaque server tools without treating them as local functions."""
     return [{"type": tool.type, **dict(tool.configuration)} for tool in tools]
 

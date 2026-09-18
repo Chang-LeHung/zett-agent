@@ -96,12 +96,14 @@ def test_responses_tools_adds_tool_search_for_deferred_functions() -> None:
             "name": "immediate",
             "description": "Always visible",
             "parameters": {"type": "object"},
+            "strict": None,
         },
         {
             "type": "function",
             "name": "later",
             "description": "Deferred",
             "parameters": {"type": "object"},
+            "strict": None,
             "defer_loading": True,
         },
         {"type": "web_search"},
@@ -179,7 +181,13 @@ async def test_openai_responses_streams_local_and_server_tools() -> None:
     assert captured["body"]["parallel_tool_calls"] is False
     assert captured["body"]["reasoning"] == {"effort": "high", "summary": "auto"}
     assert captured["body"]["tools"] == [
-        {"type": "function", "name": "save", "description": "Save result", "parameters": {"type": "object"}},
+        {
+            "type": "function",
+            "name": "save",
+            "description": "Save result",
+            "parameters": {"type": "object"},
+            "strict": None,
+        },
         {"type": "web_search", "search_context_size": "low"},
     ]
     assert [event.type for event in events] == [

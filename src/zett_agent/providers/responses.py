@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
-from typing import Any
+from typing import Any, cast
+
+from openai.types.responses import FunctionToolParam, ToolParam, ToolSearchToolParam
 
 from ..messages import (
     AnyMessage,
@@ -75,31 +77,30 @@ def responses_input(messages: Sequence[AnyMessage], *, provider: str, model: str
     return items
 
 
-def responses_tools(
-    tools: Sequence[ToolDefinition], server_tools: Sequence[ServerToolDefinition]
-) -> list[dict[str, Any]]:
+def responses_tools(tools: Sequence[ToolDefinition], server_tools: Sequence[ServerToolDefinition]) -> list[ToolParam]:
     """Render functions and hosted tools in Responses wire format.
 
     Functions marked ``deferred`` use OpenAI's ``defer_loading`` protocol. The
     request must also expose the hosted ``tool_search`` tool so the model can
     discover and load those definitions on demand.
     """
-    rendered: list[dict[str, Any]] = []
+    rendered: list[ToolParam] = []
     deferred = False
     for tool in tools:
-        payload = {
-            "type": "function",
-            "name": tool.name,
-            "description": tool.description,
-            "parameters": dict(tool.parameters),
-        }
+        payload = FunctionToolParam(
+            type="function",
+            name=tool.name,
+            description=tool.description,
+            parameters=dict(tool.parameters),
+            strict=None,
+        )
         if tool.deferred:
             payload["defer_loading"] = True
             deferred = True
         rendered.append(payload)
-    rendered.extend({"type": tool.type, **dict(tool.configuration)} for tool in server_tools)
+    rendered.extend(cast(ToolParam, {"type": tool.type, **dict(tool.configuration)}) for tool in server_tools)
     if deferred and not any(tool.type == "tool_search" for tool in server_tools):
-        rendered.append({"type": "tool_search"})
+        rendered.append(ToolSearchToolParam(type="tool_search"))
     return rendered
 
 

@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, get_type_hints
+from typing import Any, Protocol, get_type_hints, overload
 
 from pydantic import ConfigDict, TypeAdapter, create_model
 
@@ -95,6 +95,12 @@ class AgentTool(SyncMethodsMixin):
         if isinstance(value, str):
             return value
         return json.dumps(TypeAdapter(Any).dump_python(value, mode="json"), ensure_ascii=False)
+
+
+class _ToolDecorator(Protocol):
+    """Decorator returned by configured ``@tool(...)`` usage."""
+
+    def __call__[**P, R](self, function: Callable[P, R], /) -> AgentTool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +247,28 @@ def _build_agent_tool(
     )
 
 
+@overload
+def tool(
+    function: Callable[..., Any],
+    *,
+    name: str | None = None,
+    snippet: str | None = None,
+    guidelines: str | Sequence[str] | None = None,
+    execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
+) -> AgentTool: ...
+
+
+@overload
+def tool(
+    function: None = None,
+    *,
+    name: str | None = None,
+    snippet: str | None = None,
+    guidelines: str | Sequence[str] | None = None,
+    execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
+) -> _ToolDecorator: ...
+
+
 def tool(
     function: Callable[..., Any] | None = None,
     *,
@@ -248,7 +276,7 @@ def tool(
     snippet: str | None = None,
     guidelines: str | Sequence[str] | None = None,
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
-):
+) -> AgentTool | _ToolDecorator:
     """Turn a typed function and its structured docstring into an AgentTool.
 
     Args:

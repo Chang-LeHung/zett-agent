@@ -75,6 +75,27 @@ async def test_agent_generates_a_fresh_request_id_for_each_run_when_omitted() ->
     assert config.request_id is None
 
 
+async def test_agent_generates_a_session_id_for_a_blank_request_config() -> None:
+    observed: list[str | None] = []
+
+    class Observer(AgentExtension):
+        async def on_state(self, context):
+            observed.append(context.config.session_id)
+
+    default = AgentRunConfig("default-session")
+    agent = await Agent.create(
+        ScriptedModel(AssistantMessage(content="Done")),
+        config=default,
+        extensions=[Observer()],
+    )
+
+    await agent.run("Hello", config=AgentRunConfig(session_id="  "))
+
+    assert observed[0]
+    assert observed[0] != default.session_id
+    assert default.session_id == "default-session"
+
+
 async def test_phase_transition_mixin_validates_predecessors() -> None:
     transitions: list[PhaseTransitionEvent] = []
 
@@ -845,12 +866,21 @@ async def test_duplicate_tools_are_rejected():
         (await Agent.create(ScriptedModel(), tools=[add, add], config=CONFIG))
 
 
-def test_agent_config_rejects_an_empty_session_id():
-    with pytest.raises(ValueError, match="session_id"):
-        AgentRunConfig(session_id="  ")
+def test_agent_config_normalizes_blank_identities_for_runtime_generation():
+    config = AgentRunConfig(session_id="  ", request_id="  ")
 
-    with pytest.raises(ValueError, match="request_id"):
-        AgentRunConfig(session_id="session", request_id="  ")
+    assert config.session_id is None
+    assert config.request_id is None
+
+
+async def test_agent_create_generates_a_default_session_when_config_is_none():
+    agent = await Agent.create(ScriptedModel(AssistantMessage(content="Done")))
+
+    result = await agent.run("Hello")
+
+    assert result.content == "Done"
+    assert agent._initialized_config is not None
+    assert agent._initialized_config.session_id
 
 
 async def test_agent_rejects_invalid_initialization_transitions():

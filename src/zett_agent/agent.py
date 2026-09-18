@@ -51,7 +51,8 @@ class AgentRunConfig:
     """Identify a conversation and optionally one request within it.
 
     Attributes:
-        session_id: Stable non-empty conversation identifier, reused across turns.
+        session_id: Conversation identifier, reused across turns. None or an
+            empty value is replaced by a new UUIDv7 when the runtime starts.
         request_id: Optional application correlation ID for this invocation.
             It is not an idempotency key; reusing it does not deduplicate messages.
         parent_session_id: Parent conversation when running a delegated child.
@@ -82,19 +83,27 @@ class AgentRunConfig:
         and :class:`~zett_agent.SubAgentDefinition` for child-session setup.
     """
 
-    session_id: str
+    session_id: str | None = None
     request_id: str | None = None
     parent_session_id: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.session_id.strip():
-            raise ValueError("session_id cannot be empty")
-        if self.request_id is not None and not self.request_id.strip():
-            raise ValueError("request_id cannot be empty")
+        if self.session_id is not None:
+            normalized_session_id = self.session_id.strip()
+            if not normalized_session_id:
+                object.__setattr__(self, "session_id", None)
+            elif normalized_session_id != self.session_id:
+                object.__setattr__(self, "session_id", normalized_session_id)
+        if self.request_id is not None:
+            normalized_request_id = self.request_id.strip()
+            if not normalized_request_id:
+                object.__setattr__(self, "request_id", None)
+            elif normalized_request_id != self.request_id:
+                object.__setattr__(self, "request_id", normalized_request_id)
         if self.parent_session_id is not None:
             if not self.parent_session_id.strip():
                 raise ValueError("parent_session_id cannot be empty")
-            if self.parent_session_id == self.session_id:
+            if self.session_id is not None and self.parent_session_id == self.session_id:
                 raise ValueError("parent_session_id must differ from session_id")
 
 
@@ -496,7 +505,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self.max_iterations = max_iterations
         self.max_internal_messages = max_internal_messages
 
-    async def initialize(self, *, config: AgentRunConfig) -> None:
+    async def initialize(self, *, config: AgentRunConfig | None = None) -> None:
         """Bind the default session used when a request omits config.
 
         Examples:
@@ -506,11 +515,19 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 await agent.initialize(config=AgentRunConfig(session_id="session-42"))
                 reply = await agent.run("Hello")
         """
+        requested = config or AgentRunConfig()
         if self._initialized_config is not None:
-            if self._initialized_config.session_id != config.session_id:
+            if requested.session_id is None:
+                return
+            if self._initialized_config.session_id != requested.session_id:
                 raise AgentProtocolError("Agent is already initialized for another session")
             return
-        self._initialized_config = config
+        session_id = requested.session_id or new_uuid7()
+        if requested.parent_session_id == session_id:
+            raise ValueError("parent_session_id must differ from session_id")
+        self._initialized_config = (
+            requested if requested.session_id is not None else replace(requested, session_id=session_id)
+        )
 
     def get_state(self, session_id: str) -> AgentState | None:
         """Return one session's latest state, or None before its first request.
@@ -593,7 +610,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         cls,
         model: AgentModel | None,
         *,
-        config: AgentRunConfig,
+        config: AgentRunConfig | None = None,
         system_prompt: str = "You are a helpful assistant.",
         tools: Sequence[AgentTool] = (),
         extensions: Sequence[AgentExtension] | None = None,
@@ -607,6 +624,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         Args:
             model: Provider-neutral streaming model adapter.
             config: Initial session identity used when requests omit config.
+                None generates a UUIDv7 session during initialization.
             system_prompt: Initial instructions for every fresh request state.
             tools: Static tools registered before extension setup.
             extensions: Optional lifecycle and middleware extensions; None keeps
@@ -861,6 +879,10 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 "Agent is not initialized; await agent.initialize(config=...) or Agent.create(...)"
             )
         config = config or self._initialized_config
+        session_id = config.session_id or new_uuid7()
+        if config.parent_session_id == session_id:
+            raise ValueError("parent_session_id must differ from session_id")
+        config = replace(config, session_id=session_id)
         if config.request_id is None:
             config = replace(config, request_id=new_uuid7())
         resolved_model = model if model is not None else self.model

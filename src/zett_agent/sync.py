@@ -11,7 +11,6 @@ from .dispatcher import AgentEventDispatcher
 from .events import AgentEvent
 from .extensions.base import AgentExtension
 from .extensions.external import ExternalEvent
-from .ids import new_uuid7
 from .json_types import JsonValue
 from .messages import AssistantMessage, UserMessage
 from .model import AgentModel, ModelEvent, ModelRequest, ReasoningEffort
@@ -115,7 +114,7 @@ class SyncAgent(SyncObject[Agent]):
             agent = owner.call(
                 Agent.create,
                 model,
-                config=config if config is not None else AgentRunConfig(session_id=new_uuid7()),
+                config=config,
                 system_prompt=system_prompt,
                 tools=tools,
                 extensions=extensions,

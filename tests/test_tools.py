@@ -177,6 +177,31 @@ def test_tool_prompt_metadata_helpers_return_empty_values_for_missing_sections()
     assert get_tool_guidelines(plain) == ()
 
 
+def test_render_tool_guidance_indents_multiline_snippets():
+    def create_artifact(content: str) -> str:
+        """Create one artifact.
+
+        Args:
+            content: Serialized artifact content.
+
+        Snippet:
+            create_artifact(content={"artifact_type": "card", "title": "One"})
+            create_artifact(content={"artifact_type": "slides", "title": "Two", "content": "# Topic"})
+
+        Guidelines:
+            - Create only when useful.
+        """
+        return content
+
+    prompt = render_tool_guidance([tool(create_artifact)])
+
+    assert (
+        "- create_artifact:\n"
+        '  create_artifact(content={"artifact_type": "card", "title": "One"})\n'
+        '  create_artifact(content={"artifact_type": "slides", "title": "Two", "content": "# Topic"})'
+    ) in prompt
+
+
 def test_tool_docstring_rejects_unknown_argument_documentation():
     with pytest.raises(ValueError, match="unknown parameters: missing"):
 

@@ -362,7 +362,7 @@ def render_tool_guidance(tools: Sequence[AgentTool]) -> str:
     shapes first. Guidelines follow in one named group per tool, which avoids
     repeating a tool name for every rule.
     """
-    snippets = [f"- {registered.name}: {registered.snippet}" for registered in tools if registered.snippet]
+    snippets = [_render_tool_snippet(registered) for registered in tools if registered.snippet]
     guideline_groups = [
         f"## {registered.name}\n" + "\n".join(f"- {guideline}" for guideline in registered.guidelines)
         for registered in tools
@@ -374,3 +374,12 @@ def render_tool_guidance(tools: Sequence[AgentTool]) -> str:
     if guideline_groups:
         sections.append("# Tool guidelines\n" + "\n\n".join(guideline_groups))
     return "\n\n".join(sections)
+
+
+def _render_tool_snippet(tool: AgentTool) -> str:
+    """Keep every line of a multiline snippet inside its tool bullet."""
+    lines = tool.snippet.splitlines()
+    if len(lines) == 1:
+        return f"- {tool.name}: {lines[0]}"
+    body = "\n".join(f"  {line}" if line else "" for line in lines)
+    return f"- {tool.name}:\n{body}"

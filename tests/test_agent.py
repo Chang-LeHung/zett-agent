@@ -46,6 +46,35 @@ def test_agent_config_validates_session_identity_fields() -> None:
     assert (config.session_id, config.request_id, config.parent_session_id) == ("session", "request", "parent")
 
 
+async def test_agent_generates_a_fresh_request_id_for_each_run_when_omitted() -> None:
+    observed: list[str | None] = []
+
+    class Observer(AgentExtension):
+        async def on_state(self, context):
+            observed.append(context.config.request_id)
+
+        async def before_run(self, context):
+            observed.append(context.config.request_id)
+
+    config = AgentRunConfig("generated-request")
+    agent = await Agent.create(
+        ScriptedModel(AssistantMessage(content="First"), AssistantMessage(content="Second")),
+        config=config,
+        extensions=[Observer()],
+    )
+
+    await agent.run("One")
+    await agent.run("Two")
+
+    first_request_id, first_before_run, second_request_id, second_before_run = observed
+    assert first_request_id
+    assert first_request_id == first_before_run
+    assert second_request_id
+    assert second_request_id == second_before_run
+    assert first_request_id != second_request_id
+    assert config.request_id is None
+
+
 async def test_phase_transition_mixin_validates_predecessors() -> None:
     transitions: list[PhaseTransitionEvent] = []
 
@@ -264,7 +293,10 @@ async def test_context_registers_request_scoped_tools_before_messages_load():
     next_config = AgentRunConfig(session_id=CONFIG.session_id)
     await agent.run("Continue", config=next_config)
     assert contexts[0] is not contexts[1]
-    assert contexts[1].config is next_config
+    assert contexts[1].config is not next_config
+    assert contexts[1].config.session_id == next_config.session_id
+    assert contexts[1].config.request_id
+    assert next_config.request_id is None
     assert contexts[0].state is not contexts[1].state
     assert contexts[1].state is agent.state
     assert contexts[0].tools is not contexts[1].tools

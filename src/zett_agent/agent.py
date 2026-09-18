@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Self, overload
 from .event_queue import AgentEventQueue
 from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
 from .exceptions import AgentIterationLimitError, AgentProtocolError
+from .ids import new_uuid7
 from .json_types import JsonValue, json_object
 from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from .model import (
@@ -860,6 +861,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 "Agent is not initialized; await agent.initialize(config=...) or Agent.create(...)"
             )
         config = config or self._initialized_config
+        if config.request_id is None:
+            config = replace(config, request_id=new_uuid7())
         resolved_model = model if model is not None else self.model
         if resolved_model is None:
             raise AgentProtocolError("This request requires a model because the Agent has no default model")

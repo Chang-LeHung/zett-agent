@@ -63,6 +63,7 @@ class GoalEvaluation(BaseModel):
 class _GoalRun:
     """Request-local goal command and continuation count."""
 
+    armed_key: tuple[str, str | None]
     goal: str | None = None
     raw_content: UserContent | None = None
     continuation_count: int = 0
@@ -180,15 +181,18 @@ class GoalExtension(AgentExtension):
     async def on_message(self, context: AgentRunContext) -> None:
         """Consume a matching external selection and inject the Goal Mode prompt."""
         message = context.input_message
-        key = (context.config.session_id, context.config.request_id)
+        session_id = context.config.session_id
+        request_id = context.config.request_id
+        exact_key = (session_id, request_id)
+        wildcard_key = (session_id, None)
         with self._armed_lock:
-            armed = key in self._armed_requests
+            armed_key = exact_key if exact_key in self._armed_requests else wildcard_key
+            armed = armed_key in self._armed_requests
         if not armed:
             return
-        # Keep the selection armed for the complete request lifecycle. Terminal
-        # callbacks remove it together with _runs; consuming it here would lose
-        # Goal Mode before a model/tool failure or cancellation is finalized.
-        self._runs[context] = _GoalRun()
+        # Register cleanup before validation so an invalid first message still
+        # releases the session-level selection through on_error.
+        self._runs[context] = _GoalRun(armed_key=armed_key)
         if message is None:
             raise AgentProtocolError("Goal Mode requires a user message")
         goal = message.text.strip()
@@ -204,7 +208,10 @@ class GoalExtension(AgentExtension):
             content=self._goal_prompt(goal, message),
             attributes=attributes,
         )
-        self._runs[context] = _GoalRun(goal=goal, raw_content=raw_content)
+        # Keep the selection armed for the complete request lifecycle. Terminal
+        # callbacks remove it together with _runs; consuming it here would lose
+        # Goal Mode before a model/tool failure or cancellation is finalized.
+        self._runs[context] = _GoalRun(armed_key=armed_key, goal=goal, raw_content=raw_content)
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Release request-local state when cancellation bypasses run callbacks."""
@@ -361,6 +368,5 @@ class GoalExtension(AgentExtension):
         run = self._runs.pop(context, None)
         if run is None:
             return
-        key = (context.config.session_id, context.config.request_id)
         with self._armed_lock:
-            self._armed_requests.discard(key)
+            self._armed_requests.discard(run.armed_key)

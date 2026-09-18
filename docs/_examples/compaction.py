@@ -70,11 +70,11 @@ async def main() -> None:
             await client.run("Continue with Python and keep all the current request words in the recent context.")
             raw = await storage.list_raw_messages("compaction-demo")
             view = await storage.storage.load("compaction-demo")
-            assert len(raw) == 4 and raw[0].message.content == original
+            assert len(raw) == 6 and raw[1].message.content == original
             assert view.snapshot is not None
-            assert view.snapshot.compacted_through_sequence == 2
-            assert len(view.raw_tail) == 2
-            print("Raw messages: 4; checkpoint boundary: 2; raw tail: 2")
+            assert view.snapshot.compacted_through_sequence == 3
+            assert len(view.raw_tail) == 3
+            print("Raw messages: 6; checkpoint boundary: 3; raw tail: 3")
         finally:
             await storage.close()
 

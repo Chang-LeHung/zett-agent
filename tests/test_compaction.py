@@ -48,7 +48,7 @@ class Collector(AgentExtension):
 def context(messages):
     return AgentRunContext(
         AgentRunConfig(session_id="test"),
-        AgentState(messages=messages, phase=AgentPhase.READY),
+        AgentState(_messages=messages, phase=AgentPhase.READY),
         {},
         (Collector(),),
     )
@@ -73,13 +73,13 @@ async def test_compaction_preserves_instructions_and_whole_tool_turn():
         ToolMessage(tool_call_id="c1", name="lookup", content="Result"),
     ]
     state = context([instructions, *old, *recent])
-    original_list = state.state.messages
+    original_list = state.state._messages
     extension = CompactionExtension(model, max_tokens=100, keep_recent_tokens=1)
     events = await compact(extension, state)
-    assert state.state.messages is original_list
+    assert state.state._messages is original_list
     assert state.state.messages[0] is instructions
     assert isinstance(state.state.messages[1], CompactedMessage)
-    assert state.state.messages[2:] == recent
+    assert state.state.messages[2:] == tuple(recent)
     assert model.requests[0].messages[1:-1] == tuple(old)
     record = state.extensions[0].events[0]
     assert (record.compressed_from, record.compressed_to) == (1, 2)
@@ -90,7 +90,8 @@ async def test_compaction_preserves_instructions_and_whole_tool_turn():
     assert len(model.requests) == 1
     # Next turn: fold the previous checkpoint and newly old messages together.
     checkpoint = state.state.messages[1]
-    state.state.messages.extend([AssistantMessage(content="More " * 300), UserMessage(content="Next")])
+    state.add_message(AssistantMessage(content="More " * 300))
+    state.add_message(UserMessage(content="Next"))
     await compact(extension, state)
     assert model.requests[1].messages[1] is checkpoint
     assert sum(isinstance(m, CompactedMessage) for m in state.state.messages) == 1
@@ -136,7 +137,7 @@ async def test_invalid_or_larger_summary_leaves_context_unchanged(summary):
             await compact(extension, state)
     else:
         await compact(extension, state)
-    assert state.state.messages == messages
+    assert state.state.messages == tuple(messages)
     assert state.extensions[0].events == []
 
 
@@ -164,7 +165,8 @@ async def test_compaction_event_delivered_after_context_update(fail):
 
     class Restore(AgentExtension):
         async def on_state(self, context):
-            context.state.messages.extend([UserMessage(content="Old " * 500), AssistantMessage(content="Answer")])
+            context.add_message(UserMessage(content="Old " * 500))
+            context.add_message(AssistantMessage(content="Answer"))
 
     agent = await Agent.create(
         PrimaryModel(),
@@ -203,7 +205,7 @@ async def test_recent_retention_uses_token_budget_not_message_count():
     recent = [UserMessage(content="recent " * 20), AssistantMessage(content="reply"), UserMessage(content="latest")]
     state = context([*older, *recent])
     await compact(CompactionExtension(model, max_tokens=100, keep_recent_tokens=15, count_tokens=count_tokens), state)
-    assert state.state.messages[1:] == recent
+    assert state.state.messages[1:] == tuple(recent)
     assert model.requests[0].messages[1:-1] == tuple(older)
 
 
@@ -282,5 +284,5 @@ async def test_compaction_rejects_invalid_model_protocol_without_rewriting_conte
         await compact(
             CompactionExtension(InvalidSummaryModel(), max_tokens=2, keep_recent_tokens=1, count_tokens=len), state
         )
-    assert state.state.messages == messages
+    assert state.state.messages == tuple(messages)
     assert state.extensions[0].events == []

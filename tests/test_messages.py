@@ -30,6 +30,17 @@ def test_message_attributes_are_independent_and_available_to_every_role():
     }
 
 
+def test_message_storage_and_restore_flags_are_role_aware():
+    system = SystemMessage(content="Rules")
+    user = UserMessage(content="Question")
+
+    assert system.persist is True
+    assert system.include_in_messages is False
+    assert user.persist is True
+    assert user.include_in_messages is True
+    assert UserMessage(content="Transient", persist=False).persist is False
+
+
 def test_message_fields_are_direct_and_role_specific():
     call = ToolCall("c1", "lookup", {"query": "agents"})
     messages = [

@@ -16,13 +16,13 @@ EXPECTED = {
     "streaming_tools": "Answer: 42",
     "custom_extension": "Request state cleared",
     "approval": "Response accepted; duplicate rejected",
-    "sessions": "Raw roles: user, assistant, user, assistant",
+    "sessions": "Raw roles: system, user, assistant, system, user, assistant",
     "observability": "Reasoning and content boundaries recorded",
-    "compaction": "Raw messages: 4; checkpoint boundary: 2; raw tail: 2",
+    "compaction": "Raw messages: 6; checkpoint boundary: 3; raw tail: 3",
     "subagent": "Two isolated sessions; child links to parent",
     "cancellation": "Cancelled request; extension state cleared",
     "goal": "Implementation and tests are complete.",
-    "storage_adapter": "load, append:user, append:assistant",
+    "storage_adapter": "load, append:system, append:user, append:assistant",
 }
 
 

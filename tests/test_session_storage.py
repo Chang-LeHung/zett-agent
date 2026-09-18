@@ -9,6 +9,7 @@ import pytest
 
 from zett_agent import (
     Agent,
+    AgentExtension,
     AgentRunConfig,
     AssistantMessage,
     BaseSessionPersistenceExtension,
@@ -125,7 +126,12 @@ async def test_storage_persists_parent_identity_and_message_metadata(storage):
         ).fetchone()
         assert json.loads(raw["metadata_json"]) == {"subagent_type": "explore", "depth": 1}
         assert json.loads(raw["tags_json"]) == {"domain": "code", "read_only": True}
-        assert set(json.loads(raw["message_json"])[0]["data"]) == {"attributes", "content"}
+        assert set(json.loads(raw["message_json"])[0]["data"]) == {
+            "attributes",
+            "content",
+            "include_in_messages",
+            "persist",
+        }
 
     with pytest.raises(ValueError, match="parent cannot change"):
         await storage.append(
@@ -169,7 +175,8 @@ async def test_agent_persists_provider_usage_on_each_assistant_raw_message(stora
     await agent.run("Measure this request")
 
     records = await storage.list_raw_messages("usage-session")
-    user, assistant = records
+    system, user, assistant = records
+    assert isinstance(system.message, SystemMessage)
     assert user.input_tokens is None
     assert user.total_tokens is None
     assert user.cache_hit_rate is None
@@ -303,6 +310,62 @@ async def test_sqlite_session_extension_owns_storage_and_restores_history(tmp_pa
         await second.close()
 
 
+async def test_system_messages_are_stored_but_not_replayed(storage):
+    class DynamicInstructions(AgentExtension):
+        async def on_state(self, context):
+            context.add_message(SystemMessage(content="Dynamic instructions"), index=0)
+
+    first = await Agent.create(
+        Model("First answer"),
+        system_prompt="Base instructions",
+        config=AgentRunConfig("system-log"),
+        extensions=[SessionPersistenceExtension(storage), DynamicInstructions()],
+    )
+    await first.run("First question")
+
+    records = await storage.list_raw_messages("system-log")
+    assert [record.message.content for record in records] == [
+        "Dynamic instructions",
+        "Base instructions",
+        "First question",
+        "First answer",
+    ]
+
+    second_model = Model("Second answer")
+    second = await Agent.create(
+        second_model,
+        system_prompt="Current instructions",
+        config=AgentRunConfig("system-log"),
+        extensions=[SessionPersistenceExtension(storage), DynamicInstructions()],
+    )
+    await second.run("Second question")
+
+    instructions = [
+        message.content for message in second_model.requests[0].messages if isinstance(message, SystemMessage)
+    ]
+    assert instructions == ["Dynamic instructions", "Current instructions"]
+    assert sum(content == "Dynamic instructions" for content in instructions) == 1
+
+
+async def test_session_view_filters_raw_messages_marked_context_only(storage):
+    await storage.append("context-filter", "request", SystemMessage(content="Raw system"))
+    await storage.append(
+        "context-filter",
+        "request",
+        UserMessage(content="Raw only", include_in_messages=False),
+    )
+    await storage.append("context-filter", "request", UserMessage(content="Replayable"))
+
+    view = await storage.load("context-filter")
+
+    assert [record.message.content for record in view.raw_tail] == [
+        "Raw system",
+        "Raw only",
+        "Replayable",
+    ]
+    assert [message.content for message in view.messages] == ["Replayable"]
+
+
 async def test_custom_persistence_extension_only_wires_its_storage(tmp_path):
     class CustomSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorage]):
         def __init__(self, path):
@@ -342,7 +405,8 @@ async def test_raw_log_persists_model_output_timing(storage):
     )
     await agent.run("Question")
 
-    user, assistant = await storage.list_raw_messages("timed-session")
+    system, user, assistant = await storage.list_raw_messages("timed-session")
+    assert isinstance(system.message, SystemMessage)
     assert user.duration_ns == 0
     assert user.started_at == user.completed_at
     assert assistant.duration_ns >= 0
@@ -394,12 +458,21 @@ async def test_same_agent_reloads_snapshot_and_external_tail_every_request(stora
     ]
     second = await storage.load(session_id)
     assert second.snapshot is None
-    assert second.raw_tail[-1].sequence == 5
+    assert [record.message.role for record in second.raw_tail] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+        "system",
+        "user",
+        "assistant",
+    ]
+    assert second.raw_tail[-1].sequence == 7
     with sqlite_file(storage.path) as connection:
         rows = connection.execute(
             "select id, request_id, created_at, updated_at from raw_messages order by sequence"
         ).fetchall()
-        assert len(rows) == 5
+        assert len(rows) == 7
         assert all(
             UUID(row["id"]).version == 7 and UUID(row["request_id"]).version == 7
             for row in rows
@@ -407,7 +480,7 @@ async def test_same_agent_reloads_snapshot_and_external_tail_every_request(stora
         )
         assert all(row["updated_at"] == row["created_at"] for row in rows)
         assert connection.execute("select count(*) from session_snapshots").fetchone()[0] == 0
-    assert await storage.append(session_id, "later", UserMessage(content="Next")) == 6
+    assert await storage.append(session_id, "later", UserMessage(content="Next")) == 8
 
 
 async def test_configured_request_id_is_persisted(storage):
@@ -441,10 +514,10 @@ async def test_compaction_snapshot_keeps_raw_log_and_restores_checkpoint(storage
     assert view.snapshot.created_at.tzinfo is not None
     assert isinstance(view.messages[0], CompactedMessage)
     assert view.snapshot.compacted_through_sequence == 2
-    assert [record.sequence for record in view.raw_tail] == [3, 4]
+    assert [record.sequence for record in view.raw_tail] == [3, 4, 5]
     with sqlite_file(storage.path) as connection:
         rows = connection.execute("select content, message_json from raw_messages order by sequence").fetchall()
-        assert len(rows) == 4
+        assert len(rows) == 5
         assert rows[0]["content"] == "Old " * 500
         snapshot = connection.execute(
             "select id, compacted_through_sequence, message_json from session_snapshots"
@@ -458,13 +531,13 @@ async def test_compaction_snapshot_keeps_raw_log_and_restores_checkpoint(storage
     restored = await Agent.create(
         restored_model, config=AgentRunConfig(session_id), extensions=[SessionPersistenceExtension(storage)]
     )
-    assert restored.state.messages == []
+    assert restored.state.messages == ()
     await restored.run("Continue")
     assert list(restored_model.requests[0].messages[1:-1]) == view.messages
     latest = await storage.load(session_id)
     assert latest.snapshot is not None
     assert latest.snapshot.version == 1
-    assert latest.raw_tail[-1].sequence == 6
+    assert latest.raw_tail[-1].sequence == 8
 
 
 async def test_new_snapshot_advances_boundary_without_copying_raw_tail(storage):

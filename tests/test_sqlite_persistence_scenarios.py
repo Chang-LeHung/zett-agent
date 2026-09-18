@@ -18,6 +18,7 @@ from zett_agent import (
     ModelEvent,
     ModelResponse,
     SQLiteSessionExtension,
+    SystemMessage,
     ToolCall,
     ToolMessage,
     UserMessage,
@@ -119,11 +120,15 @@ async def test_successful_turn_writes_valid_session_and_raw_log_rows(sqlite_exte
             {"source": "integration-test", "classified_by": "extension"},
             {"kind": "test", "reviewed": True},
         ),
+        (
+            {"source": "integration-test", "classified_by": "extension"},
+            {"kind": "test", "reviewed": True},
+        ),
     ]
     assert (view.title, view.agent_name) == ("SQLite scenario", "test-agent")
     with sqlite_file(sqlite_extension.storage.path) as connection:
         rows = connection.execute("select id, sequence, created_at, updated_at from raw_messages").fetchall()
-        assert [row["sequence"] for row in rows] == [1, 2]
+        assert [row["sequence"] for row in rows] == [1, 2, 3]
         assert all(UUID(row["id"]).version == 7 and row["created_at"] == row["updated_at"] for row in rows)
 
 
@@ -150,19 +155,23 @@ async def test_complete_tool_turn_preserves_roles_and_session_view(sqlite_extens
     view = await sqlite_extension.storage.load("tool-session")
 
     assert result == expected_messages[-1]
-    assert [record.message for record in records] == expected_messages
+    assert [record.message for record in records] == [
+        SystemMessage(content="You are a helpful assistant."),
+        *expected_messages,
+    ]
     assert view.snapshot is None
     assert view.raw_tail == records
     assert view.messages == expected_messages
     with sqlite_file(sqlite_extension.storage.path) as connection:
         rows = connection.execute("select role, sequence from raw_messages").fetchall()
         assert [row["role"] for row in rows] == [
+            int(MessageKind.SYSTEM),
             int(MessageKind.USER),
             int(MessageKind.ASSISTANT),
             int(MessageKind.TOOL),
             int(MessageKind.ASSISTANT),
         ]
-        assert [row["sequence"] for row in rows] == [1, 2, 3, 4]
+        assert [row["sequence"] for row in rows] == [1, 2, 3, 4, 5]
 
 
 async def test_cancelled_tool_turn_is_persisted_as_provider_complete_and_can_resume(sqlite_extension):
@@ -202,7 +211,12 @@ async def test_cancelled_tool_turn_is_persisted_as_provider_complete_and_can_res
         await first
 
     records = await sqlite_extension.list_raw_messages("cancel-resume")
-    assert [type(record.message) for record in records] == [UserMessage, AssistantMessage, ToolMessage]
+    assert [type(record.message) for record in records] == [
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
+        ToolMessage,
+    ]
     cancelled_result = records[-1].message
     assert isinstance(cancelled_result, ToolMessage)
     assert cancelled_result.tool_call_id == "wait-1"
@@ -280,6 +294,7 @@ async def test_compaction_writes_snapshot_without_rewriting_raw_log(sqlite_exten
         assert [row["content"] for row in raw_rows] == [
             original.content,
             "Old answer",
+            "You are a helpful assistant.",
             "Current question",
             "Current answer",
         ]

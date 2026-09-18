@@ -15,5 +15,4 @@ class ToolGuidelinesExtension(AgentExtension):
         message = SystemMessage(content=render_tool_guidance(tuple(context.tools.values())))
         if message.content and message not in state.messages:
             instructions = [message for message in state.messages if isinstance(message, SystemMessage)]
-            dialogue = [message for message in state.messages if not isinstance(message, SystemMessage)]
-            state.messages[:] = [*instructions, message, *dialogue]
+            context.add_message(message, index=len(instructions))

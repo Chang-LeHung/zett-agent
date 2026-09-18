@@ -37,7 +37,7 @@ async def test_context_appends_message_before_publishing_its_event():
 
     await context.append_message(message, timing)
 
-    assert context.state.messages == [message]
+    assert context.state.messages == (message,)
     assert observed == [MessageAppendedEvent(message, timing)]
 
 
@@ -130,7 +130,7 @@ async def test_memory_accumulator_ignores_system_events_and_tracks_compaction():
     accumulator = InMemoryMessageAccumulator()
     context = AgentRunContext(
         AgentRunConfig("session"),
-        AgentState(messages=[SystemMessage(content="Current"), UserMessage(content="Old")]),
+        AgentState(_messages=[SystemMessage(content="Current"), UserMessage(content="Old")]),
         {},
         (accumulator,),
     )
@@ -142,7 +142,7 @@ async def test_memory_accumulator_ignores_system_events_and_tracks_compaction():
 
     checkpoint = CompactedMessage(content="Checkpoint")
     recent = UserMessage(content="Recent")
-    context.state.messages[:] = [SystemMessage(content="Current"), checkpoint, recent]
+    context.replace_messages([SystemMessage(content="Current"), checkpoint, recent], emit_new=False)
     await accumulator.on_event(context, CompactionEvent(1, 1, 2, 2, checkpoint.content))
 
     assert accumulator.messages("session") == (checkpoint, recent)

@@ -55,7 +55,7 @@ class NoteExtension(AgentExtension):
         context.register_tool(lookup_note)
 
     async def on_state(self, context: AgentRunContext) -> None:
-        context.state.messages.insert(0, SystemMessage(content="Use the note tool for project facts."))
+        context.add_message(SystemMessage(content="Use the note tool for project facts."), index=0)
 
     async def on_message(self, context: AgentRunContext) -> None:
         message = context.input_message

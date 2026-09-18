@@ -120,6 +120,7 @@ async def test_steering_skips_remaining_tools_and_persists_matching_results(tmp_
         assert events[-1].type == AgentEventType.RUN_COMPLETED
         records = await persistence.list_raw_messages("s")
         assert [record.message.role.value for record in records] == [
+            "system",
             "user",
             "assistant",
             "tool",

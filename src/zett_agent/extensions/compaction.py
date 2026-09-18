@@ -193,7 +193,7 @@ class CompactionExtension(AgentExtension):
                 )
             )
             return
-        messages[:] = [*instructions, summary, *recent]
+        context.replace_messages([*instructions, summary, *recent], emit_new=False)
         compacted = CompactionEvent(
             compressed_from=1,
             compressed_to=cutoff,

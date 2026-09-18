@@ -146,20 +146,29 @@ async def test_explore_subagent_runs_end_to_end_in_a_persisted_child_session(sto
     assert child_view.parent_session_id == "parent-session"
     assert child_view.title is None
     assert child_view.agent_name is None
-    assert [record.message.content for record in child_view.raw_tail] == [
+    assert [record.message.role for record in child_view.raw_tail] == [
+        "system",
+        "system",
+        "system",
+        "user",
+        "assistant",
+    ]
+    assert [record.message.content for record in child_view.raw_tail[-2:]] == [
         "Find the session storage boundary and return one relevant path.",
         "Found the storage boundary in src/zett_agent/storage.py",
     ]
+    assert any("Filesystem environment" in record.message.content for record in child_view.raw_tail)
+    assert any("Tool snippets" in record.message.content for record in child_view.raw_tail)
     parent_summary = (await storage.list_sessions())[0]
     assert parent_summary.session_id == "parent-session"
     assert parent_summary.parent_session_id is None
-    assert parent_summary.message_count == 4
+    assert parent_summary.message_count == 6
     child_summary = (await subagent_storage.list_sessions())[0]
     assert child_summary.session_id == child_session_id
     assert child_summary.parent_session_id == "parent-session"
     assert child_summary.title is None
     assert child_summary.agent_name is None
-    assert child_summary.message_count == 2
+    assert child_summary.message_count == 5
 
 
 async def test_task_schema_and_guidance_describe_available_subagents(storage, builtins):
@@ -266,9 +275,10 @@ async def test_cancelling_parent_propagates_into_a_running_subagent(storage, bui
     subagent_storage = child_storage(definitions)
     summaries = await subagent_storage.list_sessions()
     child = next(summary for summary in summaries if summary.parent_session_id == "parent")
-    assert child.message_count == 1
+    assert child.message_count == 2
     child_records = await subagent_storage.list_raw_messages(child.session_id)
-    assert [record.message.content for record in child_records] == ["Wait until cancelled."]
+    assert [record.message.role for record in child_records] == ["system", "user"]
+    assert child_records[-1].message.content == "Wait until cancelled."
 
 
 @pytest.mark.parametrize(
@@ -321,7 +331,7 @@ async def test_custom_subagent_extensions_run_inside_the_child_lifecycle(storage
     class ChildExtension(AgentExtension):
         async def on_state(self, context):
             observed_sessions.append(context.config.session_id)
-            context.state.messages.append(SystemMessage(content="Injected by child extension"))
+            context.add_message(SystemMessage(content="Injected by child extension"))
 
     model = DelegatingModel(subagent_type="custom")
     persistence = SessionPersistenceExtension(storage)
@@ -410,7 +420,7 @@ async def test_custom_definition_does_not_receive_implicit_persistence(storage):
 
     summaries = await storage.list_sessions()
     assert [summary.session_id for summary in summaries] == ["parent"]
-    assert summaries[0].message_count == 4
+    assert summaries[0].message_count == 5
 
 
 def test_agent_config_rejects_invalid_parent_session_ids():

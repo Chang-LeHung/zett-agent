@@ -246,7 +246,7 @@ async def test_create_preserves_subclass_and_restores_when_a_request_starts():
     class Restore(AgentExtension):
         async def on_state(self, context):
             await asyncio.sleep(0)
-            context.state.messages.append(UserMessage(content="Restored"))
+            context.add_message(UserMessage(content="Restored"))
 
     class CustomAgent(Agent):
         pass
@@ -255,7 +255,7 @@ async def test_create_preserves_subclass_and_restores_when_a_request_starts():
         ScriptedModel(AssistantMessage(content="Done")), config=CONFIG, extensions=[Restore()]
     )
     assert isinstance(agent, CustomAgent)
-    assert agent.state.messages == []
+    assert agent.state.messages == ()
     await agent.run("Hello")
     assert agent.state.messages[1].content == "Restored"
 
@@ -758,7 +758,7 @@ async def test_agent_state_retains_messages_between_runs():
 
     class Restore(AgentExtension):
         async def on_state(self, context):
-            context.state.messages.extend(history)
+            context.replace_messages([*context.state.messages, *history], emit_new=False)
 
     accumulator = InMemoryMessageAccumulator()
     agent = await Agent.create(model, system_prompt="", extensions=[Restore(), accumulator], config=CONFIG)
@@ -783,7 +783,7 @@ async def test_tool_guidance_follows_all_instructions_without_duplication():
 
     class Restore(AgentExtension):
         async def on_state(self, context):
-            context.state.messages.append(SystemMessage(content="Snapshot"))
+            context.add_message(SystemMessage(content="Snapshot"))
 
     agent = await Agent.create(
         model,
@@ -902,7 +902,7 @@ async def test_extensions_receive_all_success_hooks_and_can_modify_messages():
 
         async def on_state(self, context):
             calls.append("on_state")
-            context.state.messages.append(SystemMessage(content=f"Loaded {context.config.session_id}"))
+            context.add_message(SystemMessage(content=f"Loaded {context.config.session_id}"))
 
         async def on_message(self, context):
             calls.append("on_message")
@@ -964,12 +964,12 @@ async def test_message_injection_runs_for_each_fresh_request_state():
 
         async def on_state(self, context):
             self.calls += 1
-            context.state.messages.insert(1, SystemMessage(content="Extra instructions"))
+            context.add_message(SystemMessage(content="Extra instructions"), index=1)
 
     extension = Instructions()
     model = ScriptedModel(AssistantMessage(content="First"), AssistantMessage(content="Second"))
     agent = Agent(model, system_prompt="Base", extensions=[extension])
-    assert agent.state.messages == []
+    assert agent.state.messages == ()
     await agent.initialize(config=CONFIG)
     await agent.initialize(config=CONFIG)
     assert extension.calls == 0

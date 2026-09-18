@@ -144,19 +144,26 @@ class AgentState:
         :class:`~zett_agent.SessionView` describes restored persistent context.
     """
 
-    messages: list[AnyMessage] = field(default_factory=list)
+    _messages: list[AnyMessage] = field(default_factory=list)
     phase: AgentPhase = AgentPhase.CREATED
     # Parent conversation when this request belongs to a delegated subagent.
     parent_session_id: str | None = None
+
+    @property
+    def messages(self) -> tuple[AnyMessage, ...]:
+        """Return a read-only view of the current message sequence."""
+        return tuple(self._messages)
 
 
 @dataclass(slots=True, weakref_slot=True, eq=False)
 class AgentRunContext:
     """Per-run references shared by all lifecycle hooks.
 
-    Register request-scoped local and server tools during on_tool(). Mutate
-    state.messages and either tool registry in place to update the current
-    request without leaking registrations into another request or session.
+    Register request-scoped local and server tools during on_tool(). Add or
+    replace context messages through :meth:`add_message` and
+    :meth:`replace_messages`; mutate either tool registry in place to update
+    the current request without leaking registrations into another request or
+    session.
 
     .. note::
         Context identity is request-scoped. It is safe to use a context as a key
@@ -216,6 +223,11 @@ class AgentRunContext:
     # One request-owned channel. Internal code emits here; only Agent.stream
     # consumes it and exposes an async iterator to callers.
     event_queue: AgentEventQueue = field(default_factory=AgentEventQueue)
+    # New messages waiting for their single MessageAppendedEvent.
+    _pending_message_events: list[tuple[AnyMessage, MessageTiming, ModelUsage | None]] = field(
+        default_factory=list,
+        repr=False,
+    )
 
     async def emit(self, event: AgentEvent) -> None:
         """Queue one extension-owned CUSTOM or compaction event for the caller."""
@@ -318,19 +330,87 @@ class AgentRunContext:
         timing: MessageTiming,
         usage: ModelUsage | None = None,
     ) -> None:
-        """Append one newly produced message and publish its Raw Log event.
+        """Append one new message and notify persistence subscribers.
 
-        Runtime code must use this method for user, assistant, and tool messages
-        so in-memory context and persistence notifications cannot drift apart.
-        Restored history and generated system instructions are existing context,
-        not new Raw Log messages, and therefore do not use this method.
+        Runtime code must use this method for produced messages so in-memory
+        context and persistence notifications cannot drift apart. Subscribers
+        decide from ``message.persist`` whether the message belongs in storage.
 
         The message is visible in ``state.messages`` before subscribers run.
         Subscriber failures propagate and do not roll back the in-memory append.
         """
+        self.state._messages.append(message)
+        await self._publish_message_appended(message, timing, usage)
+
+    def add_message(
+        self,
+        message: AnyMessage,
+        *,
+        index: int | None = None,
+        usage: ModelUsage | None = None,
+    ) -> None:
+        """Add one extension-owned message and queue its append event.
+
+        The queued event is flushed by the runtime after setup hooks or before
+        the next model request. Extensions must use this method instead of
+        mutating ``AgentState.messages`` directly.
+        """
+        from .extensions.events import MessageTiming
+
+        if index is None:
+            self.state._messages.append(message)
+        else:
+            self.state._messages.insert(index, message)
+        self._pending_message_events.append((message, MessageTiming.instant(), usage))
+
+    def replace_messages(
+        self,
+        messages: Sequence[AnyMessage],
+        *,
+        emit_new: bool = True,
+    ) -> None:
+        """Replace model context and optionally queue events for newly added messages.
+
+        Restored history and compaction use ``emit_new=False`` because those
+        messages are already represented by storage records or a snapshot.
+        """
+        old_ids = {id(message) for message in self.state._messages}
+        replacement = list(messages)
+        self.state._messages[:] = replacement
+        if not emit_new:
+            return
+        for message in replacement:
+            if id(message) not in old_ids:
+                self.add_message_event(message)
+
+    def add_message_event(self, message: AnyMessage, usage: ModelUsage | None = None) -> None:
+        """Queue one append event for a message already present in state."""
+        from .extensions.events import MessageTiming
+
+        self._pending_message_events.append((message, MessageTiming.instant(), usage))
+
+    async def flush_message_events(self) -> None:
+        """Publish every queued message event exactly once."""
+        pending = self._pending_message_events
+        self._pending_message_events = []
+        by_message_id = {id(message): (message, timing, usage) for message, timing, usage in pending}
+        positions = {id(message): index for index, message in enumerate(self.state._messages)}
+        ordered = sorted(
+            (item for item in by_message_id.values() if id(item[0]) in positions),
+            key=lambda item: positions[id(item[0])],
+        )
+        for message, timing, usage in ordered:
+            await self._publish_message_appended(message, timing, usage)
+
+    async def _publish_message_appended(
+        self,
+        message: AnyMessage,
+        timing: MessageTiming,
+        usage: ModelUsage | None = None,
+    ) -> None:
+        """Notify subscribers once for one message already present in context."""
         from .extensions.events import MessageAppendedEvent
 
-        self.state.messages.append(message)
         await self.publish(MessageAppendedEvent(message, timing, usage))
 
 
@@ -888,11 +968,9 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         resolved_model = model if model is not None else self.model
         if resolved_model is None:
             raise AgentProtocolError("This request requires a model because the Agent has no default model")
-        messages = [SystemMessage(content=self.system_prompt)] if self.system_prompt else []
         # State and dynamic tools are request-scoped. Constructor tools are copied
         # so extension registrations cannot leak into later requests or sessions.
         state = AgentState(
-            messages=messages,
             parent_session_id=config.parent_session_id,
         )
         context = AgentRunContext(
@@ -905,6 +983,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             tags=json_object(tags, field_name="Context tags", nonempty_keys=True),
             input_message=input_message,
         )
+        if self.system_prompt:
+            context.add_message(SystemMessage(content=self.system_prompt))
         for registered in self.tools.values():
             context.register_tool(registered)
         with self._sessions_lock:
@@ -929,9 +1009,12 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         await self._notify_on_tool(context)
         await self._notify_on_state(context)
         await self._notify_on_message(context)
-        await self._finish_context_loading(context)
         if not isinstance(context.input_message, UserMessage):
             raise AgentProtocolError("Request setup must produce a UserMessage")
+        # Persist setup-generated instructions before the user input so Raw Log
+        # order matches the final model context.
+        await context.flush_message_events()
+        await self._finish_context_loading(context)
         await context.append_message(context.input_message, MessageTiming.instant())
         await self._notify_before_run(context)
 
@@ -1049,6 +1132,9 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             parallel_tool_call=parallel_tool_call,
         )
         await self._notify_before_model(context, request)
+        # before_model hooks may add or replace instructions; publish those
+        # changes before rebuilding the request sent to the provider.
+        await context.flush_message_events()
 
         request = self._refresh_model_request(context, request)
         model_started = await self._start_model_generation(context)

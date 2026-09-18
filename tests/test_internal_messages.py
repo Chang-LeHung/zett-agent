@@ -175,8 +175,15 @@ async def test_external_internal_message_continues_loop_and_persists_complete_hi
     ]
 
     records = await persistence.list_raw_messages("session-1")
-    assert [record.message.role.value for record in records] == ["user", "assistant", "agent", "assistant"]
+    assert [record.message.role.value for record in records] == [
+        "system",
+        "user",
+        "assistant",
+        "agent",
+        "assistant",
+    ]
     assert [record.message.content for record in records] == [
+        "You are a helpful assistant.",
         "initial question",
         "initial answer",
         "internal question",

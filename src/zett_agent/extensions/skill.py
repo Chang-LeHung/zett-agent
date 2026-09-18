@@ -156,8 +156,7 @@ class SkillExtension(AgentExtension):
             )
         )
         instructions = [item for item in context.state.messages if isinstance(item, SystemMessage)]
-        dialogue = [item for item in context.state.messages if not isinstance(item, SystemMessage)]
-        context.state.messages[:] = [*instructions, message, *dialogue]
+        context.add_message(message, index=len(instructions))
 
     def _discover(self) -> tuple[SkillDefinition, ...]:
         skills: dict[str, SkillDefinition] = {}

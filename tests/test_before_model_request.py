@@ -45,7 +45,7 @@ async def test_each_hook_and_provider_receive_latest_messages_and_tools(effort):
             assert not request.tools
             with pytest.raises(FrozenInstanceError):
                 request.reasoning_effort = ReasoningEffort.LOW
-            context.state.messages.append(SystemMessage(content="before-model change"))
+            context.add_message(SystemMessage(content="before-model change"))
             context.register_tool(probe)
 
     class Second(AgentExtension):
@@ -56,10 +56,12 @@ async def test_each_hook_and_provider_receive_latest_messages_and_tools(effort):
             assert request.messages[-1].content == "before-model change"
             assert [item.name for item in request.tools] == ["probe"]
             await context.emit(AgentEvent(AgentEventType.CUSTOM, context.config.session_id, name="preparing"))
-            context.state.messages[:] = [
-                SystemMessage(content="replacement context"),
-                SystemMessage(content="last hook change"),
-            ]
+            context.replace_messages(
+                [
+                    SystemMessage(content="replacement context"),
+                    SystemMessage(content="last hook change"),
+                ]
+            )
             context.tools.clear()
 
     class Model:

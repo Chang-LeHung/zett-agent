@@ -53,5 +53,4 @@ class FileSystemExtension(AgentExtension):
         state = context.state
         message = SystemMessage(content=self._working_directory_instructions(Path.cwd().resolve()))
         instructions = [item for item in state.messages if isinstance(item, SystemMessage)]
-        dialogue = [item for item in state.messages if not isinstance(item, SystemMessage)]
-        state.messages[:] = [*instructions, message, *dialogue]
+        context.add_message(message, index=len(instructions))

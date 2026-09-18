@@ -476,14 +476,14 @@ class PlanModeExtension(ExternalEventExtension):
         dialogue = [message for message in context.state.messages if not isinstance(message, SystemMessage)]
         guidance = render_tool_guidance((*self._filesystem_tools, baseline.exit_tool))
         prompt = self.system_prompt if not guidance else f"{self.system_prompt}\n\n{guidance}"
-        context.state.messages[:] = [SystemMessage(content=prompt), *dialogue]
+        context.replace_messages([SystemMessage(content=prompt), *dialogue])
 
     def _restore_normal_mode(self, context: AgentRunContext, baseline: _RequestBaseline) -> None:
         dialogue = [message for message in context.state.messages if not isinstance(message, SystemMessage)]
         context.tools.clear()
         context.tools.update(baseline.tools)
         context.register_tool(baseline.enter_tool)
-        context.state.messages[:] = [*baseline.system_messages, *dialogue]
+        context.replace_messages([*baseline.system_messages, *dialogue], emit_new=False)
 
     def _baseline(self, context: AgentRunContext) -> _RequestBaseline:
         baseline = self._requests.get(context)

@@ -115,6 +115,9 @@ class Message:
 
     ``attributes`` carries application-owned information attached to one message.
     Provider adapters ignore it unless they explicitly document another mapping.
+    ``persist`` controls whether Raw Log subscribers should store the message.
+    ``include_in_messages`` controls whether persisted history is restored into
+    ``AgentState.messages`` and therefore sent on later model requests.
 
     .. note::
         Request-level ``metadata`` and ``tags`` live on :class:`AgentRunContext` and
@@ -129,23 +132,35 @@ class Message:
     #: Application-owned per-message information. Provider adapters do not send
     #: these values to model APIs unless an adapter explicitly defines a mapping.
     attributes: dict[str, Any] = field(default_factory=dict)
+    #: Whether the runtime's persistence subscribers should store this message.
+    persist: bool = True
+    #: Whether restored history should include this message in model context.
+    include_in_messages: bool = True
 
 
 @dataclass(slots=True, kw_only=True)
 class SystemMessage(Message):
     """Application instructions placed before conversational messages.
 
+    System messages are recorded in the Raw Log for observability but are not
+    restored into later model context by default. Applications rebuild current
+    instructions for every request, so persisting the same instruction must not
+    accumulate stale copies in ``AgentState.messages``. Set
+    ``include_in_messages=True`` when a system message should also be replayed.
+
     Examples:
         Insert durable behavior during an extension's ``on_state`` hook::
 
-            context.state.messages.insert(
-                0,
+            context.add_message(
                 SystemMessage(content="Answer with concise, verifiable steps."),
+                index=0,
             )
     """
 
     role: ClassVar[MessageRole] = MessageRole.SYSTEM
     content: str
+    persist: bool = True
+    include_in_messages: bool = False
 
 
 @dataclass(slots=True, kw_only=True)

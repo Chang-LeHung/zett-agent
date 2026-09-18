@@ -168,7 +168,11 @@ class SessionView(BaseModel):
     def messages(self) -> list[AnyMessage]:
         """Build active model context as checkpoint followed by its Raw Log tail."""
         checkpoint = [self.snapshot.compacted_message] if self.snapshot is not None else []
-        return [*checkpoint, *(record.message for record in self.raw_tail)]
+        return [
+            message
+            for message in [*checkpoint, *(record.message for record in self.raw_tail)]
+            if message.include_in_messages
+        ]
 
 
 class SessionStorage(Protocol):
@@ -218,9 +222,9 @@ class _Request:
 
     request_id: str = field(default_factory=new_uuid7)
     snapshot_version: int = 0
-    #: One Raw Log sequence for each non-system context position. A checkpoint
-    #: position maps to the last original message represented by that checkpoint.
-    context_sequences: list[int] = field(default_factory=list)
+    #: One Raw Log sequence for each replayable non-system context position.
+    #: None represents a context-only message omitted by ``persist=False``.
+    context_sequences: list[int | None] = field(default_factory=list)
 
 
 class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
@@ -298,7 +302,10 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         # Instructions are supplied by the current application configuration;
         # persisted context contributes dialogue and checkpoints only.
         instructions = [message for message in context.state.messages if isinstance(message, SystemMessage)]
-        context.state.messages[:] = [*instructions, *self._provider_safe_messages(view.messages)]
+        context.replace_messages(
+            [*instructions, *self._provider_safe_messages(view.messages)],
+            emit_new=False,
+        )
         return view
 
     async def on_state(self, context: AgentRunContext) -> None:
@@ -307,7 +314,11 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         sequences = []
         if view.snapshot is not None:
             sequences.append(view.snapshot.compacted_through_sequence)
-        sequences.extend(record.sequence for record in view.raw_tail)
+        sequences.extend(
+            record.sequence
+            for record in view.raw_tail
+            if record.message.include_in_messages and not isinstance(record.message, SystemMessage)
+        )
         self._requests[context] = _Request(
             request_id=context.config.request_id or new_uuid7(),
             snapshot_version=view.snapshot.version if view.snapshot is not None else 0,
@@ -323,17 +334,20 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
             return
         match event:
             case MessageAppendedEvent(message=message, timing=timing, usage=usage):
-                sequence = await self.storage.append(
-                    context.config.session_id,
-                    request.request_id,
-                    message,
-                    timing,
-                    parent_session_id=context.state.parent_session_id,
-                    metadata=context.metadata,
-                    tags=context.tags,
-                    usage=usage,
-                )
-                request.context_sequences.append(sequence)
+                sequence = None
+                if message.persist:
+                    sequence = await self.storage.append(
+                        context.config.session_id,
+                        request.request_id,
+                        message,
+                        timing,
+                        parent_session_id=context.state.parent_session_id,
+                        metadata=context.metadata,
+                        tags=context.tags,
+                        usage=usage,
+                    )
+                if message.include_in_messages and not isinstance(message, SystemMessage):
+                    request.context_sequences.append(sequence)
             case CompactionEvent() as compaction:
                 await self._snapshot(context, request, compaction)
 
@@ -341,9 +355,11 @@ class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
         """Store the summary and remap its context position to the compacted prefix."""
         if event.compressed_from != 1 or event.compressed_to > len(request.context_sequences):
             raise ValueError("Compaction range does not match the restored Raw Log context")
-        compacted_sequences = request.context_sequences[: event.compressed_to]
+        compacted_sequences = [
+            sequence for sequence in request.context_sequences[: event.compressed_to] if sequence is not None
+        ]
         if not compacted_sequences:
-            raise ValueError("Compaction must represent at least one Raw Log message")
+            raise ValueError("Compaction must represent at least one persisted Raw Log message")
         compacted_through_sequence = compacted_sequences[-1]
         snapshot = await self.storage.snapshot(
             context.config.session_id,

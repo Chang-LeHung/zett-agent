@@ -570,7 +570,7 @@ async def test_decision_retry_preserves_session_and_tool_evidence(history, tmp_p
         assert "Continue from your existing findings" in dialogue[-1].text
         if storage is not None:
             assert len(await storage.list_sessions()) == 1
-            assert len(await storage.list_raw_messages(observer.sessions[0])) == 8
+            assert len(await storage.list_raw_messages(observer.sessions[0])) == 10
     finally:
         if storage is not None:
             await storage.close()

@@ -98,7 +98,7 @@ class AgentSetupHooksMixin:
             Usage::
 
                 async def on_state(self, context):
-                    context.state.messages.insert(0, SystemMessage(content="Use concise answers."))
+                    context.add_message(SystemMessage(content="Use concise answers."), index=0)
         """
 
     async def on_message(self, context: AgentRunContext) -> None:
@@ -107,7 +107,9 @@ class AgentSetupHooksMixin:
         Replace the pending UserMessage to implement externally selected modes.
         Do not append or persist it here: the runtime appends the final message
         exactly once after all input hooks finish. before_run sees that message
-        in state.messages and persistence subscribers have already received it.
+        through :meth:`AgentRunContext.add_message` or
+        :meth:`AgentRunContext.replace_messages`, and persistence subscribers
+        have already received it.
         """
 
 
@@ -186,11 +188,13 @@ class AgentModelHooksMixin:
     async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
         """Inspect the current request before preprocessing a primary model call.
 
-        Request fields are frozen. Change messages through context.state.messages,
-        local tools through context.tools, and provider tools through
-        context.server_tools; the runtime rebuilds these fields before the next
-        hook and before calling the provider. This is a shallow request view, not
-        an immutable copy of each message or tool definition.
+        Request fields are frozen. Change messages through
+        :meth:`AgentRunContext.add_message` or
+        :meth:`AgentRunContext.replace_messages`, local tools through
+        context.tools, and provider tools through context.server_tools; the
+        runtime rebuilds these fields before the next hook and before calling
+        the provider. This is a shallow request view, not an immutable copy of
+        each message or tool definition.
 
         Examples:
             Inspect the tools offered in this iteration::
@@ -198,8 +202,8 @@ class AgentModelHooksMixin:
                 async def before_model(self, context, request):
                     offered = {definition.name for definition in request.tools}
                     if "write_file" in offered:
-                        context.state.messages.append(
-                            SystemMessage(content="Read existing files before editing.")
+                        context.add_message(
+                            SystemMessage(content="Read existing files before editing."),
                         )
         """
 

@@ -101,7 +101,10 @@ def _to_model_data(payload: Any) -> Mapping[str, Any]:
         return payload.dict()  # type: ignore[operator]
     if isinstance(payload, Message):
         data = asdict(payload)
+        # The provider SDK may include extra fields that are not part of the public message schema.
         data.pop("attributes", None)
+        data.pop("persist", None)
+        data.pop("include_in_messages", None)
         return {"role": payload.role, **data}
     normalized = json.loads(json.dumps(payload, default=str))
     if not isinstance(normalized, dict):

@@ -45,7 +45,11 @@ async def test_restore_then_transform_then_persist_once_before_run(tmp_path, pri
         async def before_run(self, context):
             order.append("before_run")
             records = await storage.list_raw_messages(config.session_id)
-            assert [record.message.content for record in records] == ["history", "transformed"]
+            assert [record.message.content for record in records] == [
+                "history",
+                "You are a helpful assistant.",
+                "transformed",
+            ]
             assert records[-1].message == context.state.messages[-1]
 
     class Model:

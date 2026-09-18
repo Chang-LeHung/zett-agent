@@ -50,7 +50,14 @@ def main() -> None:
             # Storage is asynchronous; a plain function reaches it through the sync view.
             with history.storage.sync() as database:
                 records = database.list_raw_messages("sync-example")
-                assert [record.message.role for record in records] == ["user", "assistant", "user", "assistant"]
+                assert [record.message.role for record in records] == [
+                    "system",
+                    "user",
+                    "assistant",
+                    "system",
+                    "user",
+                    "assistant",
+                ]
             print("Synchronous history persisted")
         finally:
             with history.storage.sync() as database:

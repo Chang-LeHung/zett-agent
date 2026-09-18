@@ -228,7 +228,13 @@ def test_sync_model_tool_and_sqlite_history(tmp_path):
             assert agent.run("calculate").content.endswith("calculate")
         with storage.storage.sync() as db:
             records = db.list_raw_messages("stored")
-            assert [r.message.role for r in records] == ["user", "assistant", "tool", "assistant"]
+            assert [r.message.role for r in records] == [
+                "system",
+                "user",
+                "assistant",
+                "tool",
+                "assistant",
+            ]
             view = db.load("stored")
             assert [m.role for m in view.messages] == ["user", "assistant", "tool", "assistant"]
         with double.sync() as invoke:

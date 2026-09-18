@@ -43,17 +43,24 @@ async def main() -> None:
             restored = await create_agent(TurnModel(), config=config, extensions=[restored_storage])
             print((await restored.run("Continue")).content)
             rows = await restored_storage.list_raw_messages(config.session_id)
-            assert [row.message.role.value for row in rows] == ["user", "assistant", "user", "assistant"]
+            assert [row.message.role.value for row in rows] == [
+                "system",
+                "user",
+                "assistant",
+                "system",
+                "user",
+                "assistant",
+            ]
             assert rows[0].metadata == {"origin": "tutorial"}
             assert len(await restored_storage.list_raw_messages(config.session_id, limit=2, offset=2)) == 2
             view = await restored_storage.storage.load(config.session_id)
-            assert view.snapshot is None and len(view.raw_tail) == 4
+            assert view.snapshot is None and len(view.raw_tail) == 6
             await restored_storage.update_session(config.session_id, title="Project notes")
             renamed = await restored_storage.get_session(config.session_id)
             assert renamed is not None and renamed.title == "Project notes"
             assert await restored_storage.delete_session(config.session_id)
             assert await restored_storage.list_raw_messages(config.session_id) == []
-            print("Raw roles: user, assistant, user, assistant")
+            print("Raw roles: system, user, assistant, system, user, assistant")
             print("Session restored, renamed, and deleted in a temporary database")
         finally:
             await restored_storage.close()

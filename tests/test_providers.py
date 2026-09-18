@@ -43,6 +43,7 @@ from zett_agent.providers import (
     _normalize_image_source,
     _usage_from_mapping,
 )
+from zett_agent.providers.base import _tools_to_openai_payload
 
 
 def _sse_body(events: list[dict[str, Any]]) -> bytes:
@@ -237,6 +238,22 @@ def test_usage_from_mapping_normalizes_deepseek_cache_counters() -> None:
     assert usage.cache_write_tokens == 0
     assert usage.reasoning_tokens == 30
     assert usage.total_tokens == 165
+
+
+def test_chat_completion_tools_ignore_deferred_loading_marker() -> None:
+    rendered = _tools_to_openai_payload(
+        (ToolDefinition("later", "Deferred only on Responses API", {"type": "object"}, deferred=True),)
+    )
+    assert rendered == [
+        {
+            "type": "function",
+            "function": {
+                "name": "later",
+                "description": "Deferred only on Responses API",
+                "parameters": {"type": "object"},
+            },
+        }
+    ]
 
 
 # ----------------------------------------------------------------------

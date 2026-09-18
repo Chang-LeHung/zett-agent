@@ -30,7 +30,13 @@ from zett_agent import (
     tool,
 )
 from zett_agent.providers import AnthropicProvider, DeepSeekProvider, GoogleProvider, OllamaProvider, OpenAIProvider
-from zett_agent.providers.responses import _object_mapping, responses_input, responses_reasoning, stream_responses
+from zett_agent.providers.responses import (
+    _object_mapping,
+    responses_input,
+    responses_reasoning,
+    responses_tools,
+    stream_responses,
+)
 
 
 def _response(
@@ -73,6 +79,34 @@ def _completed_event(output: list[dict[str, Any]], *, model: str) -> dict[str, A
             },
         ),
     }
+
+
+def test_responses_tools_adds_tool_search_for_deferred_functions() -> None:
+    rendered = responses_tools(
+        (
+            ToolDefinition("immediate", "Always visible", {"type": "object"}),
+            ToolDefinition("later", "Deferred", {"type": "object"}, deferred=True),
+        ),
+        (ServerToolDefinition("web_search"),),
+    )
+
+    assert rendered == [
+        {
+            "type": "function",
+            "name": "immediate",
+            "description": "Always visible",
+            "parameters": {"type": "object"},
+        },
+        {
+            "type": "function",
+            "name": "later",
+            "description": "Deferred",
+            "parameters": {"type": "object"},
+            "defer_loading": True,
+        },
+        {"type": "web_search"},
+        {"type": "tool_search"},
+    ]
 
 
 async def test_openai_responses_streams_local_and_server_tools() -> None:

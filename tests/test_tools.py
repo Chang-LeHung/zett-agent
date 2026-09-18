@@ -88,6 +88,16 @@ def test_result_serialization_supports_models():
     assert total.serialize_result("plain text") == "plain text"
 
 
+def test_deferred_tool_propagates_to_definition():
+    @tool(deferred=True, guidelines="Use only when the optional capability is needed.")
+    def later(value: int) -> int:
+        """Process one optional value."""
+        return value
+
+    assert later.deferred is True
+    assert later.definition.deferred is True
+
+
 def test_tool_docstring_supplies_description_args_snippet_and_guidelines():
     def search_knowledge(query: str, limit: int = 10) -> str:
         """Search stored knowledge.

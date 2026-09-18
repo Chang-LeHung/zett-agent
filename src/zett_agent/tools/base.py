@@ -45,13 +45,23 @@ class ToolExecutionMode(StrEnum):
 class AgentTool(SyncMethodsMixin):
     """A tool is a name, an input schema, and an async callable."""
 
+    #: Unique name exposed to the model and used for dispatch.
     name: str
+    #: Natural-language purpose used by the model to select this tool.
     description: str
+    #: JSON Schema describing this tool's keyword arguments.
     parameters: dict[str, Any]
+    #: Async handler that validates arguments and performs the local operation.
     handler: Callable[..., Awaitable[Any]]
+    #: Model-facing rules rendered beside this tool in prompt guidance.
     guidelines: tuple[str, ...]
+    #: Optional invocation examples rendered into prompt guidance.
     snippet: str = ""
+    #: Whether this local handler runs serially or may run in parallel.
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL
+    #: Whether Responses API providers may defer loading this tool's schema
+    #: through tool search. Other provider protocols ignore this flag.
+    deferred: bool = False
 
     def __post_init__(self) -> None:
         if not self.description.strip():
@@ -60,10 +70,12 @@ class AgentTool(SyncMethodsMixin):
             raise ValueError("A tool needs at least one non-empty guideline")
         if not isinstance(self.execution_mode, ToolExecutionMode):
             raise ValueError("execution_mode must be a ToolExecutionMode")
+        if not isinstance(self.deferred, bool):
+            raise ValueError("deferred must be a boolean")
 
     @property
     def definition(self) -> ToolDefinition:
-        return ToolDefinition(self.name, self.description, self.parameters)
+        return ToolDefinition(self.name, self.description, self.parameters, deferred=self.deferred)
 
     async def __call__(self, arguments: Mapping[str, Any]) -> Any:
         """Execute with a mapping of model-provided keyword arguments.
@@ -224,6 +236,7 @@ def _build_agent_tool(
     snippet: str | None,
     guidelines: str | Sequence[str] | None,
     execution_mode: ToolExecutionMode,
+    deferred: bool,
 ) -> AgentTool:
     """Create an AgentTool from one function and decorator overrides."""
     documentation = _parse_tool_docstring(function)
@@ -244,6 +257,7 @@ def _build_agent_tool(
         guidelines=_resolve_guidelines(documentation, guidelines),
         snippet=snippet if snippet is not None else documentation.snippet,
         execution_mode=execution_mode,
+        deferred=deferred,
     )
 
 
@@ -255,6 +269,7 @@ def tool(
     snippet: str | None = None,
     guidelines: str | Sequence[str] | None = None,
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
+    deferred: bool = False,
 ) -> AgentTool: ...
 
 
@@ -266,6 +281,7 @@ def tool(
     snippet: str | None = None,
     guidelines: str | Sequence[str] | None = None,
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
+    deferred: bool = False,
 ) -> _ToolDecorator: ...
 
 
@@ -276,6 +292,7 @@ def tool(
     snippet: str | None = None,
     guidelines: str | Sequence[str] | None = None,
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
+    deferred: bool = False,
 ) -> AgentTool | _ToolDecorator:
     """Turn a typed function and its structured docstring into an AgentTool.
 
@@ -287,6 +304,10 @@ def tool(
         execution_mode: Whether the local handler must run serially or may run
             concurrently with other parallel handlers. The default is parallel;
             use SERIAL for handlers that require exclusive ordered execution.
+        deferred: Whether Responses API providers may load this tool's schema
+            through tool search instead of injecting it up front. Other provider
+            protocols ignore this flag. Tool search requires a compatible model
+            such as gpt-5.4 or later.
 
     Returns:
         An AgentTool for direct decoration, or a decorator when configured first.
@@ -328,6 +349,7 @@ def tool(
             snippet=snippet,
             guidelines=guidelines,
             execution_mode=execution_mode,
+            deferred=deferred,
         )
 
     return decorate(function) if function is not None else decorate

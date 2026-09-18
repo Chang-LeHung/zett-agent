@@ -30,6 +30,9 @@ class ToolDefinition:
     description: str
     #: JSON Schema describing the tool's keyword arguments.
     parameters: Mapping[str, Any]
+    #: Whether a Responses API provider may defer loading this definition until
+    #: tool search selects it. Other provider protocols ignore this flag.
+    deferred: bool = False
 
 
 @dataclass(frozen=True, slots=True)

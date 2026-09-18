@@ -78,19 +78,29 @@ def responses_input(messages: Sequence[AnyMessage], *, provider: str, model: str
 def responses_tools(
     tools: Sequence[ToolDefinition], server_tools: Sequence[ServerToolDefinition]
 ) -> list[dict[str, Any]]:
-    """Render local functions and opaque hosted tools in Responses wire format."""
-    return [
-        *(
-            {
-                "type": "function",
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": dict(tool.parameters),
-            }
-            for tool in tools
-        ),
-        *({"type": tool.type, **dict(tool.configuration)} for tool in server_tools),
-    ]
+    """Render functions and hosted tools in Responses wire format.
+
+    Functions marked ``deferred`` use OpenAI's ``defer_loading`` protocol. The
+    request must also expose the hosted ``tool_search`` tool so the model can
+    discover and load those definitions on demand.
+    """
+    rendered: list[dict[str, Any]] = []
+    deferred = False
+    for tool in tools:
+        payload = {
+            "type": "function",
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": dict(tool.parameters),
+        }
+        if tool.deferred:
+            payload["defer_loading"] = True
+            deferred = True
+        rendered.append(payload)
+    rendered.extend({"type": tool.type, **dict(tool.configuration)} for tool in server_tools)
+    if deferred and not any(tool.type == "tool_search" for tool in server_tools):
+        rendered.append({"type": "tool_search"})
+    return rendered
 
 
 def responses_reasoning(effort: ReasoningEffort) -> dict[str, str] | None:

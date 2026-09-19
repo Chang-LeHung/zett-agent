@@ -276,6 +276,8 @@ class CompactionExtension(AgentExtension):
     async def after_model(self, context: AgentRunContext, response: ModelResponse) -> None:
         """Remember exact provider input plus output as the next-step baseline."""
         if response.usage.input_tokens <= 0:
+            # Providers that omit usage return all-zero counters. Leave the
+            # baseline unset so the next comparison uses the full estimator.
             return
         self._usage_baselines[context] = (
             response.usage.input_tokens + response.usage.output_tokens,

@@ -12,11 +12,15 @@ from zett_agent import (
     AssistantMessage,
     CompactionEvent,
     CompactionExtension,
+    ImageBytesSource,
+    ImageContent,
     ModelEvent,
     ModelEventType,
     ModelRequest,
     ModelResponse,
+    ModelUsage,
     SystemMessage,
+    TextContent,
     ToolCall,
     ToolCallDelta,
     ToolMessage,
@@ -124,6 +128,69 @@ async def test_no_model_call_below_threshold_or_without_old_turns(limit, recent)
     state = context([UserMessage(content="Hello"), AssistantMessage(content="Hi")])
     await compact(CompactionExtension(model, max_tokens=limit, keep_recent_tokens=recent), state)
     assert model.requests == []
+
+
+async def test_encoded_image_size_does_not_trigger_compaction():
+    model = SummaryModel()
+    state = context(
+        [
+            UserMessage(content="Old request"),
+            AssistantMessage(content="Old answer"),
+            UserMessage(
+                content=[
+                    TextContent("Inspect this image"),
+                    ImageContent(ImageBytesSource(b"\xff" * 1_000_000, "image/png")),
+                ]
+            ),
+        ]
+    )
+
+    await compact(CompactionExtension(model, max_tokens=5_000, keep_recent_tokens=1), state)
+
+    assert model.requests == []
+
+
+async def test_provider_usage_is_the_baseline_for_the_next_model_step():
+    model = SummaryModel()
+    state = context(
+        [
+            UserMessage(content="Old context " * 10_000),
+            AssistantMessage(content="Old answer"),
+        ]
+    )
+    extension = CompactionExtension(model, max_tokens=1_000, keep_recent_tokens=1)
+    await extension.after_model(
+        state,
+        ModelResponse(
+            AssistantMessage(content="Old answer"),
+            usage=ModelUsage(input_tokens=900, output_tokens=20),
+        ),
+    )
+    state.add_message(ToolMessage(tool_call_id="call-1", name="lookup", content="Small result"))
+
+    await compact(extension, state)
+
+    assert model.requests == []
+
+
+async def test_missing_provider_usage_falls_back_to_full_message_estimate():
+    model = SummaryModel()
+    state = context(
+        [
+            UserMessage(content="Old context " * 10_000),
+            AssistantMessage(content="Old answer"),
+        ]
+    )
+    extension = CompactionExtension(model, max_tokens=1_000, keep_recent_tokens=1)
+    await extension.after_model(
+        state,
+        ModelResponse(AssistantMessage(content="Old answer")),
+    )
+    state.add_message(UserMessage(content="Current"))
+
+    await compact(extension, state)
+
+    assert model.requests
 
 
 @pytest.mark.parametrize("summary", ["", "Huge " * 1000])

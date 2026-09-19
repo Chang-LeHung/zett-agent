@@ -1,16 +1,67 @@
+import json
 from collections.abc import Callable, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass
+from weakref import WeakKeyDictionary
 
 import tiktoken
 
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
-from ..messages import AgentMessage, AnyMessage, SystemMessage, UserMessage
-from ..model import AgentModel, ModelEventType, ModelRequest, ReasoningEffort
+from ..messages import (
+    AgentMessage,
+    AnyMessage,
+    AssistantMessage,
+    ImageContent,
+    SystemMessage,
+    TextContent,
+    ToolMessage,
+    UserMessage,
+)
+from ..model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
 from .base import AgentExtension
 from .events import CompactionEvent
+
+_IMAGE_TOKEN_ESTIMATE = 1_100
+
+
+def _count_text(value: str) -> int:
+    encoding = tiktoken.get_encoding("o200k_base")
+    return len(encoding.encode_ordinary(value))
+
+
+def _count_content(content: object) -> int:
+    if isinstance(content, str):
+        return _count_text(content)
+    if not isinstance(content, Sequence):
+        return _count_text(repr(content))
+    total = 0
+    for part in content:
+        if isinstance(part, TextContent):
+            total += _count_text(part.text)
+        elif isinstance(part, ImageContent):
+            # Provider image accounting depends on dimensions/detail. Counting
+            # encoded bytes massively overstates context and can compact early.
+            total += _IMAGE_TOKEN_ESTIMATE
+        else:
+            total += _count_text(repr(part))
+    return total
+
+
+def _count_message(message: AnyMessage) -> int:
+    if isinstance(message, SystemMessage):
+        return _count_text(message.content)
+    if isinstance(message, (UserMessage, ToolMessage, AgentMessage)):
+        return _count_content(message.content)
+    if isinstance(message, AssistantMessage):
+        payload = {
+            "content": message.content,
+            "reasoning": message.reasoning,
+            "tool_calls": message.tool_calls,
+        }
+        return _count_text(json.dumps(payload, ensure_ascii=False, default=repr))
+    return _count_text(repr(message))
 
 
 @dataclass(slots=True, kw_only=True)
@@ -21,9 +72,9 @@ class CompactedMessage(UserMessage):
 class CompactionExtension(AgentExtension):
     """Summarize older dialogue before a model step when context exceeds a limit.
 
-    max_tokens measures tokenized message representations, including tool calls
-    and image sources. The default o200k_base tokenizer estimates context size;
-    inject count_tokens for provider-specific accounting, especially for images.
+    max_tokens measures provider-visible message content, including tool calls
+    and a bounded estimate for each image. The default o200k_base tokenizer
+    estimates text; inject count_tokens for provider-specific accounting.
     keep_recent_tokens is a minimum: retain the whole user turn containing the
     cutoff, including tool calls and results. The current turn is never split.
     A single oversized turn therefore cannot be compacted by this extension.
@@ -89,11 +140,21 @@ class CompactionExtension(AgentExtension):
         self.keep_recent_tokens = keep_recent_tokens
         self.count_tokens = count_tokens or self._count_tokens
         self.reasoning_effort = reasoning_effort
+        self._usage_baselines: WeakKeyDictionary[AgentRunContext, tuple[int, int]] = WeakKeyDictionary()
 
     @staticmethod
     def _count_tokens(messages: Sequence[AnyMessage]) -> int:
-        encoding = tiktoken.get_encoding("o200k_base")
-        return sum(len(encoding.encode_ordinary(repr(message))) for message in messages)
+        return sum(_count_message(message) for message in messages)
+
+    def _count_context_tokens(self, context: AgentRunContext) -> int:
+        messages = context.state.messages
+        baseline = self._usage_baselines.get(context)
+        if baseline is None:
+            return self.count_tokens(messages)
+        input_tokens, baseline_count = baseline
+        if baseline_count > len(messages):
+            return self.count_tokens(messages)
+        return input_tokens + self.count_tokens(messages[baseline_count:])
 
     async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
         """Emit compaction state while atomically replacing older context.
@@ -103,7 +164,7 @@ class CompactionExtension(AgentExtension):
         the primary request when the runtime rebuilds it after preprocessing.
         """
         messages = context.state.messages
-        if self.count_tokens(messages) <= self.max_tokens:
+        if self._count_context_tokens(context) <= self.max_tokens:
             return
         instructions = [message for message in messages if isinstance(message, SystemMessage)]
         dialogue = [message for message in messages if not isinstance(message, SystemMessage)]
@@ -194,6 +255,7 @@ class CompactionExtension(AgentExtension):
             )
             return
         context.replace_messages([*instructions, summary, *recent], emit_new=False)
+        self._usage_baselines.pop(context, None)
         compacted = CompactionEvent(
             compressed_from=1,
             compressed_to=cutoff,
@@ -209,4 +271,13 @@ class CompactionExtension(AgentExtension):
                 compaction=compacted,
                 applied=True,
             )
+        )
+
+    async def after_model(self, context: AgentRunContext, response: ModelResponse) -> None:
+        """Remember exact provider input plus output as the next-step baseline."""
+        if response.usage.input_tokens <= 0:
+            return
+        self._usage_baselines[context] = (
+            response.usage.input_tokens + response.usage.output_tokens,
+            len(context.state.messages),
         )

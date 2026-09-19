@@ -15,12 +15,15 @@ from zett_agent import (
     AgentState,
     AssistantMessage,
     ExternalEvent,
+    ImageContent,
+    ImageUrlSource,
     InternalMessageEvent,
     ModelEvent,
     ModelResponse,
     SQLiteSessionExtension,
     SteeringExtension,
     SteeringMessageEvent,
+    TextContent,
     ToolCall,
     ToolMessage,
     UserMessage,
@@ -69,6 +72,24 @@ def test_steering_is_owned_by_agent(renamed):
         extension.name = "custom"
     with pytest.raises(ValueError, match="built-in"):
         Agent(ScriptedModel(), extensions=[extension])
+
+
+def test_steering_accepts_multimodal_user_message():
+    extension = SteeringExtension()
+    context = AgentRunContext(AgentRunConfig("s"), AgentState(), {})
+    extension.open(context)
+
+    message = UserMessage(
+        content=[
+            TextContent("Inspect this"),
+            ImageContent(ImageUrlSource("https://example.com/image.png")),
+        ]
+    )
+    assert extension.accept(
+        AgentRunConfig("s"),
+        ExternalEvent("steering_message", {"message": message}),
+    )
+    assert extension.take(context) == message
 
 
 @pytest.mark.parametrize("boundary", ["model", "tool"])

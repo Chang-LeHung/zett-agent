@@ -70,12 +70,16 @@ class SteeringExtension(AgentExtension):
             return False
         session_id = config.session_id
         request_id = config.request_id
+        message = event.payload.get("message")
         content = event.payload.get("content")
         if not isinstance(session_id, str) or not session_id.strip():
             return False
         if request_id is not None and (not isinstance(request_id, str) or not request_id.strip()):
             return False
-        if not isinstance(content, str) or not content.strip():
+        if isinstance(message, UserMessage):
+            if not message.text and not message.parts:
+                return False
+        elif not isinstance(content, str) or not content.strip():
             return False
         with self._lock:
             matches = [
@@ -87,7 +91,7 @@ class SteeringExtension(AgentExtension):
             ]
             if len(matches) != 1:
                 return False
-            matches[0].messages.append(UserMessage(content=content))
+            matches[0].messages.append(message if isinstance(message, UserMessage) else UserMessage(content=content))
             return True
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:

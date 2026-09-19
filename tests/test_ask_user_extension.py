@@ -354,6 +354,8 @@ async def test_ask_user_tool_schema_and_guidance_are_visible_to_model():
     guidance = "\n".join(message.content for message in model.request.messages if isinstance(message, SystemMessage))
     assert "## ask_user" in guidance
     assert "Use only when user input is required" in guidance
+    assert "Ask exactly one question per call" in guidance
+    assert "one ask_user call per question" in guidance
 
 
 async def test_cancelling_wait_removes_pending_response():

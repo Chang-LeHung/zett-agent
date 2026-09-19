@@ -184,8 +184,9 @@ class AskUserExtension(ExternalEventExtension):
             """Ask the user a question and wait for an external response.
 
             Args:
-                question: Clear question that the user can answer directly.
-                options: Optional choices displayed in their given order.
+                question: One clear question that the user can answer directly.
+                    Never combine multiple numbered questions in this field.
+                options: Optional choices for this single question, in display order.
                 allow_multiple: Whether the user may select more than one option.
 
             Snippet:
@@ -193,7 +194,10 @@ class AskUserExtension(ExternalEventExtension):
 
             Guidelines:
                 - Use only when user input is required to continue correctly.
+                - Ask exactly one question per call. When multiple independent answers
+                  are needed, issue one ask_user call per question in the same response.
                 - Provide short, mutually distinct options when choices are known.
+                - Options must answer only the question in this call, never a later question.
                 - Do not ask for information already present in the conversation.
             """
             _ = question, options, allow_multiple

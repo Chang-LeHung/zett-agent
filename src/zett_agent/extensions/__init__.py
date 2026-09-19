@@ -123,5 +123,11 @@ from .steering import STEERING_MESSAGE_EVENT_NAME, SteeringExtension
 from .subagent import TASK_TOOL_NAME, SubAgentDefinition, SubAgentExtension, SubAgentResult, default_subagents
 from .todo import TODO_WRITE_TOOL_NAME, TodoItem, TodoStatus, TodoWriteExtension, TodoWriteResult
 from .tool_guidelines import ToolGuidelinesExtension
+from .usage_activity import (
+    ModelUsageActivityDay,
+    ModelUsageActivityRecord,
+    ModelUsageActivityStorage,
+    UsageActivityExtension,
+)
 
 __all__ = [name for name in globals() if not name.startswith("_")]

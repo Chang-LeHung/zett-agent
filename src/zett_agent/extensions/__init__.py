@@ -62,6 +62,15 @@ from .mcp import (
     McpStdioServer,
 )
 from .memory import InMemoryMessageAccumulator
+from .model_request_trace import (
+    MODEL_REQUEST_TRACE_ATTRIBUTE,
+    MODEL_REQUEST_TRACE_SCHEMA_VERSION,
+    ModelRequestTrace,
+    ModelRequestTraceExtension,
+    ServerToolDefinitionTrace,
+    ToolDefinitionTrace,
+    model_request_trace,
+)
 from .persistence import (
     BaseSessionPersistenceExtension,
     ContextSnapshot,

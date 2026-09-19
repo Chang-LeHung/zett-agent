@@ -110,6 +110,17 @@ from .server_tools import (
     ServerToolExtension,
 )
 from .session_persistence import SessionPersistenceExtension
+from .shell_approval import (
+    SHELL_APPROVAL_EVENT_NAME,
+    SHELL_APPROVAL_RESPONSE_EVENT_NAME,
+    SHELL_APPROVAL_TOOL_NAME,
+    ShellApprovalExtension,
+    ShellApprovalMode,
+    ShellApprovalRequestedEvent,
+    ShellApprovalResponse,
+    ShellApprovalStorage,
+    ShellCommandAborted,
+)
 from .skill import (
     DEFAULT_SKILL_ROOTS,
     READ_SKILL_TOOL_NAME,

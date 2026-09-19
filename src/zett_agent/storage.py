@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import json
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -12,9 +12,10 @@ from weakref import WeakKeyDictionary
 from pydantic import TypeAdapter
 from sqlalchemy import Index, Integer, String, Text, delete, func, select
 from sqlalchemy.engine import URL
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
+from sqlalchemy.schema import CreateIndex
 
 from .extensions.compaction import CompactedMessage
 from .extensions.events import MessageTiming
@@ -34,6 +35,7 @@ class AgentSessionModel(Base):
     """One root or delegated conversation and its provider-neutral identity."""
 
     __tablename__ = "agent_sessions"
+    __table_args__ = (Index("ix_agent_sessions_activity", "updated_at", "id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     parent_session_id: Mapped[str | None] = mapped_column(String(36), index=True)
@@ -182,6 +184,13 @@ def _decode_context_data(payload: str, *, field_name: str, nonempty_keys: bool =
     return json_object(value, field_name=f"Stored {field_name}", nonempty_keys=nonempty_keys)
 
 
+async def ensure_indexes(connection: AsyncConnection) -> None:
+    """Add indexes missing from databases created by an older application version."""
+    for table in Base.metadata.sorted_tables:
+        for index in table.indexes:
+            await connection.execute(CreateIndex(index, if_not_exists=True))
+
+
 class SQLiteSessionStorage(SyncMethodsMixin):
     """Standalone SQLite session storage shipped with zett-agent.
 
@@ -270,10 +279,11 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 return
             async with self.engine.begin() as connection:
                 await connection.run_sync(Base.metadata.create_all)
+                await ensure_indexes(connection)
             self._schema_ready = True
 
     @asynccontextmanager
-    async def _session_scope(self) -> AsyncIterator[AsyncSession]:
+    async def _session_scope(self) -> AsyncGenerator[AsyncSession, None]:
         await self._ensure_schema()
         async with self._sessions() as session, session.begin():
             yield session

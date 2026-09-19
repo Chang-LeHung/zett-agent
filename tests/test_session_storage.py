@@ -88,6 +88,27 @@ async def test_storage_reopens_without_application_database(tmp_path):
         await reopened.close()
 
 
+async def test_reopening_old_database_adds_missing_indexes(tmp_path):
+    path = tmp_path / "agent.sqlite3"
+    storage = SQLiteSessionStorage(path)
+    await storage.append("session", "request", UserMessage(content="Persisted"))
+    await storage.close()
+    with sqlite_file(path) as connection:
+        connection.execute("drop index if exists ix_agent_sessions_activity")
+
+    reopened = SQLiteSessionStorage(path)
+    try:
+        await reopened.list_sessions()
+    finally:
+        await reopened.close()
+
+    with sqlite_file(path) as connection:
+        indexes = {
+            row[0] for row in connection.execute("select name from sqlite_master where type = 'index'") if row[0]
+        }
+    assert "ix_agent_sessions_activity" in indexes
+
+
 async def test_storage_persists_parent_identity_and_message_metadata(storage):
     await storage.append("parent", "parent-request", UserMessage(content="Parent"))
     await storage.append(

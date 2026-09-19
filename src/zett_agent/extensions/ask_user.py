@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+import base64
+import binascii
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
-from ..messages import ToolCall
+from ..messages import ImageBytesSource, ImageContent, TextContent, ToolCall
 from ..tools import AgentTool, tool
 from .external import ExternalEventExtension
 
@@ -19,6 +21,8 @@ ASK_USER_RESPONSE_EVENT_NAME = "ask_user_response"
 Question = Annotated[str, Field(min_length=1, max_length=4_000)]
 Option = Annotated[str, Field(min_length=1, max_length=500)]
 Options = Annotated[list[Option], Field(max_length=20)]
+AskUserMaxImages = 32
+AskUserMaxImageBytes = 10_000_000
 
 
 class AskUserRequest(BaseModel):
@@ -36,6 +40,37 @@ class AskUserResult(BaseModel):
 
     name: str
     payload: dict[str, Any]
+
+
+class AskUserTextPart(BaseModel):
+    """One text segment in an external ask_user response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["text"] = "text"
+    text: str
+
+
+class AskUserImagePart(BaseModel):
+    """One base64 image segment in an external ask_user response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["image"] = "image"
+    name: str = Field(min_length=1, max_length=500)
+    mime_type: str = Field(min_length=1, max_length=255)
+    data_base64: str
+
+
+AskUserPart = Annotated[AskUserTextPart | AskUserImagePart, Field(discriminator="type")]
+
+
+class AskUserResponse(BaseModel):
+    """Validated multimodal response payload accepted from the UI."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    parts: list[AskUserPart] = Field(default_factory=list, max_length=513)
 
 
 class AskUserEvent(AgentEvent):
@@ -180,7 +215,7 @@ class AskUserExtension(ExternalEventExtension):
             question: Question,
             options: Options | None = None,
             allow_multiple: bool = False,
-        ) -> AskUserResult:
+        ) -> AskUserResult | list[TextContent | ImageContent]:
             """Ask the user a question and wait for an external response.
 
             Args:
@@ -202,6 +237,44 @@ class AskUserExtension(ExternalEventExtension):
             """
             _ = question, options, allow_multiple
             event = self._take_external_event(context)
+            content = _multimodal_answer(event.payload)
+            if content is not None:
+                return content
             return AskUserResult(name=event.name, payload=event.payload)
 
         return ask_user
+
+
+def _multimodal_answer(payload: dict[str, Any]) -> list[TextContent | ImageContent] | None:
+    """Decode ordered text/image answer parts while preserving text-only compatibility."""
+    raw_parts = payload.get("parts")
+    if not isinstance(raw_parts, list) or not raw_parts:
+        return None
+    response = AskUserResponse.model_validate({"parts": raw_parts})
+    content: list[TextContent | ImageContent] = []
+    image_count = 0
+    total_bytes = 0
+    for part in response.parts:
+        if isinstance(part, AskUserTextPart):
+            if part.text:
+                content.append(TextContent(part.text))
+            continue
+        image_count += 1
+        if image_count > AskUserMaxImages:
+            raise ValueError(f"An ask_user response can contain up to {AskUserMaxImages} images")
+        try:
+            data = base64.b64decode(part.data_base64, validate=True)
+        except (ValueError, binascii.Error) as error:
+            raise ValueError(f"Invalid image data: {part.name}") from error
+        if not data:
+            raise ValueError(f"Image is empty: {part.name}")
+        total_bytes += len(data)
+        if total_bytes > AskUserMaxImageBytes:
+            raise ValueError("ask_user response images exceed the configured limit")
+        content.append(
+            ImageContent(
+                source=ImageBytesSource(data=data, media_type=part.mime_type),
+                alt_text=part.name,
+            )
+        )
+    return content or None

@@ -1,6 +1,7 @@
 """Ask-user event protocol, suspension, routing, and cancellation behavior."""
 
 import asyncio
+import base64
 import json
 from datetime import UTC, datetime
 from time import monotonic_ns
@@ -22,10 +23,12 @@ from zett_agent import (
     ExtensionEvent,
     ExternalEvent,
     ExternalEventExtension,
+    ImageContent,
     ModelEvent,
     ModelResponse,
     RunCancelledEvent,
     SystemMessage,
+    TextContent,
     ToolCall,
     ToolGuidelinesExtension,
     ToolMessage,
@@ -208,6 +211,43 @@ async def test_ask_user_event_pauses_tool_until_accept_and_returns_payload():
     ]
     result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
     assert json.loads(result.content) == {"name": ASK_USER_RESPONSE_EVENT_NAME, "payload": response.payload}
+
+
+async def test_ask_user_accepts_multimodal_response_parts():
+    extension = AskUserExtension()
+    model = AskModel()
+    config = AgentRunConfig("session-image", request_id="request-image")
+    agent = await Agent.create(model, config=config, extensions=[extension])
+    events, ready = [], asyncio.Event()
+    task = asyncio.create_task(_wait_for_ask(events, ready, agent))
+
+    await asyncio.wait_for(ready.wait(), timeout=1)
+    image_data = base64.b64encode(b"image").decode("ascii")
+    response = ExternalEvent(
+        ASK_USER_RESPONSE_EVENT_NAME,
+        {
+            "tool_call_id": "question-1",
+            "answer": "Inspect this",
+            "parts": [
+                {"type": "text", "text": "Inspect this"},
+                {
+                    "type": "image",
+                    "name": "clipboard.png",
+                    "mime_type": "image/png",
+                    "data_base64": image_data,
+                },
+            ],
+        },
+    )
+    assert agent.emit_external_event(response, config=config) == ["AskUserExtension"]
+    await asyncio.wait_for(task, timeout=1)
+
+    result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
+    assert isinstance(result.content, list)
+    assert isinstance(result.content[0], TextContent)
+    assert result.content[0].text == "Inspect this"
+    assert isinstance(result.content[1], ImageContent)
+    assert result.content[1].alt_text == "clipboard.png"
 
 
 @pytest.mark.parametrize(

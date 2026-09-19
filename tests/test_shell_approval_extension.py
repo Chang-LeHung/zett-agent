@@ -74,6 +74,21 @@ class ParallelShellModel:
         yield ModelEvent.completed(ModelResponse(message))
 
 
+class SequentialShellModel:
+    def __init__(self) -> None:
+        self.requests = []
+
+    async def stream(self, request):
+        self.requests.append(request)
+        if len(self.requests) == 1:
+            message = AssistantMessage(tool_calls=(ToolCall("shell-1", "run_shell", {"command": "first"}),))
+        elif len(self.requests) == 2:
+            message = AssistantMessage(tool_calls=(ToolCall("shell-2", "run_shell", {"command": "second"}),))
+        else:
+            message = AssistantMessage(content="finished")
+        yield ModelEvent.completed(ModelResponse(message))
+
+
 class MemoryShellApprovalStorage:
     def __init__(self, allowed: set[str] | None = None) -> None:
         self.allowed = set(allowed or ())
@@ -267,6 +282,41 @@ async def test_parallel_shell_calls_execute_as_each_approval_arrives() -> None:
     await asyncio.wait_for(task, timeout=1)
 
     assert shell.commands == ["second", "first"]
+
+
+async def test_session_mode_change_applies_during_active_run() -> None:
+    storage = MemoryShellApprovalStorage()
+    shell = FakeShellTool()
+    model = SequentialShellModel()
+    config = AgentRunConfig("dynamic-mode")
+    agent = await Agent.create(
+        model,
+        config=config,
+        extensions=[ShellApprovalExtension(storage), shell],
+    )
+    events = []
+    first_waiting = asyncio.Event()
+
+    async def consume() -> None:
+        async for event in agent.stream("run"):
+            events.append(event)
+            if event.name == SHELL_APPROVAL_EVENT_NAME:
+                first_waiting.set()
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(first_waiting.wait(), timeout=1)
+    await storage.set_session_mode("dynamic-mode", ShellApprovalMode.ALLOW_ALL)
+    agent.emit_external_event(
+        ExternalEvent(
+            SHELL_APPROVAL_RESPONSE_EVENT_NAME,
+            {"tool_call_id": "shell-1", "decision": "execute"},
+        ),
+        config=config,
+    )
+    await asyncio.wait_for(task, timeout=1)
+
+    assert shell.commands == ["first", "second"]
+    assert [event.name for event in events].count(SHELL_APPROVAL_EVENT_NAME) == 1
 
 
 async def wait_until(predicate, *, timeout: float = 1) -> None:

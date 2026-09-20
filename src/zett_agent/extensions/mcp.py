@@ -15,7 +15,7 @@ from mcp.shared._httpx_utils import create_mcp_http_client
 from mcp_types import CallToolResult, ListToolsResult, Tool
 
 from ..agent import AgentRunContext
-from ..messages import AssistantMessage
+from ..messages import AssistantMessage, SystemMessage
 from ..tools import AgentTool
 from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
@@ -235,7 +235,9 @@ class McpExtension(AgentExtension):
         Usage::
 
             # With no arguments, load Streamable HTTP servers from
-            # ~/.zett/mcp.json when that file exists.
+            # ~/.zett/mcp.json when that file exists. A configured path that
+            # does not exist yet is treated as no servers and is still named in
+            # the request's system message.
             extension = McpExtension()
 
             # A custom path and explicit server definitions may be used
@@ -289,10 +291,13 @@ class McpExtension(AgentExtension):
         resolved_config_path: Path | None = None
         if config_path is not None:
             resolved_config_path = Path(config_path).expanduser().resolve()
-            configured_servers = McpConfiguration.from_file(
-                resolved_config_path,
-                server_keys=self.server_keys,
-            ).servers
+            # A configured location is reported in the system prompt, so a file
+            # that does not exist yet simply means no servers are loaded.
+            if resolved_config_path.is_file():
+                configured_servers = McpConfiguration.from_file(
+                    resolved_config_path,
+                    server_keys=self.server_keys,
+                ).servers
         elif servers is None:
             resolved_config_path = DEFAULT_MCP_CONFIG_PATH.expanduser().resolve()
             if resolved_config_path.is_file():
@@ -325,6 +330,33 @@ class McpExtension(AgentExtension):
             self._requests.pop(context, None)
             await request.stack.aclose()
             raise
+
+    async def on_state(self, context: AgentRunContext) -> None:
+        """Describe where MCP servers are configured and how their tools are named."""
+        if self.config_path is None and not self.servers:
+            return
+        message = SystemMessage(content=self._instructions())
+        instructions = [item for item in context.state.messages if isinstance(item, SystemMessage)]
+        context.add_message(message, index=len(instructions))
+
+    def _instructions(self) -> str:
+        """Describe the MCP configuration file and the namespaces it declares."""
+        keys = " or ".join(f"`{key}`" for key in self.server_keys)
+        lines = ["# MCP servers"]
+        if self.config_path is not None:
+            lines.append(
+                f"MCP servers are configured in `{self.config_path}`: a JSON file whose {keys} object maps a "
+                "server name to its transport. Servers changed there apply to the next request."
+            )
+        else:
+            lines.append("MCP servers are supplied by the application; this request loads no configuration file.")
+        if not self.servers:
+            lines.append("No MCP servers are configured, so no MCP tools are available.")
+            return "\n".join(lines)
+        if self.namespace_tools:
+            lines.append("Remote tools are exposed as `<server>__<tool>`, so each name names its server.")
+        entries = "\n".join(f"- {server.name}: {_transport_label(server)}" for server in self.servers)
+        return f"{'\n'.join(lines)}\n\nConfigured servers:\n{entries}"
 
     async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Close request transports after a successful final answer."""
@@ -373,6 +405,16 @@ async def _list_all_tools(client: McpClient) -> AsyncIterator[Tool]:
         cursor = result.next_cursor
         if cursor is None:
             return
+
+
+def _transport_label(server: McpServer) -> str:
+    """Name one configured transport without exposing credentials or arguments."""
+    match server:
+        case McpHttpServer():
+            return "streamable HTTP"
+        case McpStdioServer():
+            return "stdio child process"
+    raise ValueError(f"Unsupported MCP server: {type(server).__name__}")
 
 
 def _default_client_factory(server: McpServer) -> AbstractAsyncContextManager[McpClient]:

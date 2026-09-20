@@ -147,6 +147,8 @@ Read every changed file before reporting findings.
     )
     assert "review: Review changes with focused checks." in catalog
     assert str(path) in catalog
+    assert f"- {tmp_path.resolve()}" in catalog
+    assert "searches these roots in order" in catalog
     assert "Read every changed file" not in catalog
     result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
     assert result.content == complete

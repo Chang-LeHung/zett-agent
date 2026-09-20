@@ -29,6 +29,7 @@ from zett_agent import (
     ModelEvent,
     ModelResponse,
     RunCancelledEvent,
+    SystemMessage,
     ToolCall,
     ToolMessage,
 )
@@ -358,6 +359,48 @@ async def test_mcp_extension_discovers_all_pages_executes_tool_and_closes_on_suc
     assert factory.closed == ["docs"]
 
 
+async def test_mcp_extension_describes_config_file_and_namespaced_tools(tmp_path):
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        json.dumps({"servers": {"docs": {"type": "streamable-http", "url": "https://example.test/mcp"}}}),
+        encoding="utf-8",
+    )
+    extension = McpExtension(config_path=config_path)
+    context = AgentRunContext(AgentRunConfig("mcp-state"), AgentState(), {})
+
+    await extension.on_state(context)
+
+    message = next(
+        item
+        for item in context.state.messages
+        if isinstance(item, SystemMessage) and item.content.startswith("# MCP servers")
+    )
+    assert str(config_path.resolve()) in message.content
+    assert "`servers` or `mcpServers`" in message.content
+    assert "`<server>__<tool>`" in message.content
+    assert "- docs: streamable HTTP" in message.content
+    assert "example.test" not in message.content
+
+
+async def test_mcp_extension_reports_configuration_source_without_servers(tmp_path):
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(json.dumps({"servers": {}}), encoding="utf-8")
+
+    configured = AgentRunContext(AgentRunConfig("mcp-state-empty"), AgentState(), {})
+    await McpExtension(config_path=config_path).on_state(configured)
+    supplied = AgentRunContext(AgentRunConfig("mcp-state-supplied"), AgentState(), {})
+    await McpExtension([McpStdioServer("local", "secret-server", args=("--token=abc",))]).on_state(supplied)
+
+    configured_content = next(item.content for item in configured.state.messages if isinstance(item, SystemMessage))
+    assert str(config_path.resolve()) in configured_content
+    assert "No MCP servers are configured" in configured_content
+    supplied_content = next(item.content for item in supplied.state.messages if isinstance(item, SystemMessage))
+    assert "supplied by the application" in supplied_content
+    assert "- local: stdio child process" in supplied_content
+    assert "secret-server" not in supplied_content
+    assert "abc" not in supplied_content
+
+
 async def test_mcp_extension_preserves_unstructured_content_and_reports_remote_errors():
     client = FakeClient(
         {None: ListToolsResult(tools=[remote_tool("okay"), remote_tool("broken")])},
@@ -612,6 +655,20 @@ def test_mcp_extension_without_arguments_allows_a_missing_default_configuration(
 
     assert extension.config_path == config_path.resolve()
     assert extension.servers == ()
+
+
+async def test_mcp_extension_keeps_a_configured_location_that_has_no_file_yet(tmp_path):
+    config_path = tmp_path / "mcp.json"
+    extension = McpExtension(config_path=config_path)
+    context = AgentRunContext(AgentRunConfig("mcp-state-missing"), AgentState(), {})
+
+    await extension.on_state(context)
+
+    assert extension.config_path == config_path.resolve()
+    assert extension.servers == ()
+    message = next(item for item in context.state.messages if isinstance(item, SystemMessage))
+    assert str(config_path.resolve()) in message.content
+    assert "No MCP servers are configured" in message.content
 
 
 def test_mcp_extension_merges_custom_configuration_and_explicit_servers(tmp_path):

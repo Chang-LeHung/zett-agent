@@ -143,20 +143,26 @@ class SkillExtension(AgentExtension):
             context.register_tool(self._read_skill_tool)
 
     async def on_state(self, context: AgentRunContext) -> None:
-        """Place the compact skill catalog with the request's system messages."""
+        """Place the skill catalog and its storage roots with the system messages."""
         if not self._skills:
             return
-        entries = "\n".join(f"- {skill.name}: {skill.description} (file: {skill.path})" for skill in self._skills)
-        message = SystemMessage(
-            content=(
-                "# Available skills\n"
-                "Skills are optional instruction sets. When a skill is relevant, call "
-                f"`{READ_SKILL_TOOL_NAME}` with its name and follow the complete returned instructions.\n\n"
-                f"{entries}"
-            )
-        )
+        message = SystemMessage(content=self._catalog())
         instructions = [item for item in context.state.messages if isinstance(item, SystemMessage)]
         context.add_message(message, index=len(instructions))
+
+    def _catalog(self) -> str:
+        """Describe where skills are stored and which ones are installed."""
+        entries = "\n".join(f"- {skill.name}: {skill.description} (file: {skill.path})" for skill in self._skills)
+        roots = "\n".join(f"- {root}" for root in self._roots)
+        return (
+            "# Available skills\n"
+            "Skills are optional instruction sets. Each skill is one directory holding a `SKILL.md` file, and "
+            "Zett Agent searches these roots in order; the first root that declares a name wins:\n"
+            f"{roots}\n\n"
+            f"When a skill is relevant, call `{READ_SKILL_TOOL_NAME}` with its name and follow the complete "
+            "returned instructions. Skill bodies stay out of context until that call.\n\n"
+            f"{entries}"
+        )
 
     def _discover(self) -> tuple[SkillDefinition, ...]:
         skills: dict[str, SkillDefinition] = {}

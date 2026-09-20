@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
+import re
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
-from ..messages import ImageBytesSource, ImageContent, TextContent, ToolCall
+from ..messages import ImageContent, ImageUrlSource, TextContent, ToolCall
 from ..tools import AgentTool, tool
 from .external import ExternalEventExtension
 
@@ -23,6 +22,7 @@ Option = Annotated[str, Field(min_length=1, max_length=500)]
 Options = Annotated[list[Option], Field(max_length=20)]
 AskUserMaxImages = 32
 AskUserMaxImageBytes = 10_000_000
+_IMAGE_DATA_URL = re.compile(r"^data:(image/[A-Za-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$")
 
 
 class AskUserRequest(BaseModel):
@@ -52,14 +52,14 @@ class AskUserTextPart(BaseModel):
 
 
 class AskUserImagePart(BaseModel):
-    """One base64 image segment in an external ask_user response."""
+    """One image segment in an external ask_user response, carried as base64."""
 
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["image"] = "image"
     name: str = Field(min_length=1, max_length=500)
-    mime_type: str = Field(min_length=1, max_length=255)
-    data_base64: str
+    mime_type: str | None = Field(default=None, min_length=1, max_length=255)
+    content_url: str = Field(min_length=1)
 
 
 AskUserPart = Annotated[AskUserTextPart | AskUserImagePart, Field(discriminator="type")]
@@ -262,19 +262,15 @@ def _multimodal_answer(payload: dict[str, Any]) -> list[TextContent | ImageConte
         image_count += 1
         if image_count > AskUserMaxImages:
             raise ValueError(f"An ask_user response can contain up to {AskUserMaxImages} images")
-        try:
-            data = base64.b64decode(part.data_base64, validate=True)
-        except (ValueError, binascii.Error) as error:
-            raise ValueError(f"Invalid image data: {part.name}") from error
-        if not data:
+        match = _IMAGE_DATA_URL.fullmatch("".join(part.content_url.split()))
+        if match is None:
+            raise ValueError(f"Image {part.name} must be a base64 data URL")
+        encoded = match.group(2)
+        size = len(encoded) // 4 * 3 - (len(encoded) - len(encoded.rstrip("=")))
+        if size <= 0:
             raise ValueError(f"Image is empty: {part.name}")
-        total_bytes += len(data)
+        total_bytes += size
         if total_bytes > AskUserMaxImageBytes:
             raise ValueError("ask_user response images exceed the configured limit")
-        content.append(
-            ImageContent(
-                source=ImageBytesSource(data=data, media_type=part.mime_type),
-                alt_text=part.name,
-            )
-        )
+        content.append(ImageContent(source=ImageUrlSource(part.content_url), alt_text=part.name))
     return content or None

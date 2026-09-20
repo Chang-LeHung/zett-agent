@@ -234,7 +234,7 @@ async def test_ask_user_accepts_multimodal_response_parts():
                     "type": "image",
                     "name": "clipboard.png",
                     "mime_type": "image/png",
-                    "data_base64": image_data,
+                    "content_url": f"data:image/png;base64,{image_data}",
                 },
             ],
         },

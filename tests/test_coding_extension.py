@@ -58,7 +58,11 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
     monkeypatch.chdir(tmp_path)
     calls = (
         ToolCall("write", "write_file", {"path": "note.txt", "content": "hello"}),
-        ToolCall("replace", "replace_in_file", {"path": "note.txt", "old_text": "hello", "new_text": "world"}),
+        ToolCall(
+            "replace",
+            "replace_in_file",
+            {"path": "note.txt", "edits": [{"old_text": "hello", "new_text": "world"}]},
+        ),
         ToolCall("read", "read_file", {"path": "note.txt"}),
         ToolCall("glob", "glob", {"pattern": "*.txt"}),
         ToolCall("grep", "grep", {"pattern": "world"}),

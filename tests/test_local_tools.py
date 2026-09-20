@@ -16,14 +16,16 @@ async def test_file_tools_write_read_and_replace_text(tmp_path, monkeypatch):
     page = await read_file({"path": "notes/example.txt", "start_line": 2, "line_count": 2})
     assert page == "two\nthree\n\n... [more lines; continue with start_line=4]"
 
-    replaced = await replace_in_file({"path": "notes/example.txt", "old_text": "three", "new_text": "THREE"})
+    replaced = await replace_in_file(
+        {"path": "notes/example.txt", "edits": [{"old_text": "three", "new_text": "THREE"}]}
+    )
     assert replaced == "Replaced 1 occurrence in notes/example.txt"
     assert await read_file({"path": "notes/example.txt"}) == "one\ntwo\nTHREE\nfour\n"
 
     overwritten = await write_file({"path": "notes/example.txt", "content": "same\nsame\n"})
     assert overwritten == "Wrote notes/example.txt"
     replaced_all = await replace_in_file(
-        {"path": "notes/example.txt", "old_text": "same", "new_text": "changed", "replace_all": True}
+        {"path": "notes/example.txt", "edits": [{"old_text": "same", "new_text": "changed", "replace_all": True}]}
     )
     assert replaced_all == "Replaced 2 occurrences in notes/example.txt"
     assert (tmp_path / "notes/example.txt").read_text() == "changed\nchanged\n"
@@ -31,6 +33,64 @@ async def test_file_tools_write_read_and_replace_text(tmp_path, monkeypatch):
     deleted = await delete_file({"path": "notes/example.txt"})
     assert deleted == "Deleted notes/example.txt"
     assert not (tmp_path / "notes/example.txt").exists()
+
+
+async def test_replace_in_file_applies_a_batch_of_edits_in_one_write(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    await write_file({"path": "notes/batch.txt", "content": "alpha\nbeta\nbeta\n"})
+
+    replaced = await replace_in_file(
+        {
+            "path": "notes/batch.txt",
+            "edits": [
+                {"old_text": "alpha", "new_text": "ALPHA"},
+                {"old_text": "beta", "new_text": "BETA", "replace_all": True},
+            ],
+        }
+    )
+
+    assert replaced == "Replaced 3 occurrences in notes/batch.txt"
+    assert (tmp_path / "notes/batch.txt").read_text() == "ALPHA\nBETA\nBETA\n"
+
+    # Edits are ordered: the second one can target text the first one wrote.
+    chained = await replace_in_file(
+        {
+            "path": "notes/batch.txt",
+            "edits": [
+                {"old_text": "ALPHA", "new_text": "FIRST"},
+                {"old_text": "FIRST\n", "new_text": "FIRST: alpha\n"},
+            ],
+        }
+    )
+
+    assert chained == "Replaced 2 occurrences in notes/batch.txt"
+    assert (tmp_path / "notes/batch.txt").read_text() == "FIRST: alpha\nBETA\nBETA\n"
+
+
+async def test_replace_in_file_batch_failures_leave_the_file_untouched(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    await write_file({"path": "notes/batch.txt", "content": "alpha\nbeta\n"})
+
+    with pytest.raises(ValueError, match="not found"):
+        await replace_in_file(
+            {
+                "path": "notes/batch.txt",
+                "edits": [
+                    {"old_text": "alpha", "new_text": "ALPHA"},
+                    {"old_text": "missing", "new_text": "x"},
+                ],
+            }
+        )
+
+    assert (tmp_path / "notes/batch.txt").read_text() == "alpha\nbeta\n"
+
+    # Edits are the only shape: a lone old_text or an empty batch is rejected.
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        await replace_in_file({"path": "notes/batch.txt", "edits": []})
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        await replace_in_file({"path": "notes/batch.txt", "old_text": "alpha"})
+    with pytest.raises(ValidationError, match="Field required"):
+        await replace_in_file({"path": "notes/batch.txt"})
 
 
 async def test_file_tools_reject_invalid_or_ambiguous_operations(tmp_path, monkeypatch):
@@ -43,7 +103,7 @@ async def test_file_tools_reject_invalid_or_ambiguous_operations(tmp_path, monke
     with pytest.raises(ValueError, match="does not exist"):
         await read_file({"path": "missing.txt"})
     with pytest.raises(ValueError, match="does not exist"):
-        await replace_in_file({"path": "missing.txt", "old_text": "old", "new_text": "new"})
+        await replace_in_file({"path": "missing.txt", "edits": [{"old_text": "old", "new_text": "new"}]})
     with pytest.raises(ValueError, match="does not exist"):
         await delete_file({"path": "missing.txt"})
     with pytest.raises(ValueError, match="does not exist"):
@@ -53,9 +113,9 @@ async def test_file_tools_reject_invalid_or_ambiguous_operations(tmp_path, monke
     with pytest.raises(ValueError, match="already exists"):
         await write_file({"path": "existing.txt", "content": "text", "overwrite": False})
     with pytest.raises(ValueError, match="not unique"):
-        await replace_in_file({"path": "existing.txt", "old_text": "same", "new_text": "changed"})
+        await replace_in_file({"path": "existing.txt", "edits": [{"old_text": "same", "new_text": "changed"}]})
     with pytest.raises(ValueError, match="not found"):
-        await replace_in_file({"path": "existing.txt", "old_text": "missing", "new_text": "changed"})
+        await replace_in_file({"path": "existing.txt", "edits": [{"old_text": "missing", "new_text": "changed"}]})
     with pytest.raises(ValueError, match="byte limit"):
         await write_file({"path": "large.txt", "content": "x" * 17})
 
@@ -144,7 +204,9 @@ async def test_file_tools_accept_absolute_and_parent_paths(tmp_path, monkeypatch
     assert created == f"Created {absolute}"
     assert await read_file({"path": str(absolute)}) == "before"
 
-    replaced = await replace_in_file({"path": "../absolute.txt", "old_text": "before", "new_text": "after"})
+    replaced = await replace_in_file(
+        {"path": "../absolute.txt", "edits": [{"old_text": "before", "new_text": "after"}]}
+    )
     assert replaced == "Replaced 1 occurrence in ../absolute.txt"
     assert await read_file({"path": "../absolute.txt"}) == "after"
 

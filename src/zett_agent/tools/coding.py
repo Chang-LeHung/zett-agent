@@ -5,10 +5,11 @@ import os
 import re
 import signal
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .base import tool
 from .output import MAX_MATCH_BYTES, MAX_OUTPUT_BYTES, shell_preview, utf8_prefix
@@ -262,25 +263,40 @@ def write_file(path: FilePath, content: str, overwrite: bool = True) -> str:
     return f"Created {result_path}" if created else f"Wrote {result_path}"
 
 
+class FileEdit(BaseModel):
+    """One exact-text edit applied to a file.
+
+    By default ``old_text`` must appear exactly once in the current text, so
+    include the surrounding characters that make it unique. Set ``replace_all``
+    when every occurrence should change. ``new_text`` may be empty to delete the
+    matched text.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    old_text: Annotated[str, Field(min_length=1, description="Exact text to find")]
+    new_text: str = Field(default="", description="Replacement text; an empty value deletes the match")
+    replace_all: bool = Field(default=False, description="Whether every exact match should be replaced")
+
+
 @tool
 def replace_in_file(
     path: FilePath,
-    old_text: Annotated[str, Field(min_length=1)],
-    new_text: str,
-    replace_all: bool = False,
+    edits: Annotated[list[FileEdit], Field(min_length=1, description="Ordered exact-text edits applied in one call")],
 ) -> str:
-    """Replace exact text in a UTF-8 file, requiring one match by default.
+    """Replace exact text in a UTF-8 file with one or more edits.
 
     Args:
         path: Absolute path or a path relative to the current working directory.
-        old_text: Exact text to find.
-        new_text: Replacement text.
-        replace_all: Whether every exact match should be replaced.
+        edits: Ordered edits applied in one call; each one replaces exact text once, or every
+            match when it sets replace_all. Pass a single-element list for one change.
 
     Snippet:
-        replace_in_file(path="notes/plan.md", old_text="Draft", new_text="Final")
+        replace_in_file(path="notes/plan.md", edits=[{"old_text": "Draft", "new_text": "Final"}])
+        replace_in_file(path="notes/plan.md", edits=[{"old_text": "First", "new_text": "1st"}, {"old_text": "Second", "new_text": "2nd", "replace_all": True}])
 
     Guidelines:
+        - Send every change you already know in one call: each edit sees the result of the previous one and the file is written once.
         - Keep replace_all false unless every occurrence should change.
         - Read the file first when the target text may be ambiguous.
     """
@@ -288,16 +304,34 @@ def replace_in_file(
     if not target.is_file():
         raise ValueError(f"File does not exist: {path}")
     content = _read_working_text(target)
-    matches = content.count(old_text)
-    if matches == 0:
-        raise ValueError("Text to replace was not found")
-    if matches > 1 and not replace_all:
-        raise ValueError(f"Text to replace is not unique; found {matches} matches")
-    replacements = matches if replace_all else 1
-    updated = content.replace(old_text, new_text, -1 if replace_all else 1)
+    updated, replacements = _apply_edits(content, edits)
+    # One write for the whole batch: a failing edit leaves the file untouched.
     _write_working_text(target, updated)
     result_path = _result_path(path, working_directory, target)
     return f"Replaced {replacements} occurrence{'s' if replacements != 1 else ''} in {result_path}"
+
+
+def _apply_edits(content: str, edits: Sequence[FileEdit]) -> tuple[str, int]:
+    """Apply exact-text edits in order, validating each against the current text."""
+    replacements = 0
+    for edit in edits:
+        matches = content.count(edit.old_text)
+        if matches == 0:
+            raise ValueError(f"Text to replace was not found: {_excerpt(edit.old_text)}")
+        if matches > 1 and not edit.replace_all:
+            raise ValueError(
+                f"Text to replace is not unique; found {matches} matches "
+                f"(set replace_all to change every one): {_excerpt(edit.old_text)}"
+            )
+        content = content.replace(edit.old_text, edit.new_text, -1 if edit.replace_all else 1)
+        replacements += matches if edit.replace_all else 1
+    return content, replacements
+
+
+def _excerpt(value: str, *, limit: int = 60) -> str:
+    """Shorten one matched snippet for an error message."""
+    collapsed = " ".join(value.split())
+    return repr(f"{collapsed[:limit]}…" if len(collapsed) > limit else collapsed)
 
 
 @tool

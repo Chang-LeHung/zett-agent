@@ -445,7 +445,7 @@ class PlanModeExtension(ExternalEventExtension):
                 plan: Complete Markdown plan for the user to review before implementation.
 
             Snippet:
-                exit_plan_mode(plan="# Plan\n\n1. Update storage.\n2. Add tests.")
+                exit_plan_mode(plan="# Plan\\n\\n1. Update storage.\\n2. Add tests.")
 
             Guidelines:
                 - Call only after investigation is complete and the plan is actionable.

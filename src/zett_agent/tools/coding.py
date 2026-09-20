@@ -245,7 +245,7 @@ def write_file(path: FilePath, content: str, overwrite: bool = True) -> str:
         overwrite: Whether an existing file may be replaced.
 
     Snippet:
-        write_file(path="notes/plan.md", content="# Plan\n")
+        write_file(path="notes/plan.md", content="# Plan\\n")
 
     Guidelines:
         - Use for new files or intentional full-file replacement.

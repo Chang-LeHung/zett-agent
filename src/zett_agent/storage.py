@@ -10,7 +10,7 @@ from pathlib import Path
 from weakref import WeakKeyDictionary
 
 from pydantic import TypeAdapter
-from sqlalchemy import Index, Integer, String, Text, delete, func, select
+from sqlalchemy import Index, Integer, String, Text, delete, event, func, select
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -260,9 +260,21 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             URL.create("sqlite+aiosqlite", database=str(self.path)),
             poolclass=NullPool,
         )
+        event.listen(self.engine.sync_engine, "connect", self._configure_sqlite_connection)
         self._sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         self._schema_ready = False
         self._schema_locks: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = WeakKeyDictionary()
+
+    @staticmethod
+    def _configure_sqlite_connection(dbapi_connection: object, _: object) -> None:
+        """Use WAL and a bounded busy wait for independent runtime processes."""
+        cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cursor.close()
 
     async def _ensure_schema(self) -> None:
         """Create ORM tables once, before the first awaited statement.

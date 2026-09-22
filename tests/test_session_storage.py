@@ -20,6 +20,7 @@ from zett_agent import (
     ModelResponse,
     ModelUsage,
     SessionPersistenceExtension,
+    SessionTypeCode,
     SQLiteSessionExtension,
     SystemMessage,
     ToolCall,
@@ -107,6 +108,24 @@ async def test_reopening_old_database_adds_missing_indexes(tmp_path):
             row[0] for row in connection.execute("select name from sqlite_master where type = 'index'") if row[0]
         }
     assert "ix_agent_sessions_activity" in indexes
+
+
+async def test_reopening_old_database_adds_session_type_column(tmp_path):
+    path = tmp_path / "agent.sqlite3"
+    storage = SQLiteSessionStorage(path)
+    await storage.append("session", "request", UserMessage(content="Persisted"))
+    await storage.close()
+    with sqlite_file(path) as connection:
+        connection.execute("alter table agent_sessions drop column session_type")
+
+    reopened = SQLiteSessionStorage(path)
+    try:
+        summaries = await reopened.list_sessions()
+    finally:
+        await reopened.close()
+
+    assert summaries[0].session_type == int(SessionTypeCode.STANDARD)
+    assert "session_type" in table_columns(path, "agent_sessions")
 
 
 async def test_storage_persists_parent_identity_and_message_metadata(storage):
@@ -677,6 +696,7 @@ async def test_create_session_persists_an_empty_conversation(storage):
     created = await storage.create_session(session_id="empty-session", title="Empty", agent_name="Zett Agent")
 
     assert created.session_id == "empty-session"
+    assert created.session_type == int(SessionTypeCode.STANDARD)
     assert created.title == "Empty"
     assert created.agent_name == "Zett Agent"
     assert created.message_count == 0
@@ -684,6 +704,22 @@ async def test_create_session_persists_an_empty_conversation(storage):
     assert await storage.list_raw_messages("empty-session") == []
     with pytest.raises(ValueError, match="already exists"):
         await storage.create_session(session_id="empty-session")
+
+
+async def test_sessions_can_be_filtered_by_integer_type_code(storage):
+    normal = await storage.create_session(session_id="normal-session")
+    scheduled = await storage.create_session(
+        session_id="scheduled-session",
+        session_type=SessionTypeCode.AUTOMATION,
+    )
+
+    assert normal.session_type == int(SessionTypeCode.STANDARD)
+    assert scheduled.session_type == int(SessionTypeCode.AUTOMATION)
+    assert [item.session_id for item in await storage.list_sessions(session_types=(SessionTypeCode.AUTOMATION,))] == [
+        "scheduled-session"
+    ]
+    with pytest.raises(ValueError, match="Unsupported session_type"):
+        await storage.create_session(session_id="invalid-session", session_type=99)
 
 
 async def test_storage_rejects_invalid_checkpoint_writes(storage):

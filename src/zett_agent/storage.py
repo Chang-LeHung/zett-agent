@@ -31,6 +31,13 @@ class Base(DeclarativeBase):
     """Schema owned exclusively by zett-agent."""
 
 
+class SessionTypeCode(IntEnum):
+    """Persisted integer code for ``agent_sessions.session_type``."""
+
+    STANDARD = 0
+    AUTOMATION = 1
+
+
 class AgentSessionModel(Base):
     """One root or delegated conversation and its provider-neutral identity."""
 
@@ -39,6 +46,12 @@ class AgentSessionModel(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     parent_session_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    # Applications map semantic names to these storage-owned integer codes.
+    session_type: Mapped[int] = mapped_column(
+        Integer,
+        default=int(SessionTypeCode.STANDARD),
+        server_default=str(int(SessionTypeCode.STANDARD)),
+    )
     title: Mapped[str | None] = mapped_column(String(200))
     agent_name: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column()
@@ -191,6 +204,23 @@ async def ensure_indexes(connection: AsyncConnection) -> None:
             await connection.execute(CreateIndex(index, if_not_exists=True))
 
 
+async def ensure_session_type_column(connection: AsyncConnection) -> None:
+    """Ensure existing session tables have the integer type column."""
+    rows = (await connection.exec_driver_sql("PRAGMA table_info(agent_sessions)")).fetchall()
+    if "session_type" not in {row[1] for row in rows}:
+        await connection.exec_driver_sql(
+            "ALTER TABLE agent_sessions ADD COLUMN session_type INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _session_type_code(value: SessionTypeCode | int) -> SessionTypeCode:
+    """Normalize one supported integer session type code."""
+    try:
+        return SessionTypeCode(value)
+    except ValueError as error:
+        raise ValueError(f"Unsupported session_type: {value}") from error
+
+
 class SQLiteSessionStorage(SyncMethodsMixin):
     """Standalone SQLite session storage shipped with zett-agent.
 
@@ -291,6 +321,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 return
             async with self.engine.begin() as connection:
                 await connection.run_sync(Base.metadata.create_all)
+                await ensure_session_type_column(connection)
                 await ensure_indexes(connection)
             self._schema_ready = True
 
@@ -311,6 +342,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
         parent_session_id: str | None = None,
         title: str | None = None,
         agent_name: str | None = None,
+        session_type: SessionTypeCode | int = SessionTypeCode.STANDARD,
     ) -> SessionSummary:
         """Create an empty session before its first Raw Log message is appended."""
         resolved_id = session_id or new_uuid7()
@@ -326,6 +358,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             raise ValueError("Session title must contain between 1 and 200 characters")
         if normalized_agent_name is not None and (not normalized_agent_name or len(normalized_agent_name) > 64):
             raise ValueError("Agent name must contain between 1 and 64 characters")
+        resolved_session_type = _session_type_code(session_type)
         now = datetime.now(UTC)
         async with self._session_scope() as session:
             if await session.get(AgentSessionModel, resolved_id) is not None:
@@ -335,6 +368,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 parent_session_id=parent_session_id,
                 title=normalized_title,
                 agent_name=normalized_agent_name,
+                session_type=int(resolved_session_type),
                 created_at=now,
                 updated_at=now,
             )
@@ -389,17 +423,25 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             rows = await session.scalars(statement.order_by(RawLogMessageModel.sequence).offset(offset).limit(limit))
             return [self._record(row) for row in rows]
 
-    async def list_sessions(self, *, limit: int = 100, offset: int = 0) -> list[SessionSummary]:
+    async def list_sessions(
+        self,
+        *,
+        session_types: Sequence[SessionTypeCode | int] | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[SessionSummary]:
         """Return one page of root and subagent sessions by latest activity."""
         if limit < 1:
             raise ValueError("limit must be positive")
         if offset < 0:
             raise ValueError("offset cannot be negative")
+        type_codes = tuple(int(_session_type_code(value)) for value in session_types) if session_types else None
         async with self._session_scope() as session:
-            rows = await session.execute(
+            statement = (
                 select(
                     AgentSessionModel.id.label("session_id"),
                     AgentSessionModel.parent_session_id,
+                    AgentSessionModel.session_type,
                     AgentSessionModel.title,
                     AgentSessionModel.agent_name,
                     func.count(RawLogMessageModel.id).label("message_count"),
@@ -410,6 +452,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 .group_by(
                     AgentSessionModel.id,
                     AgentSessionModel.parent_session_id,
+                    AgentSessionModel.session_type,
                     AgentSessionModel.title,
                     AgentSessionModel.agent_name,
                     AgentSessionModel.created_at,
@@ -419,10 +462,14 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 .offset(offset)
                 .limit(limit)
             )
+            if type_codes is not None:
+                statement = statement.where(AgentSessionModel.session_type.in_(type_codes))
+            rows = await session.execute(statement)
             return [
                 SessionSummary(
                     session_id=row.session_id,
                     parent_session_id=row.parent_session_id,
+                    session_type=row.session_type,
                     title=row.title,
                     agent_name=row.agent_name,
                     message_count=row.message_count,
@@ -493,6 +540,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
         return SessionSummary(
             session_id=row.id,
             parent_session_id=row.parent_session_id,
+            session_type=row.session_type,
             title=row.title,
             agent_name=row.agent_name,
             message_count=message_count,
@@ -611,6 +659,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             )
             return SessionView(
                 parent_session_id=session_row.parent_session_id if session_row is not None else None,
+                session_type=session_row.session_type if session_row is not None else int(SessionTypeCode.STANDARD),
                 title=session_row.title if session_row is not None else None,
                 agent_name=session_row.agent_name if session_row is not None else None,
                 snapshot=snapshot,

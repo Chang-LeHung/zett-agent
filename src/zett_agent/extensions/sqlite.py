@@ -1,8 +1,9 @@
 """SQLite-backed session persistence exposed as an Agent extension."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
-from ..storage import SQLiteSessionStorage
+from ..storage import SessionTypeCode, SQLiteSessionStorage
 from .persistence import BaseSessionPersistenceExtension, RawMessageRecord, SessionSummary
 
 
@@ -74,6 +75,7 @@ class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorag
         parent_session_id: str | None = None,
         title: str | None = None,
         agent_name: str | None = None,
+        session_type: SessionTypeCode | int = SessionTypeCode.STANDARD,
     ) -> SessionSummary:
         """Create an empty session in the owned storage."""
         return await self.storage.create_session(
@@ -81,11 +83,18 @@ class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorag
             parent_session_id=parent_session_id,
             title=title,
             agent_name=agent_name,
+            session_type=session_type,
         )
 
-    async def list_sessions(self, *, limit: int = 100, offset: int = 0) -> list[SessionSummary]:
+    async def list_sessions(
+        self,
+        *,
+        session_types: Sequence[SessionTypeCode | int] | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[SessionSummary]:
         """Forward a paginated session-summary query to owned storage."""
-        return await self.storage.list_sessions(limit=limit, offset=offset)
+        return await self.storage.list_sessions(session_types=session_types, limit=limit, offset=offset)
 
     async def get_session(self, session_id: str) -> SessionSummary | None:
         """Forward a typed session metadata lookup to the owned storage."""

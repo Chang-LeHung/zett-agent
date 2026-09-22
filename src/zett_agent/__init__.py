@@ -193,7 +193,7 @@ from .providers import (
     ProviderError,
     ProviderResponseError,
 )
-from .storage import SQLiteSessionStorage
+from .storage import SessionTypeCode, SQLiteSessionStorage
 from .sync import SyncAgent, SyncModelAdapter, create_agent_sync
 from .sync_runtime import SyncContext, SyncObject, SyncRuntime, SyncStream
 from .tools import (
@@ -299,6 +299,7 @@ __all__ = [
     "PlanModeExitedEvent",
     "PlanModeExtension",
     "SQLiteSessionStorage",
+    "SessionTypeCode",
     "SQLiteSessionExtension",
     "SessionView",
     "SessionSummary",

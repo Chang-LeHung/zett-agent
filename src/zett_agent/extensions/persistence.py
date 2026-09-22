@@ -85,6 +85,9 @@ class SessionSummary(BaseModel):
         default=None,
         description="Parent conversation for a delegated subagent; null for a root session",
     )
+    session_type: int = Field(
+        description="Storage-owned integer code describing the session origin",
+    )
     title: str | None = Field(
         default=None,
         min_length=1,
@@ -145,6 +148,9 @@ class SessionView(BaseModel):
     parent_session_id: str | None = Field(
         default=None,
         description="Parent conversation for a delegated subagent; null for a root session",
+    )
+    session_type: int = Field(
+        description="Storage-owned integer code describing the session origin",
     )
     title: str | None = Field(
         default=None,

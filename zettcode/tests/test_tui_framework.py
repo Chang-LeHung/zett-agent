@@ -1,4 +1,9 @@
+import builtins
+import importlib
+import sys
 from io import StringIO
+
+import pytest
 
 from zettcode.tui_framework import (
     Canvas,
@@ -15,6 +20,42 @@ from zettcode.tui_framework import (
 )
 from zettcode.tui_framework.components import _layout_input
 from zettcode.tui_framework.input import InputDecoder
+
+
+def test_tui_framework_imports_where_termios_is_unavailable(monkeypatch) -> None:
+    """ZettCode must load on platforms without raw-mode terminal modules."""
+    real_import = builtins.__import__
+    saved_modules = {
+        name: sys.modules.get(name) for name in ("zettcode.tui_framework.terminal", "zettcode.tui_framework")
+    }
+
+    def blocked(name, *args, **kwargs):
+        if name in {"termios", "tty"}:
+            raise ImportError(f"No module named {name!r}")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+    try:
+        for module_name in saved_modules:
+            sys.modules.pop(module_name, None)
+        module = importlib.import_module("zettcode.tui_framework")
+        assert hasattr(module, "Terminal")
+    finally:
+        for module_name, saved in saved_modules.items():
+            if saved is None:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = saved
+
+
+def test_terminal_refuses_platforms_without_posix_raw_mode(monkeypatch) -> None:
+    from zettcode.tui_framework import terminal as terminal_module
+
+    monkeypatch.setattr(terminal_module, "POSIX", False)
+
+    with pytest.raises(RuntimeError, match="POSIX terminal"):
+        with terminal_module.Terminal(input_fd=0, output=StringIO()):
+            pass
 
 
 class Actions:

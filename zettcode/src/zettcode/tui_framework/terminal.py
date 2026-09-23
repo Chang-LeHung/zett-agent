@@ -7,14 +7,17 @@ import os
 import shutil
 import signal
 import sys
-import termios
-import tty
 from collections.abc import Callable
 from types import TracebackType
 from typing import TextIO
 
 from .events import EventType, InputEvent
 from .input import InputDecoder
+
+# Raw-mode input, SIGWINCH, and add_reader on stdin are POSIX-only. Keep the
+# import safe on Windows so the rest of ZettCode still loads, and fail with a
+# clear message when a TUI is actually requested there.
+POSIX = os.name == "posix"
 
 
 class Terminal:
@@ -31,6 +34,11 @@ class Terminal:
         return max(20, size.columns), max(8, size.lines)
 
     def __enter__(self) -> Terminal:
+        if not POSIX:
+            raise RuntimeError("ZettCode TUI requires a POSIX terminal")
+        import termios
+        import tty
+
         if not os.isatty(self.input_fd) or not self.output.isatty():
             raise RuntimeError("ZettCode TUI requires an interactive terminal")
         self._attributes = termios.tcgetattr(self.input_fd)
@@ -46,6 +54,8 @@ class Terminal:
     ) -> None:
         self.write("\x1b[0m\x1b[?25h\x1b[?7h\x1b[?1000l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b[?1049l")
         if self._attributes is not None:
+            import termios
+
             termios.tcsetattr(self.input_fd, termios.TCSADRAIN, self._attributes)
             self._attributes = None
 
@@ -68,18 +78,20 @@ class AsyncInput:
     def start(self) -> None:
         self.loop = asyncio.get_running_loop()
         self.loop.add_reader(self.terminal.input_fd, self._read_ready)
-        self._previous_resize_handler = signal.getsignal(signal.SIGWINCH)
-        self.loop.add_signal_handler(signal.SIGWINCH, self._resize)
+        if hasattr(signal, "SIGWINCH"):
+            self._previous_resize_handler = signal.getsignal(signal.SIGWINCH)
+            self.loop.add_signal_handler(signal.SIGWINCH, self._resize)
 
     def close(self) -> None:
         if self.loop is None:
             return
         self.loop.remove_reader(self.terminal.input_fd)
-        self.loop.remove_signal_handler(signal.SIGWINCH)
+        if hasattr(signal, "SIGWINCH"):
+            self.loop.remove_signal_handler(signal.SIGWINCH)
         if self._escape_handle is not None:
             self._escape_handle.cancel()
             self._escape_handle = None
-        if callable(self._previous_resize_handler):
+        if hasattr(signal, "SIGWINCH") and callable(self._previous_resize_handler):
             signal.signal(signal.SIGWINCH, self._previous_resize_handler)
         self.loop = None
 

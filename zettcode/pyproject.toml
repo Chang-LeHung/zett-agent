@@ -9,7 +9,7 @@ authors = [{name = "Chang-LeHung"}]
 dependencies = [
   "pyperclip>=1.9,<2",
   "wcwidth>=0.2,<1",
-  "zett-agent==0.2.0.dev0",
+  "zett-agent==0.1.0",
 ]
 
 [project.scripts]

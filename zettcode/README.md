@@ -11,15 +11,15 @@ DeepSeek:
 
 ```bash
 export DEEPSEEK_API_KEY=...
-uv run --directory backend/zettcode zettcode --provider deepseek --model deepseek-chat
+uv run --directory zettcode zettcode --provider deepseek --model deepseek-chat
 ```
 
 OpenAI or an OpenAI-compatible endpoint:
 
 ```bash
 export OPENAI_API_KEY=...
-uv run --directory backend/zettcode zettcode --provider openai --model gpt-5-mini
-uv run --directory backend/zettcode zettcode \
+uv run --directory zettcode zettcode --provider openai --model gpt-5-mini
+uv run --directory zettcode zettcode \
   --provider openai --model my-model --base-url https://example.com/v1
 ```
 

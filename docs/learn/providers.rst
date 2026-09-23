@@ -46,7 +46,7 @@ keys into source, command output, or documentation.
 
 .. code-block:: bash
 
-   uv run --directory backend/zett-agent python docs/_examples/real_provider.py
+   uv run python docs/_examples/real_provider.py
 
 Retries and proxies
 -----------------------

@@ -1,0 +1,14 @@
+**/.venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.coverage
+**/.pytest_cache/
+**/.ruff_cache/
+docs/_build/
+docs/_generated/
+.zett-tool-output/
+.env
+.DS_Store

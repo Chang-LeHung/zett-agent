@@ -1263,7 +1263,7 @@ wheels = [
 [[package]]
 name = "zett-agent"
 version = "0.2.0.dev0"
-source = { editable = "../zett-agent" }
+source = { editable = "../" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "anthropic" },
@@ -1339,7 +1339,7 @@ dev = [
 requires-dist = [
     { name = "pyperclip", specifier = ">=1.9,<2" },
     { name = "wcwidth", specifier = ">=0.2,<1" },
-    { name = "zett-agent", editable = "../zett-agent" },
+    { name = "zett-agent", editable = "../" },
 ]
 
 [package.metadata.requires-dev]

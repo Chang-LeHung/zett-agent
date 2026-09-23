@@ -6,6 +6,25 @@ This is an **unreleased simplification** of the published 0.1.0 API. Develop loc
 with `uv sync`. No compatibility wrappers are kept for the old generic messages,
 session state containers, or extensions.
 
+## Repository layout
+
+- `src/zett_agent/` — the runtime this repository publishes as `zett-agent`.
+- `zettcode/` — ZettCode, the terminal coding agent built on that runtime. It is
+  a separate package with its own `pyproject.toml` and a Python 3.14 floor:
+  `uv run --directory zettcode zettcode --help`.
+- `docs/` — the Sphinx manual; `make docs-serve` previews it locally.
+- `examples/` — runnable programs, most of which need no API key.
+
+## Install
+
+```bash
+pip install zett-agent
+# or
+uv add zett-agent
+```
+
+Releases are cut by pushing a `v<version>` tag; see `RELEASING.md`.
+
 ## Start here
 
 Read these files in order:
@@ -819,6 +838,9 @@ uv run pytest
 uv run ruff check src tests examples
 uv run ruff format --check src tests examples
 ```
+
+`make check` runs the same Ruff checks, the coverage-gated test suite, the
+documentation checks, and the ZettCode suite.
 
 Live checks are opt-in and use `DEEPSEEK_API`:
 

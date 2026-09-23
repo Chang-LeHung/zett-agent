@@ -10,7 +10,7 @@ From the repository root:
 
 .. code-block:: console
 
-   uv run --directory backend/zett-agent python docs/_examples/storage_adapter.py
+   uv run python docs/_examples/storage_adapter.py
 
 The output includes:
 

@@ -29,7 +29,7 @@ html_theme_options = {
     "navbar_align": "left",
     "header_links_before_dropdown": 5,
     "secondary_sidebar_items": ["page-toc"],
-    "github_url": "https://github.com/Chang-LeHung/knowledge-cards-system",
+    "github_url": "https://github.com/Chang-LeHung/zett-agent",
 }
 templates_path = ["_templates"]
 html_static_path = ["_static"]

@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --locked --group dev
+
+      - name: Check formatting
+        run: uv run --no-sync ruff format --check src tests examples
+
+      - name: Lint
+        run: uv run --no-sync ruff check src tests examples
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --locked --group dev
+
+      - name: Run tests
+        run: uv run --no-sync pytest --cov --cov-report=term-missing
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Lint documentation helpers
+        run: uv run --group docs ruff check docs
+
+      - name: Build documentation and run offline examples
+        run: uv run --group docs pytest tests/test_documentation.py tests/test_documentation_examples.py -q
+
+  zettcode:
+    name: ZettCode (Python 3.14)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Check formatting
+        run: uv run --directory zettcode ruff format --check src tests
+
+      - name: Lint
+        run: uv run --directory zettcode ruff check src tests
+
+      - name: Run tests
+        run: uv run --directory zettcode pytest
+
+  package:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Build
+        run: uv build
+
+      - name: Verify the wheel only ships the runtime
+        run: |
+          python3 - <<'PY'
+          import glob
+          import zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          assert any(name.startswith("zett_agent/") for name in names), names
+          unexpected = [name for name in names if name.startswith("zettcode/")]
+          assert not unexpected, unexpected
+          print(f"{wheel}: {len(names)} files")
+          PY

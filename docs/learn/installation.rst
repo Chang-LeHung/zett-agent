@@ -10,8 +10,8 @@ not required for the Agent library or its documentation.
 
 From the repository root::
 
-    uv sync --directory backend/zett-agent
-    uv run --directory backend/zett-agent python -c "import zett_agent; print(zett_agent.__file__)"
+    uv sync
+    uv run python -c "import zett_agent; print(zett_agent.__file__)"
 
 The printed path should point into this checkout's ``src/zett_agent`` directory.
 That confirms examples will use the source you are reading.
@@ -21,7 +21,7 @@ Run without an API key
 
 .. code-block:: bash
 
-   uv run --directory backend/zett-agent python docs/_examples/first_agent.py
+   uv run python docs/_examples/first_agent.py
 
 Expected output::
 

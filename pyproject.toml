@@ -40,7 +40,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.urls]
-Repository = "https://github.com/Chang-LeHung/knowledge-cards-system"
+Repository = "https://github.com/Chang-LeHung/zett-agent"
+Issues = "https://github.com/Chang-LeHung/zett-agent/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/zett_agent"]

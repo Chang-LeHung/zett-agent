@@ -89,7 +89,7 @@ Run and inspect the result
 
 .. code-block:: bash
 
-   uv run --directory backend/zett-agent python docs/_examples/custom_extension.py
+   uv run python docs/_examples/custom_extension.py
 
 Expected output::
 

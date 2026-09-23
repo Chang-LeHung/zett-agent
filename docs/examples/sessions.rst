@@ -10,7 +10,7 @@ From the repository root:
 
 .. code-block:: console
 
-   uv run --directory backend/zett-agent python docs/_examples/sessions.py
+   uv run python docs/_examples/sessions.py
 
 The output includes:
 

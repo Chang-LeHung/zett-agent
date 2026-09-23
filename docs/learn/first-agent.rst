@@ -43,7 +43,7 @@ the first exchange. The ``run`` method returns a complete AssistantMessage.
 
 From the repository root::
 
-    uv run --directory backend/zett-agent python docs/_examples/first_agent.py
+    uv run python docs/_examples/first_agent.py
 
 Expected output::
 

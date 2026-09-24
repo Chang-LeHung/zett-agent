@@ -3,8 +3,9 @@
 import asyncio
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextvars import copy_context
-from typing import Any, Self
+from typing import Any
 
+from ._compat import Self
 from .agent import Agent, AgentRunConfig
 from .client import AgentClient
 from .dispatcher import AgentEventDispatcher

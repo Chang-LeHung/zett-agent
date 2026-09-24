@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import aclosing
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import datetime
 from threading import RLock
 from time import monotonic_ns
-from typing import TYPE_CHECKING, Self, overload
+from typing import TYPE_CHECKING, overload
 
+from ._compat import UTC, Self, add_note
 from .event_queue import AgentEventQueue
 from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
 from .exceptions import AgentIterationLimitError, AgentProtocolError
@@ -155,7 +157,14 @@ class AgentState:
         return tuple(self._messages)
 
 
-@dataclass(slots=True, weakref_slot=True, eq=False)
+#: Python 3.11 added ``weakref_slot``. On 3.10 a slotted dataclass has no room
+#: for ``__weakref__`` (``slots=True`` also rejects a class that declares
+#: ``__slots__`` itself), while extensions key request state by this context in
+#: a ``WeakKeyDictionary``, so 3.10 keeps the ordinary instance dictionary.
+_RUN_CONTEXT_DATACLASS = {"slots": True, "weakref_slot": True} if sys.version_info >= (3, 11) else {}
+
+
+@dataclass(eq=False, **_RUN_CONTEXT_DATACLASS)
 class AgentRunContext:
     """Per-run references shared by all lifecycle hooks.
 
@@ -1268,7 +1277,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             await self._cancel_unanswered_tool_calls(context)
             await self._cancel_request(context)
         except Exception as notification_error:
-            cancellation.add_note(f"Cancellation notification failed: {notification_error!r}")
+            add_note(cancellation, f"Cancellation notification failed: {notification_error!r}")
 
     async def _cancel_unanswered_tool_calls(self, context: AgentRunContext) -> None:
         """Append cancellation results for the latest unfinished tool-call batch."""
@@ -1308,11 +1317,11 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             try:
                 await self._fail_request(context)
             except Exception as notification_error:
-                error.add_note(f"Failure notification failed: {notification_error!r}")
+                add_note(error, f"Failure notification failed: {notification_error!r}")
         try:
             await self._notify_error(context, error)
         except Exception as notification_error:
-            error.add_note(f"Error hook failed: {notification_error!r}")
+            add_note(error, f"Error hook failed: {notification_error!r}")
 
     def _release_request(self, context: AgentRunContext) -> None:
         """Clear only this request's inboxes and release its session for reuse."""

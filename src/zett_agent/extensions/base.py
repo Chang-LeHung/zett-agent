@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING, Any
+
+from .._compat import TypeAliasType
 
 if TYPE_CHECKING:
     from ..agent import AgentRunConfig, AgentRunContext
@@ -27,8 +29,8 @@ class _PendingRequests:
 _PENDING_TRACKER_CREATION_LOCK = Lock()
 
 
-type ModelRequestNext = Callable[[ModelRequest], AsyncIterator[ModelEvent]]
-type ToolCallNext = Callable[[], Awaitable[Any]]
+ModelRequestNext = TypeAliasType("ModelRequestNext", "Callable[[ModelRequest], AsyncIterator[ModelEvent]]")
+ToolCallNext = TypeAliasType("ToolCallNext", "Callable[[], Awaitable[Any]]")
 
 
 class MiddlewareHook:

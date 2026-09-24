@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 
@@ -28,6 +28,7 @@ from zett_agent import (
     ToolCall,
     ToolCallDelta,
 )
+from zett_agent._compat import UTC
 
 CONFIG = AgentRunConfig("robustness-session")
 

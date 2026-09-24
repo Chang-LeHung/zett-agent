@@ -19,6 +19,7 @@ from zett_agent import (
     ToolMessage,
     tool,
 )
+from zett_agent._compat import timeout
 
 
 class ShellModel:
@@ -319,7 +320,7 @@ async def test_session_mode_change_applies_during_active_run() -> None:
     assert [event.name for event in events].count(SHELL_APPROVAL_EVENT_NAME) == 1
 
 
-async def wait_until(predicate, *, timeout: float = 1) -> None:
-    async with asyncio.timeout(timeout):
+async def wait_until(predicate, *, seconds: float = 1) -> None:
+    async with timeout(seconds):
         while not predicate():
             await asyncio.sleep(0)

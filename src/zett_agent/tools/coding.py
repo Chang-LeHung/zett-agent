@@ -11,6 +11,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .._compat import timeout
 from .base import tool
 from .output import MAX_MATCH_BYTES, MAX_OUTPUT_BYTES, shell_preview, utf8_prefix
 
@@ -396,9 +397,11 @@ async def run_shell(
             start_new_session=os.name == "posix",
         )
         try:
-            async with asyncio.timeout(timeout_seconds):
+            async with timeout(timeout_seconds):
                 await process.wait()
-        except (TimeoutError, asyncio.CancelledError) as error:
+        # asyncio.TimeoutError is the builtin TimeoutError from 3.11 on, but a
+        # distinct class before that.
+        except (TimeoutError, asyncio.TimeoutError, asyncio.CancelledError) as error:
             # On POSIX stop the entire process group, including child commands.
             try:
                 if os.name == "posix":

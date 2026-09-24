@@ -27,7 +27,7 @@
 
 ## Tooling
 
-- Use Python 3.12+ and `uv` for dependency management.
+- Use Python 3.10+ and `uv` for dependency management.
 - Use Ruff for formatting and linting, with `line-length = 120`.
 - Run `make check` (Ruff, pytest with the 95% coverage gate, and the
   documentation checks) before handing work over.

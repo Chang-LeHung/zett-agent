@@ -3,7 +3,7 @@
 import asyncio
 import base64
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from time import monotonic_ns
 
 import pytest
@@ -33,6 +33,7 @@ from zett_agent import (
     ToolGuidelinesExtension,
     ToolMessage,
 )
+from zett_agent._compat import UTC
 
 
 class AskModel:

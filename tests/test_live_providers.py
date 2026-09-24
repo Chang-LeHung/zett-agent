@@ -1,6 +1,5 @@
 """Opt-in live SDK checks; credentials remain in environment variables."""
 
-import asyncio
 import os
 import ssl
 
@@ -23,6 +22,7 @@ from zett_agent import (
     UserMessage,
     tool,
 )
+from zett_agent._compat import timeout
 
 pytestmark = pytest.mark.skipif(
     os.getenv("ZETT_AGENT_LIVE_TESTS") != "1" or not os.getenv("DEEPSEEK_API"),
@@ -53,7 +53,7 @@ def provider_for(protocol: str):
 async def test_live_stream(protocol: str) -> None:
     provider = provider_for(protocol)
     try:
-        async with asyncio.timeout(60):
+        async with timeout(60):
             events = [
                 event
                 async for event in provider.stream(
@@ -90,7 +90,7 @@ async def test_live_tool_round_trip(protocol: str, effort: ReasoningEffort) -> N
             max_iterations=3,
             config=AgentRunConfig(session_id=f"live-{protocol}"),
         )
-        async with asyncio.timeout(90):
+        async with timeout(90):
             events = [
                 event
                 async for event in agent.stream(
@@ -146,7 +146,7 @@ async def test_live_compaction_persists_snapshot_and_answers_from_summary(tmp_pa
             ],
             config=AgentRunConfig(session_id=session_id),
         )
-        async with asyncio.timeout(120):
+        async with timeout(120):
             events = [
                 event
                 async for event in agent.stream(

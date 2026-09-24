@@ -6,15 +6,18 @@ import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import Any, Protocol, get_type_hints, overload
+from typing import Any, ParamSpec, Protocol, TypeVar, get_type_hints, overload
 
 from pydantic import ConfigDict, TypeAdapter, create_model
 
+from .._compat import StrEnum
 from ..model import ToolDefinition
 from ..sync_runtime import SyncMethodsMixin
 
 _CURRENT_TOOL_CALL_ID: ContextVar[str | None] = ContextVar("zett_agent_tool_call_id", default=None)
+
+_DecoratedParameters = ParamSpec("_DecoratedParameters")
+_DecoratedResult = TypeVar("_DecoratedResult")
 
 
 def _bind_tool_call(call_id: str) -> Token[str | None]:
@@ -112,7 +115,7 @@ class AgentTool(SyncMethodsMixin):
 class _ToolDecorator(Protocol):
     """Decorator returned by configured ``@tool(...)`` usage."""
 
-    def __call__[**P, R](self, function: Callable[P, R], /) -> AgentTool: ...
+    def __call__(self, function: Callable[_DecoratedParameters, _DecoratedResult], /) -> AgentTool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,7 +210,14 @@ def _build_input_schema(
         default = ... if parameter.default is inspect.Parameter.empty else parameter.default
         fields[parameter.name] = (hints[parameter.name], default)
 
-    inputs = create_model("ToolInput", __config__=ConfigDict(extra="forbid"), **fields)
+    # Build the validator in the tool's own module so a forward reference in its
+    # annotations resolves there instead of inside this framework module.
+    inputs = create_model(
+        "ToolInput",
+        __config__=ConfigDict(extra="forbid"),
+        __module__=getattr(function, "__module__", __name__),
+        **fields,
+    )
     parameters = inputs.model_json_schema()
     unknown_parameters = documentation.parameter_descriptions.keys() - fields.keys()
     if unknown_parameters:

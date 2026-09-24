@@ -4,9 +4,10 @@ Install and run from source
 Prerequisites
 -----------------
 
-The standalone package requires Python 3.12 or newer. This repository develops
-and tests with Python 3.14 and uses ``uv`` for dependency management. Node.js is
-not required for the Agent library or its documentation.
+The standalone package requires Python 3.10 or newer, and continuous integration
+covers 3.10 through 3.14. This repository develops and tests with Python 3.14 and
+uses ``uv`` for dependency management. Node.js is not required for the Agent
+library or its documentation.
 
 From the repository root::
 

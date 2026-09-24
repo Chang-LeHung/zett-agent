@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from enum import StrEnum
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from .._compat import StrEnum
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..messages import ToolCall

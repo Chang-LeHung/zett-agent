@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+from ._compat import TypeAliasType
 from .events import AgentEvent, AgentEventType
 from .exceptions import AgentProtocolError
 
@@ -25,7 +26,7 @@ class _QueuedEvent:
     acknowledged: asyncio.Future[None] | None = None
 
 
-type _QueueItem = _QueuedEvent | _QueueFailure | _QueueClosed
+_QueueItem = TypeAliasType("_QueueItem", _QueuedEvent | _QueueFailure | _QueueClosed)
 
 
 class AgentEventQueue:

@@ -42,7 +42,7 @@ publishing and the GitHub release both require a tag push.
 request:
 
 - Ruff format and lint checks for the runtime.
-- pytest with the coverage gate on Python 3.12, 3.13, and 3.14.
+- pytest with the coverage gate on Python 3.10 through 3.14.
 - Documentation build, example, and link checks.
 - A `uv build` job that fails if the wheel picks up anything outside
   `zett_agent`.

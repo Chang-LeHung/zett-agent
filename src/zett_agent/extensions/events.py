@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from time import monotonic_ns
-from typing import Self
 
+from .._compat import UTC, Self
 from ..events import AgentPhase
 from ..messages import AgentMessage, AnyMessage, AssistantMessage, UserMessage
 from ..model import ModelUsage

@@ -9,7 +9,7 @@ from contextlib import aclosing
 from dataclasses import asdict, dataclass
 from functools import wraps
 from json import JSONDecodeError
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import httpx
 import truststore
@@ -385,7 +385,10 @@ class RetryingProvider(SyncMethodsMixin):
         return False
 
 
-def retry_model_stream[ProviderT: RetryingProvider](
+ProviderT = TypeVar("ProviderT", bound=RetryingProvider)
+
+
+def retry_model_stream(
     stream: Callable[[ProviderT, ModelRequest], AsyncIterator[ModelEvent]],
 ) -> Callable[[ProviderT, ModelRequest], AsyncIterator[ModelEvent]]:
     """Apply model-owned exponential backoff to a provider stream method.

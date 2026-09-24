@@ -6,11 +6,12 @@ import asyncio
 import base64
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from threading import Lock
 from weakref import WeakKeyDictionary
 
+from .._compat import UTC
 from ..agent import AgentRunContext
 from ..messages import AnyMessage, AssistantMessage, UserMessage
 from .base import AgentExtension

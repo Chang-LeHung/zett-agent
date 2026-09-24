@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
 from math import isfinite
 from typing import Any, Protocol, runtime_checkable
 
+from ._compat import StrEnum
 from .messages import AnyMessage, AssistantMessage
 
 

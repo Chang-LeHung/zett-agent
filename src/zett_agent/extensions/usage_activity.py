@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .._compat import UTC
 from ..agent import AgentRunContext
 from ..model import ModelResponse
 from .base import AgentExtension

@@ -1,6 +1,6 @@
 # Zett Agent
 
-A small Python model/tool loop. Python 3.12+, MIT licensed.
+A small Python model/tool loop. Python 3.10+, MIT licensed.
 
 This is an **unreleased simplification** of the published 0.1.0 API. Develop locally
 with `uv sync`. No compatibility wrappers are kept for the old generic messages,

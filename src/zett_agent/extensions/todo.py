@@ -1,10 +1,10 @@
 """Session-scoped sequential todo tracking exposed through one model tool."""
 
-from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from .._compat import StrEnum
 from ..agent import AgentRunContext
 from ..messages import AssistantMessage
 from ..tools import AgentTool, tool
@@ -14,7 +14,6 @@ from .events import ExtensionEvent, RunCancelledEvent
 TODO_WRITE_TOOL_NAME = "todo_write"
 
 TodoContent = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4_000)]
-TodoList = Annotated[list["TodoItem"], Field(min_length=1, max_length=100)]
 
 
 class TodoStatus(StrEnum):
@@ -32,6 +31,9 @@ class TodoItem(BaseModel):
 
     content: TodoContent
     status: TodoStatus
+
+
+TodoList = Annotated[list[TodoItem], Field(min_length=1, max_length=100)]
 
 
 class TodoWriteResult(BaseModel):

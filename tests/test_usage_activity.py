@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from zett_agent import (
     AgentRunConfig,
@@ -9,6 +9,7 @@ from zett_agent import (
     ModelUsage,
     UsageActivityExtension,
 )
+from zett_agent._compat import UTC
 
 
 class Storage:

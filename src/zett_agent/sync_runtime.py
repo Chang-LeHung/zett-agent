@@ -12,9 +12,18 @@ from contextvars import ContextVar
 from functools import wraps
 from queue import Queue
 from threading import Event, Lock, Thread, get_ident
-from typing import Any, Self, overload
+from typing import Any, Generic, ParamSpec, TypeVar, overload
+
+from ._compat import BaseExceptionGroup, Self, owned_event_loop
 
 _callback_loop: ContextVar[asyncio.AbstractEventLoop | None] = ContextVar("zett_sync_callback_loop", default=None)
+
+# Type variables for generic services: one result, one arbitrary parameter list.
+_T = TypeVar("_T")
+_P = ParamSpec("_P")
+# Method-call signatures preserve both the callee parameters and its result.
+_ParametersT = ParamSpec("_ParametersT")
+_ResultT = TypeVar("_ResultT")
 
 
 class SyncRuntime(AbstractContextManager):
@@ -62,8 +71,8 @@ class SyncRuntime(AbstractContextManager):
         self._ready.wait()
 
     def _serve(self) -> None:
-        with asyncio.Runner() as runner:
-            self._loop = runner.get_loop()
+        with owned_event_loop() as loop:
+            self._loop = loop
             self._thread_id = get_ident()
             self._ready.set()
             self._loop.run_forever()
@@ -79,7 +88,7 @@ class SyncRuntime(AbstractContextManager):
                 "A synchronous callback cannot close its own runtime or stream; return to the caller first"
             )
 
-    def _submit[T](self, function: Callable[[], Coroutine[Any, Any, T]]) -> Future[T]:
+    def _submit(self, function: Callable[[], Coroutine[Any, Any, _T]]) -> Future[_T]:
         self._check_thread()
         with self._lock:
             if self._closed:
@@ -91,7 +100,7 @@ class SyncRuntime(AbstractContextManager):
                 coroutine.close()
                 raise
 
-    def call[**P, T](self, function: Callable[P, T | Awaitable[T]], /, *args: P.args, **kwargs: P.kwargs) -> T:
+    def call(self, function: Callable[_P, _T | Awaitable[_T]], /, *args: _P.args, **kwargs: _P.kwargs) -> _T:
         """Invoke a callable on the owned loop and wait for its final value.
 
         Accept a callable and its arguments, not an already-created coroutine.
@@ -104,7 +113,7 @@ class SyncRuntime(AbstractContextManager):
         asyncio.to_thread when that operation must run outside the loop.
         """
 
-        async def invoke() -> T:
+        async def invoke() -> _T:
             result = function(*args, **kwargs)
             return await result if inspect.isawaitable(result) else result
 
@@ -115,9 +124,9 @@ class SyncRuntime(AbstractContextManager):
             future.cancel()
             raise
 
-    def stream[**P, T](
-        self, function: Callable[P, AsyncIterator[T]], /, *args: P.args, **kwargs: P.kwargs
-    ) -> SyncStream[T]:
+    def stream(
+        self, function: Callable[_P, AsyncIterator[_T]], /, *args: _P.args, **kwargs: _P.kwargs
+    ) -> SyncStream[_T]:
         """Create a lazy, closeable iterator with one owner task for its lifetime.
 
         Each next() requests exactly one item; this bridge does not prefetch.
@@ -133,11 +142,11 @@ class SyncRuntime(AbstractContextManager):
             self._streams.add(stream)
         return stream
 
-    def wrap[T](self, value: T) -> SyncObject[T]:
+    def wrap(self, value: _T) -> SyncObject[_T]:
         """Expose an object's async methods as blocking methods on this runtime."""
         return SyncObject(value, runtime=self)
 
-    def context[T](self, value: AbstractAsyncContextManager[T]) -> SyncContext[T]:
+    def context(self, value: AbstractAsyncContextManager[_T]) -> SyncContext[_T]:
         """Return a synchronous with adapter; enter and exit share one async task.
 
         The value yielded by the source remains unchanged. Its asynchronous
@@ -175,7 +184,7 @@ class SyncRuntime(AbstractContextManager):
         self.close()
 
 
-class SyncStream[T](Iterator[T], AbstractContextManager):
+class SyncStream(Iterator[_T], AbstractContextManager, Generic[_T]):
     """Pull async events synchronously, preserving one task and bounded memory.
 
     A stream has one consumer. Another thread may call close() to interrupt a
@@ -183,7 +192,7 @@ class SyncStream[T](Iterator[T], AbstractContextManager):
     Do not rely on garbage collection to close an abandoned stream.
     """
 
-    def __init__(self, runtime: SyncRuntime, factory: Callable[[], AsyncIterator[T]]) -> None:
+    def __init__(self, runtime: SyncRuntime, factory: Callable[[], AsyncIterator[_T]]) -> None:
         self._runtime = runtime
         self._factory = factory
         self._lock = Lock()
@@ -229,7 +238,7 @@ class SyncStream[T](Iterator[T], AbstractContextManager):
             with self._runtime._lock:
                 self._runtime._streams.discard(self)
 
-    def __next__(self) -> T:
+    def __next__(self) -> _T:
         self._runtime._check_thread()
         if not self._consumer.acquire(blocking=False):
             raise RuntimeError("A SyncStream supports only one consumer at a time")
@@ -287,7 +296,7 @@ class SyncStream[T](Iterator[T], AbstractContextManager):
         self.close()
 
 
-class SyncObject[T](AbstractContextManager):
+class SyncObject(AbstractContextManager, Generic[_T]):
     """A blocking view of an existing Agent, provider, tool, or storage object.
 
     The original object remains available as ``wrapped``. Attribute reads and
@@ -314,56 +323,56 @@ class SyncObject[T](AbstractContextManager):
     """
 
     #: Original service object; its resources remain caller-owned.
-    wrapped: T
+    wrapped: _T
     #: Shared or privately owned bridge used to execute method calls.
     runtime: SyncRuntime
     # True only when this view must close its runtime on context-manager exit.
     _owns_runtime: bool
 
-    def __init__(self, wrapped: T, *, runtime: SyncRuntime | None = None) -> None:
+    def __init__(self, wrapped: _T, *, runtime: SyncRuntime | None = None) -> None:
         object.__setattr__(self, "wrapped", wrapped)
         object.__setattr__(self, "runtime", runtime if runtime is not None else SyncRuntime())
         object.__setattr__(self, "_owns_runtime", runtime is None)
 
     @overload
-    def _invoke[**ParametersT, ResultT](
+    def _invoke(
         self,
-        function: Callable[ParametersT, AsyncIterator[ResultT] | Awaitable[AsyncIterator[ResultT]]],
-        *args: ParametersT.args,
-        **kwargs: ParametersT.kwargs,
-    ) -> SyncStream[ResultT]: ...
+        function: Callable[_ParametersT, AsyncIterator[_ResultT] | Awaitable[AsyncIterator[_ResultT]]],
+        *args: _ParametersT.args,
+        **kwargs: _ParametersT.kwargs,
+    ) -> SyncStream[_ResultT]: ...
 
     @overload
-    def _invoke[**ParametersT, ResultT](
+    def _invoke(
         self,
         function: Callable[
-            ParametersT, AbstractAsyncContextManager[ResultT] | Awaitable[AbstractAsyncContextManager[ResultT]]
+            _ParametersT, AbstractAsyncContextManager[_ResultT] | Awaitable[AbstractAsyncContextManager[_ResultT]]
         ],
-        *args: ParametersT.args,
-        **kwargs: ParametersT.kwargs,
-    ) -> SyncContext[ResultT]: ...
+        *args: _ParametersT.args,
+        **kwargs: _ParametersT.kwargs,
+    ) -> SyncContext[_ResultT]: ...
 
     @overload
-    def _invoke[**ParametersT, ResultT](
+    def _invoke(
         self,
-        function: Callable[ParametersT, Awaitable[ResultT]],
-        *args: ParametersT.args,
-        **kwargs: ParametersT.kwargs,
-    ) -> ResultT: ...
+        function: Callable[_ParametersT, Awaitable[_ResultT]],
+        *args: _ParametersT.args,
+        **kwargs: _ParametersT.kwargs,
+    ) -> _ResultT: ...
 
     @overload
-    def _invoke[**ParametersT, ResultT](
+    def _invoke(
         self,
-        function: Callable[ParametersT, ResultT],
-        *args: ParametersT.args,
-        **kwargs: ParametersT.kwargs,
-    ) -> ResultT: ...
+        function: Callable[_ParametersT, _ResultT],
+        *args: _ParametersT.args,
+        **kwargs: _ParametersT.kwargs,
+    ) -> _ResultT: ...
 
-    def _invoke[**ParametersT, ResultT](
+    def _invoke(
         self,
-        function: Callable[ParametersT, ResultT],
-        *args: ParametersT.args,
-        **kwargs: ParametersT.kwargs,
+        function: Callable[_ParametersT, _ResultT],
+        *args: _ParametersT.args,
+        **kwargs: _ParametersT.kwargs,
     ) -> object:
         """Preserve callable parameters and expose its blocking result type.
 
@@ -428,7 +437,7 @@ class SyncMethodsMixin:
         return SyncObject(self, runtime=runtime)
 
 
-class SyncContext[T](AbstractContextManager):
+class SyncContext(AbstractContextManager, Generic[_T]):
     """Adapt async with to ordinary with without changing the yielded value.
 
     One async task owns both __aenter__ and __aexit__. This matters for task
@@ -448,7 +457,7 @@ class SyncContext[T](AbstractContextManager):
                     runtime.call(connection.send, "Hello")
     """
 
-    def __init__(self, runtime: SyncRuntime, source: AbstractAsyncContextManager[T]) -> None:
+    def __init__(self, runtime: SyncRuntime, source: AbstractAsyncContextManager[_T]) -> None:
         self._source = source
         self._exception: tuple[Any, Any, Any] = (None, None, None)
         self._events = runtime.stream(self._lifecycle)
@@ -464,7 +473,7 @@ class SyncContext[T](AbstractContextManager):
         else:
             yield await self._source.__aexit__(*self._exception)
 
-    def __enter__(self) -> T:
+    def __enter__(self) -> _T:
         return next(self._events)
 
     def __exit__(self, *exc: Any) -> bool:

@@ -23,9 +23,14 @@ context has the same JSON structure that was supplied originally.
 from collections.abc import Mapping
 from math import isfinite
 
+from ._compat import TypeAliasType
+
 # Recursive, provider-neutral values that JSON can represent without custom
 # encoders. Tuples, sets, bytes, datetime objects, NaN, and infinity are excluded.
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+JsonValue = TypeAliasType(
+    "JsonValue",
+    "None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]",
+)
 
 
 def json_object(

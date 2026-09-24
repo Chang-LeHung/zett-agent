@@ -1,7 +1,8 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Any, ClassVar
+
+from ._compat import StrEnum, TypeAliasType
 
 
 class MessageRole(StrEnum):
@@ -60,7 +61,7 @@ class ImageBytesSource:
         _validate_image_media_type(self.media_type)
 
 
-type ImageSource = ImageUrlSource | ImageBytesSource
+ImageSource = TypeAliasType("ImageSource", ImageUrlSource | ImageBytesSource)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,8 +76,8 @@ class ImageContent:
     alt_text: str | None = None
 
 
-type UserContentPart = TextContent | ImageContent
-type UserContent = str | list[UserContentPart]
+UserContentPart = TypeAliasType("UserContentPart", TextContent | ImageContent)
+UserContent = TypeAliasType("UserContent", str | list[UserContentPart])
 
 
 def _validate_image_media_type(media_type: str) -> None:
@@ -292,4 +293,4 @@ class AgentMessage(Message):
     content: str
 
 
-type AnyMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage | AgentMessage
+AnyMessage = TypeAliasType("AnyMessage", SystemMessage | UserMessage | AssistantMessage | ToolMessage | AgentMessage)

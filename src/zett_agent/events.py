@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from enum import StrEnum
+from datetime import datetime
 from time import monotonic_ns
 from typing import TYPE_CHECKING, Any, Protocol
 
+from ._compat import UTC, StrEnum
 from .exceptions import AgentProtocolError
 from .messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage, UserMessage
 from .model import (

@@ -34,6 +34,7 @@ from zett_agent import (
     create_agent_sync,
     tool,
 )
+from zett_agent._compat import ExceptionGroup
 
 
 class EchoModel:

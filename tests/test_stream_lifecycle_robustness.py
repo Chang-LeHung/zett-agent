@@ -1,6 +1,7 @@
 """Fault injection and scheduling boundaries for the decomposed stream lifecycle."""
 
 import asyncio
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
@@ -61,6 +62,18 @@ HOOKS = [
 ]
 
 
+def assert_same_failure(caught, failure):
+    """Assert the runtime propagated the injected failure.
+
+    Python 3.10 rebuilds a ``CancelledError`` that crosses a task boundary, so
+    only its type survives there. Everything else keeps its identity.
+    """
+    if isinstance(failure, asyncio.CancelledError) and sys.version_info < (3, 11):
+        assert type(caught.value) is type(failure)
+    else:
+        assert caught.value is failure
+
+
 @pytest.mark.parametrize("hook", HOOKS)
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_every_lifecycle_hook_failure_releases_session_and_allows_retry(hook, cancel):
@@ -82,7 +95,7 @@ async def test_every_lifecycle_hook_failure_releases_session_and_allows_retry(ho
     agent = await Agent.create(ToolModel(), config=AgentRunConfig("fault"), tools=[echo], extensions=[Fault()])
     with pytest.raises(type(failure)) as caught:
         await asyncio.wait_for(agent.run("first"), 2)
-    assert caught.value is failure
+    assert_same_failure(caught, failure)
     assert agent.get_state("fault").phase is (AgentPhase.CANCELLED if cancel else AgentPhase.FAILED)
     assert errors == ([] if cancel else [failure])
     assert agent._active_configs == {}
@@ -113,7 +126,7 @@ async def test_event_generator_failure_runs_finally_and_preserves_error(hook, ca
     agent = await Agent.create(ToolModel(), config=AgentRunConfig("events"), tools=[echo], extensions=[Fault()])
     with pytest.raises(type(failure)) as caught:
         await agent.run("fail")
-    assert caught.value is failure
+    assert_same_failure(caught, failure)
     assert finalized == [True]
     assert agent._active_configs == {}
     assert (await agent.run("retry")).content == "done"

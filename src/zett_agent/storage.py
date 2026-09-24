@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import IntEnum
 from pathlib import Path
 from weakref import WeakKeyDictionary
@@ -17,6 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateIndex
 
+from ._compat import UTC
 from .extensions.compaction import CompactedMessage
 from .extensions.events import MessageTiming
 from .extensions.persistence import ContextSnapshot, RawMessageRecord, SessionSummary, SessionView

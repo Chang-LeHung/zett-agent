@@ -14,6 +14,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 from mcp_types import CallToolResult, ListToolsResult, Tool
 
+from .._compat import TypeAliasType
 from ..agent import AgentRunContext
 from ..messages import AssistantMessage, SystemMessage
 from ..tools import AgentTool
@@ -81,7 +82,7 @@ class McpStdioServer:
             raise ValueError("MCP server command cannot be empty")
 
 
-type McpServer = McpHttpServer | McpStdioServer
+McpServer = TypeAliasType("McpServer", McpHttpServer | McpStdioServer)
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,7 +213,7 @@ class McpClient(Protocol):
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> CallToolResult: ...
 
 
-type McpClientFactory = Callable[[McpServer], AbstractAsyncContextManager[McpClient]]
+McpClientFactory = TypeAliasType("McpClientFactory", Callable[[McpServer], AbstractAsyncContextManager[McpClient]])
 
 
 @dataclass(slots=True)
@@ -356,7 +357,8 @@ class McpExtension(AgentExtension):
         if self.namespace_tools:
             lines.append("Remote tools are exposed as `<server>__<tool>`, so each name names its server.")
         entries = "\n".join(f"- {server.name}: {_transport_label(server)}" for server in self.servers)
-        return f"{'\n'.join(lines)}\n\nConfigured servers:\n{entries}"
+        configured = "\n".join(lines)
+        return f"{configured}\n\nConfigured servers:\n{entries}"
 
     async def on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Close request transports after a successful final answer."""

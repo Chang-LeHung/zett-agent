@@ -2,7 +2,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Generic, Protocol, TypeVar
 from weakref import WeakKeyDictionary
 
 from pydantic import BaseModel, Field
@@ -233,7 +233,10 @@ class _Request:
     context_sequences: list[int | None] = field(default_factory=list)
 
 
-class BaseSessionPersistenceExtension[StorageT: SessionStorage](AgentExtension):
+StorageT = TypeVar("StorageT", bound=SessionStorage)
+
+
+class BaseSessionPersistenceExtension(AgentExtension, Generic[StorageT]):
     """Reusable lifecycle adapter for one typed session storage implementation.
 
     This base owns all framework-specific behavior: request bookkeeping,

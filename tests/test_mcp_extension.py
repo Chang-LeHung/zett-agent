@@ -6,7 +6,7 @@ import socket
 import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -33,6 +33,7 @@ from zett_agent import (
     ToolCall,
     ToolMessage,
 )
+from zett_agent._compat import UTC
 
 
 class FakeClient:

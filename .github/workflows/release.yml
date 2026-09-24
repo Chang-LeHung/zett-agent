@@ -26,11 +26,15 @@ jobs:
         run: |
           python3 - <<'PY'
           import os
-          import tomllib
+          import re
+          from pathlib import Path
 
           tag = os.environ["GITHUB_REF_NAME"]
-          with open("pyproject.toml", "rb") as handle:
-              version = tomllib.load(handle)["project"]["version"]
+          source = Path("src/zett_agent/__init__.py").read_text()
+          match = re.search(r'^__version__ = "([^"]+)"', source, re.MULTILINE)
+          if match is None:
+              raise SystemExit("src/zett_agent/__init__.py does not define __version__")
+          version = match.group(1)
           expected = f"v{version}"
           if tag != expected:
               raise SystemExit(f"tag {tag!r} does not match project version {version!r}; expected {expected!r}")

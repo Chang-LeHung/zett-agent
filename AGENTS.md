@@ -2,18 +2,18 @@
 
 ## Scope
 
-- This repository is the standalone home of two packages: `zett-agent`, the
-  agent runtime at the repository root (`src/zett_agent`), and `zettcode`, the
-  terminal coding agent in `zettcode/` that is built on top of it.
+- This repository is the standalone home of the `zett-agent` runtime
+  (`src/zett_agent`). ZettCode, the terminal coding agent built on it, lives in
+  its own repository.
 - `zett_agent` must stay importable and installable on its own. It must never
-  import `zettcode`, the documentation extensions, or any host application.
+  import the documentation extensions, a terminal client, or any host
+  application.
 - Keep host application vocabulary out of `zett_agent`. The runtime owns
   messages, models, providers, tools, extensions, storage contracts, and
   sessions; knowledge cards, artifacts, tags, channels, and scheduled tasks
   belong to other projects.
-- `zettcode` depends on the published `zett-agent` contract only. Its own
-  dependency pin and `[tool.uv.sources]` path must keep pointing at the root
-  project so the two packages stay in step.
+- Downstream packages depend on the published `zett-agent` contract only.
+  Anything they need must be exported here rather than copied from here.
 
 ## Layout
 
@@ -27,11 +27,10 @@
 
 ## Tooling
 
-- Use Python 3.12+ and `uv` for dependency management. `zettcode` targets
-  Python 3.14 because its terminal layer owns the TTY directly.
+- Use Python 3.12+ and `uv` for dependency management.
 - Use Ruff for formatting and linting, with `line-length = 120`.
-- Run `make check` (Ruff, pytest with the 95% coverage gate, documentation
-  checks, and the ZettCode suite) before handing work over.
+- Run `make check` (Ruff, pytest with the 95% coverage gate, and the
+  documentation checks) before handing work over.
 - Tests must never write into the checkout or into user data. Use temporary
   directories and in-memory databases.
 - Keep the documentation build warning-free: `make docs` runs Sphinx with

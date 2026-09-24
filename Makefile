@@ -2,7 +2,7 @@ DOCS_HOST ?= 127.0.0.1
 DOCS_PORT ?= 8000
 UV ?= uv
 
-.PHONY: help install lint test build check docs docs-serve docs-check docs-examples docs-ui-check zettcode-check
+.PHONY: help install lint test build check docs docs-serve docs-check docs-examples docs-ui-check
 
 help:
 	@echo "Available targets:"
@@ -16,7 +16,6 @@ help:
 	@echo "  make docs-check Validate public API coverage, examples, and local links"
 	@echo "  make docs-examples  Run every offline documentation example"
 	@echo "  make docs-ui-check  Verify navigation and search in Chromium"
-	@echo "  make zettcode-check Verify the bundled ZettCode terminal agent"
 
 install:
 	$(UV) sync
@@ -31,7 +30,7 @@ test:
 build:
 	$(UV) build
 
-check: lint test docs-check zettcode-check
+check: lint test docs-check
 
 docs:
 	env -u VIRTUAL_ENV $(UV) run --group docs sphinx-build -E -a -W --keep-going -b html docs docs/_build/html
@@ -50,8 +49,3 @@ docs-ui-check:
 docs-check:
 	env -u VIRTUAL_ENV $(UV) run --group docs ruff check docs
 	env -u VIRTUAL_ENV $(UV) run --group docs pytest tests/test_documentation.py tests/test_documentation_examples.py -q
-
-zettcode-check:
-	env -u VIRTUAL_ENV $(UV) run --directory zettcode ruff format --check src tests
-	env -u VIRTUAL_ENV $(UV) run --directory zettcode ruff check src tests
-	env -u VIRTUAL_ENV $(UV) run --directory zettcode pytest

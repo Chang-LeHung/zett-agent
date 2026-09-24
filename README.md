@@ -9,11 +9,11 @@ session state containers, or extensions.
 ## Repository layout
 
 - `src/zett_agent/` — the runtime this repository publishes as `zett-agent`.
-- `zettcode/` — ZettCode, the terminal coding agent built on that runtime. It is
-  a separate package with its own `pyproject.toml` and a Python 3.14 floor:
-  `uv run --directory zettcode zettcode --help`.
 - `docs/` — the Sphinx manual; `make docs-serve` previews it locally.
 - `examples/` — runnable programs, most of which need no API key.
+
+ZettCode, the terminal coding agent built on this runtime, lives in its own
+repository: <https://github.com/Chang-LeHung/zettcode>.
 
 ## Install
 

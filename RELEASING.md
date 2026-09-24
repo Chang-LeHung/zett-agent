@@ -1,7 +1,7 @@
 # Releasing
 
 `zett-agent` is published from this repository to PyPI by
-`.github/workflows/release.yml`. `zettcode` is not published yet.
+`.github/workflows/release.yml`.
 
 ## One-time setup
 

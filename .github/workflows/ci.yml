@@ -70,26 +70,6 @@ jobs:
       - name: Build documentation and run offline examples
         run: uv run --group docs pytest tests/test_documentation.py tests/test_documentation_examples.py -q
 
-  zettcode:
-    name: ZettCode (Python 3.14)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.14"
-          enable-cache: true
-
-      - name: Check formatting
-        run: uv run --directory zettcode ruff format --check src tests
-
-      - name: Lint
-        run: uv run --directory zettcode ruff check src tests
-
-      - name: Run tests
-        run: uv run --directory zettcode pytest
-
   package:
     name: Build distribution
     runs-on: ubuntu-latest
@@ -112,7 +92,7 @@ jobs:
           wheel = glob.glob("dist/*.whl")[0]
           names = zipfile.ZipFile(wheel).namelist()
           assert any(name.startswith("zett_agent/") for name in names), names
-          unexpected = [name for name in names if name.startswith("zettcode/")]
+          unexpected = [name for name in names if not name.startswith(("zett_agent/", "zett_agent-"))]
           assert not unexpected, unexpected
           print(f"{wheel}: {len(names)} files")
           PY

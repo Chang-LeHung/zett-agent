@@ -20,7 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv publishes exact versions only, so there is no moving `v10` tag.
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.14"
           enable-cache: true
@@ -47,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -67,7 +68,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.14"
           enable-cache: true
@@ -84,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.14"
           enable-cache: true

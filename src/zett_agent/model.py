@@ -196,10 +196,20 @@ class ModelRequest:
     #: switch. The Agent still decides whether returned calls are safe to run
     #: concurrently; this flag alone never makes local execution concurrent.
     parallel_tool_call: bool = True
+    #: Routing key that lets an endpoint reuse one cached prompt prefix.
+    #:
+    #: The Agent fills this from the run's session identity, so every step of one
+    #: conversation routes to the same cache. Adapters map it to their protocol;
+    #: the OpenAI Chat Completions and Responses APIs both call it
+    #: ``prompt_cache_key``. None declares no key and leaves routing to the
+    #: endpoint.
+    cache_key: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.parallel_tool_call, bool):
             raise ValueError("parallel_tool_call must be a boolean")
+        if self.cache_key is not None and not self.cache_key.strip():
+            raise ValueError("cache_key must be a non-empty string when supplied")
 
 
 @dataclass(frozen=True, slots=True)

@@ -435,10 +435,12 @@ class _OpenAIStyleProvider(RetryingProvider):
         temperature: float | None = None,
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
+        send_prompt_cache_key: bool = True,
     ) -> None:
         validate_retry(retry)
         validate_response(response)
         self.retry = retry
+        self.send_prompt_cache_key = send_prompt_cache_key
         if not api_key:
             raise ValueError("api_key is required")
         self.model = model
@@ -477,6 +479,8 @@ class _OpenAIStyleProvider(RetryingProvider):
             payload["temperature"] = self.temperature
         if request.tool_choice:
             payload["tool_choice"] = {"type": "function", "function": {"name": request.tool_choice}}
+        if self.send_prompt_cache_key and request.cache_key:
+            payload["prompt_cache_key"] = request.cache_key
         extra_body = self._provider_specific_request_extra_fields(request)
         if extra_body:
             payload["extra_body"] = extra_body
@@ -516,6 +520,8 @@ class _OpenAIStyleProvider(RetryingProvider):
         reasoning = responses_reasoning(request.reasoning_effort)
         if reasoning is not None:
             payload["reasoning"] = reasoning
+        if self.send_prompt_cache_key and request.cache_key:
+            payload["prompt_cache_key"] = request.cache_key
         try:
             return await self._client.responses.create(**payload)  # type: ignore[misc]
         except APIStatusError as error:

@@ -81,6 +81,42 @@ def _completed_event(output: list[dict[str, Any]], *, model: str) -> dict[str, A
     }
 
 
+async def _collect(stream):
+    return [event async for event in stream]
+
+
+def _responses_capture(model: str = "gpt-5") -> tuple[dict[str, Any], httpx.MockTransport]:
+    """Capture the JSON payload of one Responses API request."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        body = _responses_sse([_completed_event([], model=model)])
+        return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    return captured, httpx.MockTransport(handler)
+
+
+async def test_openai_responses_declares_the_prompt_cache_key() -> None:
+    captured, transport = _responses_capture()
+    provider = OpenAIProvider("gpt-5", "key", transport=transport, response=True)
+    request = ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42")
+
+    await _collect(provider.stream(request))
+
+    assert captured["body"]["prompt_cache_key"] == "chat-42"
+
+
+async def test_openai_responses_can_suppress_the_prompt_cache_key() -> None:
+    captured, transport = _responses_capture()
+    provider = OpenAIProvider("gpt-5", "key", transport=transport, response=True, send_prompt_cache_key=False)
+    request = ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42")
+
+    await _collect(provider.stream(request))
+
+    assert "prompt_cache_key" not in captured["body"]
+
+
 def test_responses_tools_adds_tool_search_for_deferred_functions() -> None:
     rendered = responses_tools(
         (

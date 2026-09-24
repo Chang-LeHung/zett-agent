@@ -2,9 +2,8 @@
 
 A small Python model/tool loop. Python 3.10+, MIT licensed.
 
-This is an **unreleased simplification** of the published 0.1.0 API. Develop locally
-with `uv sync`. No compatibility wrappers are kept for the old generic messages,
-session state containers, or extensions.
+Develop locally with `uv sync`. No compatibility wrappers are kept for the
+pre-0.1.0 generic messages, session state containers, or extensions.
 
 ## Repository layout
 

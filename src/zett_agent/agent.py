@@ -59,6 +59,10 @@ class AgentRunConfig:
             It is not an idempotency key; reusing it does not deduplicate messages.
         parent_session_id: Parent conversation when running a delegated child.
             Must differ from session_id.
+        cache_key: Prompt cache routing key declared to the provider. None
+            reuses session_id, which keeps every step of one conversation on the
+            same cached prefix; set it to route several conversations onto one
+            prefix instead.
 
     Raises:
         ValueError: If an identity is empty or a session references itself.
@@ -88,6 +92,7 @@ class AgentRunConfig:
     session_id: str | None = None
     request_id: str | None = None
     parent_session_id: str | None = None
+    cache_key: str | None = None
 
     def __post_init__(self) -> None:
         if self.session_id is not None:
@@ -107,6 +112,12 @@ class AgentRunConfig:
                 raise ValueError("parent_session_id cannot be empty")
             if self.session_id is not None and self.parent_session_id == self.session_id:
                 raise ValueError("parent_session_id must differ from session_id")
+        if self.cache_key is not None:
+            normalized_cache_key = self.cache_key.strip()
+            if not normalized_cache_key:
+                object.__setattr__(self, "cache_key", None)
+            elif normalized_cache_key != self.cache_key:
+                object.__setattr__(self, "cache_key", normalized_cache_key)
 
 
 @dataclass(slots=True)
@@ -1139,6 +1150,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             server_tools=tuple(context.server_tools.values()),
             reasoning_effort=reasoning_effort,
             parallel_tool_call=parallel_tool_call,
+            cache_key=config.cache_key or config.session_id,
         )
         await self._notify_before_model(context, request)
         # before_model hooks may add or replace instructions; publish those

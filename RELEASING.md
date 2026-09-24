@@ -17,8 +17,10 @@ requests `id-token: write`.
 
 ## Cutting a release
 
-1. Set the final version in `pyproject.toml` (for example `0.2.0`) and commit
-   it. The tagged commit must carry the released version, not `0.2.0.dev0`.
+1. Set the final version in `src/zett_agent/__init__.py` (for example `0.2.0`)
+   and commit it. `pyproject.toml` reads that attribute, and the release
+   workflow checks the tag against it. The tagged commit must carry the
+   released version, not `0.2.0.dev0`.
 2. Tag and push:
 
    ```bash

@@ -43,6 +43,9 @@ Required stream invariants
 ModelRequest contains the complete context for this step. Support the applicable
 message roles and typed image parts explicitly. AgentMessage is internal input,
 not assistant output; built-in adapters map it to user input for vendor APIs.
+Declare :attr:`~zett_agent.ModelRequest.cache_key` to the endpoint when its
+protocol caches prompt prefixes; the OpenAI adapter sends it as
+``prompt_cache_key`` on both of its protocols.
 
 Tool calls and usage
 ------------------------

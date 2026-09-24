@@ -68,4 +68,17 @@ Default transports honor ``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, and
 Always release the provider with ``await model.aclose()``. The client's lifetime
 does not imply ownership of an adapter shared with other clients.
 
+Prompt cache keys
+--------------------
+
+Endpoints that cache prompt prefixes route on a caller-supplied key. The Agent
+fills :attr:`~zett_agent.ModelRequest.cache_key` from the run's session identity,
+so every step of one conversation reuses the same prefix, and the OpenAI adapter
+declares it as ``prompt_cache_key`` on both Chat Completions and Responses.
+Reported hits are normalized into :attr:`~zett_agent.ModelUsage.cache_read_tokens`.
+
+Pass ``cache_key`` to :class:`~zett_agent.AgentRunConfig` to route several
+conversations onto one prefix, or construct a provider with
+``send_prompt_cache_key=False`` when an endpoint rejects the field.
+
 Implement your own adapter: :doc:`../extending/model-adapter`.

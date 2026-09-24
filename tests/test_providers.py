@@ -15,7 +15,9 @@ import httpx
 import pytest
 
 from zett_agent import (
+    Agent,
     AgentMessage,
+    AgentRunConfig,
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
@@ -108,6 +110,88 @@ async def _collect(stream):
 
 def _mock_transport(handler) -> httpx.MockTransport:
     return httpx.MockTransport(handler)
+
+
+def _chat_capture() -> tuple[dict[str, Any], httpx.MockTransport]:
+    """Capture the JSON payload of one Chat Completions request."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            content=_sse_body(
+                [
+                    {"choices": [{"delta": {"content": "ok"}}]},
+                    {"choices": [{"finish_reason": "stop"}]},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    return captured, _mock_transport(handler)
+
+
+async def test_openai_chat_declares_the_prompt_cache_key() -> None:
+    captured, transport = _chat_capture()
+    provider = OpenAIProvider(model="gpt-4o", api_key="sk-test", transport=transport)
+
+    await _collect(provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42")))
+
+    assert captured["body"]["prompt_cache_key"] == "chat-42"
+
+
+async def test_openai_chat_omits_the_prompt_cache_key_when_unset() -> None:
+    captured, transport = _chat_capture()
+    provider = OpenAIProvider(model="gpt-4o", api_key="sk-test", transport=transport)
+
+    await _collect(provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),))))
+
+    assert "prompt_cache_key" not in captured["body"]
+
+
+async def test_openai_chat_can_suppress_the_prompt_cache_key() -> None:
+    captured, transport = _chat_capture()
+    provider = OpenAIProvider(
+        model="gpt-4o",
+        api_key="sk-test",
+        transport=transport,
+        send_prompt_cache_key=False,
+    )
+
+    await _collect(provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42")))
+
+    assert "prompt_cache_key" not in captured["body"]
+
+
+async def test_deepseek_chat_routes_on_the_cache_key_only_when_asked() -> None:
+    captured, transport = _chat_capture()
+    request = ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42")
+
+    silent = DeepSeekProvider(model="deepseek-chat", api_key="sk-test", transport=transport)
+    await _collect(silent.stream(request))
+    assert "prompt_cache_key" not in captured["body"]
+
+    routing = DeepSeekProvider(
+        model="deepseek-chat",
+        api_key="sk-test",
+        transport=transport,
+        send_prompt_cache_key=True,
+    )
+    await _collect(routing.stream(request))
+    assert captured["body"]["prompt_cache_key"] == "chat-42"
+
+
+async def test_agent_declares_the_conversation_cache_key_to_the_provider() -> None:
+    captured, transport = _chat_capture()
+    provider = OpenAIProvider(model="gpt-4o", api_key="sk-test", transport=transport)
+    agent = await Agent.create(provider, config=AgentRunConfig(session_id="chat-42"))
+    try:
+        await agent.run("Hello")
+    finally:
+        await provider.aclose()
+
+    assert captured["body"]["prompt_cache_key"] == "chat-42"
 
 
 def _environment_proxy_urls(client: httpx.AsyncClient) -> dict[str, str]:

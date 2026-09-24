@@ -46,6 +46,34 @@ def test_agent_config_validates_session_identity_fields() -> None:
     assert (config.session_id, config.request_id, config.parent_session_id) == ("session", "request", "parent")
 
 
+def test_agent_config_normalizes_the_prompt_cache_key() -> None:
+    assert AgentRunConfig("session", cache_key="  shared-prefix  ").cache_key == "shared-prefix"
+    assert AgentRunConfig("session", cache_key="   ").cache_key is None
+
+
+def test_model_request_rejects_a_blank_cache_key() -> None:
+    with pytest.raises(ValueError, match="cache_key"):
+        ModelRequest(messages=(UserMessage(content="Question"),), cache_key="   ")
+
+
+async def test_model_request_declares_the_conversation_prompt_cache_key() -> None:
+    model = ScriptedModel(AssistantMessage(content="Answer"))
+    agent = await Agent.create(model, config=AgentRunConfig("cache-session"))
+
+    await agent.run("Question")
+
+    assert model.requests[0].cache_key == "cache-session"
+
+
+async def test_run_config_can_route_several_conversations_onto_one_prefix() -> None:
+    model = ScriptedModel(AssistantMessage(content="Answer"))
+    agent = await Agent.create(model, config=AgentRunConfig("cache-session", cache_key="shared-prefix"))
+
+    await agent.run("Question")
+
+    assert model.requests[0].cache_key == "shared-prefix"
+
+
 async def test_agent_generates_a_fresh_request_id_for_each_run_when_omitted() -> None:
     observed: list[str | None] = []
 

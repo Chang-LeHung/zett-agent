@@ -17,6 +17,8 @@ class OpenAIProvider(_OpenAIStyleProvider):
         temperature: Optional sampling temperature passed to the provider.
         response: Use the Responses API instead of Chat Completions.
         retry: Exponential backoff applied before the first emitted event only.
+        send_prompt_cache_key: Declare the run's prompt cache key on every
+            request. Disable it when a compatible endpoint rejects the field.
 
     Note:
         Await aclose() when finished. Model capabilities determine support for
@@ -43,6 +45,12 @@ class OpenAIProvider(_OpenAIStyleProvider):
         The default HTTP client honors ``HTTP_PROXY``, ``HTTPS_PROXY``,
         ``ALL_PROXY``, and ``NO_PROXY`` from the process environment.
 
+    .. note::
+        Both protocols declare ``prompt_cache_key`` from
+        :attr:`~zett_agent.ModelRequest.cache_key`, so each conversation keeps a
+        stable prefix for provider-side prompt caching. Reported cache hits are
+        normalized into :attr:`~zett_agent.ModelUsage.cache_read_tokens`.
+
     .. seealso::
         :doc:`/learn/providers` covers credentials and transport ownership;
         :class:`~zett_agent.RetryOptions` controls retries before output starts.
@@ -58,6 +66,7 @@ class OpenAIProvider(_OpenAIStyleProvider):
         temperature: float | None = None,
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
+        send_prompt_cache_key: bool = True,
     ) -> None:
         super().__init__(
             model=model,
@@ -67,6 +76,7 @@ class OpenAIProvider(_OpenAIStyleProvider):
             temperature=temperature,
             response=response,
             retry=retry,
+            send_prompt_cache_key=send_prompt_cache_key,
         )
         self.provider_name = "openai"
 

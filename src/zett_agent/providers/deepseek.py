@@ -17,6 +17,10 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         temperature: Optional provider sampling temperature.
         response: Use DeepSeek's Responses-compatible endpoint instead of Chat Completions.
         retry: Model-owned retry/backoff policy; never restarts an emitted stream.
+        send_prompt_cache_key: Declare the run's prompt cache key on every
+            request. Off by default: DeepSeek caches context automatically and
+            its compatibility endpoint does not document the field. Enable it
+            for gateways that route on the key.
 
     Note:
         Cache-hit counters are normalized into ModelUsage. Reasoning deltas
@@ -58,6 +62,7 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         temperature: float | None = None,
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
+        send_prompt_cache_key: bool = False,
     ) -> None:
         super().__init__(
             model=model,
@@ -67,6 +72,7 @@ class DeepSeekProvider(_OpenAIStyleProvider):
             temperature=temperature,
             response=response,
             retry=retry,
+            send_prompt_cache_key=send_prompt_cache_key,
         )
         self.provider_name = "deepseek"
 

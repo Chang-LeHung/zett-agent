@@ -10,11 +10,19 @@ from typing import Any, ParamSpec, Protocol, TypeVar, get_type_hints, overload
 
 from pydantic import ConfigDict, TypeAdapter, create_model
 
-from .._compat import StrEnum
+from .._compat import StrEnum, TypeAliasType
 from ..model import ToolDefinition
 from ..sync_runtime import SyncMethodsMixin
 
 _CURRENT_TOOL_CALL_ID: ContextVar[str | None] = ContextVar("zett_agent_tool_call_id", default=None)
+
+#: Raw result of one local tool invocation, before the runtime turns it into a
+#: ``ToolMessage``. ``TextContent`` and ``ImageContent`` parts (or a list of
+#: them) become multimodal content, strings pass through unchanged, and every
+#: other value is serialized by Pydantic, which covers JSON values, Pydantic
+#: models, and dataclasses. The runtime never inspects the value itself, so this
+#: alias stays wide instead of claiming an exhaustive union.
+ToolResult = TypeAliasType("ToolResult", Any)
 
 _DecoratedParameters = ParamSpec("_DecoratedParameters")
 _DecoratedResult = TypeVar("_DecoratedResult")
@@ -55,7 +63,7 @@ class AgentTool(SyncMethodsMixin):
     #: JSON Schema describing this tool's keyword arguments.
     parameters: dict[str, Any]
     #: Async handler that validates arguments and performs the local operation.
-    handler: Callable[..., Awaitable[Any]]
+    handler: Callable[..., Awaitable[ToolResult]]
     #: Model-facing rules rendered beside this tool in prompt guidance.
     guidelines: tuple[str, ...]
     #: Optional invocation examples rendered into prompt guidance.
@@ -80,7 +88,7 @@ class AgentTool(SyncMethodsMixin):
     def definition(self) -> ToolDefinition:
         return ToolDefinition(self.name, self.description, self.parameters, deferred=self.deferred)
 
-    async def __call__(self, arguments: Mapping[str, Any]) -> Any:
+    async def __call__(self, arguments: Mapping[str, Any]) -> ToolResult:
         """Execute with a mapping of model-provided keyword arguments.
 
         Args:
@@ -101,7 +109,7 @@ class AgentTool(SyncMethodsMixin):
         """
         return await self.handler(**arguments)
 
-    def serialize_result(self, value: Any) -> str:
+    def serialize_result(self, value: ToolResult) -> str:
         """Convert Pydantic models, dataclasses, and plain values into JSON.
 
         Strings pass through unchanged so plain-text tool results reach the

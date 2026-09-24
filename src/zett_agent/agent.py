@@ -29,7 +29,7 @@ from .model import (
     ServerToolDefinition,
 )
 from .sync_runtime import SyncMethodsMixin
-from .tools import AgentTool, ToolExecutionMode
+from .tools import AgentTool, ToolExecutionMode, ToolResult
 from .tools.base import _bind_tool_call, _reset_tool_call
 
 if TYPE_CHECKING:
@@ -1498,10 +1498,10 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         context: AgentRunContext,
         call: ToolCall,
         registered: AgentTool,
-    ) -> object:
+    ) -> ToolResult:
         """Build one tool middleware chain independently for each invocation task."""
 
-        async def invoke_handler() -> object:
+        async def invoke_handler() -> ToolResult:
             return await registered(call.arguments)
 
         call_next: ToolCallNext = invoke_handler
@@ -1512,7 +1512,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 *,
                 hook: AgentExtension = extension,
                 next_handler: ToolCallNext = inner,
-            ) -> object:
+            ) -> ToolResult:
                 return await hook.on_tool_call(context, call, next_handler)
 
             call_next = wrapped

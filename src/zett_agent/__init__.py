@@ -199,6 +199,7 @@ from .sync_runtime import SyncContext, SyncObject, SyncRuntime, SyncStream
 from .tools import (
     AgentTool,
     ToolExecutionMode,
+    ToolResult,
     delete_file,
     get_tool_guidelines,
     get_tool_snippet,
@@ -399,6 +400,7 @@ __all__ = [
     "ToolDefinition",
     "AgentTool",
     "ToolExecutionMode",
+    "ToolResult",
     "delete_file",
     "glob",
     "grep",

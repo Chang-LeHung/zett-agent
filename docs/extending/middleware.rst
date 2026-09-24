@@ -16,9 +16,10 @@ Two boundaries
 
 ``on_tool_call(context, call, call_next)``
    Wraps the actual handler for one local tool invocation. It may edit
-   ``call.arguments`` before awaiting ``call_next()``, transform the raw return
-   value, or return directly to short-circuit the handler. An exception follows
-   ordinary tool error handling and is recorded as a failed ``ToolMessage``.
+   ``call.arguments`` before awaiting ``call_next()``, transform the raw
+   :data:`~zett_agent.ToolResult`, or return directly to short-circuit the
+   handler. An exception follows ordinary tool error handling and is recorded
+   as a failed ``ToolMessage``.
 
 Provider-hosted server tools do not pass through ``on_tool_call`` because the
 provider executes them inside ``on_model_request``.

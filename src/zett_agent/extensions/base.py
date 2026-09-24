@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .._compat import TypeAliasType
+from ..tools.base import ToolResult
 
 if TYPE_CHECKING:
     from ..agent import AgentRunConfig, AgentRunContext
@@ -29,8 +30,8 @@ class _PendingRequests:
 _PENDING_TRACKER_CREATION_LOCK = Lock()
 
 
-ModelRequestNext = TypeAliasType("ModelRequestNext", "Callable[[ModelRequest], AsyncIterator[ModelEvent]]")
-ToolCallNext = TypeAliasType("ToolCallNext", "Callable[[], Awaitable[Any]]")
+ModelRequestNext = TypeAliasType("ModelRequestNext", Callable[["ModelRequest"], AsyncIterator["ModelEvent"]])
+ToolCallNext = TypeAliasType("ToolCallNext", Callable[[], Awaitable[ToolResult]])
 
 
 class MiddlewareHook:
@@ -65,8 +66,8 @@ class MiddlewareHook:
         context: AgentRunContext,
         call: ToolCall,
         call_next: ToolCallNext,
-    ) -> Any:
-        """Wrap one registered local tool handler and return its raw result.
+    ) -> ToolResult:
+        """Wrap one registered local tool handler and return its :data:`ToolResult`.
 
         An extension may adjust ``call.arguments``, return without calling the
         next layer, transform its result, or raise into normal tool-failure

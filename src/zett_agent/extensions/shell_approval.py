@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Literal, Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -11,13 +11,14 @@ from .._compat import StrEnum
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..messages import ToolCall
+from ..tools.base import ToolResult
 from .external import ExternalEventExtension
 
 SHELL_APPROVAL_TOOL_NAME = "run_shell"
 SHELL_APPROVAL_EVENT_NAME = "shell_approval_requested"
 SHELL_APPROVAL_RESPONSE_EVENT_NAME = "shell_approval_response"
 
-ShellCommandNext = Callable[[], Awaitable[Any]]
+ShellCommandNext = Callable[[], Awaitable[ToolResult]]
 
 
 class ShellApprovalMode(StrEnum):
@@ -110,7 +111,7 @@ class ShellApprovalExtension(ExternalEventExtension):
         context: AgentRunContext,
         call: ToolCall,
         call_next: ShellCommandNext,
-    ) -> Any:
+    ) -> ToolResult:
         """Approve one shell call, then execute it or raise a normal tool failure."""
         if not self.enabled or call.name != SHELL_APPROVAL_TOOL_NAME:
             return await call_next()

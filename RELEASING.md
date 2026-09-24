@@ -38,12 +38,11 @@ publishing and the GitHub release both require a tag push.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push to `main` and on every pull
+`.github/workflows/ci.yml` runs on every push to any branch and on every pull
 request:
 
 - Ruff format and lint checks for the runtime.
 - pytest with the coverage gate on Python 3.12, 3.13, and 3.14.
 - Documentation build, example, and link checks.
-- The ZettCode format, lint, and test suite on Python 3.14.
 - A `uv build` job that fails if the wheel picks up anything outside
   `zett_agent`.

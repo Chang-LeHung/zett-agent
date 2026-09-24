@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
 
@@ -22,10 +22,14 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          python-version: "3.14"
           enable-cache: true
 
       - name: Sync dependencies
         run: uv sync --locked --group dev
+
+      - name: Report the interpreter
+        run: uv run --no-sync python -c "import sys; print(sys.version)"
 
       - name: Check formatting
         run: uv run --no-sync ruff format --check src tests examples
@@ -51,6 +55,9 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked --group dev
 
+      - name: Report the interpreter
+        run: uv run --no-sync python -c "import sys; print(sys.version)"
+
       - name: Run tests
         run: uv run --no-sync pytest --cov --cov-report=term-missing
 
@@ -62,6 +69,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          python-version: "3.14"
           enable-cache: true
 
       - name: Lint documentation helpers
@@ -78,6 +86,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          python-version: "3.14"
           enable-cache: true
 
       - name: Build

@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from pathlib import Path
 
-from ..storage import SessionTypeCode, SQLiteSessionStorage
+from ..storage import _DEFAULT_SESSION_TYPE, SQLiteSessionStorage
 from .persistence import BaseSessionPersistenceExtension, RawMessageRecord, SessionSummary
 
 
@@ -75,7 +75,7 @@ class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorag
         parent_session_id: str | None = None,
         title: str | None = None,
         agent_name: str | None = None,
-        session_type: SessionTypeCode | int = SessionTypeCode.STANDARD,
+        session_type: int = _DEFAULT_SESSION_TYPE,
     ) -> SessionSummary:
         """Create an empty session in the owned storage."""
         return await self.storage.create_session(
@@ -89,7 +89,7 @@ class SQLiteSessionExtension(BaseSessionPersistenceExtension[SQLiteSessionStorag
     async def list_sessions(
         self,
         *,
-        session_types: Sequence[SessionTypeCode | int] | None = None,
+        session_types: Sequence[int] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[SessionSummary]:

@@ -32,11 +32,9 @@ class Base(DeclarativeBase):
     """Schema owned exclusively by zett-agent."""
 
 
-class SessionTypeCode(IntEnum):
-    """Persisted integer code for ``agent_sessions.session_type``."""
-
-    STANDARD = 0
-    AUTOMATION = 1
+#: Session type this runtime stores for the sessions it creates itself.
+#: Applications define every other code they need.
+_DEFAULT_SESSION_TYPE = 0
 
 
 class AgentSessionModel(Base):
@@ -47,11 +45,11 @@ class AgentSessionModel(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     parent_session_id: Mapped[str | None] = mapped_column(String(36), index=True)
-    # Applications map semantic names to these storage-owned integer codes.
+    # Every session type is an application-defined integer code.
     session_type: Mapped[int] = mapped_column(
         Integer,
-        default=int(SessionTypeCode.STANDARD),
-        server_default=str(int(SessionTypeCode.STANDARD)),
+        default=_DEFAULT_SESSION_TYPE,
+        server_default=str(_DEFAULT_SESSION_TYPE),
     )
     title: Mapped[str | None] = mapped_column(String(200))
     agent_name: Mapped[str | None] = mapped_column(String(64), index=True)
@@ -214,12 +212,18 @@ async def ensure_session_type_column(connection: AsyncConnection) -> None:
         )
 
 
-def _session_type_code(value: SessionTypeCode | int) -> SessionTypeCode:
-    """Normalize one supported integer session type code."""
-    try:
-        return SessionTypeCode(value)
-    except ValueError as error:
-        raise ValueError(f"Unsupported session_type: {value}") from error
+def _session_type_code(value: int) -> int:
+    """Return one application-defined session type code.
+
+    The runtime stores the integer without interpreting it, so an application
+    owns the vocabulary behind each code. Booleans, other types, and negative
+    values are rejected to keep the column meaningful.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("session_type must be an integer code")
+    if value < 0:
+        raise ValueError("session_type cannot be negative")
+    return int(value)
 
 
 class SQLiteSessionStorage(SyncMethodsMixin):
@@ -343,7 +347,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
         parent_session_id: str | None = None,
         title: str | None = None,
         agent_name: str | None = None,
-        session_type: SessionTypeCode | int = SessionTypeCode.STANDARD,
+        session_type: int = _DEFAULT_SESSION_TYPE,
     ) -> SessionSummary:
         """Create an empty session before its first Raw Log message is appended."""
         resolved_id = session_id or new_uuid7()
@@ -369,7 +373,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 parent_session_id=parent_session_id,
                 title=normalized_title,
                 agent_name=normalized_agent_name,
-                session_type=int(resolved_session_type),
+                session_type=resolved_session_type,
                 created_at=now,
                 updated_at=now,
             )
@@ -427,7 +431,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
     async def list_sessions(
         self,
         *,
-        session_types: Sequence[SessionTypeCode | int] | None = None,
+        session_types: Sequence[int] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[SessionSummary]:
@@ -436,7 +440,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             raise ValueError("limit must be positive")
         if offset < 0:
             raise ValueError("offset cannot be negative")
-        type_codes = tuple(int(_session_type_code(value)) for value in session_types) if session_types else None
+        type_codes = tuple(_session_type_code(value) for value in session_types) if session_types else None
         async with self._session_scope() as session:
             statement = (
                 select(
@@ -660,7 +664,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             )
             return SessionView(
                 parent_session_id=session_row.parent_session_id if session_row is not None else None,
-                session_type=session_row.session_type if session_row is not None else int(SessionTypeCode.STANDARD),
+                session_type=session_row.session_type if session_row is not None else _DEFAULT_SESSION_TYPE,
                 title=session_row.title if session_row is not None else None,
                 agent_name=session_row.agent_name if session_row is not None else None,
                 snapshot=snapshot,

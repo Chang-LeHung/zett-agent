@@ -20,7 +20,6 @@ from zett_agent import (
     ModelResponse,
     ModelUsage,
     SessionPersistenceExtension,
-    SessionTypeCode,
     SQLiteSessionExtension,
     SystemMessage,
     ToolCall,
@@ -124,7 +123,7 @@ async def test_reopening_old_database_adds_session_type_column(tmp_path):
     finally:
         await reopened.close()
 
-    assert summaries[0].session_type == int(SessionTypeCode.STANDARD)
+    assert summaries[0].session_type == 0
     assert "session_type" in table_columns(path, "agent_sessions")
 
 
@@ -696,7 +695,7 @@ async def test_create_session_persists_an_empty_conversation(storage):
     created = await storage.create_session(session_id="empty-session", title="Empty", agent_name="Zett Agent")
 
     assert created.session_id == "empty-session"
-    assert created.session_type == int(SessionTypeCode.STANDARD)
+    assert created.session_type == 0
     assert created.title == "Empty"
     assert created.agent_name == "Zett Agent"
     assert created.message_count == 0
@@ -710,16 +709,36 @@ async def test_sessions_can_be_filtered_by_integer_type_code(storage):
     normal = await storage.create_session(session_id="normal-session")
     scheduled = await storage.create_session(
         session_id="scheduled-session",
-        session_type=SessionTypeCode.AUTOMATION,
+        session_type=1,
     )
+    # The runtime stores application-defined codes without owning the vocabulary.
+    custom = await storage.create_session(session_id="custom-session", session_type=99)
 
-    assert normal.session_type == int(SessionTypeCode.STANDARD)
-    assert scheduled.session_type == int(SessionTypeCode.AUTOMATION)
-    assert [item.session_id for item in await storage.list_sessions(session_types=(SessionTypeCode.AUTOMATION,))] == [
-        "scheduled-session"
+    assert normal.session_type == 0
+    assert scheduled.session_type == 1
+    assert custom.session_type == 99
+    assert [item.session_id for item in await storage.list_sessions(session_types=(1,))] == ["scheduled-session"]
+    assert [item.session_id for item in await storage.list_sessions(session_types=(99,))] == ["custom-session"]
+    assert await storage.get_session("custom-session") == custom
+    assert [item.session_id for item in await storage.list_sessions()] == [
+        "custom-session",
+        "scheduled-session",
+        "normal-session",
     ]
-    with pytest.raises(ValueError, match="Unsupported session_type"):
-        await storage.create_session(session_id="invalid-session", session_type=99)
+
+
+@pytest.mark.parametrize(
+    ("session_type", "error"),
+    [
+        (-1, "cannot be negative"),
+        (1.5, "must be an integer code"),
+        ("standard", "must be an integer code"),
+        (True, "must be an integer code"),
+    ],
+)
+async def test_create_session_rejects_invalid_type_codes(storage, session_type, error):
+    with pytest.raises(ValueError, match=error):
+        await storage.create_session(session_id="invalid-session", session_type=session_type)
 
 
 async def test_storage_rejects_invalid_checkpoint_writes(storage):

@@ -59,7 +59,7 @@ from ..model import (
     validate_retry,
 )
 from ..sync_runtime import SyncMethodsMixin
-from .responses import responses_input, responses_reasoning, responses_tools, stream_responses
+from .responses import local_tool_search_name, responses_input, responses_reasoning, responses_tools, stream_responses
 from .tool_images import expand_tool_images
 
 
@@ -219,6 +219,7 @@ def _replay_reasoning_content(
 
 
 def _tools_to_openai_payload(tools: Sequence[ToolDefinition]) -> list[ChatCompletionToolParam]:
+    reject_local_tool_search("Chat Completions", tools)
     rendered: list[ChatCompletionToolParam] = []
     for tool in tools:
         function: FunctionDefinition = {
@@ -233,6 +234,12 @@ def _tools_to_openai_payload(tools: Sequence[ToolDefinition]) -> list[ChatComple
             }
         )
     return rendered
+
+
+def reject_local_tool_search(protocol: str, tools: Sequence[ToolDefinition]) -> None:
+    """Fail when a protocol cannot serve tools that stay out of the request."""
+    if any(tool.local_tool_search for tool in tools):
+        raise ValueError(f"{protocol} cannot answer client-side tool search; use the Responses API")
 
 
 def _server_tools_to_payload(tools: Sequence[ServerToolDefinition]) -> list[Mapping[str, Any]]:
@@ -501,7 +508,12 @@ class _OpenAIStyleProvider(RetryingProvider):
         tools = responses_tools(request.tools, request.server_tools)
         payload: dict[str, Any] = {
             "model": self.model,
-            "input": responses_input(request.messages, provider=self.provider_name, model=self.model),
+            "input": responses_input(
+                request.messages,
+                provider=self.provider_name,
+                model=self.model,
+                local_search_tool=local_tool_search_name(request.tools),
+            ),
             "stream": True,
             "store": False,
             "parallel_tool_calls": request.parallel_tool_call,
@@ -549,10 +561,16 @@ class _OpenAIStyleProvider(RetryingProvider):
 
     @retry_model_stream
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        local_search_tool = local_tool_search_name(request.tools)
         if self.response:
             response = await self._request(request)
             try:
-                async for event in stream_responses(response, provider=self.provider_name, model=self.model):
+                async for event in stream_responses(
+                    response,
+                    provider=self.provider_name,
+                    model=self.model,
+                    local_search_tool=local_search_tool,
+                ):
                     yield event
             except (RuntimeError, TypeError, ValueError, json.JSONDecodeError) as error:
                 raise ProviderResponseError(str(error)) from error

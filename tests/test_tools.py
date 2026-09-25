@@ -1,9 +1,17 @@
 from typing import Annotated
 
 import pytest
+from openai.types.responses import FunctionToolParam
 from pydantic import BaseModel, Field, ValidationError
 
-from zett_agent import get_tool_guidelines, get_tool_snippet, render_tool_guidance, tool
+from zett_agent import (
+    AgentTool,
+    get_tool_guidelines,
+    get_tool_snippet,
+    render_tool_guidance,
+    render_tool_search_text,
+    tool,
+)
 
 
 class Item(BaseModel):
@@ -96,6 +104,46 @@ def test_deferred_tool_propagates_to_definition():
 
     assert later.deferred is True
     assert later.definition.deferred is True
+
+
+def test_local_tool_search_tool_propagates_to_definition():
+    @tool(local_tool_search=True, guidelines="Use to find optional tools.")
+    def find_tools(query: str) -> list[FunctionToolParam]:
+        """Return the tools that match one query.
+
+        Args:
+            query: What the model wants to do.
+        """
+        return []
+
+    assert find_tools.local_tool_search is True
+    assert find_tools.definition.local_tool_search is True
+
+
+def test_local_tool_search_tool_cannot_defer_its_own_schema():
+    with pytest.raises(ValueError, match="cannot also defer"):
+
+        @tool(local_tool_search=True, deferred=True, guidelines="Use to find optional tools.")
+        def find_tools(query: str) -> list[FunctionToolParam]:
+            """Return the tools that match one query.
+
+            Args:
+                query: What the model wants to do.
+            """
+            return []
+
+
+@pytest.mark.parametrize("keyword", ["local_tool_search"])
+def test_tool_flags_must_be_boolean(keyword):
+    with pytest.raises(ValueError, match=f"{keyword} must be a boolean"):
+        AgentTool(
+            name="flag",
+            description="Flagged tool",
+            parameters={"type": "object"},
+            handler=lambda: None,
+            guidelines=("Use for flag tests.",),
+            **{keyword: "yes"},
+        )
 
 
 def test_tool_docstring_supplies_description_args_snippet_and_guidelines():
@@ -200,6 +248,29 @@ def test_render_tool_guidance_indents_multiline_snippets():
         '  create_artifact(content={"artifact_type": "card", "title": "One"})\n'
         '  create_artifact(content={"artifact_type": "slides", "title": "Two", "content": "# Topic"})'
     ) in prompt
+
+
+def test_render_tool_search_text_collects_every_model_facing_field():
+    @tool(guidelines=("Inspect the depot inventory.", "Report exact pallet counts."))
+    def depot_report(site: str) -> str:
+        """Return a report for one depot.
+
+        Args:
+            site: Two-letter depot code.
+
+        Snippet:
+            depot_report(site="sh")
+        """
+        return site
+
+    text = render_tool_search_text(depot_report)
+
+    assert "depot report" in text
+    assert "Return a report for one depot." in text
+    assert "Two-letter depot code." in text
+    assert 'depot_report(site="sh")' in text
+    assert "Inspect the depot inventory." in text
+    assert "Report exact pallet counts." in text
 
 
 def test_tool_docstring_rejects_unknown_argument_documentation():

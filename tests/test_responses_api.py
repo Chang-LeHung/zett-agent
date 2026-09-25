@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 import pytest
+from openai.types.responses import FunctionToolParam
 
 from zett_agent import (
     Agent,
@@ -407,6 +408,263 @@ async def test_agent_completes_a_responses_function_round_trip() -> None:
         function,
         {"type": "function_call_output", "call_id": "call_1", "output": "5"},
     ]
+
+
+async def test_agent_completes_a_deferred_tool_search_round_trip() -> None:
+    calls: list[str] = []
+
+    @tool(deferred=True, guidelines="Use for warehouse stock questions.")
+    def inventory(warehouse: str) -> str:
+        """Return the stock level for one warehouse.
+
+        Args:
+            warehouse: Warehouse code to look up.
+        """
+        calls.append(warehouse)
+        return f"{warehouse}:42"
+
+    search = {
+        "id": "ts_1",
+        "call_id": "call_search",
+        "type": "tool_search_call",
+        "status": "completed",
+        "action": {"type": "search", "queries": ["inventory stock"]},
+    }
+    function = {
+        "id": "fc_1",
+        "call_id": "call_1",
+        "type": "function_call",
+        "name": "inventory",
+        "arguments": '{"warehouse":"shanghai"}',
+        "status": "completed",
+    }
+    answer = {
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": "Shanghai has 42 in stock.", "annotations": [], "logprobs": []}],
+    }
+    requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        output = [search, function] if len(requests) == 1 else [answer]
+        return httpx.Response(
+            200,
+            content=_responses_sse([_completed_event(output, model="deepseek-flash")]),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = OpenAIProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    agent = await Agent.create(provider, config=AgentRunConfig("deferred-tools"), tools=(inventory,))
+    try:
+        result = await agent.run("How much stock is in the shanghai warehouse?")
+    finally:
+        await provider.aclose()
+
+    assert result.content == "Shanghai has 42 in stock."
+    assert calls == ["shanghai"]
+    advertised = {tool_schema["name"]: tool_schema for tool_schema in requests[0]["tools"] if "name" in tool_schema}
+    assert advertised["inventory"]["defer_loading"] is True
+    assert {"type": "tool_search"} in requests[0]["tools"]
+    assert requests[1]["input"][-2:] == [
+        function,
+        {"type": "function_call_output", "call_id": "call_1", "output": "shanghai:42"},
+    ]
+
+
+def test_responses_tools_declare_client_side_search() -> None:
+    rendered = responses_tools(
+        (
+            ToolDefinition("find_tools", "Find tools", {"type": "object"}, local_tool_search=True),
+            ToolDefinition("later", "Deferred", {"type": "object"}, deferred=True),
+        ),
+        (),
+    )
+
+    assert [tool.get("name") for tool in rendered] == ["later", None]
+    assert rendered[0]["defer_loading"] is True
+    declared = rendered[-1]
+    assert declared["type"] == "tool_search"
+    assert declared["execution"] == "client"
+    assert declared["parameters"] == {"type": "object"}
+
+
+def test_responses_tools_reject_mixed_tool_search_and_duplicates() -> None:
+    search = ToolDefinition("find_tools", "Find tools", {"type": "object"}, local_tool_search=True)
+    with pytest.raises(ValueError, match="provider tool_search"):
+        responses_tools((search,), (ServerToolDefinition("tool_search"),))
+    with pytest.raises(ValueError, match="Only one local tool search"):
+        responses_tools(
+            (search, ToolDefinition("other", "Other search", {"type": "object"}, local_tool_search=True)),
+            (),
+        )
+
+
+async def test_agent_answers_client_tool_search_locally() -> None:
+    searched: list[list[str]] = []
+    calls: list[str] = []
+
+    @tool(local_tool_search=True, guidelines="Use to find optional tools.")
+    def find_tools(queries: list[str]) -> list[FunctionToolParam]:
+        """Return tool definitions matching the requested queries.
+
+        Args:
+            queries: What the model wants to do.
+        """
+        searched.append(list(queries))
+        return [
+            FunctionToolParam(
+                type="function",
+                name="warehouse_stock",
+                description="Return stock for one warehouse",
+                parameters={"type": "object", "properties": {"warehouse": {"type": "string"}}},
+                strict=None,
+            )
+        ]
+
+    @tool(deferred=True, guidelines="Use for stock questions.")
+    def warehouse_stock(warehouse: str) -> str:
+        """Return stock for one warehouse.
+
+        Args:
+            warehouse: Warehouse code to look up.
+        """
+        calls.append(warehouse)
+        return f"{warehouse}:42"
+
+    search = {
+        "id": "ts_1",
+        "call_id": "call_search",
+        "type": "tool_search_call",
+        "status": "completed",
+        "execution": "client",
+        "arguments": {"queries": ["warehouse stock"]},
+    }
+    function = {
+        "id": "fc_1",
+        "call_id": "call_1",
+        "type": "function_call",
+        "name": "warehouse_stock",
+        "arguments": '{"warehouse":"shanghai"}',
+        "status": "completed",
+    }
+    answer = {
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": "Shanghai has 42.", "annotations": [], "logprobs": []}],
+    }
+    requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        output = [[search], [function], [answer]][len(requests) - 1]
+        return httpx.Response(
+            200,
+            content=_responses_sse([_completed_event(output, model="deepseek-flash")]),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = OpenAIProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    agent = await Agent.create(
+        provider,
+        config=AgentRunConfig("client-tool-search"),
+        tools=(find_tools, warehouse_stock),
+    )
+    try:
+        result = await agent.run("How much stock is in the shanghai warehouse?")
+    finally:
+        await provider.aclose()
+
+    assert result.content == "Shanghai has 42."
+    assert searched == [["warehouse stock"]]
+    assert calls == ["shanghai"]
+    declared = requests[0]["tools"][-1]
+    assert (declared["type"], declared["execution"]) == ("tool_search", "client")
+    assert all(tool.get("name") != "find_tools" for tool in requests[0]["tools"])
+    searched = requests[1]["input"][-1]
+    assert searched["type"] == "tool_search_output"
+    assert searched["call_id"] == "call_search"
+    assert [tool["name"] for tool in searched["tools"]] == ["warehouse_stock"]
+    assert requests[2]["input"][-2:] == [
+        function,
+        {"type": "function_call_output", "call_id": "call_1", "output": "shanghai:42"},
+    ]
+
+
+async def test_agent_rejects_invalid_local_tool_search_results() -> None:
+    @tool(local_tool_search=True, guidelines="Use to find optional tools.")
+    def find_tools(queries: list[str]) -> list[FunctionToolParam]:
+        """Return tool definitions matching the requested queries.
+
+        Args:
+            queries: What the model wants to do.
+        """
+        return [{"name": "warehouse_stock", "parameters": {"type": "object"}}]  # type: ignore[list-item]
+
+    search = {
+        "id": "ts_1",
+        "call_id": "call_search",
+        "type": "tool_search_call",
+        "status": "completed",
+        "execution": "client",
+        "arguments": {"queries": ["warehouse stock"]},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_responses_sse([_completed_event([search], model="deepseek-flash")]),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = OpenAIProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    agent = await Agent.create(provider, config=AgentRunConfig("invalid-search"), tools=(find_tools,))
+    try:
+        with pytest.raises(ValueError, match="invalid FunctionToolParam"):
+            await agent.run("Find tools for the warehouse")
+    finally:
+        await provider.aclose()
+
+
+async def test_agent_rejects_a_non_json_local_tool_search_result() -> None:
+    @tool(local_tool_search=True, guidelines="Use to find optional tools.")
+    def find_tools(queries: list[str]) -> str:
+        """Return plain text instead of tool definitions.
+
+        Args:
+            queries: What the model wants to do.
+        """
+        return "no tools"
+
+    search = {
+        "id": "ts_1",
+        "call_id": "call_search",
+        "type": "tool_search_call",
+        "status": "completed",
+        "execution": "client",
+        "arguments": {"queries": ["warehouse stock"]},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_responses_sse([_completed_event([search], model="deepseek-flash")]),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = OpenAIProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    agent = await Agent.create(provider, config=AgentRunConfig("non-json-search"), tools=(find_tools,))
+    try:
+        with pytest.raises(ValueError, match="must return JSON tool definitions"):
+            await agent.run("Find tools for the warehouse")
+    finally:
+        await provider.aclose()
 
 
 @pytest.mark.parametrize(

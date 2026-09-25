@@ -43,12 +43,14 @@ from .base import (
     _reasoning_effort_to_budget,
     _to_model_data,
     _ToolCallAccumulator,
+    reject_local_tool_search,
     retry_model_stream,
 )
 from .tool_images import expand_tool_images
 
 
 def _tools_to_anthropic_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
+    reject_local_tool_search("Anthropic messages", tools)
     rendered = []
     for tool in tools:
         rendered.append(

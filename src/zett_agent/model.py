@@ -33,6 +33,13 @@ class ToolDefinition:
     #: Whether a Responses API provider may defer loading this definition until
     #: tool search selects it. Other provider protocols ignore this flag.
     deferred: bool = False
+    #: Whether this definition answers client-side tool search for one request.
+    #:
+    #: The Responses adapter renders it as the local ``tool_search`` endpoint
+    #: (``execution: "client"``) instead of a model-visible function, and the
+    #: Agent dispatches every search request to it. Other provider protocols
+    #: reject it.
+    local_tool_search: bool = False
 
 
 @dataclass(frozen=True, slots=True)

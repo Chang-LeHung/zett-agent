@@ -134,6 +134,11 @@ from .steering import STEERING_MESSAGE_EVENT_NAME, SteeringExtension
 from .subagent import TASK_TOOL_NAME, SubAgentDefinition, SubAgentExtension, SubAgentResult, default_subagents
 from .todo import TODO_WRITE_TOOL_NAME, TodoItem, TodoStatus, TodoWriteExtension, TodoWriteResult
 from .tool_guidelines import ToolGuidelinesExtension
+from .tool_search import (
+    TOOL_SEARCH_TOOL_NAME,
+    BM25Search,
+    ToolSearchExtension,
+)
 from .usage_activity import (
     ModelUsageActivityDay,
     ModelUsageActivityRecord,

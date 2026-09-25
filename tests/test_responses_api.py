@@ -409,6 +409,71 @@ async def test_agent_completes_a_responses_function_round_trip() -> None:
     ]
 
 
+async def test_agent_completes_a_deferred_tool_search_round_trip() -> None:
+    calls: list[str] = []
+
+    @tool(deferred=True, guidelines="Use for warehouse stock questions.")
+    def inventory(warehouse: str) -> str:
+        """Return the stock level for one warehouse.
+
+        Args:
+            warehouse: Warehouse code to look up.
+        """
+        calls.append(warehouse)
+        return f"{warehouse}:42"
+
+    search = {
+        "id": "ts_1",
+        "call_id": "call_search",
+        "type": "tool_search_call",
+        "status": "completed",
+        "action": {"type": "search", "queries": ["inventory stock"]},
+    }
+    function = {
+        "id": "fc_1",
+        "call_id": "call_1",
+        "type": "function_call",
+        "name": "inventory",
+        "arguments": '{"warehouse":"shanghai"}',
+        "status": "completed",
+    }
+    answer = {
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": "Shanghai has 42 in stock.", "annotations": [], "logprobs": []}],
+    }
+    requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        output = [search, function] if len(requests) == 1 else [answer]
+        return httpx.Response(
+            200,
+            content=_responses_sse([_completed_event(output, model="deepseek-flash")]),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = OpenAIProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    agent = await Agent.create(provider, config=AgentRunConfig("deferred-tools"), tools=(inventory,))
+    try:
+        result = await agent.run("How much stock is in the shanghai warehouse?")
+    finally:
+        await provider.aclose()
+
+    assert result.content == "Shanghai has 42 in stock."
+    assert calls == ["shanghai"]
+    advertised = {tool_schema["name"]: tool_schema for tool_schema in requests[0]["tools"] if "name" in tool_schema}
+    assert advertised["inventory"]["defer_loading"] is True
+    assert {"type": "tool_search"} in requests[0]["tools"]
+    assert requests[1]["input"][-2:] == [
+        function,
+        {"type": "function_call_output", "call_id": "call_1", "output": "shanghai:42"},
+    ]
+
+
 @pytest.mark.parametrize(
     ("factory", "message"),
     [

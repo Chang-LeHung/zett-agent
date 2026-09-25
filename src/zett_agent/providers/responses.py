@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, cast
 
 from openai.types.responses import FunctionToolParam, ToolParam, ToolSearchToolParam
+from pydantic import TypeAdapter, ValidationError
 
 from ..messages import (
     AnyMessage,
@@ -33,8 +34,16 @@ from ..model import (
 )
 from .tool_images import expand_tool_images
 
+_SEARCHED_TOOLS = TypeAdapter(list[FunctionToolParam])
 
-def responses_input(messages: Sequence[AnyMessage], *, provider: str, model: str) -> list[dict[str, Any]]:
+
+def responses_input(
+    messages: Sequence[AnyMessage],
+    *,
+    provider: str,
+    model: str,
+    local_search_tool: str | None = None,
+) -> list[dict[str, Any]]:
     """Render complete local history as stateless Responses API input items."""
     items: list[dict[str, Any]] = []
     for message in expand_tool_images(messages):
@@ -67,6 +76,9 @@ def responses_input(messages: Sequence[AnyMessage], *, provider: str, model: str
             case "tool":
                 if not isinstance(message, ToolMessage):
                     raise TypeError(f"Invalid tool message: {type(message)!r}")
+                if local_search_tool is not None and message.name == local_search_tool:
+                    items.append(_tool_search_output(message))
+                    continue
                 items.append(
                     {
                         "type": "function_call_output",
@@ -77,16 +89,53 @@ def responses_input(messages: Sequence[AnyMessage], *, provider: str, model: str
     return items
 
 
+def local_tool_search_name(tools: Sequence[ToolDefinition]) -> str | None:
+    """Return the name of the tool that answers client-side tool search."""
+    return next((tool.name for tool in tools if tool.local_tool_search), None)
+
+
+def _tool_search_output(message: ToolMessage) -> dict[str, Any]:
+    """Render one local search result as the client's ``tool_search_output``."""
+    if not message.success:
+        raise ValueError(f"Local tool search failed: {message.content}")
+    try:
+        tools = json.loads(message.content)
+    except json.JSONDecodeError as error:
+        raise ValueError("A local tool search tool must return JSON tool definitions") from error
+    try:
+        definitions = _SEARCHED_TOOLS.validate_python(tools)
+    except ValidationError as error:
+        raise ValueError(f"A local tool search tool returned invalid FunctionToolParam definitions: {error}") from error
+    return {
+        "type": "tool_search_output",
+        "call_id": message.tool_call_id,
+        "execution": "client",
+        "status": "completed",
+        "tools": definitions,
+    }
+
+
 def responses_tools(tools: Sequence[ToolDefinition], server_tools: Sequence[ServerToolDefinition]) -> list[ToolParam]:
     """Render functions and hosted tools in Responses wire format.
 
     Functions marked ``deferred`` use OpenAI's ``defer_loading`` protocol. The
     request must also expose the hosted ``tool_search`` tool so the model can
-    discover and load those definitions on demand.
+    discover and load those definitions on demand. A tool marked
+    ``local_tool_search`` answers that search instead: it is not rendered as a
+    function, and the request declares ``execution: "client"``.
     """
+    search_tools = tuple(tool for tool in tools if tool.local_tool_search)
+    if len(search_tools) > 1:
+        raise ValueError("Only one local tool search tool can be registered")
+    if search_tools and any(tool.type == "tool_search" for tool in server_tools):
+        raise ValueError("A local tool search tool cannot be combined with a provider tool_search tool")
     rendered: list[ToolParam] = []
     deferred = False
     for tool in tools:
+        if tool.local_tool_search:
+            # The model never calls the search tool as a function; it only
+            # reaches it through the client-side tool_search endpoint.
+            continue
         payload = FunctionToolParam(
             type="function",
             name=tool.name,
@@ -99,7 +148,18 @@ def responses_tools(tools: Sequence[ToolDefinition], server_tools: Sequence[Serv
             deferred = True
         rendered.append(payload)
     rendered.extend(cast(ToolParam, {"type": tool.type, **dict(tool.configuration)}) for tool in server_tools)
-    if deferred and not any(tool.type == "tool_search" for tool in server_tools):
+    if search_tools:
+        # The declared parameters are what the model fills in for each search:
+        # without them the endpoint sends an empty argument object.
+        rendered.append(
+            ToolSearchToolParam(
+                type="tool_search",
+                execution="client",
+                description=search_tools[0].description,
+                parameters=dict(search_tools[0].parameters),
+            )
+        )
+    elif deferred and not any(tool.type == "tool_search" for tool in server_tools):
         rendered.append(ToolSearchToolParam(type="tool_search"))
     return rendered
 
@@ -115,7 +175,13 @@ def responses_reasoning(effort: ReasoningEffort) -> dict[str, str] | None:
             return {"effort": effort.value, "summary": "auto"}
 
 
-async def stream_responses(stream: Any, *, provider: str, model: str) -> AsyncIterator[ModelEvent]:
+async def stream_responses(
+    stream: Any,
+    *,
+    provider: str,
+    model: str,
+    local_search_tool: str | None = None,
+) -> AsyncIterator[ModelEvent]:
     """Convert one OpenAI-compatible Responses stream to normalized events."""
     text = ""
     reasoning = ""
@@ -140,6 +206,10 @@ async def stream_responses(stream: Any, *, provider: str, model: str) -> AsyncIt
                 item_type = str(item.get("type", ""))
                 if item_type == "function_call":
                     yield ModelEvent.tool_call(_function_call_start(item, int(getattr(event, "output_index", 0))))
+                elif _is_client_tool_search(item) and local_search_tool is not None:
+                    yield ModelEvent.tool_call(
+                        _client_tool_search_start(item, int(getattr(event, "output_index", 0)), local_search_tool)
+                    )
                 elif _is_server_tool_item(item_type):
                     call = _server_tool_call(item)
                     server_calls[call.id] = call
@@ -154,7 +224,9 @@ async def stream_responses(stream: Any, *, provider: str, model: str) -> AsyncIt
             case "response.output_item.done":
                 item = _object_mapping(getattr(event, "item", None))
                 item_type = str(item.get("type", ""))
-                if _is_server_tool_item(item_type):
+                if _is_server_tool_item(item_type) and not (
+                    _is_client_tool_search(item) and local_search_tool is not None
+                ):
                     call = _server_tool_call(item)
                     original = server_calls.get(call.id)
                     if original is None:
@@ -187,7 +259,9 @@ async def stream_responses(stream: Any, *, provider: str, model: str) -> AsyncIt
         text = _response_text(output)
     if not reasoning:
         reasoning = _response_reasoning(output)
-    calls = tuple(_response_tool_call(item) for item in output if item.get("type") == "function_call")
+    calls = tuple(
+        call for call in (_local_or_function_call(item, local_search_tool) for item in output) if call is not None
+    )
     yield ModelEvent.completed(
         ModelResponse(
             message=AssistantMessage(
@@ -290,6 +364,40 @@ def _responses_usage(payload: Mapping[str, Any]) -> ModelUsage:
 
 def _is_server_tool_item(item_type: str) -> bool:
     return item_type.endswith("_call") and item_type not in {"function_call", "custom_tool_call"}
+
+
+def _is_client_tool_search(item: Mapping[str, Any]) -> bool:
+    """Whether one provider item asks this client to run a tool search."""
+    return item.get("type") == "tool_search_call" and item.get("execution") == "client"
+
+
+def _client_tool_search_start(item: Mapping[str, Any], index: int, tool_name: str) -> ToolCallDelta:
+    """Expose one client search request as an ordinary local tool call."""
+    return ToolCallDelta(
+        index=index,
+        id_delta=str(item.get("call_id") or item.get("id") or ""),
+        name_delta=tool_name,
+        arguments_delta=json.dumps(item.get("arguments") or {}, ensure_ascii=False),
+    )
+
+
+def _client_tool_search_call(item: Mapping[str, Any], tool_name: str) -> ToolCall:
+    """Complete one client search request as an ordinary local tool call."""
+    arguments = item.get("arguments")
+    return ToolCall(
+        id=str(item.get("call_id") or item.get("id") or ""),
+        name=tool_name,
+        arguments=dict(arguments) if isinstance(arguments, Mapping) else {},
+    )
+
+
+def _local_or_function_call(item: Mapping[str, Any], local_search_tool: str | None) -> ToolCall | None:
+    """Normalize one response output item into a local tool call when it is one."""
+    if item.get("type") == "function_call":
+        return _response_tool_call(item)
+    if local_search_tool is not None and _is_client_tool_search(item):
+        return _client_tool_search_call(item, local_search_tool)
+    return None
 
 
 def _server_tool_call(item: Mapping[str, Any]) -> ServerToolCall:

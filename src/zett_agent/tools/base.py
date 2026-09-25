@@ -73,6 +73,13 @@ class AgentTool(SyncMethodsMixin):
     #: Whether Responses API providers may defer loading this tool's schema
     #: through tool search. Other provider protocols ignore this flag.
     deferred: bool = False
+    #: Whether this tool answers client-side tool search for one request.
+    #:
+    #: A search tool is internal: the model never calls it directly. The
+    #: Responses adapter declares ``tool_search`` with ``execution: "client"``
+    #: and routes every search request to this handler, whose result decides
+    #: which tools the model may load. Other provider protocols reject it.
+    local_tool_search: bool = False
 
     def __post_init__(self) -> None:
         if not self.description.strip():
@@ -83,10 +90,20 @@ class AgentTool(SyncMethodsMixin):
             raise ValueError("execution_mode must be a ToolExecutionMode")
         if not isinstance(self.deferred, bool):
             raise ValueError("deferred must be a boolean")
+        if not isinstance(self.local_tool_search, bool):
+            raise ValueError("local_tool_search must be a boolean")
+        if self.local_tool_search and self.deferred:
+            raise ValueError("A local tool search tool cannot also defer its own schema")
 
     @property
     def definition(self) -> ToolDefinition:
-        return ToolDefinition(self.name, self.description, self.parameters, deferred=self.deferred)
+        return ToolDefinition(
+            self.name,
+            self.description,
+            self.parameters,
+            deferred=self.deferred,
+            local_tool_search=self.local_tool_search,
+        )
 
     async def __call__(self, arguments: Mapping[str, Any]) -> ToolResult:
         """Execute with a mapping of model-provided keyword arguments.
@@ -255,6 +272,7 @@ def _build_agent_tool(
     guidelines: str | Sequence[str] | None,
     execution_mode: ToolExecutionMode,
     deferred: bool,
+    local_tool_search: bool,
 ) -> AgentTool:
     """Create an AgentTool from one function and decorator overrides."""
     documentation = _parse_tool_docstring(function)
@@ -276,6 +294,7 @@ def _build_agent_tool(
         snippet=snippet if snippet is not None else documentation.snippet,
         execution_mode=execution_mode,
         deferred=deferred,
+        local_tool_search=local_tool_search,
     )
 
 
@@ -288,6 +307,7 @@ def tool(
     guidelines: str | Sequence[str] | None = None,
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
     deferred: bool = False,
+    local_tool_search: bool = False,
 ) -> AgentTool: ...
 
 
@@ -300,6 +320,7 @@ def tool(
     guidelines: str | Sequence[str] | None = None,
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
     deferred: bool = False,
+    local_tool_search: bool = False,
 ) -> _ToolDecorator: ...
 
 
@@ -311,6 +332,7 @@ def tool(
     guidelines: str | Sequence[str] | None = None,
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
     deferred: bool = False,
+    local_tool_search: bool = False,
 ) -> AgentTool | _ToolDecorator:
     """Turn a typed function and its structured docstring into an AgentTool.
 
@@ -326,6 +348,14 @@ def tool(
             through tool search instead of injecting it up front. Other provider
             protocols ignore this flag. Tool search requires a compatible model
             such as gpt-5.4 or later.
+        local_tool_search: Whether this tool answers client-side tool search.
+            The Responses adapter declares ``tool_search`` with
+            ``execution: "client"`` and hands every search query to this
+            handler; it must return ``list[FunctionToolParam]`` (OpenAI's
+            Responses function definition), which becomes the
+            ``tool_search_output`` the model loads from. The model never calls
+            this tool as a function, and other provider protocols reject the
+            flag.
 
     Returns:
         An AgentTool for direct decoration, or a decorator when configured first.
@@ -368,6 +398,7 @@ def tool(
             guidelines=guidelines,
             execution_mode=execution_mode,
             deferred=deferred,
+            local_tool_search=local_tool_search,
         )
 
     return decorate(function) if function is not None else decorate
@@ -392,6 +423,31 @@ def render_tool_guidance(tools: Sequence[AgentTool]) -> str:
     if guideline_groups:
         sections.append("# Tool guidelines\n" + "\n\n".join(guideline_groups))
     return "\n\n".join(sections)
+
+
+def render_tool_search_text(tool: AgentTool) -> str:
+    """Return every model-facing text field of one tool for search indexing.
+
+    The result includes the normalized tool name, description, parameter
+    descriptions from its JSON Schema, snippet, and guidelines. Search
+    extensions can index this text without knowing how ``AgentTool`` stores or
+    renders those fields.
+    """
+    properties = tool.parameters.get("properties")
+    parameter_descriptions = (
+        " ".join(str(value.get("description", "")) for value in properties.values() if isinstance(value, Mapping))
+        if isinstance(properties, Mapping)
+        else ""
+    )
+    return " ".join(
+        (
+            tool.name.replace("_", " "),
+            tool.description,
+            parameter_descriptions,
+            tool.snippet,
+            " ".join(tool.guidelines),
+        )
+    )
 
 
 def _render_tool_snippet(tool: AgentTool) -> str:

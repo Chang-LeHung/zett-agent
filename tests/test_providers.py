@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 import pytest
+from google.genai import types as google_types
 
 from zett_agent import (
     Agent,
@@ -45,7 +46,9 @@ from zett_agent.providers import (
     _normalize_image_source,
     _usage_from_mapping,
 )
+from zett_agent.providers.anthropic import _tools_to_anthropic_payload
 from zett_agent.providers.base import _tools_to_openai_payload
+from zett_agent.providers.ollama import _tools_to_ollama_payload
 
 
 def _sse_body(events: list[dict[str, Any]]) -> bytes:
@@ -338,6 +341,22 @@ def test_chat_completion_tools_ignore_deferred_loading_marker() -> None:
             },
         }
     ]
+
+
+def test_non_responses_protocols_reject_a_local_tool_search_tool() -> None:
+    search = ToolDefinition("find_tools", "Find tools", {"type": "object"}, local_tool_search=True)
+
+    with pytest.raises(ValueError, match="client-side tool search"):
+        _tools_to_openai_payload((search,))
+    with pytest.raises(ValueError, match="client-side tool search"):
+        _tools_to_anthropic_payload((search,))
+    with pytest.raises(ValueError, match="client-side tool search"):
+        _tools_to_ollama_payload((search,))
+    with pytest.raises(ValueError, match="client-side tool search"):
+        GoogleProvider._google_tools(
+            google_types,
+            ModelRequest(messages=(UserMessage(content="Hello"),), tools=(search,)),
+        )
 
 
 # ----------------------------------------------------------------------

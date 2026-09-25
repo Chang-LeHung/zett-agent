@@ -12,3 +12,4 @@ docs/_generated/
 .zett-tool-output/
 .env
 .DS_Store
+e2e/

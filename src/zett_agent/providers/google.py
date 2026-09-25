@@ -30,7 +30,13 @@ from ..model import (
     validate_response,
     validate_retry,
 )
-from .base import ProviderResponseError, RetryingProvider, _reasoning_effort_to_budget, retry_model_stream
+from .base import (
+    ProviderResponseError,
+    RetryingProvider,
+    _reasoning_effort_to_budget,
+    reject_local_tool_search,
+    retry_model_stream,
+)
 from .tool_images import expand_tool_images
 
 
@@ -255,6 +261,7 @@ class GoogleProvider(RetryingProvider):
     @staticmethod
     def _google_tools(types: Any, request: ModelRequest) -> list[Any] | None:
         """Build local function declarations and native Google server tools."""
+        reject_local_tool_search("Google generative AI", request.tools)
         tools: list[Any] = []
         if request.tools:
             tools.append(

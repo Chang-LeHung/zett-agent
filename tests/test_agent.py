@@ -579,6 +579,12 @@ def add(left: int, right: int) -> int:
     return left + right
 
 
+@tool(deferred=True, guidelines="Use for deferred work.")
+def deferred_add(left: int, right: int) -> int:
+    """Add two integers, loaded only through tool search."""
+    return left + right
+
+
 class ScriptedModel:
     def __init__(self, *messages: AssistantMessage):
         self.messages = list(messages)
@@ -827,6 +833,25 @@ async def test_tool_guidance_follows_all_instructions_without_duplication():
         assert prompt.endswith("## add\n- Use for exact addition.")
         assert prompt.count("# Tool guidelines") == 1
     assert sum("# Tool guidelines" in message.content for message in agent.state.messages) == 1
+
+
+async def test_tool_guidance_skips_deferred_tools():
+    model = ScriptedModel(AssistantMessage(content="ok"))
+    agent = await Agent.create(
+        model,
+        tools=[add, deferred_add],
+        extensions=[ToolGuidelinesExtension()],
+        config=CONFIG,
+    )
+
+    await agent.run("Add", config=CONFIG)
+
+    prompt = "\n\n".join(
+        message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)
+    )
+    assert "## add\n- Use for exact addition." in prompt
+    assert "deferred_add" not in prompt
+    assert "Use for deferred work." not in prompt
 
 
 async def test_iteration_limit_is_explicit():

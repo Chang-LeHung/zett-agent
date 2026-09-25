@@ -23,11 +23,12 @@ from ..model import (
     validate_response,
     validate_retry,
 )
-from .base import ProviderResponseError, RetryingProvider, retry_model_stream
+from .base import ProviderResponseError, RetryingProvider, reject_local_tool_search, retry_model_stream
 from .tool_images import expand_tool_images
 
 
 def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
+    reject_local_tool_search("Ollama chat", tools)
     rendered = []
     for tool in tools:
         rendered.append(

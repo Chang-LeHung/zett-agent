@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from ..agent import AgentRunContext
-from ..tools import run_shell
+from ..tools.coding import run_shell
 from .file_system import FileSystemExtension
 
 
@@ -29,8 +29,8 @@ class CodingExtension(FileSystemExtension):
         sandbox.
 
     .. seealso::
-        :class:`~zett_agent.FileSystemExtension` supports read-only operation;
-        :class:`~zett_agent.ToolGuidelinesExtension` adds prompt guidance.
+        :class:`~zett_agent.extensions.file_system.FileSystemExtension` supports read-only operation;
+        :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` adds prompt guidance.
     """
 
     def __init__(self) -> None:

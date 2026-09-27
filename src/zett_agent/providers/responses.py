@@ -5,9 +5,9 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
-from typing import Any, cast
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any, cast
 
-from openai.types.responses import FunctionToolParam, ToolParam, ToolSearchToolParam
 from pydantic import TypeAdapter, ValidationError
 
 from ..messages import (
@@ -34,7 +34,20 @@ from ..model import (
 )
 from .tool_images import expand_tool_images
 
-_SEARCHED_TOOLS = TypeAdapter(list[FunctionToolParam])
+if TYPE_CHECKING:
+    from openai.types.responses import FunctionToolParam, ToolParam
+
+
+@lru_cache(maxsize=1)
+def _searched_tools() -> TypeAdapter[list[FunctionToolParam]]:
+    """Validate the definitions a client-side tool search returned.
+
+    The adapter is built on first use because its schema comes from the OpenAI
+    SDK, which this module imports only when a request needs it.
+    """
+    from openai.types.responses import FunctionToolParam
+
+    return TypeAdapter(list[FunctionToolParam])
 
 
 def responses_input(
@@ -103,7 +116,7 @@ def _tool_search_output(message: ToolMessage) -> dict[str, Any]:
     except json.JSONDecodeError as error:
         raise ValueError("A local tool search tool must return JSON tool definitions") from error
     try:
-        definitions = _SEARCHED_TOOLS.validate_python(tools)
+        definitions = _searched_tools().validate_python(tools)
     except ValidationError as error:
         raise ValueError(f"A local tool search tool returned invalid FunctionToolParam definitions: {error}") from error
     return {
@@ -136,31 +149,31 @@ def responses_tools(tools: Sequence[ToolDefinition], server_tools: Sequence[Serv
             # The model never calls the search tool as a function; it only
             # reaches it through the client-side tool_search endpoint.
             continue
-        payload = FunctionToolParam(
-            type="function",
-            name=tool.name,
-            description=tool.description,
-            parameters=dict(tool.parameters),
-            strict=None,
-        )
+        payload: FunctionToolParam = {
+            "type": "function",
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": dict(tool.parameters),
+            "strict": None,
+        }
         if tool.deferred:
             payload["defer_loading"] = True
             deferred = True
         rendered.append(payload)
-    rendered.extend(cast(ToolParam, {"type": tool.type, **dict(tool.configuration)}) for tool in server_tools)
+    rendered.extend(cast("ToolParam", {"type": tool.type, **dict(tool.configuration)}) for tool in server_tools)
     if search_tools:
         # The declared parameters are what the model fills in for each search:
         # without them the endpoint sends an empty argument object.
         rendered.append(
-            ToolSearchToolParam(
-                type="tool_search",
-                execution="client",
-                description=search_tools[0].description,
-                parameters=dict(search_tools[0].parameters),
-            )
+            {
+                "type": "tool_search",
+                "execution": "client",
+                "description": search_tools[0].description,
+                "parameters": dict(search_tools[0].parameters),
+            }
         )
     elif deferred and not any(tool.type == "tool_search" for tool in server_tools):
-        rendered.append(ToolSearchToolParam(type="tool_search"))
+        rendered.append({"type": "tool_search"})
     return rendered
 
 

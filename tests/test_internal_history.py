@@ -2,20 +2,24 @@
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
-    AgentExtension,
-    AgentMessage,
     AgentRunConfig,
+)
+from zett_agent.events import AgentEventType
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.compaction import CompactedMessage
+from zett_agent.extensions.events import InternalMessageEvent
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.messages import (
+    AgentMessage,
     AssistantMessage,
-    InternalMessageEvent,
-    ModelEvent,
-    ModelResponse,
-    SQLiteSessionExtension,
     UserMessage,
 )
-from zett_agent.extensions.compaction import CompactedMessage
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
 from zett_agent.storage import decode_messages, encode_messages
 
 

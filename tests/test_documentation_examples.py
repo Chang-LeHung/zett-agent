@@ -51,7 +51,8 @@ def test_every_example_is_classified_and_valid_python():
 
 
 async def test_example_extension_isolates_concurrent_requests_and_cleans_errors():
-    from zett_agent import AgentRunConfig, create_agent
+    from zett_agent.agent import AgentRunConfig
+    from zett_agent.client import create_agent
 
     example = runpy.run_path(str(EXAMPLES / "custom_extension.py"))
     extension = example["NoteExtension"]()
@@ -72,7 +73,10 @@ async def test_example_extension_isolates_concurrent_requests_and_cleans_errors(
 async def test_approval_example_rejection_validation_and_routing(answer):
     from contextlib import aclosing
 
-    from zett_agent import AgentEventType, AgentRunConfig, ExternalEvent, create_agent
+    from zett_agent.agent import AgentRunConfig
+    from zett_agent.client import create_agent
+    from zett_agent.events import AgentEventType
+    from zett_agent.extensions.external import ExternalEvent
 
     example = runpy.run_path(str(EXAMPLES / "approval.py"))
     config = AgentRunConfig(session_id="approval-edge", request_id="request-edge")

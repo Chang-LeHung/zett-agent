@@ -3,18 +3,20 @@
 import asyncio
 from collections.abc import AsyncIterator
 
-from zett_agent import (
-    AgentExtension,
-    AgentRunContext,
-    AssistantMessage,
+from zett_agent.agent import AgentRunContext
+from zett_agent.client import create_agent
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import (
     ExtensionEvent,
     MessageAppendedEvent,
+)
+from zett_agent.messages import AssistantMessage
+from zett_agent.model import (
     ModelEvent,
     ModelRequest,
     ModelResponse,
     ModelUsage,
     RetryOptions,
-    create_agent,
 )
 
 

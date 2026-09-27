@@ -2,7 +2,7 @@
 
 from ..agent import AgentRunContext
 from ..messages import SystemMessage
-from ..tools import render_tool_guidance
+from ..tools.base import render_tool_guidance
 from .base import AgentExtension
 
 

@@ -10,7 +10,12 @@ from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
 from ..messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage
 from ..model import ModelRequest
-from ..tools import AgentTool, render_tool_guidance, run_shell, tool
+from ..tools.base import (
+    AgentTool,
+    render_tool_guidance,
+    tool,
+)
+from ..tools.coding import run_shell
 from .events import ExtensionEvent, RunCancelledEvent
 from .external import ExternalEventExtension
 from .file_system import FileSystemExtension
@@ -254,7 +259,7 @@ class PlanModeExtension(ExternalEventExtension):
         session mode only after the application returns an approved response.
 
     .. seealso::
-        :class:`~zett_agent.AskUserExtension` uses the same external-event
+        :class:`~zett_agent.extensions.ask_user.AskUserExtension` uses the same external-event
         routing pattern for ordinary questions.
     """
 

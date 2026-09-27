@@ -8,7 +8,7 @@ base_url; a new adapter may be unnecessary.
 The protocol
 ----------------
 
-:class:`~zett_agent.AgentModel` accepts one fully assembled ModelRequest and
+:class:`~zett_agent.model.AgentModel` accepts one fully assembled ModelRequest and
 returns an async iterator of ModelEvent. It has a model-owned RetryOptions policy.
 The protocol method is declared as a normal ``def`` returning AsyncIterator;
 an implementation may use ``async def`` with ``yield`` to satisfy that contract.
@@ -16,8 +16,12 @@ an implementation may use ``async def`` with ``yield`` to satisfy that contract.
 .. code-block:: python
 
    from collections.abc import AsyncIterator
-   from zett_agent import (
-       AssistantMessage, ModelEvent, ModelRequest, ModelResponse, RetryOptions,
+   from zett_agent.messages import AssistantMessage
+   from zett_agent.model import (
+       ModelEvent,
+       ModelRequest,
+       ModelResponse,
+       RetryOptions,
    )
 
    class FixedModel:
@@ -43,7 +47,7 @@ Required stream invariants
 ModelRequest contains the complete context for this step. Support the applicable
 message roles and typed image parts explicitly. AgentMessage is internal input,
 not assistant output; built-in adapters map it to user input for vendor APIs.
-Declare :attr:`~zett_agent.ModelRequest.cache_key` to the endpoint when its
+Declare :attr:`~zett_agent.model.ModelRequest.cache_key` to the endpoint when its
 protocol caches prompt prefixes; the OpenAI adapter sends it as
 ``prompt_cache_key`` on both of its protocols.
 

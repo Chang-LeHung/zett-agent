@@ -426,7 +426,7 @@ class AgentEvent:
         converted into a synthetic terminal ``AgentEvent``.
 
     .. seealso::
-        :class:`~zett_agent.AgentEventDispatcher` provides typed application
+        :class:`~zett_agent.dispatcher.AgentEventDispatcher` provides typed application
         callbacks, and :doc:`/concepts/events` compares all event channels.
     """
 

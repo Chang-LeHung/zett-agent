@@ -12,7 +12,7 @@ from .json_types import JsonValue
 from .messages import AssistantMessage, UserMessage
 from .model import AgentModel, ReasoningEffort
 from .sync_runtime import SyncMethodsMixin
-from .tools import AgentTool
+from .tools.base import AgentTool
 
 
 class AgentClient(SyncMethodsMixin):
@@ -179,7 +179,9 @@ async def create_agent(
     Examples:
         Usage::
 
-            from zett_agent import AgentEvent, AgentEventDispatcher, create_agent
+            from zett_agent.events import AgentEvent
+            from zett_agent.dispatcher import AgentEventDispatcher
+            from zett_agent.client import create_agent
 
             class ConsoleEvents(AgentEventDispatcher):
                 async def on_text_delta_event(self, event: AgentEvent) -> None:

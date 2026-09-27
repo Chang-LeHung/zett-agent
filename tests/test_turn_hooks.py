@@ -2,18 +2,22 @@
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentExtension,
     AgentRunConfig,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import SteeringMessageEvent
+from zett_agent.messages import (
     AssistantMessage,
-    ModelEvent,
-    ModelResponse,
-    SteeringMessageEvent,
     ToolCall,
     UserMessage,
-    tool,
 )
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
+from zett_agent.tools.base import tool
 
 
 class ScriptedModel:

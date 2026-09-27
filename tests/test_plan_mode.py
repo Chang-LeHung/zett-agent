@@ -5,7 +5,18 @@ import json
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
+    Agent,
+    AgentRunConfig,
+)
+from zett_agent.events import AgentEventType
+from zett_agent.exceptions import (
+    AgentIterationLimitError,
+    AgentProtocolError,
+)
+from zett_agent.extensions.coding import CodingExtension
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.extensions.plan_mode import (
     ENTER_PLAN_MODE_EVENT_NAME,
     ENTER_PLAN_MODE_RESPONSE_EVENT_NAME,
     ENTER_PLAN_MODE_TOOL_NAME,
@@ -15,21 +26,18 @@ from zett_agent import (
     PLAN_MODE_ENTERED_EVENT_NAME,
     PLAN_MODE_EXITED_EVENT_NAME,
     PLAN_MODE_SYSTEM_PROMPT,
-    Agent,
-    AgentEventType,
-    AgentIterationLimitError,
-    AgentProtocolError,
-    AgentRunConfig,
-    AssistantMessage,
-    CodingExtension,
-    ExternalEvent,
-    ModelEvent,
-    ModelResponse,
     PlanModeExtension,
+)
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.messages import (
+    AssistantMessage,
     SystemMessage,
     ToolCall,
-    ToolGuidelinesExtension,
     ToolMessage,
+)
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
 )
 
 

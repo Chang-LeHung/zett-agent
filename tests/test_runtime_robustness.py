@@ -2,33 +2,41 @@ from datetime import datetime
 
 import pytest
 
-from zett_agent import (
+from zett_agent._compat import UTC
+from zett_agent.agent import (
     Agent,
-    AgentEvent,
-    AgentEventType,
-    AgentExtension,
-    AgentPhase,
-    AgentPhaseTransitionMixin,
-    AgentProtocolError,
     AgentRunConfig,
     AgentRunContext,
     AgentState,
-    AssistantMessage,
+)
+from zett_agent.events import (
+    AgentEvent,
+    AgentEventType,
+    AgentPhase,
+    AgentPhaseTransitionMixin,
+    ModelOutputTracker,
+)
+from zett_agent.exceptions import AgentProtocolError
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import (
     ContentCompletedEvent,
     ContentStartedEvent,
     MessageTiming,
-    ModelEvent,
-    ModelEventType,
-    ModelOutputTracker,
-    ModelResponse,
     PhaseTransitionEvent,
     ReasoningCompletedEvent,
     ReasoningStartedEvent,
     RunCancelledEvent,
+)
+from zett_agent.messages import (
+    AssistantMessage,
     ToolCall,
+)
+from zett_agent.model import (
+    ModelEvent,
+    ModelEventType,
+    ModelResponse,
     ToolCallDelta,
 )
-from zett_agent._compat import UTC
 
 CONFIG = AgentRunConfig("robustness-session")
 

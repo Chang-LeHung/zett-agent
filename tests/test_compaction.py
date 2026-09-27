@@ -1,32 +1,37 @@
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
-    AgentExtension,
-    AgentPhase,
-    AgentProtocolError,
     AgentRunConfig,
     AgentRunContext,
     AgentState,
+)
+from zett_agent.events import (
+    AgentEventType,
+    AgentPhase,
+)
+from zett_agent.exceptions import AgentProtocolError
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.compaction import CompactedMessage, CompactionExtension
+from zett_agent.extensions.events import CompactionEvent
+from zett_agent.messages import (
     AssistantMessage,
-    CompactionEvent,
-    CompactionExtension,
     ImageBytesSource,
     ImageContent,
+    SystemMessage,
+    TextContent,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelEventType,
     ModelRequest,
     ModelResponse,
     ModelUsage,
-    SystemMessage,
-    TextContent,
-    ToolCall,
     ToolCallDelta,
-    ToolMessage,
-    UserMessage,
 )
-from zett_agent.extensions.compaction import CompactedMessage
 
 
 class SummaryModel:

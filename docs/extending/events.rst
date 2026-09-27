@@ -76,7 +76,7 @@ Acceptance and validation
 
 Use :doc:`../examples/approval` for run instructions and expected output.
 Protected subclass helper contracts are included on the
-:class:`~zett_agent.ExternalEventExtension` API page because extension authors
+:class:`~zett_agent.extensions.external.ExternalEventExtension` API page because extension authors
 need them, despite their underscore names.
 
 Internal continuation versus user steering

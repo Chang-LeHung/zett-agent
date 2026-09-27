@@ -1,30 +1,7 @@
-"""Provider adapters and their shared public errors."""
+"""Provider adapters.
 
-from .anthropic import AnthropicProvider, _to_anthropic_content_blocks
-from .base import (
-    ProviderAuthError,
-    ProviderError,
-    ProviderResponseError,
-    _message_to_openai_payload,
-    _normalize_image_source,
-    _usage_from_mapping,
-)
-from .deepseek import DeepSeekProvider
-from .google import GoogleProvider
-from .ollama import OllamaProvider
-from .openai import OpenAIProvider
-
-__all__ = [
-    "AnthropicProvider",
-    "DeepSeekProvider",
-    "GoogleProvider",
-    "OllamaProvider",
-    "OpenAIProvider",
-    "ProviderAuthError",
-    "ProviderError",
-    "ProviderResponseError",
-    "_message_to_openai_payload",
-    "_normalize_image_source",
-    "_to_anthropic_content_blocks",
-    "_usage_from_mapping",
-]
+Every adapter is imported from its own module, for example
+``from zett_agent.providers.openai import OpenAIProvider``. Each adapter imports
+its provider SDK inside the calls that need it, so importing an adapter module
+never pays for that SDK.
+"""

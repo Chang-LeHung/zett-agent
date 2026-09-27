@@ -2,24 +2,30 @@
 
 import asyncio
 
-from zett_agent import (
-    SHELL_APPROVAL_EVENT_NAME,
-    SHELL_APPROVAL_RESPONSE_EVENT_NAME,
+from zett_agent._compat import timeout
+from zett_agent.agent import (
     Agent,
-    AgentExtension,
     AgentRunConfig,
     AgentRunContext,
-    AssistantMessage,
-    ExternalEvent,
-    ModelEvent,
-    ModelResponse,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.extensions.shell_approval import (
+    SHELL_APPROVAL_EVENT_NAME,
+    SHELL_APPROVAL_RESPONSE_EVENT_NAME,
     ShellApprovalExtension,
     ShellApprovalMode,
+)
+from zett_agent.messages import (
+    AssistantMessage,
     ToolCall,
     ToolMessage,
-    tool,
 )
-from zett_agent._compat import timeout
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
+from zett_agent.tools.base import tool
 
 
 class ShellModel:

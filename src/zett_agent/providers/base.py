@@ -9,25 +9,11 @@ from contextlib import aclosing
 from dataclasses import asdict, dataclass
 from functools import wraps
 from json import JSONDecodeError
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import httpx
 import truststore
 from json_repair import repair_json
-from openai import APIStatusError, AsyncOpenAI
-from openai.types.chat import (
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionContentPartImageParam,
-    ChatCompletionContentPartParam,
-    ChatCompletionContentPartTextParam,
-    ChatCompletionMessageFunctionToolCallParam,
-    ChatCompletionMessageParam,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionToolMessageParam,
-    ChatCompletionToolParam,
-    ChatCompletionUserMessageParam,
-)
-from openai.types.shared_params import FunctionDefinition
 
 from ..exceptions import AgentError
 from ..messages import (
@@ -58,6 +44,21 @@ from ..model import (
     validate_response,
     validate_retry,
 )
+
+if TYPE_CHECKING:
+    from openai.types.chat import (
+        ChatCompletionAssistantMessageParam,
+        ChatCompletionContentPartImageParam,
+        ChatCompletionContentPartParam,
+        ChatCompletionMessageParam,
+        ChatCompletionToolParam,
+    )
+    from openai.types.shared_params import FunctionDefinition
+
+#: The OpenAI SDK is imported where this adapter needs it -- client construction
+#: and request failures -- because importing it alone costs a few hundred
+#: milliseconds. Payload rendering therefore uses plain dictionaries that still
+#: type-check against the SDK's TypedDicts.
 from ..sync_runtime import SyncMethodsMixin
 from .responses import local_tool_search_name, responses_input, responses_reasoning, responses_tools, stream_responses
 from .tool_images import expand_tool_images
@@ -118,16 +119,13 @@ def _normalize_image_source(
     """Normalize a typed image source into an OpenAI-compatible content block."""
     match part:
         case ImageUrlSource(url=url):
-            return ChatCompletionContentPartImageParam(
-                type="image_url",
-                image_url={"url": url, "detail": detail.value},
-            )
+            return {"type": "image_url", "image_url": {"url": url, "detail": detail.value}}
         case ImageBytesSource(data=data, media_type=media_type):
             encoded = base64.b64encode(data).decode("ascii")
-            return ChatCompletionContentPartImageParam(
-                type="image_url",
-                image_url={"url": f"data:{media_type};base64,{encoded}", "detail": detail.value},
-            )
+            return {
+                "type": "image_url",
+                "image_url": {"url": f"data:{media_type};base64,{encoded}", "detail": detail.value},
+            }
         case _:
             raise ProviderResponseError(f"Unsupported image source type: {part!r}")
 
@@ -136,58 +134,54 @@ def _message_to_openai_payload(message: AnyMessage) -> ChatCompletionMessagePara
     role = message.role
     match role:
         case "agent":
-            return ChatCompletionUserMessageParam(role="user", content=message.content)
+            return {"role": "user", "content": message.content}
         case "system":
             if not isinstance(message, SystemMessage):
                 raise ProviderResponseError(f"Invalid system message data type: {type(message)!r}")
-            return ChatCompletionSystemMessageParam(role="system", content=message.content)
+            return {"role": "system", "content": message.content}
         case "user":
             if not isinstance(message, UserMessage):
                 raise ProviderResponseError(f"Invalid user message data type: {type(message)!r}")
             content = message.content
             match content:
                 case str() as text:
-                    return ChatCompletionUserMessageParam(role="user", content=text)
+                    return {"role": "user", "content": text}
                 case []:
-                    return ChatCompletionUserMessageParam(role="user", content="")
+                    return {"role": "user", "content": ""}
                 case list():
                     parts: list[ChatCompletionContentPartParam] = []
                     for part in content:
                         match part:
                             case TextContent(text=text):
-                                parts.append(ChatCompletionContentPartTextParam(type="text", text=text))
+                                parts.append({"type": "text", "text": text})
                             case ImageContent(source=source, detail=detail):
                                 parts.append(_normalize_image_source(source, detail))
                             case _:
                                 raise ProviderResponseError(f"Unsupported user content part: {part!r}")
-                    return ChatCompletionUserMessageParam(role="user", content=parts)
+                    return {"role": "user", "content": parts}
                 case _:
                     raise ProviderResponseError(f"Unsupported user content type: {type(content)!r}")
         case "assistant":
             if not isinstance(message, AssistantMessage):
                 raise ProviderResponseError(f"Invalid assistant message data type: {type(message)!r}")
-            payload = ChatCompletionAssistantMessageParam(role="assistant", content=message.content)
+            payload: ChatCompletionAssistantMessageParam = {"role": "assistant", "content": message.content}
             if message.tool_calls:
                 payload["tool_calls"] = [
-                    ChatCompletionMessageFunctionToolCallParam(
-                        id=call.id,
-                        type="function",
-                        function={
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
                             "name": call.name,
                             "arguments": json.dumps(dict(call.arguments), ensure_ascii=False),
                         },
-                    )
+                    }
                     for call in message.tool_calls
                 ]
             return payload
         case "tool":
             if not isinstance(message, ToolMessage):
                 raise ProviderResponseError(f"Invalid tool message data type: {type(message)!r}")
-            return ChatCompletionToolMessageParam(
-                role="tool",
-                tool_call_id=message.tool_call_id,
-                content=message.content,
-            )
+            return {"role": "tool", "tool_call_id": message.tool_call_id, "content": message.content}
         case _:
             raise ProviderResponseError(f"Unsupported role in message conversion: {role}")
 
@@ -208,7 +202,7 @@ def _replay_reasoning_content(
 
     See https://api-docs.deepseek.com/zh-cn/guides/thinking_mode.
     """
-    rendered = [cast(ChatCompletionMessageParam, dict(payload)) for payload in payload_messages]
+    rendered = [cast("ChatCompletionMessageParam", dict(payload)) for payload in payload_messages]
     for source, target in zip(source_messages, rendered, strict=True):
         if not isinstance(source, AssistantMessage) or source.reasoning is None:
             continue
@@ -458,6 +452,8 @@ class _OpenAIStyleProvider(RetryingProvider):
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
             trust_env=True,
         )
+        from openai import AsyncOpenAI
+
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=self._http_client, max_retries=0)
 
     async def _request(self, request: ModelRequest) -> Any:
@@ -491,6 +487,8 @@ class _OpenAIStyleProvider(RetryingProvider):
         extra_body = self._provider_specific_request_extra_fields(request)
         if extra_body:
             payload["extra_body"] = extra_body
+        from openai import APIStatusError
+
         try:
             return await self._client.chat.completions.create(**payload)  # type: ignore[misc]
         except APIStatusError as error:
@@ -534,6 +532,8 @@ class _OpenAIStyleProvider(RetryingProvider):
             payload["reasoning"] = reasoning
         if self.send_prompt_cache_key and request.cache_key:
             payload["prompt_cache_key"] = request.cache_key
+        from openai import APIStatusError
+
         try:
             return await self._client.responses.create(**payload)  # type: ignore[misc]
         except APIStatusError as error:

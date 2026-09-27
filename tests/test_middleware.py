@@ -4,22 +4,27 @@ import asyncio
 from contextlib import aclosing
 from dataclasses import replace
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentExtension,
     AgentRunConfig,
-    AssistantMessage,
+)
+from zett_agent.client import create_agent
+from zett_agent.extensions.base import (
+    AgentExtension,
     MiddlewareHook,
-    ModelEvent,
-    ModelResponse,
-    SyncAgent,
+)
+from zett_agent.messages import (
+    AssistantMessage,
     SystemMessage,
     ToolCall,
     ToolMessage,
-    create_agent,
-    tool,
 )
-from zett_agent.tools.base import current_tool_call_id
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
+from zett_agent.sync import SyncAgent
+from zett_agent.tools.base import current_tool_call_id, tool
 
 
 def test_agent_extension_owns_the_middleware_contract() -> None:

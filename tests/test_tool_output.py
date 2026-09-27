@@ -8,8 +8,13 @@ import sys
 
 import pytest
 
-from zett_agent import glob, grep, read_file, run_shell
 from zett_agent.tools import output as tool_output
+from zett_agent.tools.coding import (
+    glob,
+    grep,
+    read_file,
+    run_shell,
+)
 
 RESUME = re.compile(r"start_line=(\d+)(?:, start_column=(\d+))?\]")
 

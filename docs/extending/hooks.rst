@@ -1,7 +1,7 @@
 Lifecycle hook reference
 ============================
 
-All hooks receive :class:`~zett_agent.AgentRunContext` unless noted. Lifecycle
+All hooks receive :class:`~zett_agent.agent.AgentRunContext` unless noted. Lifecycle
 hooks are ordinary async functions returning None. ``accept`` is synchronous and
 returns bool. Lifecycle defaults are no-ops; middleware defaults transparently
 call the next layer. Override only what your extension needs.
@@ -16,13 +16,13 @@ Setup hooks
    * - Hook
      - State at entry
      - Intended operation
-   * - :meth:`~zett_agent.AgentExtension.on_tool`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.on_tool`
      - Fresh local registry already contains constructor tools; server registry is empty.
      - Register dynamic tools through context.register_tool or context.register_server_tool.
-   * - :meth:`~zett_agent.AgentExtension.on_state`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.on_state`
      - All dynamic tools registered; new input not appended.
      - Restore history and insert system instructions.
-   * - :meth:`~zett_agent.AgentExtension.on_message`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.on_message`
      - History ready; input in context.input_message.
      - Replace or validate current input; do not append it yourself.
 
@@ -34,13 +34,13 @@ Request hooks
 
    * - Hook
      - Boundary and constraints
-   * - :meth:`~zett_agent.AgentExtension.before_run`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.before_run`
      - Transformed input has been appended and published; initialize per-request work.
-   * - :meth:`~zett_agent.AgentExtension.after_run`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.after_run`
      - A final answer is ready with no remaining queued input.
-   * - :meth:`~zett_agent.AgentExtension.on_success`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.on_success`
      - All after_run hooks succeeded; precedes RUN_COMPLETED. Release success state.
-   * - :meth:`~zett_agent.AgentExtension.on_error`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.on_error`
      - A non-cancellation request error is being propagated. Release failure state.
 
 Turn hooks
@@ -51,9 +51,9 @@ Turn hooks
 
    * - Hook
      - Boundary and constraints
-   * - :meth:`~zett_agent.AgentExtension.before_turn`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.before_turn`
      - After before_run, or after the previous turn's after_turn; before compaction, before_model, and the provider call. Messages or tools edited here shape this turn only.
-   * - :meth:`~zett_agent.AgentExtension.after_turn`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.after_turn`
      - The turn's AssistantMessage and every ToolMessage it requested are appended and published. Receives the assistant message that opened the turn, including when its tool calls failed or steering superseded them. The final answer closes its turn before after_run.
 
 Model and tool hooks
@@ -64,13 +64,13 @@ Model and tool hooks
 
    * - Hook
      - Boundary and constraints
-   * - :meth:`~zett_agent.AgentExtension.before_model`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.before_model`
      - Receives context and ModelRequest; inspect it or change context.state.messages, context.tools, and context.server_tools.
-   * - :meth:`~zett_agent.AgentExtension.after_model`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.after_model`
      - Complete AssistantMessage already appended; receives ModelResponse including usage.
-   * - :meth:`~zett_agent.AgentExtension.before_tool`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.before_tool`
      - Before one tool call. A raised exception fails the request before execution.
-   * - :meth:`~zett_agent.AgentExtension.after_tool`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.after_tool`
      - Tool execution has finished but ToolMessage is not appended yet. Inspect the separate error argument and modify the result before context and persistence receive it.
 
 Middleware hooks
@@ -81,9 +81,9 @@ Middleware hooks
 
    * - Hook
      - Boundary and constraints
-   * - :meth:`~zett_agent.AgentExtension.on_model_request`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.on_model_request`
      - Wraps the provider stream. Pass a ModelRequest to ``call_next`` and close the returned iterator when leaving early.
-   * - :meth:`~zett_agent.AgentExtension.on_tool_call`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.on_tool_call`
      - Wraps one registered local tool handler. It may adjust arguments, transform or short-circuit the result, or raise a normal tool failure.
 
 These hooks use the same extension priority ordering as lifecycle hooks, with
@@ -97,7 +97,7 @@ Any lifecycle hook may publish visible progress with
 ``await context.emit(AgentEvent(...))``. The event enters the request-owned queue
 at that exact point in hook priority order. Internal runtime methods and
 extensions never expose nested AgentEvent async generators; only
-:meth:`~zett_agent.Agent.stream` drains the queue and yields to callers.
+:meth:`~zett_agent.agent.Agent.stream` drains the queue and yields to callers.
 
 Custom output does not become a phase transition simply because its payload says
 "working". Do not synthesize MODEL_STARTED, TOOL_STARTED, or terminal events that
@@ -119,9 +119,9 @@ Notification and input hooks
 
    * - Hook
      - Contract
-   * - :meth:`~zett_agent.AgentExtension.on_event`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.on_event`
      - Awaited for ExtensionEvent published inside the request; inspect concrete event types.
-   * - :meth:`~zett_agent.AgentExtension.accept`
+   * - :meth:`~zett_agent.extensions.base.AgentExtension.accept`
      - Receives config and ExternalEvent from external callers, potentially on another thread. Return whether delivery was accepted.
 
 Use ExternalEventExtension for pending responses instead of writing your own

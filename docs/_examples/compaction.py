@@ -5,19 +5,21 @@ from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from zett_agent import (
-    AgentEvent,
-    AgentEventDispatcher,
-    AgentRunConfig,
+from zett_agent.agent import AgentRunConfig
+from zett_agent.client import create_agent
+from zett_agent.dispatcher import AgentEventDispatcher
+from zett_agent.events import AgentEvent
+from zett_agent.extensions.compaction import CompactionExtension
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.messages import (
     AnyMessage,
     AssistantMessage,
-    CompactionExtension,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelRequest,
     ModelResponse,
     RetryOptions,
-    SQLiteSessionExtension,
-    create_agent,
 )
 
 

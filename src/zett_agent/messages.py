@@ -126,7 +126,7 @@ class Message:
         from per-message ``attributes``.
 
     .. seealso::
-        :class:`~zett_agent.RawMessageRecord` is the persisted message envelope.
+        :class:`~zett_agent.extensions.persistence.RawMessageRecord` is the persisted message envelope.
     """
 
     role: ClassVar[MessageRole]
@@ -181,8 +181,8 @@ class UserMessage(Message):
         image payloads; parts preserves their original order.
 
     .. seealso::
-        :class:`~zett_agent.TextContent`, :class:`~zett_agent.ImageContent`, and
-        :class:`~zett_agent.ImageSource` define supported content parts.
+        :class:`~zett_agent.messages.TextContent`, :class:`~zett_agent.messages.ImageContent`, and
+        :class:`~zett_agent.messages.ImageSource` define supported content parts.
     """
 
     role: ClassVar[MessageRole] = MessageRole.USER
@@ -223,8 +223,8 @@ class AssistantMessage(Message):
             )
 
     .. seealso::
-        :class:`~zett_agent.ModelResponse` carries this message with normalized
-        usage, and :class:`~zett_agent.ToolMessage` returns tool observations.
+        :class:`~zett_agent.model.ModelResponse` carries this message with normalized
+        usage, and :class:`~zett_agent.messages.ToolMessage` returns tool observations.
     """
 
     role: ClassVar[MessageRole] = MessageRole.ASSISTANT
@@ -285,7 +285,7 @@ class AgentMessage(Message):
             )
 
     .. seealso::
-        :class:`~zett_agent.InternalMessageExtension` owns the request-local
+        :class:`~zett_agent.extensions.internal_message.InternalMessageExtension` owns the request-local
         queue and processing limit for these messages.
     """
 

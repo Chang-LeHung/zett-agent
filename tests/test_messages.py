@@ -1,6 +1,6 @@
 import pytest
 
-from zett_agent import (
+from zett_agent.messages import (
     AgentMessage,
     AssistantMessage,
     ImageBytesSource,

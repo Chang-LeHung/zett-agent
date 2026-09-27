@@ -7,26 +7,32 @@ from uuid import UUID
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentExtension,
-    AgentPhase,
     AgentRunConfig,
+)
+from zett_agent.events import AgentPhase
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.session_persistence import SessionPersistenceExtension
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.extensions.subagent import (
+    SubAgentDefinition,
+    SubAgentExtension,
+    default_subagents,
+)
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.messages import (
     AssistantMessage,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelResponse,
     ReasoningEffort,
-    SessionPersistenceExtension,
-    SQLiteSessionExtension,
-    SQLiteSessionStorage,
-    SubAgentDefinition,
-    SubAgentExtension,
-    SystemMessage,
-    ToolCall,
-    ToolGuidelinesExtension,
-    ToolMessage,
-    default_subagents,
 )
+from zett_agent.storage import SQLiteSessionStorage
 
 
 @pytest.fixture

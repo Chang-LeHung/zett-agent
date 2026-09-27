@@ -43,8 +43,8 @@ class AgentEventDispatcher(SyncMethodsMixin):
         names are handled inside :meth:`on_custom_event`.
 
     .. seealso::
-        :meth:`~zett_agent.AgentClient.stream` dispatches events automatically;
-        :class:`~zett_agent.AgentEvent` documents type-specific fields.
+        :meth:`~zett_agent.client.AgentClient.stream` dispatches events automatically;
+        :class:`~zett_agent.events.AgentEvent` documents type-specific fields.
     """
 
     async def dispatch(self, event: AgentEvent) -> None:

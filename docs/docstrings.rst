@@ -4,10 +4,11 @@ Writing API documentation
 Source of truth
 ---------------
 
-Public objects are selected from ``zett_agent.__all__``. The reference generator
-creates one page per export and groups pages by responsibility. Do not edit
-``docs/_generated``: rebuilds regenerate these files. Maintain API descriptions
-in source docstrings and tutorials in hand-written RST pages.
+Public objects are discovered from the modules that define them: the reference
+generator walks the runtime package, keeps every public name a module defines
+itself, creates one page per name, and groups pages by responsibility. Do not
+edit ``docs/_generated``: rebuilds regenerate these files. Maintain API
+descriptions in source docstrings and tutorials in hand-written RST pages.
 
 Sphinx, reStructuredText, and docstring style
 ----------------------------------------------------
@@ -26,8 +27,8 @@ Useful RST constructs::
     A section heading
     =================
 
-    :class:`~zett_agent.Agent`
-    :meth:`~zett_agent.Agent.stream`
+    :class:`~zett_agent.agent.Agent`
+    :meth:`~zett_agent.agent.Agent.stream`
     :doc:`extending/first-extension`
 
     .. code-block:: python

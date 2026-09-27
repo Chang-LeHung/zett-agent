@@ -114,7 +114,7 @@ Complete implementation
 
 Next: :doc:`hooks`, :doc:`events`, :doc:`state`.
 
-Related API: :class:`~zett_agent.AgentExtension`, :class:`~zett_agent.AgentRunContext`,
-:meth:`~zett_agent.AgentRunContext.register_tool`,
-:meth:`~zett_agent.AgentRunContext.register_server_tool`, and
-:class:`~zett_agent.AgentEvent`.
+Related API: :class:`~zett_agent.extensions.base.AgentExtension`, :class:`~zett_agent.agent.AgentRunContext`,
+:meth:`~zett_agent.agent.AgentRunContext.register_tool`,
+:meth:`~zett_agent.agent.AgentRunContext.register_server_tool`, and
+:class:`~zett_agent.events.AgentEvent`.

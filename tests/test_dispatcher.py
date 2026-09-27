@@ -6,19 +6,25 @@ from uuid import UUID
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
+    AgentRunConfig,
+)
+from zett_agent.client import (
     AgentClient,
+    create_agent,
+)
+from zett_agent.dispatcher import AgentEventDispatcher
+from zett_agent.events import (
     AgentEvent,
-    AgentEventDispatcher,
     AgentEventType,
     AgentPhase,
-    AgentRunConfig,
-    AssistantMessage,
+)
+from zett_agent.messages import AssistantMessage
+from zett_agent.model import (
     ModelEvent,
     ModelResponse,
     ReasoningEffort,
-    create_agent,
 )
 
 

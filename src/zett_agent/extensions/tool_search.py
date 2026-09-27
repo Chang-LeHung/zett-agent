@@ -9,11 +9,18 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import aclosing
 from dataclasses import replace
 
+# ``tools.base`` builds the search tool's schema with ``get_type_hints``, which
+# evaluates annotations against this module's globals, so the SDK type stays a
+# real import even though it is only used for typing.
 from openai.types.responses import FunctionToolParam
 
 from ..agent import AgentRunContext
 from ..model import ModelEvent, ModelRequest
-from ..tools import AgentTool, render_tool_search_text, tool
+from ..tools.base import (
+    AgentTool,
+    render_tool_search_text,
+    tool,
+)
 from .base import AgentExtension, ModelRequestNext
 
 #: Public name of the internal search tool; it is never sent as a function.
@@ -102,7 +109,7 @@ def _definition(tool: AgentTool) -> FunctionToolParam:
     """Render one tool as the definition the model loads.
 
     A deferred tool never reaches the provider schema and
-    :class:`~zett_agent.ToolGuidelinesExtension` skips it, so this result is the
+    :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` skips it, so this result is the
     only place the model can learn its rules: the guidelines travel with the
     description.
     """
@@ -127,7 +134,7 @@ class ToolSearchExtension(AgentExtension):
     from provider requests. Matching definitions reach the model through
     ``tool_search_output``; their handlers remain locally registered. Tools
     without ``deferred`` keep flowing to the model as ordinary functions, so
-    :class:`~zett_agent.ToolGuidelinesExtension` renders their guidance as usual.
+    :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` renders their guidance as usual.
 
     The search tool's signature and docstring supply its schema, description,
     snippet, and guidelines, just like any other ``@tool``-decorated function.

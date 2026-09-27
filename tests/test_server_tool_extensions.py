@@ -4,21 +4,23 @@ from __future__ import annotations
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentExtension,
     AgentRunConfig,
-    AnthropicServerToolExtension,
-    AssistantMessage,
-    DeepSeekServerToolExtension,
-    GoogleServerToolExtension,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.server_tools.anthropic import AnthropicServerToolExtension
+from zett_agent.extensions.server_tools.base import ServerToolExtension
+from zett_agent.extensions.server_tools.deepseek import DeepSeekServerToolExtension
+from zett_agent.extensions.server_tools.google import GoogleServerToolExtension
+from zett_agent.extensions.server_tools.openai import OpenAIServerToolExtension
+from zett_agent.extensions.server_tools.openrouter import OpenRouterServerToolExtension
+from zett_agent.messages import AssistantMessage
+from zett_agent.model import (
     ModelEvent,
     ModelRequest,
     ModelResponse,
-    OpenAIServerToolExtension,
-    OpenRouterServerToolExtension,
     ServerToolDefinition,
-    ServerToolExtension,
 )
 
 

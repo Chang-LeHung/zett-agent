@@ -16,24 +16,30 @@ from mcp.server.mcpserver import MCPServer
 from mcp_types import CallToolResult, ListToolsResult, TextContent, Tool
 
 import zett_agent.extensions.mcp as mcp_module
-from zett_agent import (
+from zett_agent._compat import UTC
+from zett_agent.agent import (
     Agent,
     AgentRunConfig,
     AgentRunContext,
     AgentState,
-    AssistantMessage,
+)
+from zett_agent.extensions.events import RunCancelledEvent
+from zett_agent.extensions.mcp import (
     McpConfiguration,
     McpExtension,
     McpHttpServer,
     McpStdioServer,
-    ModelEvent,
-    ModelResponse,
-    RunCancelledEvent,
+)
+from zett_agent.messages import (
+    AssistantMessage,
     SystemMessage,
     ToolCall,
     ToolMessage,
 )
-from zett_agent._compat import UTC
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
 
 
 class FakeClient:
@@ -522,7 +528,8 @@ def test_default_client_factory_maps_http_and_stdio_configuration(monkeypatch, t
         def __init__(self, server):
             captured.append(server)
 
-    monkeypatch.setattr(mcp_module, "Client", FakeMcpSdkClient)
+    # The extension imports the SDK inside the factory, so patch its source.
+    monkeypatch.setattr("mcp.Client", FakeMcpSdkClient)
     http = McpHttpServer("http", "https://example.test/mcp")
     stdio = McpStdioServer("stdio", "python", ("server.py",), {"TOKEN": "secret"}, tmp_path)
 
@@ -566,9 +573,9 @@ async def test_default_client_factory_passes_headers_to_streamable_http_client(m
         captured["http_client"] = http_client
         return "transport"
 
-    monkeypatch.setattr(mcp_module, "create_mcp_http_client", fake_create_http_client)
-    monkeypatch.setattr(mcp_module, "streamable_http_client", fake_streamable_http_client)
-    monkeypatch.setattr(mcp_module, "Client", FakeSdkClient)
+    monkeypatch.setattr("mcp.shared._httpx_utils.create_mcp_http_client", fake_create_http_client)
+    monkeypatch.setattr("mcp.client.streamable_http.streamable_http_client", fake_streamable_http_client)
+    monkeypatch.setattr("mcp.Client", FakeSdkClient)
     server = McpHttpServer(
         "secure",
         "https://secure.test/mcp",

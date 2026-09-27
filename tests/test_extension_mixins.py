@@ -1,6 +1,6 @@
 """Public extension hook groups remain small, disjoint, and composable."""
 
-from zett_agent import (
+from zett_agent.extensions.base import (
     AgentEventHooksMixin,
     AgentExtension,
     AgentModelHooksMixin,

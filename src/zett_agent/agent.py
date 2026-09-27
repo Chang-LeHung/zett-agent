@@ -29,8 +29,13 @@ from .model import (
     ServerToolDefinition,
 )
 from .sync_runtime import SyncMethodsMixin
-from .tools import AgentTool, ToolExecutionMode, ToolResult
-from .tools.base import _bind_tool_call, _reset_tool_call
+from .tools.base import (
+    AgentTool,
+    ToolExecutionMode,
+    ToolResult,
+    _bind_tool_call,
+    _reset_tool_call,
+)
 
 if TYPE_CHECKING:
     from .extensions.base import AgentExtension, ModelRequestNext, ToolCallNext
@@ -85,8 +90,8 @@ class AgentRunConfig:
         does not suppress a second message or model call.
 
     .. seealso::
-        :class:`~zett_agent.SQLiteSessionStorage` for persisted session identity,
-        and :class:`~zett_agent.SubAgentDefinition` for child-session setup.
+        :class:`~zett_agent.storage.SQLiteSessionStorage` for persisted session identity,
+        and :class:`~zett_agent.extensions.subagent.SubAgentDefinition` for child-session setup.
     """
 
     session_id: str | None = None
@@ -153,8 +158,8 @@ class AgentState:
     survives only when a memory or persistence extension restores it.
 
     .. seealso::
-        :class:`~zett_agent.AgentPhase` documents the state machine, while
-        :class:`~zett_agent.SessionView` describes restored persistent context.
+        :class:`~zett_agent.events.AgentPhase` documents the state machine, while
+        :class:`~zett_agent.extensions.persistence.SessionView` describes restored persistent context.
     """
 
     _messages: list[AnyMessage] = field(default_factory=list)
@@ -215,8 +220,8 @@ class AgentRunContext:
             await context.publish(event, target="SearchIndexExtension")
 
     .. seealso::
-        :class:`~zett_agent.AgentExtension` for lifecycle hooks and
-        :class:`~zett_agent.AgentTool` for request-scoped tool registration.
+        :class:`~zett_agent.extensions.base.AgentExtension` for lifecycle hooks and
+        :class:`~zett_agent.tools.base.AgentTool` for request-scoped tool registration.
     """
 
     # Configuration for this invocation.
@@ -490,8 +495,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         :meth:`create` or await :meth:`initialize` after direct construction.
 
     .. seealso::
-        :func:`~zett_agent.create_agent` is the convenient initialized entry
-        point. :class:`~zett_agent.AgentClient` adds application event dispatch,
+        :func:`~zett_agent.client.create_agent` is the convenient initialized entry
+        point. :class:`~zett_agent.client.AgentClient` adds application event dispatch,
         and :doc:`/concepts/lifecycle` explains the complete loop.
     """
 

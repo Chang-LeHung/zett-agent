@@ -11,19 +11,19 @@ Choose an adapter
    * - Adapter
      - Endpoint
      - Application responsibility
-   * - :class:`~zett_agent.OpenAIProvider`
+   * - :class:`~zett_agent.providers.openai.OpenAIProvider`
      - Chat Completions or Responses API
      - Model name and API key; optional base URL and ``response=True``
-   * - :class:`~zett_agent.DeepSeekProvider`
+   * - :class:`~zett_agent.providers.deepseek.DeepSeekProvider`
      - DeepSeek Chat Completions or Responses API
      - Model name and API key; optional ``response=True``
-   * - :class:`~zett_agent.AnthropicProvider`
+   * - :class:`~zett_agent.providers.anthropic.AnthropicProvider`
      - Anthropic-style API
      - Model name, API key, optional base URL
-   * - :class:`~zett_agent.GoogleProvider`
+   * - :class:`~zett_agent.providers.google.GoogleProvider`
      - Google GenAI SDK
      - Model name and API key
-   * - :class:`~zett_agent.OllamaProvider`
+   * - :class:`~zett_agent.providers.ollama.OllamaProvider`
      - Running Ollama server
      - Installed model and reachable server URL
 
@@ -72,12 +72,12 @@ Prompt cache keys
 --------------------
 
 Endpoints that cache prompt prefixes route on a caller-supplied key. The Agent
-fills :attr:`~zett_agent.ModelRequest.cache_key` from the run's session identity,
+fills :attr:`~zett_agent.model.ModelRequest.cache_key` from the run's session identity,
 so every step of one conversation reuses the same prefix, and the OpenAI adapter
 declares it as ``prompt_cache_key`` on both Chat Completions and Responses.
-Reported hits are normalized into :attr:`~zett_agent.ModelUsage.cache_read_tokens`.
+Reported hits are normalized into :attr:`~zett_agent.model.ModelUsage.cache_read_tokens`.
 
-Pass ``cache_key`` to :class:`~zett_agent.AgentRunConfig` to route several
+Pass ``cache_key`` to :class:`~zett_agent.agent.AgentRunConfig` to route several
 conversations onto one prefix, or construct a provider with
 ``send_prompt_cache_key=False`` when an endpoint rejects the field.
 

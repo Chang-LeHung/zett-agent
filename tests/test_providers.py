@@ -15,40 +15,42 @@ import httpx
 import pytest
 from google.genai import types as google_types
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentMessage,
     AgentRunConfig,
+)
+from zett_agent.messages import (
+    AgentMessage,
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
     ImageUrlSource,
-    ModelEventType,
-    ModelUsage,
-    ReasoningEffort,
     SystemMessage,
     TextContent,
     ToolCall,
-    ToolDefinition,
     ToolMessage,
     UserMessage,
 )
-from zett_agent.model import ModelRequest
-from zett_agent.providers import (
-    AnthropicProvider,
-    DeepSeekProvider,
-    GoogleProvider,
-    OllamaProvider,
-    OpenAIProvider,
+from zett_agent.model import (
+    ModelEventType,
+    ModelRequest,
+    ModelUsage,
+    ReasoningEffort,
+    ToolDefinition,
+)
+from zett_agent.providers.anthropic import AnthropicProvider, _tools_to_anthropic_payload
+from zett_agent.providers.base import (
     ProviderAuthError,
     ProviderResponseError,
     _message_to_openai_payload,
     _normalize_image_source,
+    _tools_to_openai_payload,
     _usage_from_mapping,
 )
-from zett_agent.providers.anthropic import _tools_to_anthropic_payload
-from zett_agent.providers.base import _tools_to_openai_payload
-from zett_agent.providers.ollama import _tools_to_ollama_payload
+from zett_agent.providers.deepseek import DeepSeekProvider
+from zett_agent.providers.google import GoogleProvider
+from zett_agent.providers.ollama import OllamaProvider, _tools_to_ollama_payload
+from zett_agent.providers.openai import OpenAIProvider
 
 
 def _sse_body(events: list[dict[str, Any]]) -> bytes:

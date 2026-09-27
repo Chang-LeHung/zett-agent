@@ -1,15 +1,17 @@
 from datetime import date, datetime
 
-from zett_agent import (
+from zett_agent._compat import UTC
+from zett_agent.agent import (
     AgentRunConfig,
     AgentRunContext,
     AgentState,
-    AssistantMessage,
+)
+from zett_agent.extensions.usage_activity import UsageActivityExtension
+from zett_agent.messages import AssistantMessage
+from zett_agent.model import (
     ModelResponse,
     ModelUsage,
-    UsageActivityExtension,
 )
-from zett_agent._compat import UTC
 
 
 class Storage:

@@ -7,7 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from .._compat import StrEnum
 from ..agent import AgentRunContext
 from ..messages import AssistantMessage
-from ..tools import AgentTool, tool
+from ..tools.base import (
+    AgentTool,
+    tool,
+)
 from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
 
@@ -81,7 +84,7 @@ class TodoWriteExtension(AgentExtension):
         cleared after success, failure, or cancellation.
 
     .. seealso::
-        :class:`~zett_agent.TodoItem` and :class:`~zett_agent.TodoWriteResult`
+        :class:`~zett_agent.extensions.todo.TodoItem` and :class:`~zett_agent.extensions.todo.TodoWriteResult`
         expose validated progress to application code.
     """
 

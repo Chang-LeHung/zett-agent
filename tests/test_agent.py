@@ -2,40 +2,50 @@ import asyncio
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentEvent,
-    AgentEventType,
-    AgentExtension,
-    AgentIterationLimitError,
-    AgentPhase,
-    AgentPhaseTransitionMixin,
-    AgentProtocolError,
     AgentRunConfig,
     AgentRunContext,
     AgentState,
-    AssistantMessage,
+)
+from zett_agent.events import (
+    AgentEvent,
+    AgentEventType,
+    AgentPhase,
+    AgentPhaseTransitionMixin,
+)
+from zett_agent.exceptions import (
+    AgentIterationLimitError,
+    AgentProtocolError,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import (
     ContentCompletedEvent,
     ContentStartedEvent,
-    InMemoryMessageAccumulator,
-    InternalMessageExtension,
     MessageAppendedEvent,
+    PhaseTransitionEvent,
+    ReasoningCompletedEvent,
+    ReasoningStartedEvent,
+)
+from zett_agent.extensions.internal_message import InternalMessageExtension
+from zett_agent.extensions.memory import InMemoryMessageAccumulator
+from zett_agent.extensions.steering import SteeringExtension
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.messages import (
+    AssistantMessage,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelRequest,
     ModelResponse,
-    PhaseTransitionEvent,
-    ReasoningCompletedEvent,
     ReasoningEffort,
-    ReasoningStartedEvent,
     ServerToolDefinition,
-    SteeringExtension,
-    SystemMessage,
-    ToolCall,
-    ToolGuidelinesExtension,
-    ToolMessage,
-    UserMessage,
-    tool,
 )
+from zett_agent.tools.base import tool
 
 CONFIG = AgentRunConfig(session_id="test-session")
 

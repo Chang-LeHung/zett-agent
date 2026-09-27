@@ -4,7 +4,7 @@ import pytest
 from openai.types.responses import FunctionToolParam
 from pydantic import BaseModel, Field, ValidationError
 
-from zett_agent import (
+from zett_agent.tools.base import (
     AgentTool,
     get_tool_guidelines,
     get_tool_snippet,

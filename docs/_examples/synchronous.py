@@ -3,16 +3,20 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from zett_agent import (
-    AgentEventDispatcher,
-    AgentEventType,
-    AgentRunConfig,
+from zett_agent.agent import AgentRunConfig
+from zett_agent.dispatcher import AgentEventDispatcher
+from zett_agent.events import AgentEventType
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.messages import (
     AssistantMessage,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelResponse,
-    SQLiteSessionExtension,
+)
+from zett_agent.sync import (
     SyncModelAdapter,
-    UserMessage,
     create_agent_sync,
 )
 

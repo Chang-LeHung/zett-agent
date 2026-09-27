@@ -2,18 +2,22 @@
 
 from pathlib import Path
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
     AgentRunConfig,
+)
+from zett_agent.extensions.coding import CodingExtension
+from zett_agent.extensions.file_system import FileSystemExtension
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.messages import (
     AssistantMessage,
-    CodingExtension,
-    FileSystemExtension,
-    ModelEvent,
-    ModelResponse,
     SystemMessage,
     ToolCall,
-    ToolGuidelinesExtension,
     ToolMessage,
+)
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
 )
 
 

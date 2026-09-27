@@ -86,6 +86,6 @@ message annotations. It is not exported from the package root. Store this
 checkpoint separately from the original Raw Log, together with the inclusive
 sequence boundary described above.
 
-Related API: :class:`~zett_agent.SessionStorage`,
-:class:`~zett_agent.BaseSessionPersistenceExtension`,
-:class:`~zett_agent.SQLiteSessionStorage`, :class:`~zett_agent.SessionView`.
+Related API: :class:`~zett_agent.extensions.persistence.SessionStorage`,
+:class:`~zett_agent.extensions.persistence.BaseSessionPersistenceExtension`,
+:class:`~zett_agent.storage.SQLiteSessionStorage`, :class:`~zett_agent.extensions.persistence.SessionView`.

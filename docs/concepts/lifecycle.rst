@@ -64,12 +64,12 @@ One model/tool cycle
                                  after_turn()
 
 Hooks and their exact purpose are catalogued in :doc:`../extending/hooks`.
-The :class:`~zett_agent.AgentExtension` reference also includes the complete
+The :class:`~zett_agent.extensions.base.AgentExtension` reference also includes the complete
 state diagram with internal notifications and exceptional paths.
 
 Lifecycle hooks emit visible progress with ``await context.emit(event)``. All
-internal work writes to the request's :class:`~zett_agent.AgentEventQueue`; the
-outer :meth:`~zett_agent.Agent.stream` is the only AgentEvent async generator.
+internal work writes to the request's :class:`~zett_agent.event_queue.AgentEventQueue`; the
+outer :meth:`~zett_agent.agent.Agent.stream` is the only AgentEvent async generator.
 It drains events in order until RUN_COMPLETED and cancels the producer if the
 caller closes the stream early.
 

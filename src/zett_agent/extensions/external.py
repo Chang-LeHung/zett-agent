@@ -87,10 +87,14 @@ class ExternalEventExtension(AgentExtension):
 
     Example::
 
-        from zett_agent import (
-            AgentRunContext, AgentEvent, AgentEventType, ExternalEventExtension,
-            ToolCall, tool,
+        from zett_agent.agent import AgentRunContext
+        from zett_agent.events import (
+            AgentEvent,
+            AgentEventType,
         )
+        from zett_agent.extensions.external import ExternalEventExtension
+        from zett_agent.messages import ToolCall
+        from zett_agent.tools.base import tool
 
         class ConfirmationExtension(ExternalEventExtension):
             def __init__(self) -> None:
@@ -131,7 +135,11 @@ class ExternalEventExtension(AgentExtension):
 
     Usage::
 
-        from zett_agent import Agent, AgentRunConfig, ExternalEvent
+        from zett_agent.agent import (
+            Agent,
+            AgentRunConfig,
+        )
+        from zett_agent.extensions.external import ExternalEvent
 
         config = AgentRunConfig(session_id="session-42", request_id="request-1")
         agent = await Agent.create(model, config=config, extensions=[ConfirmationExtension()])

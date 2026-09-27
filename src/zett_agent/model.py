@@ -183,8 +183,8 @@ class ModelRequest:
         ``ModelRequest`` describes intent; it does not control transport attempts.
 
     .. seealso::
-        :class:`~zett_agent.AgentModel` defines the receiving adapter, and
-        :class:`~zett_agent.ToolDefinition` defines exposed model tools.
+        :class:`~zett_agent.model.AgentModel` defines the receiving adapter, and
+        :class:`~zett_agent.model.ToolDefinition` defines exposed model tools.
     """
 
     #: Fully assembled context, including instructions and tool round trips.
@@ -333,7 +333,7 @@ class ModelResponse:
             yield ModelEvent.completed(response)
 
     .. seealso::
-        :class:`~zett_agent.ModelUsage` normalizes provider token counters.
+        :class:`~zett_agent.model.ModelUsage` normalizes provider token counters.
     """
 
     #: Complete assistant output, including any tool calls and replay blocks.
@@ -414,7 +414,7 @@ class ModelEvent:
         conversation messages, and do not omit the terminal response.
 
     .. seealso::
-        :class:`~zett_agent.AgentEvent` is the higher-level stream consumed by
+        :class:`~zett_agent.events.AgentEvent` is the higher-level stream consumed by
         applications after runtime lifecycle events are added.
     """
 
@@ -505,7 +505,7 @@ class AgentModel(Protocol):
 
     .. seealso::
         :doc:`/extending/model-adapter` provides a complete adapter walkthrough;
-        :class:`~zett_agent.RetryOptions` defines the model-owned retry policy.
+        :class:`~zett_agent.model.RetryOptions` defines the model-owned retry policy.
     """
 
     #: Model-owned backoff policy; max_retries=0 disables retries.

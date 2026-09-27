@@ -15,25 +15,29 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.patch_stdout import patch_stdout
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
+    AgentRunConfig,
+)
+from zett_agent.events import (
     AgentEvent,
     AgentEventType,
-    AgentRunConfig,
+)
+from zett_agent.extensions.coding import CodingExtension
+from zett_agent.extensions.compaction import CompactionExtension
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.ids import new_uuid7
+from zett_agent.messages import (
     AnyMessage,
     AssistantMessage,
-    CodingExtension,
-    CompactionExtension,
-    DeepSeekProvider,
-    ReasoningEffort,
-    SQLiteSessionExtension,
-    SQLiteSessionStorage,
     SystemMessage,
-    ToolGuidelinesExtension,
     ToolMessage,
     UserMessage,
-    new_uuid7,
 )
+from zett_agent.model import ReasoningEffort
+from zett_agent.providers.deepseek import DeepSeekProvider
+from zett_agent.storage import SQLiteSessionStorage
 
 SLASH_COMMANDS = ("/sessions", "/history", "/new", "/use", "/help", "/quit", "/exit")
 

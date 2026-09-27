@@ -1,6 +1,7 @@
 """Build the complete public reference in isolation and inspect rendered HTML."""
 
 import ast
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,15 @@ pytest.importorskip("sphinx", reason="Install the docs group or run make docs-ch
 pytest.importorskip("pydata_sphinx_theme")
 from bs4 import BeautifulSoup
 
-import zett_agent
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def reference_exports():
+    """Return the documented names by asking the reference generator itself."""
+    spec = importlib.util.spec_from_file_location("reference_ext", ROOT / "docs" / "_ext" / "reference.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.reference_exports()
 
 
 @pytest.fixture(scope="module")
@@ -35,7 +44,8 @@ def documentation(tmp_path_factory):
 
 def test_all_public_exports_have_reference_pages(documentation):
     source, output = documentation
-    names = zett_agent.__all__
+    names = list(reference_exports())
+    assert len(names) > 200
     assert len(names) == len(set(names))
     assert len(names) == len({name.casefold() for name in names})
     for name in names:
@@ -105,7 +115,9 @@ def test_state_diagram_return_path_stays_in_one_column():
     """A return arrow must join the same column as every vertical segment."""
     import inspect
 
-    lines = inspect.getdoc(zett_agent.AgentState).splitlines()
+    from zett_agent.agent import AgentState
+
+    lines = inspect.getdoc(AgentState).splitlines()
     start = next(index for index, line in enumerate(lines) if "| READY " in line)
     end = next(index for index, line in enumerate(lines) if "| GENERATING " in line)
     column = lines[start].rindex("+")
@@ -166,7 +178,7 @@ def test_protected_extension_interfaces_have_anchors(documentation):
     _, output = documentation
     soup = BeautifulSoup((output / "_generated/ExternalEventExtension.html").read_text(), "html.parser")
     for method in ("_wait_for_external_event", "_take_external_event", "accept", "on_error"):
-        assert soup.find(id=f"zett_agent.ExternalEventExtension.{method}"), method
+        assert soup.find(id=f"zett_agent.extensions.external.ExternalEventExtension.{method}"), method
 
 
 def test_desktop_mobile_navigation_and_search(documentation):

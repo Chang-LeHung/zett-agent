@@ -8,8 +8,8 @@ keeps history. **Prerequisites:** :doc:`installation`; no API credentials.
 -----------------------------
 
 An Agent does not know how to send an HTTP request to a specific model vendor.
-It expects an adapter that accepts :class:`~zett_agent.ModelRequest` and streams
-:class:`~zett_agent.ModelEvent`. For this first example, the adapter counts user
+It expects an adapter that accepts :class:`~zett_agent.model.ModelRequest` and streams
+:class:`~zett_agent.model.ModelEvent`. For this first example, the adapter counts user
 turns instead of calling an LLM.
 
 .. literalinclude:: ../_examples/first_agent.py
@@ -26,8 +26,8 @@ display, but do not replace that final response.
    :language: python
    :pyobject: main
 
-:func:`~zett_agent.create_agent` generates a UUIDv7 session when config is
-omitted. The returned :class:`~zett_agent.AgentClient` wraps a normal Agent.
+:func:`~zett_agent.client.create_agent` generates a UUIDv7 session when config is
+omitted. The returned :class:`~zett_agent.client.AgentClient` wraps a normal Agent.
 Its default extensions retain in-memory history, so the second request includes
 the first exchange. The ``run`` method returns a complete AssistantMessage.
 
@@ -63,5 +63,5 @@ Continue with :doc:`providers`, then :doc:`streaming`.
    in-memory history. A new request always starts with fresh AgentState; an
    extension must restore previous conversation messages.
 
-Related API: :class:`~zett_agent.Agent`, :class:`~zett_agent.AgentRunConfig`,
-:class:`~zett_agent.InMemoryMessageAccumulator`.
+Related API: :class:`~zett_agent.agent.Agent`, :class:`~zett_agent.agent.AgentRunConfig`,
+:class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator`.

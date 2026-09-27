@@ -2,20 +2,24 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from zett_agent import (
-    AgentExtension,
+from zett_agent.agent import (
     AgentRunConfig,
     AgentRunContext,
     AgentState,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.compaction import CompactedMessage
+from zett_agent.extensions.events import (
     CompactionEvent,
-    InMemoryMessageAccumulator,
     MessageAppendedEvent,
     MessageTiming,
-    ModelUsage,
+)
+from zett_agent.extensions.memory import InMemoryMessageAccumulator
+from zett_agent.messages import (
     SystemMessage,
     UserMessage,
 )
-from zett_agent.extensions.compaction import CompactedMessage
+from zett_agent.model import ModelUsage
 
 
 async def test_context_appends_message_before_publishing_its_event():

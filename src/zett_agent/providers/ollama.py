@@ -74,7 +74,7 @@ class OllamaProvider(RetryingProvider):
 
     .. seealso::
         :doc:`/learn/providers` covers shared adapter ownership and retries;
-        :class:`~zett_agent.AgentModel` defines the normalized stream contract.
+        :class:`~zett_agent.model.AgentModel` defines the normalized stream contract.
     """
 
     def __init__(

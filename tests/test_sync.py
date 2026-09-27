@@ -8,33 +8,41 @@ from threading import Event, get_ident
 
 import pytest
 
-from zett_agent import (
+from zett_agent._compat import ExceptionGroup
+from zett_agent.agent import (
     Agent,
-    AgentEvent,
-    AgentEventDispatcher,
-    AgentEventType,
-    AgentExtension,
-    AgentMessage,
-    AgentPhase,
-    AgentProtocolError,
     AgentRunConfig,
     AgentRunContext,
-    AskUserExtension,
-    AssistantMessage,
-    ExternalEvent,
-    ModelEvent,
+)
+from zett_agent.dispatcher import AgentEventDispatcher
+from zett_agent.events import (
+    AgentEvent,
+    AgentEventType,
+    AgentPhase,
     ModelOutputTracker,
-    ModelResponse,
-    SQLiteSessionExtension,
-    SyncAgent,
-    SyncModelAdapter,
-    SyncRuntime,
+)
+from zett_agent.exceptions import AgentProtocolError
+from zett_agent.extensions.ask_user import AskUserExtension
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.messages import (
+    AgentMessage,
+    AssistantMessage,
     ToolCall,
     UserMessage,
-    create_agent_sync,
-    tool,
 )
-from zett_agent._compat import ExceptionGroup
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
+from zett_agent.sync import (
+    SyncAgent,
+    SyncModelAdapter,
+    create_agent_sync,
+)
+from zett_agent.sync_runtime import SyncRuntime
+from zett_agent.tools.base import tool
 
 
 class EchoModel:
@@ -387,7 +395,10 @@ def test_mcp_scope_is_entered_and_exited_by_the_same_task():
     import anyio
     from mcp_types import ListToolsResult
 
-    from zett_agent import McpExtension, McpHttpServer
+    from zett_agent.extensions.mcp import (
+        McpExtension,
+        McpHttpServer,
+    )
 
     scopes = []
 
@@ -415,7 +426,7 @@ def test_mcp_scope_is_entered_and_exited_by_the_same_task():
 
 
 def test_sync_agent_async_hook_can_publish_to_other_extensions():
-    from zett_agent import InternalMessageEvent
+    from zett_agent.extensions.events import InternalMessageEvent
 
     class Publisher(AgentExtension):
         async def on_message(self, context):

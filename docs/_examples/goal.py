@@ -3,22 +3,26 @@
 import asyncio
 from collections.abc import AsyncIterator
 
-from zett_agent import (
+from zett_agent.agent import AgentRunConfig
+from zett_agent.client import create_agent
+from zett_agent.dispatcher import AgentEventDispatcher
+from zett_agent.events import AgentEvent
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.extensions.goal import (
     GOAL_MODE_EVENT_NAME,
-    AgentEvent,
-    AgentEventDispatcher,
-    AgentRunConfig,
-    AssistantMessage,
-    ExternalEvent,
     GoalExtension,
+)
+from zett_agent.extensions.subagent import SubAgentDefinition
+from zett_agent.messages import (
+    AssistantMessage,
+    ToolCall,
+    ToolMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelRequest,
     ModelResponse,
     RetryOptions,
-    SubAgentDefinition,
-    ToolCall,
-    ToolMessage,
-    create_agent,
 )
 
 

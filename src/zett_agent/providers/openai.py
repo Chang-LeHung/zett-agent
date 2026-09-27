@@ -47,13 +47,13 @@ class OpenAIProvider(_OpenAIStyleProvider):
 
     .. note::
         Both protocols declare ``prompt_cache_key`` from
-        :attr:`~zett_agent.ModelRequest.cache_key`, so each conversation keeps a
+        :attr:`~zett_agent.model.ModelRequest.cache_key`, so each conversation keeps a
         stable prefix for provider-side prompt caching. Reported cache hits are
-        normalized into :attr:`~zett_agent.ModelUsage.cache_read_tokens`.
+        normalized into :attr:`~zett_agent.model.ModelUsage.cache_read_tokens`.
 
     .. seealso::
         :doc:`/learn/providers` covers credentials and transport ownership;
-        :class:`~zett_agent.RetryOptions` controls retries before output starts.
+        :class:`~zett_agent.model.RetryOptions` controls retries before output starts.
     """
 
     def __init__(

@@ -48,7 +48,7 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         the server will return reasoning deltas.
 
     .. seealso::
-        :class:`~zett_agent.ReasoningEffort` lists provider-neutral levels, and
+        :class:`~zett_agent.model.ReasoningEffort` lists provider-neutral levels, and
         :doc:`/learn/providers` covers shared provider lifecycle rules.
     """
 

@@ -4,7 +4,7 @@ Stream to a terminal or UI
 Use callbacks when you do not need to control iteration
 -----------------------------------------------------------
 
-Subclass :class:`~zett_agent.AgentEventDispatcher` and override only the events
+Subclass :class:`~zett_agent.dispatcher.AgentEventDispatcher` and override only the events
 you want to display. Bind it through ``create_agent(..., event_dispatcher=...)``;
 ``client.run`` then dispatches events and still returns the final answer.
 

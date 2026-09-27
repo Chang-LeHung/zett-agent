@@ -4,28 +4,34 @@ import asyncio
 from collections.abc import AsyncIterator
 from copy import deepcopy
 
-from zett_agent import (
+from zett_agent.agent import AgentRunContext
+from zett_agent.client import create_agent
+from zett_agent.dispatcher import AgentEventDispatcher
+from zett_agent.events import (
     AgentEvent,
-    AgentEventDispatcher,
     AgentEventType,
-    AgentExtension,
-    AgentRunContext,
-    AssistantMessage,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import (
     ExtensionEvent,
-    InMemoryMessageAccumulator,
+    RunCancelledEvent,
+)
+from zett_agent.extensions.memory import InMemoryMessageAccumulator
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.messages import (
+    AssistantMessage,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelRequest,
     ModelResponse,
     RetryOptions,
-    RunCancelledEvent,
-    SystemMessage,
-    ToolCall,
-    ToolGuidelinesExtension,
-    ToolMessage,
-    UserMessage,
-    create_agent,
-    tool,
 )
+from zett_agent.tools.base import tool
 
 
 class NoteExtension(AgentExtension):

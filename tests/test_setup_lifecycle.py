@@ -2,17 +2,21 @@
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentExtension,
-    AgentProtocolError,
     AgentRunConfig,
+)
+from zett_agent.exceptions import AgentProtocolError
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import MessageAppendedEvent
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.messages import (
     AssistantMessage,
-    MessageAppendedEvent,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelResponse,
-    SQLiteSessionExtension,
-    UserMessage,
 )
 
 

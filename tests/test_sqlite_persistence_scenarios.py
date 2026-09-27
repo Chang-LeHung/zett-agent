@@ -9,23 +9,26 @@ from uuid import UUID
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentExtension,
     AgentRunConfig,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.compaction import CompactedMessage, CompactionExtension
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.messages import (
     AssistantMessage,
-    CompactionExtension,
-    ModelEvent,
-    ModelResponse,
-    SQLiteSessionExtension,
     SystemMessage,
     ToolCall,
     ToolMessage,
     UserMessage,
-    tool,
 )
-from zett_agent.extensions.compaction import CompactedMessage
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
 from zett_agent.storage import MessageKind
+from zett_agent.tools.base import tool
 
 
 @contextmanager

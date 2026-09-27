@@ -54,7 +54,7 @@ successful request. ``compacted_through_sequence`` is the last original record
 already represented by the checkpoint. Restoring starts strictly after it, so
 summarized messages are not sent twice.
 
-Use :class:`~zett_agent.SessionView` for the restored model context and
+Use :class:`~zett_agent.extensions.persistence.SessionView` for the restored model context and
 ``await storage.list_raw_messages(...)`` for full UI history. Request IDs
 correlate records but do not automatically make appends idempotent. Storage
 restoration is asynchronous: the runtime awaits the snapshot and raw tail before

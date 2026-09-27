@@ -5,8 +5,9 @@ A server tool runs inside a model provider, unlike an ordinary ``AgentTool``
 executed by the Agent loop. Install one provider-specific extension for each
 hosted capability you want to expose::
 
-    from zett_agent import GoogleServerToolExtension, create_agent
-    from zett_agent import ServerToolDefinition
+    from zett_agent.extensions.server_tools.google import GoogleServerToolExtension
+    from zett_agent.client import create_agent
+    from zett_agent.model import ServerToolDefinition
 
     client = await create_agent(
         model,
@@ -18,7 +19,7 @@ hosted capability you want to expose::
         ],
     )
 
-Every extension calls :meth:`~zett_agent.AgentRunContext.register_server_tool`
+Every extension calls :meth:`~zett_agent.agent.AgentRunContext.register_server_tool`
 during ``on_tool``. The resulting definitions are request-scoped and reach
 every subsequent before-model hook and the final ``ModelRequest``. They never
 enter the Agent's local tool executor.
@@ -33,19 +34,19 @@ Choose the extension that matches the endpoint
    * - Extension
      - Default type
      - Transport requirement
-   * - :class:`~zett_agent.GoogleServerToolExtension`
+   * - :class:`~zett_agent.extensions.server_tools.google.GoogleServerToolExtension`
      - ``google_search`` + ``url_context``
      - Gemini GenerateContent; supported by GoogleProvider.
-   * - :class:`~zett_agent.AnthropicServerToolExtension`
+   * - :class:`~zett_agent.extensions.server_tools.anthropic.AnthropicServerToolExtension`
      - ``web_search_20260318`` + ``web_fetch_20260318``
      - Anthropic Messages; supported by AnthropicProvider.
-   * - :class:`~zett_agent.OpenRouterServerToolExtension`
+   * - :class:`~zett_agent.extensions.server_tools.openrouter.OpenRouterServerToolExtension`
      - ``openrouter:web_search`` + ``openrouter:web_fetch``
      - OpenRouter-compatible Chat Completions endpoint.
-   * - :class:`~zett_agent.OpenAIServerToolExtension`
+   * - :class:`~zett_agent.extensions.server_tools.openai.OpenAIServerToolExtension`
      - ``web_search``
      - OpenAI Responses API; not OpenAI Chat Completions.
-   * - :class:`~zett_agent.DeepSeekServerToolExtension`
+   * - :class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekServerToolExtension`
      - ``web_search``
      - DeepSeek Responses API; not legacy Chat Completions.
 

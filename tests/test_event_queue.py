@@ -3,7 +3,13 @@ import inspect
 
 import pytest
 
-from zett_agent import Agent, AgentEvent, AgentEventQueue, AgentEventType, AgentProtocolError
+from zett_agent.agent import Agent
+from zett_agent.event_queue import AgentEventQueue
+from zett_agent.events import (
+    AgentEvent,
+    AgentEventType,
+)
+from zett_agent.exceptions import AgentProtocolError
 
 
 async def test_event_queue_preserves_fifo_order_without_stream_acknowledgements():

@@ -5,7 +5,16 @@ from pathlib import Path
 
 from ..agent import AgentRunContext
 from ..messages import SystemMessage
-from ..tools import AgentTool, delete_file, glob, grep, read_file, replace_in_file, view_image, write_file
+from ..tools.base import AgentTool
+from ..tools.coding import (
+    delete_file,
+    glob,
+    grep,
+    read_file,
+    replace_in_file,
+    write_file,
+)
+from ..tools.images import view_image
 from .base import AgentExtension
 
 

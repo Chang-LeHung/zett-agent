@@ -72,7 +72,7 @@ class GoogleProvider(RetryingProvider):
         reused only with the same Google model.
 
     .. seealso::
-        :class:`~zett_agent.AssistantMessage` describes model-scoped replay data,
+        :class:`~zett_agent.messages.AssistantMessage` describes model-scoped replay data,
         and :doc:`/learn/providers` shows the common provider workflow.
     """
 

@@ -8,32 +8,44 @@ from time import monotonic_ns
 
 import pytest
 
-from zett_agent import (
-    ASK_USER_RESPONSE_EVENT_NAME,
+from zett_agent._compat import UTC
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
-    AgentExtension,
-    AgentPhase,
     AgentRunConfig,
     AgentRunContext,
     AgentState,
+)
+from zett_agent.events import (
+    AgentEventType,
+    AgentPhase,
+)
+from zett_agent.extensions.ask_user import (
+    ASK_USER_RESPONSE_EVENT_NAME,
     AskUserEvent,
     AskUserExtension,
-    AssistantMessage,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import (
     ExtensionEvent,
+    RunCancelledEvent,
+)
+from zett_agent.extensions.external import (
     ExternalEvent,
     ExternalEventExtension,
+)
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.messages import (
+    AssistantMessage,
     ImageContent,
-    ModelEvent,
-    ModelResponse,
-    RunCancelledEvent,
     SystemMessage,
     TextContent,
     ToolCall,
-    ToolGuidelinesExtension,
     ToolMessage,
 )
-from zett_agent._compat import UTC
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
 
 
 class AskModel:

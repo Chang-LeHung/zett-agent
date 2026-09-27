@@ -3,32 +3,29 @@ import json
 import httpx
 import pytest
 
-from zett_agent import (
-    AnthropicProvider,
+from zett_agent.messages import (
     AssistantMessage,
-    DeepSeekProvider,
-    GoogleProvider,
     ImageBytesSource,
     ImageContent,
     ImageUrlSource,
-    ModelEventType,
-    ModelRequest,
-    OllamaProvider,
-    OpenAIProvider,
-    ProviderAuthError,
-    ProviderResponseError,
-    ReasoningEffort,
     SystemMessage,
     TextContent,
     ToolCall,
-    ToolCallDelta,
-    ToolDefinition,
     ToolMessage,
     UserMessage,
 )
-from zett_agent.model import ModelEvent
-from zett_agent.providers.anthropic import _to_anthropic_image_block
+from zett_agent.model import (
+    ModelEvent,
+    ModelEventType,
+    ModelRequest,
+    ReasoningEffort,
+    ToolCallDelta,
+    ToolDefinition,
+)
+from zett_agent.providers.anthropic import AnthropicProvider, _to_anthropic_image_block
 from zett_agent.providers.base import (
+    ProviderAuthError,
+    ProviderResponseError,
     _normalize_image_source,
     _parse_tool_arguments,
     _parse_tool_calls,
@@ -36,6 +33,10 @@ from zett_agent.providers.base import (
     _to_model_data,
     _ToolCallAccumulator,
 )
+from zett_agent.providers.deepseek import DeepSeekProvider
+from zett_agent.providers.google import GoogleProvider
+from zett_agent.providers.ollama import OllamaProvider
+from zett_agent.providers.openai import OpenAIProvider
 
 
 async def _collect(stream):

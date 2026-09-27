@@ -8,7 +8,6 @@ from typing import Any
 
 import httpx
 import truststore
-from anthropic import AnthropicError, AsyncAnthropic
 
 from ..messages import (
     AssistantMessage,
@@ -168,7 +167,7 @@ class AnthropicProvider(RetryingProvider):
         reasoning text.
 
     .. seealso::
-        :class:`~zett_agent.AssistantMessage` documents ``replay_blocks``;
+        :class:`~zett_agent.messages.AssistantMessage` documents ``replay_blocks``;
         :doc:`/concepts/context` explains replay during tool round trips.
     """
 
@@ -196,6 +195,8 @@ class AnthropicProvider(RetryingProvider):
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
             trust_env=True,
         )
+        from anthropic import AsyncAnthropic
+
         self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, http_client=self._http_client, max_retries=0)
 
     async def aclose(self) -> None:
@@ -261,6 +262,8 @@ class AnthropicProvider(RetryingProvider):
         server_initial_inputs: dict[int, dict[str, Any]] = {}
         usage = ModelUsage()
         replay: dict[int, dict[str, Any]] = {}
+
+        from anthropic import AnthropicError
 
         try:
             response = await self._client.messages.create(**body)

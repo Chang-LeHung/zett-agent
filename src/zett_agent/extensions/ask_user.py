@@ -10,7 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..messages import ImageContent, ImageUrlSource, TextContent, ToolCall
-from ..tools import AgentTool, tool
+from ..tools.base import (
+    AgentTool,
+    tool,
+)
 from .external import ExternalEventExtension
 
 ASK_USER_TOOL_NAME = "ask_user"
@@ -180,7 +183,7 @@ class AskUserExtension(ExternalEventExtension):
         Displaying a question is not equivalent to authorizing an action.
 
     .. seealso::
-        :class:`~zett_agent.ExternalEventExtension` owns waiting and wake-up;
+        :class:`~zett_agent.extensions.external.ExternalEventExtension` owns waiting and wake-up;
         :doc:`/extending/events` contains a complete approval example.
     """
 

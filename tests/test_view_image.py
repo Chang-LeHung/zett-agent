@@ -5,25 +5,28 @@ import base64
 import httpx
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
     AgentRunConfig,
+)
+from zett_agent.extensions.file_system import FileSystemExtension
+from zett_agent.messages import (
     AssistantMessage,
-    FileSystemExtension,
     ImageContent,
-    ModelEvent,
-    ModelResponse,
-    SQLiteSessionStorage,
     ToolCall,
     ToolMessage,
     UserMessage,
-    view_image,
+)
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
 )
 from zett_agent.providers.base import _message_to_openai_payload
 from zett_agent.providers.responses import responses_input
 from zett_agent.providers.tool_images import expand_tool_images
-from zett_agent.storage import decode_messages, encode_messages
+from zett_agent.storage import SQLiteSessionStorage, decode_messages, encode_messages
 from zett_agent.tools import images as image_tools
+from zett_agent.tools.images import view_image
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
 

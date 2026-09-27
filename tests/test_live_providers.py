@@ -7,22 +7,26 @@ import httpx
 import pytest
 import truststore
 
-from zett_agent import (
+from zett_agent._compat import timeout
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
     AgentRunConfig,
-    AnthropicProvider,
+)
+from zett_agent.events import AgentEventType
+from zett_agent.extensions.compaction import CompactionExtension
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.messages import (
     AssistantMessage,
-    CompactionExtension,
-    DeepSeekProvider,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEventType,
     ModelRequest,
     ReasoningEffort,
-    SQLiteSessionExtension,
-    UserMessage,
-    tool,
 )
-from zett_agent._compat import timeout
+from zett_agent.providers.anthropic import AnthropicProvider
+from zett_agent.providers.deepseek import DeepSeekProvider
+from zett_agent.tools.base import tool
 
 pytestmark = pytest.mark.skipif(
     os.getenv("ZETT_AGENT_LIVE_TESTS") != "1" or not os.getenv("DEEPSEEK_API"),

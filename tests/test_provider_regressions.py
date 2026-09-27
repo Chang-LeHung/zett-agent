@@ -5,22 +5,28 @@ import json
 
 import httpx
 
-from zett_agent import (
+from zett_agent.messages import (
     AssistantMessage,
-    DeepSeekProvider,
     ImageContent,
     ImageDetail,
     ImageUrlSource,
-    ModelRequest,
-    OllamaProvider,
-    OpenAIProvider,
-    ReasoningEffort,
     SystemMessage,
     ToolCall,
     ToolMessage,
     UserMessage,
 )
-from zett_agent.providers import _message_to_openai_payload, _to_anthropic_content_blocks, _usage_from_mapping
+from zett_agent.model import (
+    ModelRequest,
+    ReasoningEffort,
+)
+from zett_agent.providers.anthropic import _to_anthropic_content_blocks
+from zett_agent.providers.base import (
+    _message_to_openai_payload,
+    _usage_from_mapping,
+)
+from zett_agent.providers.deepseek import DeepSeekProvider
+from zett_agent.providers.ollama import OllamaProvider
+from zett_agent.providers.openai import OpenAIProvider
 
 
 def test_tool_arguments_are_serializable_in_both_protocols() -> None:

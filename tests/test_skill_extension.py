@@ -5,20 +5,26 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from zett_agent import (
-    DEFAULT_SKILL_ROOTS,
-    READ_SKILL_TOOL_NAME,
+from zett_agent.agent import (
     Agent,
     AgentRunConfig,
-    AssistantMessage,
-    ModelEvent,
-    ModelResponse,
+)
+from zett_agent.extensions.skill import (
+    DEFAULT_SKILL_ROOTS,
+    READ_SKILL_TOOL_NAME,
     SkillExtension,
     SkillFileParser,
+)
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.messages import (
+    AssistantMessage,
     SystemMessage,
     ToolCall,
-    ToolGuidelinesExtension,
     ToolMessage,
+)
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
 )
 
 

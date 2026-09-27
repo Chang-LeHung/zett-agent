@@ -4,21 +4,27 @@ import asyncio
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
+    AgentRunConfig,
+)
+from zett_agent.events import (
     AgentEvent,
     AgentEventType,
-    AgentExtension,
     AgentPhase,
-    AgentProtocolError,
-    AgentRunConfig,
+)
+from zett_agent.exceptions import AgentProtocolError
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.messages import (
     AssistantMessage,
-    ModelEvent,
-    ModelResponse,
     ToolCall,
     ToolMessage,
-    tool,
 )
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
+from zett_agent.tools.base import tool
 
 
 class Model:

@@ -10,27 +10,34 @@ import httpx
 import pytest
 from openai.types.responses import FunctionToolParam
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentMessage,
     AgentRunConfig,
+)
+from zett_agent.messages import (
+    AgentMessage,
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
     ImageDetail,
     ImageUrlSource,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEventType,
     ModelRequest,
     ReasoningEffort,
     ServerToolDefinition,
-    SystemMessage,
-    ToolCall,
     ToolDefinition,
-    ToolMessage,
-    UserMessage,
-    tool,
 )
-from zett_agent.providers import AnthropicProvider, DeepSeekProvider, GoogleProvider, OllamaProvider, OpenAIProvider
+from zett_agent.providers.anthropic import AnthropicProvider
+from zett_agent.providers.deepseek import DeepSeekProvider
+from zett_agent.providers.google import GoogleProvider
+from zett_agent.providers.ollama import OllamaProvider
+from zett_agent.providers.openai import OpenAIProvider
 from zett_agent.providers.responses import (
     _object_mapping,
     responses_input,
@@ -38,6 +45,7 @@ from zett_agent.providers.responses import (
     responses_tools,
     stream_responses,
 )
+from zett_agent.tools.base import tool
 
 
 def _response(

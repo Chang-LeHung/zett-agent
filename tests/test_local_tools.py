@@ -4,7 +4,15 @@ import importlib
 import pytest
 from pydantic import ValidationError
 
-from zett_agent import delete_file, glob, grep, read_file, replace_in_file, run_shell, write_file
+from zett_agent.tools.coding import (
+    delete_file,
+    glob,
+    grep,
+    read_file,
+    replace_in_file,
+    run_shell,
+    write_file,
+)
 
 
 async def test_file_tools_write_read_and_replace_text(tmp_path, monkeypatch):

@@ -8,12 +8,17 @@ from typing import Any
 import httpx
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
-    AgentProtocolError,
     AgentRunConfig,
+)
+from zett_agent.events import AgentEventType
+from zett_agent.exceptions import AgentProtocolError
+from zett_agent.messages import (
     AssistantMessage,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelEventType,
     ModelRequest,
@@ -23,16 +28,13 @@ from zett_agent import (
     ServerToolInputDelta,
     ServerToolResult,
     ToolDefinition,
-    UserMessage,
-    tool,
 )
-from zett_agent.providers import (
-    AnthropicProvider,
-    GoogleProvider,
-    OllamaProvider,
-    OpenAIProvider,
-    ProviderResponseError,
-)
+from zett_agent.providers.anthropic import AnthropicProvider
+from zett_agent.providers.base import ProviderResponseError
+from zett_agent.providers.google import GoogleProvider
+from zett_agent.providers.ollama import OllamaProvider
+from zett_agent.providers.openai import OpenAIProvider
+from zett_agent.tools.base import tool
 
 
 def _openai_sse(events: list[dict[str, Any]]) -> bytes:

@@ -4,22 +4,28 @@ import asyncio
 
 import pytest
 
-from zett_agent import (
-    INTERNAL_MESSAGE_EVENT_NAME,
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
-    AgentExtension,
-    AgentIterationLimitError,
-    AgentMessage,
     AgentRunConfig,
-    AssistantMessage,
-    ExternalEvent,
-    InternalMessageEvent,
+)
+from zett_agent.events import AgentEventType
+from zett_agent.exceptions import AgentIterationLimitError
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import InternalMessageEvent
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.extensions.internal_message import (
+    INTERNAL_MESSAGE_EVENT_NAME,
     InternalMessageExtension,
+)
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.messages import (
+    AgentMessage,
+    AssistantMessage,
+    ToolCall,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelResponse,
-    SQLiteSessionExtension,
-    ToolCall,
 )
 
 

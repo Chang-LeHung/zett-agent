@@ -16,7 +16,7 @@ from .json_types import JsonValue
 from .messages import AssistantMessage, UserMessage
 from .model import AgentModel, ModelEvent, ModelRequest, ReasoningEffort
 from .sync_runtime import SyncMethodsMixin, SyncObject, SyncRuntime, SyncStream, _callback_loop, _worker
-from .tools import AgentTool
+from .tools.base import AgentTool
 
 
 class SyncModelAdapter(SyncMethodsMixin):

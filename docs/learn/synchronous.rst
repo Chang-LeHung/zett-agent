@@ -1,7 +1,7 @@
 Synchronous Python
 ==================
 
-Use :func:`~zett_agent.create_agent_sync` or :class:`~zett_agent.SyncAgent` from
+Use :func:`~zett_agent.sync.create_agent_sync` or :class:`~zett_agent.sync.SyncAgent` from
 an ordinary ``def`` function. The synchronous API runs the existing Agent on one
 persistent background event loop. Model responses, tools, extensions, session
 history, retries, and event types have the same meaning as the asynchronous API.
@@ -11,7 +11,7 @@ Run and stream
 
 .. code-block:: python
 
-   from zett_agent import create_agent_sync
+   from zett_agent.sync import create_agent_sync
 
    with create_agent_sync(model) as agent:
        reply = agent.run("Hello")
@@ -48,7 +48,7 @@ method names with blocking behavior:
        context = db.load("session-42")
 
 For free functions, third-party clients, or class factories, use
-:class:`~zett_agent.SyncRuntime` directly. ``call`` preserves parameter types
+:class:`~zett_agent.sync_runtime.SyncRuntime` directly. ``call`` preserves parameter types
 and the return value; ``stream`` returns a closeable synchronous iterator;
 ``context`` adapts an asynchronous context manager with its exception-suppression
 behavior and task ownership intact.
@@ -94,12 +94,12 @@ Extension hooks, callbacks, and models
 
 Extension lifecycle hooks use ordinary ``async def`` functions. They send UI
 events through ``await context.emit(...)``. SyncAgent runs them on its background event loop with
-the original :class:`~zett_agent.AgentRunContext`, without a proxy or automatic
+the original :class:`~zett_agent.agent.AgentRunContext`, without a proxy or automatic
 worker-thread adaptation. Await ``context.publish(event)`` and
 ``context.append_message(...)`` as usual. Extensions do not expose ``.sync()``;
 their external-event ``accept`` method remains synchronous.
 
-The :class:`~zett_agent.MiddlewareHook` inherited by every extension uses the
+The :class:`~zett_agent.extensions.base.MiddlewareHook` inherited by every extension uses the
 same rule. Its model and tool wrappers run on the Agent event loop, including
 when the extension is registered through ``SyncAgent`` or
 ``create_agent_sync``.
@@ -122,7 +122,7 @@ Application-side dispatcher callbacks also use ``async def``:
 Callbacks are completed in stream order. They execute on the Agent event loop, not on the UI
 thread; GUI applications must schedule visual changes through their own UI
 dispatcher. Existing ``@tool`` functions already accept both synchronous and
-asynchronous implementations. Use :class:`~zett_agent.SyncModelAdapter` for a
+asynchronous implementations. Use :class:`~zett_agent.sync.SyncModelAdapter` for a
 custom model that returns a normal iterator from ``def stream(request)``.
 
 Await asynchronous I/O inside callbacks; offload blocking work explicitly when

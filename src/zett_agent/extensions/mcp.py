@@ -7,19 +7,17 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping, Se
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
-
-from mcp import Client, StdioServerParameters
-from mcp.client.streamable_http import streamable_http_client
-from mcp.shared._httpx_utils import create_mcp_http_client
-from mcp_types import CallToolResult, ListToolsResult, Tool
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .._compat import TypeAliasType
 from ..agent import AgentRunContext
 from ..messages import AssistantMessage, SystemMessage
-from ..tools import AgentTool
+from ..tools.base import AgentTool
 from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
+
+if TYPE_CHECKING:
+    from mcp_types import CallToolResult, ListToolsResult, Tool
 
 DEFAULT_MCP_CONFIG_PATH = Path("~/.zett/mcp.json")
 DEFAULT_MCP_SERVER_KEYS = ("servers", "mcpServers")
@@ -420,6 +418,8 @@ def _transport_label(server: McpServer) -> str:
 
 
 def _default_client_factory(server: McpServer) -> AbstractAsyncContextManager[McpClient]:
+    from mcp import Client, StdioServerParameters
+
     match server:
         case McpHttpServer(headers=headers) if headers:
             return _authenticated_http_client(server)
@@ -438,6 +438,10 @@ def _default_client_factory(server: McpServer) -> AbstractAsyncContextManager[Mc
 @asynccontextmanager
 async def _authenticated_http_client(server: McpHttpServer) -> AsyncGenerator[McpClient, None]:
     """Connect Streamable HTTP with SDK-owned timeouts and caller headers."""
+    from mcp import Client
+    from mcp.client.streamable_http import streamable_http_client
+    from mcp.shared._httpx_utils import create_mcp_http_client
+
     async with create_mcp_http_client(headers=dict(server.headers)) as http_client:
         transport = streamable_http_client(server.url, http_client=http_client)
         async with Client(transport) as client:

@@ -13,7 +13,10 @@ from pydantic import BaseModel, Field
 from ..agent import Agent, AgentRunConfig, AgentRunContext
 from ..ids import new_uuid7
 from ..model import AgentModel, ReasoningEffort
-from ..tools import AgentTool, tool
+from ..tools.base import (
+    AgentTool,
+    tool,
+)
 from .base import AgentExtension
 from .file_system import FileSystemExtension
 from .sqlite import SQLiteSessionExtension

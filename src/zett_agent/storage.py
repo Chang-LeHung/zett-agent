@@ -280,7 +280,7 @@ class SQLiteSessionStorage(SyncMethodsMixin):
         an explicit path instead of silently using the default location.
 
     .. seealso::
-        :class:`~zett_agent.SQLiteSessionExtension` integrates this storage with
+        :class:`~zett_agent.extensions.sqlite.SQLiteSessionExtension` integrates this storage with
         lifecycle hooks, and :doc:`/extending/storage-adapter` explains the
         generic storage boundary.
     """

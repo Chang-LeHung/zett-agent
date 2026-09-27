@@ -9,18 +9,18 @@ import pytest
 from google.genai.errors import APIError as GoogleAPIError
 from ollama import ResponseError as OllamaResponseError
 
-from zett_agent import (
-    AnthropicProvider,
-    DeepSeekProvider,
-    GoogleProvider,
+from zett_agent.messages import UserMessage
+from zett_agent.model import (
     ModelEvent,
     ModelRequest,
-    OllamaProvider,
-    OpenAIProvider,
     RetryOptions,
-    UserMessage,
 )
+from zett_agent.providers.anthropic import AnthropicProvider
 from zett_agent.providers.base import ProviderError, RetryingProvider, retry_model_stream
+from zett_agent.providers.deepseek import DeepSeekProvider
+from zett_agent.providers.google import GoogleProvider
+from zett_agent.providers.ollama import OllamaProvider
+from zett_agent.providers.openai import OpenAIProvider
 
 PROVIDERS = [OpenAIProvider, DeepSeekProvider, AnthropicProvider, GoogleProvider, OllamaProvider]
 

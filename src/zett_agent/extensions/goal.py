@@ -14,7 +14,7 @@ from ..exceptions import AgentIterationLimitError, AgentProtocolError
 from ..ids import new_uuid7
 from ..messages import AgentMessage, AssistantMessage, ImageContent, TextContent, UserContent, UserMessage
 from ..model import AgentModel, ModelResponse, ReasoningEffort
-from ..tools import tool
+from ..tools.base import tool
 from .base import AgentExtension
 from .coding import CodingExtension
 from .events import ExtensionEvent, InternalMessageEvent, RunCancelledEvent

@@ -9,7 +9,10 @@ from pathlib import Path
 
 from ..agent import AgentRunContext
 from ..messages import SystemMessage
-from ..tools import AgentTool, tool
+from ..tools.base import (
+    AgentTool,
+    tool,
+)
 from .base import AgentExtension
 
 SKILL_FILE_NAME = "SKILL.md"

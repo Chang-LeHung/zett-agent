@@ -4,27 +4,31 @@ import asyncio
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentMessage,
-    AgentPhase,
-    AgentProtocolError,
     AgentRunConfig,
     AgentRunContext,
     AgentState,
-    AskUserExtension,
+)
+from zett_agent.events import AgentPhase
+from zett_agent.exceptions import AgentProtocolError
+from zett_agent.extensions.ask_user import AskUserExtension
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.extensions.file_system import FileSystemExtension
+from zett_agent.extensions.memory import InMemoryMessageAccumulator
+from zett_agent.extensions.plan_mode import PlanModeExtension
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.extensions.todo import TodoWriteExtension
+from zett_agent.messages import (
+    AgentMessage,
     AssistantMessage,
-    ExternalEvent,
-    FileSystemExtension,
-    InMemoryMessageAccumulator,
-    ModelEvent,
-    ModelResponse,
-    PlanModeExtension,
-    SQLiteSessionExtension,
-    TodoWriteExtension,
     ToolCall,
     ToolMessage,
     UserMessage,
+)
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
 )
 
 

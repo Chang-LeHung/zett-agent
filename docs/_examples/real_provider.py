@@ -3,7 +3,11 @@
 import asyncio
 import os
 
-from zett_agent import AgentEvent, AgentEventDispatcher, OpenAIProvider, RetryOptions, create_agent
+from zett_agent.client import create_agent
+from zett_agent.dispatcher import AgentEventDispatcher
+from zett_agent.events import AgentEvent
+from zett_agent.model import RetryOptions
+from zett_agent.providers.openai import OpenAIProvider
 
 
 class ConsoleEvents(AgentEventDispatcher):

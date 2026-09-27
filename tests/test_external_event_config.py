@@ -2,13 +2,15 @@
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
-    AgentExtension,
     AgentRunConfig,
-    AssistantMessage,
-    ExternalEvent,
+)
+from zett_agent.events import AgentEventType
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.messages import AssistantMessage
+from zett_agent.model import (
     ModelEvent,
     ModelResponse,
 )

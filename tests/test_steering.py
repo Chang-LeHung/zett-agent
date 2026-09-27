@@ -4,31 +4,39 @@ import asyncio
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
-    AgentExtension,
-    AgentMessage,
-    AgentPhase,
     AgentRunConfig,
     AgentRunContext,
     AgentState,
+)
+from zett_agent.events import (
+    AgentEventType,
+    AgentPhase,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import (
+    InternalMessageEvent,
+    SteeringMessageEvent,
+)
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.extensions.steering import SteeringExtension
+from zett_agent.messages import (
+    AgentMessage,
     AssistantMessage,
-    ExternalEvent,
     ImageContent,
     ImageUrlSource,
-    InternalMessageEvent,
-    ModelEvent,
-    ModelResponse,
-    SQLiteSessionExtension,
-    SteeringExtension,
-    SteeringMessageEvent,
     TextContent,
     ToolCall,
     ToolMessage,
     UserMessage,
-    tool,
 )
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
+)
+from zett_agent.tools.base import tool
 
 
 class ScriptedModel:

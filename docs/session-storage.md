@@ -5,7 +5,7 @@ the SQLite storage and restores history before every request. The lower-level
 `SessionPersistenceExtension(storage)` remains available for custom storage.
 
 ```python
-from zett_agent import SQLiteSessionExtension
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
 
 history = SQLiteSessionExtension()
 agent = await Agent.create(

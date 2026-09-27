@@ -8,22 +8,30 @@ from typing import Any
 import httpx
 import pytest
 
-from zett_agent import (
-    TOOL_SEARCH_TOOL_NAME,
+from zett_agent.agent import (
     Agent,
-    AgentExtension,
     AgentRunConfig,
     AgentRunContext,
     AgentState,
-    AgentTool,
-    AssistantMessage,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.extensions.tool_search import (
+    TOOL_SEARCH_TOOL_NAME,
     BM25Search,
+    ToolSearchExtension,
+)
+from zett_agent.messages import (
+    AssistantMessage,
+    SystemMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelResponse,
-    OpenAIProvider,
-    SystemMessage,
-    ToolGuidelinesExtension,
-    ToolSearchExtension,
+)
+from zett_agent.providers.openai import OpenAIProvider
+from zett_agent.tools.base import (
+    AgentTool,
     tool,
 )
 

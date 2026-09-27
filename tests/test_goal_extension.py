@@ -5,37 +5,45 @@ from collections import deque
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
+    Agent,
+    AgentRunConfig,
+)
+from zett_agent.events import AgentEventType
+from zett_agent.exceptions import (
+    AgentIterationLimitError,
+    AgentProtocolError,
+)
+from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.coding import CodingExtension
+from zett_agent.extensions.external import ExternalEvent
+from zett_agent.extensions.goal import (
     GOAL_EVALUATION_TOOL_NAME,
     GOAL_MODE_EVENT_NAME,
-    Agent,
-    AgentEventType,
-    AgentExtension,
-    AgentIterationLimitError,
-    AgentMessage,
-    AgentProtocolError,
-    AgentRunConfig,
-    AssistantMessage,
-    CodingExtension,
-    ExternalEvent,
     GoalEvaluation,
     GoalExtension,
+    default_goal_subagent,
+)
+from zett_agent.extensions.internal_message import InternalMessageExtension
+from zett_agent.extensions.sqlite import SQLiteSessionExtension
+from zett_agent.extensions.subagent import SubAgentDefinition
+from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.messages import (
+    AgentMessage,
+    AssistantMessage,
     ImageContent,
     ImageUrlSource,
-    InternalMessageExtension,
+    TextContent,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelResponse,
     ReasoningEffort,
-    SQLiteSessionExtension,
-    SubAgentDefinition,
-    TextContent,
-    ToolCall,
-    ToolGuidelinesExtension,
-    ToolMessage,
-    UserMessage,
-    default_goal_subagent,
-    tool,
 )
+from zett_agent.tools.base import tool
 
 
 def enable_goal_mode(agent: Agent, config: AgentRunConfig) -> None:
@@ -613,7 +621,7 @@ async def test_tool_call_candidate_is_not_evaluated_until_parent_final_answer() 
             )
             yield ModelEvent.completed(ModelResponse(message))
 
-    from zett_agent import tool
+    from zett_agent.tools.base import tool
 
     @tool
     def noop() -> str:

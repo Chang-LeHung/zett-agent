@@ -2,20 +2,24 @@ import json
 
 import pytest
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
-    AgentEventType,
     AgentRunConfig,
+)
+from zett_agent.events import AgentEventType
+from zett_agent.extensions.jsonl import JSONLExtension
+from zett_agent.messages import (
     AssistantMessage,
-    JSONLExtension,
-    ModelEvent,
-    ModelResponse,
     ToolCall,
     ToolMessage,
     UserMessage,
-    tool,
+)
+from zett_agent.model import (
+    ModelEvent,
+    ModelResponse,
 )
 from zett_agent.storage import decode_messages
+from zett_agent.tools.base import tool
 
 
 @tool(guidelines="Use once to produce the requested value.")

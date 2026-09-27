@@ -30,7 +30,7 @@ program to see reasoning, arguments, result, and answer in sequence.
 Direct Python invocation has a different syntax
 ---------------------------------------------------
 
-Decoration returns an :class:`~zett_agent.AgentTool`, not the original function.
+Decoration returns an :class:`~zett_agent.tools.base.AgentTool`, not the original function.
 To test it directly::
 
     value = await add({"left": 20, "right": 22})
@@ -60,7 +60,7 @@ Local tool search
 ---------------------
 
 Keep optional tools out of the request and load them on demand with
-:class:`~zett_agent.ToolSearchExtension`:
+:class:`~zett_agent.extensions.tool_search.ToolSearchExtension`:
 
 .. code-block:: python
 
@@ -82,11 +82,11 @@ guidelines, so a deferred tool's rules arrive together with the definition that
 makes it callable.
 
 Tools without ``deferred`` are untouched: they keep their ordinary function
-schema, and :class:`~zett_agent.ToolGuidelinesExtension` renders their snippets
+schema, and :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` renders their snippets
 and guidelines as before.
 
 The extension defines and registers one real ``@tool``-decorated search function.
-That function directly uses :class:`~zett_agent.BM25Search` over the currently
+That function directly uses :class:`~zett_agent.extensions.tool_search.BM25Search` over the currently
 registered tools' names, descriptions, Args, snippets, and guidelines. There is
 no replacement handler, sentinel return value, or custom search callback.
 
@@ -94,10 +94,10 @@ The search tool declares its own parameters, so the model passes one or more
 keyword ``queries`` plus an optional ``score`` that overrides the default
 threshold for that search. The schema comes from the search function's signature,
 and its description travels in the ``tool_search`` declaration itself. The search
-tool is not deferred, so adding :class:`~zett_agent.ToolGuidelinesExtension` also
+tool is not deferred, so adding :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` also
 renders its snippet and guidelines in the prompt — pair the two when the model
 should read that guidance. Set ``min_score`` on the extension or on
-:class:`~zett_agent.BM25Search` to raise the bar for every search; results scoring
+:class:`~zett_agent.extensions.tool_search.BM25Search` to raise the bar for every search; results scoring
 at or below it are dropped. Omitting ``score`` uses the configured default;
 passing ``score=0.0`` explicitly overrides that default.
 
@@ -108,7 +108,7 @@ a normal local tool call:
 
 .. code-block:: python
 
-   from zett_agent import tool
+   from zett_agent.tools.base import tool
    from openai.types.responses import FunctionToolParam
 
    @tool(local_tool_search=True, guidelines="Use to find optional tools.")

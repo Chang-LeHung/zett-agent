@@ -2,17 +2,21 @@
 
 import asyncio
 
-from zett_agent import (
+from zett_agent.agent import (
     Agent,
     AgentRunConfig,
+)
+from zett_agent.messages import (
     AssistantMessage,
+    ToolCall,
+    ToolMessage,
+)
+from zett_agent.model import (
     ModelEvent,
     ModelRequest,
     ModelResponse,
-    ToolCall,
-    ToolMessage,
-    tool,
 )
+from zett_agent.tools.base import tool
 
 
 @tool

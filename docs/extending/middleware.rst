@@ -1,8 +1,8 @@
 Middleware
 ==========
 
-Every :class:`~zett_agent.AgentExtension` inherits
-:class:`~zett_agent.MiddlewareHook`. Override these methods when the extension
+Every :class:`~zett_agent.extensions.base.AgentExtension` inherits
+:class:`~zett_agent.extensions.base.MiddlewareHook`. Override these methods when the extension
 must wrap the operation that crosses into a provider or local tool handler.
 There is no separate middleware registry or constructor argument.
 
@@ -17,7 +17,7 @@ Two boundaries
 ``on_tool_call(context, call, call_next)``
    Wraps the actual handler for one local tool invocation. It may edit
    ``call.arguments`` before awaiting ``call_next()``, transform the raw
-   :data:`~zett_agent.ToolResult`, or return directly to short-circuit the
+   :data:`~zett_agent.tools.base.ToolResult`, or return directly to short-circuit the
    handler. An exception follows ordinary tool error handling and is recorded
    as a failed ``ToolMessage``.
 
@@ -38,7 +38,8 @@ equal priorities retain registration order.
    from dataclasses import replace
    from time import monotonic
 
-   from zett_agent import AgentExtension, SystemMessage
+   from zett_agent.extensions.base import AgentExtension
+   from zett_agent.messages import SystemMessage
 
    class TraceExtension(AgentExtension):
        async def on_model_request(self, context, request, call_next):

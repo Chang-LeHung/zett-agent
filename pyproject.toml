@@ -9,7 +9,7 @@ license-files = ["LICENSE"]
 authors = [{name = "Chang-LeHung"}]
 keywords = ["agent", "llm", "streaming", "tools"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",

@@ -101,6 +101,17 @@ should read that guidance. Set ``min_score`` on the extension or on
 at or below it are dropped. Omitting ``score`` uses the configured default;
 passing ``score=0.0`` explicitly overrides that default.
 
+A definition is handed to the model once per session. The loaded definition
+stays declared in the conversation as a ``tool_search_output`` item, and strict
+endpoints reject a later result that repeats a name the history already
+declares, so the extension records what it sent. The record is kept in memory
+for the lifetime of the extension; pass ``storage=`` with a
+:class:`~zett_agent.extensions.tool_search.ToolSearchStorage` to keep it across
+process restarts. A compaction replaces the messages that declared those
+definitions, so the record is dropped and a later search may offer them again.
+Pass ``resend_definitions_after_compaction=False`` to keep suppressing them
+after a checkpoint instead.
+
 To answer searches yourself, mark one tool with ``local_tool_search=True``. The
 Responses adapter then declares ``tool_search`` with ``execution: "client"``
 instead of exposing that tool as a function, and every search request arrives as

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -15,6 +16,7 @@ from zett_agent.agent import (
     AgentState,
 )
 from zett_agent.extensions.base import AgentExtension
+from zett_agent.extensions.events import CompactionEvent
 from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
 from zett_agent.extensions.tool_search import (
     TOOL_SEARCH_TOOL_NAME,
@@ -121,8 +123,33 @@ async def test_extension_registers_the_search_tool_alongside_the_others() -> Non
     assert observed == [["billing_lookup", "tool_search", "warehouse_stock"]]
 
 
-def search_context(*tools: AgentTool) -> AgentRunContext:
-    return AgentRunContext(AgentRunConfig("search-test"), AgentState(), {item.name: item for item in tools})
+def search_context(
+    *tools: AgentTool,
+    session_id: str = "search-test",
+    extensions: tuple[AgentExtension, ...] = (),
+) -> AgentRunContext:
+    return AgentRunContext(
+        AgentRunConfig(session_id),
+        AgentState(),
+        {item.name: item for item in tools},
+        extensions,
+    )
+
+
+class MemoryStorage:
+    """Minimal key/value stand-in for an application-owned store."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    async def get(self, key: str) -> str | None:
+        return self.values.get(key)
+
+    async def set(self, key: str, value: str) -> None:
+        self.values[key] = value
+
+    async def delete(self, key: str) -> None:
+        self.values.pop(key, None)
 
 
 async def test_extension_registers_the_decorated_tool_it_builds(monkeypatch) -> None:
@@ -169,20 +196,33 @@ async def test_registered_search_uses_decorator_argument_validation(arguments) -
         await context.tools[TOOL_SEARCH_TOOL_NAME](arguments)
 
 
-async def test_search_defaults_and_discovery_state_are_request_local() -> None:
+async def test_search_threshold_default_is_overridable_per_call() -> None:
     extension = ToolSearchExtension(min_score=100.0)
-    first = search_context(warehouse_stock)
-    second = search_context(warehouse_stock)
-    await extension.on_tool(first)
-    await extension.on_tool(second)
-    search = first.tools[TOOL_SEARCH_TOOL_NAME]
+    context = search_context(warehouse_stock)
+    await extension.on_tool(context)
+    search = context.tools[TOOL_SEARCH_TOOL_NAME]
     assert await search({"queries": ["warehouse stock"]}) == []
     # Explicit zero overrides the configured threshold rather than being "unset".
     definitions = await search({"queries": ["warehouse stock"], "score": 0.0})
     assert [definition["name"] for definition in definitions] == ["warehouse_stock"]
     assert await search({"queries": ["warehouse stock"], "score": 0.0}) == []
+
+
+async def test_discovered_definitions_never_repeat_within_one_session() -> None:
+    extension = ToolSearchExtension()
+    first = search_context(warehouse_stock)
+    second = search_context(warehouse_stock)
+    await extension.on_tool(first)
+    await extension.on_tool(second)
+
+    search = first.tools[TOOL_SEARCH_TOOL_NAME]
+    definitions = await search({"queries": ["warehouse stock"], "score": 0.0})
+    assert [definition["name"] for definition in definitions] == ["warehouse_stock"]
+    assert await search({"queries": ["warehouse stock"], "score": 0.0}) == []
+    # A later turn of the same session still declares the definition in its
+    # history, so the search must not offer it a second time.
     other = await second.tools[TOOL_SEARCH_TOOL_NAME]({"queries": ["warehouse stock"], "score": 0.0})
-    assert other == definitions
+    assert other == []
 
 
 async def test_search_reads_tools_registered_after_its_own_setup() -> None:
@@ -481,3 +521,151 @@ async def test_extension_never_repeats_a_discovered_definition() -> None:
         "status": "completed",
         "tools": [],
     }
+
+
+async def test_storage_remembers_sent_definitions_for_a_new_extension_instance() -> None:
+    storage = MemoryStorage()
+    first = ToolSearchExtension(storage=storage)
+    context = search_context(warehouse_stock, session_id="durable")
+    await first.on_tool(context)
+
+    definitions = await context.tools[TOOL_SEARCH_TOOL_NAME]({"queries": ["warehouse stock"]})
+    assert [definition["name"] for definition in definitions] == ["warehouse_stock"]
+    assert storage.values == {"tool_search:sent:durable": '["warehouse_stock"]'}
+
+    # A fresh extension, as after a restart, reads the same session record and
+    # keeps the definition out of a second turn's search result.
+    restarted = ToolSearchExtension(storage=storage)
+    next_turn = search_context(warehouse_stock, session_id="durable")
+    await restarted.on_tool(next_turn)
+    assert await next_turn.tools[TOOL_SEARCH_TOOL_NAME]({"queries": ["warehouse stock"]}) == []
+
+
+async def test_a_second_turn_does_not_repeat_a_definition_its_history_declares() -> None:
+    """Reproduce the reported failure: turn two re-offered a loaded tool."""
+    first = {
+        "id": "ts_1",
+        "call_id": "call_search_1",
+        "type": "tool_search_call",
+        "status": "completed",
+        "execution": "client",
+        "arguments": {"queries": ["warehouse stock"]},
+    }
+    second = {**first, "id": "ts_2", "call_id": "call_search_2"}
+    answer = {
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": "Done.", "annotations": [], "logprobs": []}],
+    }
+    requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        output = [[first], [answer], [second], [answer]][len(requests) - 1]
+        return httpx.Response(200, content=_sse(output), headers={"content-type": "text/event-stream"})
+
+    provider = OpenAIProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    agent = await Agent.create(
+        provider,
+        config=AgentRunConfig("repeat-turns"),
+        tools=(warehouse_stock,),
+        extensions=[ToolSearchExtension()],
+    )
+    try:
+        await agent.run("Find the stock tool")
+        await agent.run("Find the stock tool again")
+    finally:
+        await provider.aclose()
+
+    assert [candidate["name"] for candidate in requests[1]["input"][-1]["tools"]] == ["warehouse_stock"]
+    # The earlier turn already declared that definition, and strict endpoints
+    # reject a repeated tool name, so the second search must return nothing.
+    assert requests[3]["input"][-1]["tools"] == []
+
+
+async def test_storage_record_is_scoped_to_one_session() -> None:
+    storage = MemoryStorage()
+    extension = ToolSearchExtension(storage=storage)
+    first = search_context(warehouse_stock, session_id="session-a")
+    second = search_context(warehouse_stock, session_id="session-b")
+    await extension.on_tool(first)
+    await extension.on_tool(second)
+
+    await first.tools[TOOL_SEARCH_TOOL_NAME]({"queries": ["warehouse stock"]})
+    other = await second.tools[TOOL_SEARCH_TOOL_NAME]({"queries": ["warehouse stock"]})
+    assert [definition["name"] for definition in other] == ["warehouse_stock"]
+
+
+async def test_a_damaged_storage_record_does_not_stall_searches() -> None:
+    storage = MemoryStorage()
+    storage.values["tool_search:sent:damaged"] = "not json"
+    extension = ToolSearchExtension(storage=storage)
+    context = search_context(warehouse_stock, session_id="damaged")
+    await extension.on_tool(context)
+
+    definitions = await context.tools[TOOL_SEARCH_TOOL_NAME]({"queries": ["warehouse stock"]})
+    assert [definition["name"] for definition in definitions] == ["warehouse_stock"]
+    assert storage.values["tool_search:sent:damaged"] == '["warehouse_stock"]'
+
+
+async def test_compaction_lets_the_conversation_rediscover_a_definition() -> None:
+    storage = MemoryStorage()
+    extension = ToolSearchExtension(storage=storage)
+    context = search_context(warehouse_stock, session_id="compacted", extensions=(extension,))
+    await extension.on_tool(context)
+    search = context.tools[TOOL_SEARCH_TOOL_NAME]
+
+    assert [definition["name"] for definition in await search({"queries": ["warehouse stock"]})] == ["warehouse_stock"]
+    assert await search({"queries": ["warehouse stock"]}) == []
+
+    # The checkpoint replaced the messages that declared the definition, so the
+    # record must be dropped or the model could never load that tool again.
+    await context.publish(
+        CompactionEvent(compressed_from=1, compressed_to=2, kept_from=3, kept_to=4, summary="Earlier work.")
+    )
+    assert storage.values == {}
+    assert [definition["name"] for definition in await search({"queries": ["warehouse stock"]})] == ["warehouse_stock"]
+
+
+async def test_compaction_keeps_suppressing_when_resending_is_disabled() -> None:
+    extension = ToolSearchExtension(resend_definitions_after_compaction=False)
+    context = search_context(warehouse_stock, session_id="keep-suppressed", extensions=(extension,))
+    await extension.on_tool(context)
+    search = context.tools[TOOL_SEARCH_TOOL_NAME]
+
+    assert [definition["name"] for definition in await search({"queries": ["warehouse stock"]})] == ["warehouse_stock"]
+    await context.publish(
+        CompactionEvent(compressed_from=1, compressed_to=2, kept_from=3, kept_to=4, summary="Earlier work.")
+    )
+    # The caller asked to keep the model's loaded tools suppressed after the
+    # checkpoint instead of letting a search offer them again.
+    assert await search({"queries": ["warehouse stock"]}) == []
+
+
+async def test_compaction_in_another_session_keeps_this_record() -> None:
+    storage = MemoryStorage()
+    extension = ToolSearchExtension(storage=storage)
+    context = search_context(warehouse_stock, session_id="keep", extensions=(extension,))
+    await extension.on_tool(context)
+    await context.tools[TOOL_SEARCH_TOOL_NAME]({"queries": ["warehouse stock"]})
+
+    other = search_context(warehouse_stock, session_id="drop", extensions=(extension,))
+    await other.publish(
+        CompactionEvent(compressed_from=1, compressed_to=2, kept_from=3, kept_to=4, summary="Earlier work.")
+    )
+
+    assert set(storage.values) == {"tool_search:sent:keep"}
+
+
+async def test_parallel_searches_hand_out_a_definition_once() -> None:
+    extension = ToolSearchExtension()
+    context = search_context(warehouse_stock)
+    await extension.on_tool(context)
+    search = context.tools[TOOL_SEARCH_TOOL_NAME]
+
+    results = await asyncio.gather(*(search({"queries": ["warehouse stock"]}) for _ in range(4)))
+    offered = [definition["name"] for result in results for definition in result]
+    assert offered == ["warehouse_stock"]

@@ -57,7 +57,10 @@ Tool calls and usage
 Use ToolCallDelta for partial ID/name/argument fragments and ToolCall for final
 parsed arguments. Correlate ToolMessage results by call ID, not list position.
 Report ModelUsage on the final response; input includes cache reads/writes and
-output includes reasoning when reported. Missing counters remain zero.
+output includes reasoning when reported. Missing counters remain zero, but a
+protocol that reports no cache counters at all must pass
+``cache_reported=False`` so callers can tell unknown cache usage from a
+measured miss.
 
 Replay signed vendor blocks only for the same provider/model identity. Preserve
 them in AssistantMessage.replay_blocks instead of concatenating them into text.

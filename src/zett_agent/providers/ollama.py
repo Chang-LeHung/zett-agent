@@ -186,7 +186,14 @@ class OllamaProvider(RetryingProvider):
                 if chunk.done:
                     done = True
                     finish_reason = chunk.done_reason
-                    usage = ModelUsage(input_tokens=chunk.prompt_eval_count or 0, output_tokens=chunk.eval_count or 0)
+                    # Ollama reports prompt evaluation counts only; it never
+                    # reports prompt-cache counters, so the hit rate is unknown
+                    # rather than zero.
+                    usage = ModelUsage(
+                        input_tokens=chunk.prompt_eval_count or 0,
+                        output_tokens=chunk.eval_count or 0,
+                        cache_reported=False,
+                    )
         finally:
             await stream.aclose()
         if not done:

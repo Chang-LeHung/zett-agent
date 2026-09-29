@@ -81,4 +81,12 @@ Pass ``cache_key`` to :class:`~zett_agent.agent.AgentRunConfig` to route several
 conversations onto one prefix, or construct a provider with
 ``send_prompt_cache_key=False`` when an endpoint rejects the field.
 
+The key routes a conversation; it does not make a service report the result.
+Gateways that translate between protocols often return Chat Completions usage
+without ``prompt_tokens_details``, so the cached tokens are billed but never
+reported. :attr:`~zett_agent.model.ModelUsage.cache_reported` is False and
+``cache_hit_rate`` is None in that case, which distinguishes unknown cache usage
+from a measured 0% miss. Served models usually keep the breakdown on the
+Responses API, so prefer that protocol when cache visibility matters.
+
 Implement your own adapter: :doc:`../extending/model-adapter`.

@@ -302,22 +302,61 @@ def _parse_tool_arguments(payload: str, *, index: int) -> dict[str, Any]:
     return parsed
 
 
+#: Cache counters accepted from OpenAI-compatible payloads. Gateways regularly
+#: relay one protocol's payload through another, so the same number appears
+#: under several spellings; every one of them is read.
+_CACHE_READ_KEYS = ("prompt_cache_hit_tokens", "cache_read_input_tokens", "cached_tokens")
+_CACHE_WRITE_KEYS = ("cache_write_tokens", "cache_creation_input_tokens", "cache_creation_tokens")
+_CACHE_DETAIL_KEYS = ("prompt_tokens_details", "input_tokens_details")
+
+
+def _cache_counters(payload: Mapping[str, Any]) -> tuple[int, int, bool]:
+    """Read cache counters from a usage mapping in any compatible spelling.
+
+    Nested detail objects are applied after the top level so a detailed payload
+    wins over a flattened copy of itself, matching the OpenAI schema where
+    ``prompt_tokens_details`` is authoritative.
+    """
+    sources: list[Mapping[str, Any]] = [payload]
+    sources.extend(details for key in _CACHE_DETAIL_KEYS if isinstance(details := payload.get(key), Mapping))
+    read_tokens = 0
+    write_tokens = 0
+    reported = False
+    for source in sources:
+        for key in _CACHE_READ_KEYS:
+            if key in source:
+                read_tokens = int(source[key] or 0)
+                reported = True
+        for key in _CACHE_WRITE_KEYS:
+            if key in source:
+                write_tokens = int(source[key] or 0)
+                reported = True
+    return read_tokens, write_tokens, reported
+
+
 def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:
     """Normalize token usage returned by OpenAI-compatible chat APIs.
 
     This helper is shared by :class:`OpenAIProvider` and
     :class:`DeepSeekProvider`. Their response fields map as follows::
 
-        Provider   API field                                  ModelUsage field
-        ---------- ------------------------------------------ ----------------------
-        OpenAI     prompt_tokens                              input_tokens
-        OpenAI     completion_tokens                          output_tokens
-        OpenAI     prompt_tokens_details.cached_tokens        cache_read_tokens
-        OpenAI     completion_tokens_details.reasoning_tokens reasoning_tokens
-        DeepSeek   prompt_tokens                              input_tokens
-        DeepSeek   completion_tokens                          output_tokens
-        DeepSeek   prompt_cache_hit_tokens                    cache_read_tokens
-        DeepSeek   completion_tokens_details.reasoning_tokens reasoning_tokens
+        ModelUsage field     Accepted API fields
+        -------------------  -------------------------------------------------
+        input_tokens         prompt_tokens, input_tokens
+        output_tokens        completion_tokens, output_tokens
+        cache_read_tokens    prompt_cache_hit_tokens, cache_read_input_tokens,
+                             cached_tokens, prompt_tokens_details.cached_tokens,
+                             input_tokens_details.cached_tokens
+        cache_write_tokens   cache_write_tokens, cache_creation_input_tokens,
+                             cache_creation_tokens,
+                             prompt_tokens_details.cache_write_tokens,
+                             input_tokens_details.cache_write_tokens
+        reasoning_tokens     completion_tokens_details.reasoning_tokens,
+                             output_tokens_details.reasoning_tokens
+
+    The aliases exist because gateways front one protocol with another and
+    return whichever usage schema their upstream speaks. Reading all of them
+    keeps a relay from silently reporting zero cache reads.
 
     ``prompt_tokens`` includes cached input tokens. For DeepSeek it is the sum
     of ``prompt_cache_hit_tokens`` and ``prompt_cache_miss_tokens``; the miss
@@ -326,29 +365,36 @@ def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:
     added to them. Both providers return ``total_tokens``, but ``ModelUsage``
     derives that total from input plus output to preserve one internal invariant.
 
-    Neither schema reports cache-creation tokens, so ``cache_write_tokens`` is
-    zero. Anthropic reports ``input_tokens``, ``cache_read_input_tokens``, and
-    ``cache_creation_input_tokens`` separately. Gemini reports
-    ``prompt_token_count``, ``candidates_token_count``,
+    A payload that carries no cache counter at all leaves ``cache_reported``
+    False, so :attr:`~zett_agent.model.ModelUsage.cache_hit_rate` reports
+    unknown instead of a false zero. Anthropic reports ``input_tokens``,
+    ``cache_read_input_tokens``, and ``cache_creation_input_tokens`` separately.
+    Gemini reports ``prompt_token_count``, ``candidates_token_count``,
     ``cached_content_token_count``, and ``thoughts_token_count``. Ollama reports
     ``prompt_eval_count`` and ``eval_count``. Those provider-specific schemas
     are normalized in their own adapters rather than by this helper.
     """
-    cache_read_tokens = int(payload.get("prompt_cache_hit_tokens", 0) or 0)
-    reasoning_tokens = 0
+    cache_read_tokens, cache_write_tokens, cache_reported = _cache_counters(payload)
 
-    prompt_details = payload.get("prompt_tokens_details")
-    if isinstance(prompt_details, Mapping):
-        cache_read_tokens = int(prompt_details.get("cached_tokens", cache_read_tokens) or 0)
-    completion_details = payload.get("completion_tokens_details")
-    if isinstance(completion_details, Mapping):
-        reasoning_tokens = int(completion_details.get("reasoning_tokens", 0) or 0)
+    input_tokens = payload.get("prompt_tokens")
+    if input_tokens is None:
+        input_tokens = payload.get("input_tokens")
+    output_tokens = payload.get("completion_tokens")
+    if output_tokens is None:
+        output_tokens = payload.get("output_tokens")
+
+    reasoning_tokens = 0
+    for details_key in ("completion_tokens_details", "output_tokens_details"):
+        details = payload.get(details_key)
+        if isinstance(details, Mapping):
+            reasoning_tokens = int(details.get("reasoning_tokens", reasoning_tokens) or 0)
 
     return ModelUsage(
-        input_tokens=int(payload.get("prompt_tokens", 0) or 0),
-        output_tokens=int(payload.get("completion_tokens", 0) or 0),
+        input_tokens=int(input_tokens or 0),
+        output_tokens=int(output_tokens or 0),
         cache_read_tokens=cache_read_tokens,
-        cache_write_tokens=0,
+        cache_write_tokens=cache_write_tokens,
+        cache_reported=cache_reported,
         reasoning_tokens=reasoning_tokens,
     )
 

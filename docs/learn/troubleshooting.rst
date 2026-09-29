@@ -48,8 +48,18 @@ Reasoning or cache statistics are missing
 
 The model must actually return them. Reasoning effort is a request preference,
 not a promise of visible reasoning. Usage belongs to MODEL_COMPLETED, not every
-text fragment. Missing counters default to zero; cache_hit_rate is None without
-input tokens. It is a ratio, so multiply by 100 for a percentage.
+text fragment. Missing counters default to zero. ``cache_hit_rate`` is None
+without input tokens and also when the provider reported no cache counters at
+all, which :attr:`~zett_agent.model.ModelUsage.cache_reported` records; a
+reported zero stays a real 0% miss. It is a ratio, so multiply by 100 for a
+percentage.
+
+A gateway that relays OpenAI Chat Completions can drop the cache counters while
+forwarding usage: requests then cost the same but cache statistics read as
+unknown. Endpoints that translate protocols usually keep the breakdown on the
+Responses API, so run those models with a Responses adapter, or make the
+gateway pass ``prompt_tokens_details`` through instead of rebuilding usage from
+its own fields.
 
 A retry duplicated text
 ---------------------------

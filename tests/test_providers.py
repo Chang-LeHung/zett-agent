@@ -199,6 +199,54 @@ async def test_agent_declares_the_conversation_cache_key_to_the_provider() -> No
     assert captured["body"]["prompt_cache_key"] == "chat-42"
 
 
+def _usage_transport(usage: dict[str, Any]) -> httpx.MockTransport:
+    """Replay one chat stream whose final chunk carries provider-supplied usage."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = _sse_body(
+            [
+                {"choices": [{"delta": {"content": "ok"}}]},
+                {"choices": [], "usage": usage},
+            ]
+        )
+        return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    return _mock_transport(handler)
+
+
+async def test_chat_usage_reports_unknown_when_a_gateway_omits_cache_counters() -> None:
+    transport = _usage_transport({"prompt_tokens": 4040, "completion_tokens": 13, "total_tokens": 4053})
+    provider = OpenAIProvider(model="deepseek-flash", api_key="sk-test", transport=transport)
+
+    events = await _collect(provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),))))
+
+    usage = events[-1].response.usage
+    assert usage.input_tokens == 4040
+    assert usage.cache_reported is False
+    assert usage.cache_hit_rate is None
+    await provider.aclose()
+
+
+async def test_chat_usage_reads_cache_counters_relayed_from_another_protocol() -> None:
+    transport = _usage_transport(
+        {
+            "prompt_tokens": 4000,
+            "completion_tokens": 5,
+            "total_tokens": 4005,
+            "input_tokens_details": {"cached_tokens": 3840, "cache_write_tokens": 12},
+        }
+    )
+    provider = OpenAIProvider(model="deepseek-flash", api_key="sk-test", transport=transport)
+
+    events = await _collect(provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),))))
+
+    usage = events[-1].response.usage
+    assert usage.cache_read_tokens == 3840
+    assert usage.cache_write_tokens == 12
+    assert usage.cache_hit_rate == pytest.approx(0.96)
+    await provider.aclose()
+
+
 def _environment_proxy_urls(client: httpx.AsyncClient) -> dict[str, str]:
     """Inspect HTTPX transports to verify terminal proxy variables were applied."""
     proxies = {}
@@ -309,6 +357,16 @@ def test_model_usage_rejects_negative_counters_and_handles_empty_input() -> None
     assert ModelUsage().cache_hit_rate is None
 
 
+def test_model_usage_separates_an_unreported_cache_from_a_miss() -> None:
+    miss = ModelUsage(input_tokens=100, output_tokens=5, cache_read_tokens=0)
+    assert miss.cache_reported is True
+    assert miss.cache_hit_rate == 0.0
+
+    unknown = ModelUsage(input_tokens=100, output_tokens=5, cache_reported=False)
+    assert unknown.cache_read_tokens == 0
+    assert unknown.cache_hit_rate is None
+
+
 def test_usage_from_mapping_normalizes_deepseek_cache_counters() -> None:
     usage = _usage_from_mapping(
         {
@@ -327,6 +385,42 @@ def test_usage_from_mapping_normalizes_deepseek_cache_counters() -> None:
     assert usage.cache_write_tokens == 0
     assert usage.reasoning_tokens == 30
     assert usage.total_tokens == 165
+
+
+def test_usage_from_mapping_accepts_relayed_cache_shapes() -> None:
+    responses_shaped = _usage_from_mapping(
+        {
+            "prompt_tokens": 1000,
+            "completion_tokens": 10,
+            "input_tokens_details": {"cached_tokens": 900, "cache_write_tokens": 20},
+        }
+    )
+    assert responses_shaped.cache_read_tokens == 900
+    assert responses_shaped.cache_write_tokens == 20
+    assert responses_shaped.cache_reported is True
+    assert responses_shaped.cache_hit_rate == pytest.approx(0.9)
+
+    anthropic_shaped = _usage_from_mapping(
+        {
+            "input_tokens": 1000,
+            "output_tokens": 10,
+            "cache_read_input_tokens": 640,
+            "cache_creation_input_tokens": 64,
+        }
+    )
+    assert anthropic_shaped.input_tokens == 1000
+    assert anthropic_shaped.output_tokens == 10
+    assert anthropic_shaped.cache_read_tokens == 640
+    assert anthropic_shaped.cache_write_tokens == 64
+
+
+def test_usage_from_mapping_marks_a_cache_silent_gateway_as_unknown() -> None:
+    usage = _usage_from_mapping({"prompt_tokens": 4040, "completion_tokens": 13, "total_tokens": 4053})
+
+    assert usage.input_tokens == 4040
+    assert usage.cache_read_tokens == 0
+    assert usage.cache_reported is False
+    assert usage.cache_hit_rate is None
 
 
 def test_chat_completion_tools_ignore_deferred_loading_marker() -> None:
@@ -928,4 +1022,6 @@ async def test_ollama_provider_streams_text_and_tool_calls() -> None:
     assert response.usage.output_tokens == 9
     assert response.usage.cache_read_tokens == 0
     assert response.usage.cache_write_tokens == 0
+    assert response.usage.cache_reported is False
+    assert response.usage.cache_hit_rate is None
     assert response.message.provider == "ollama"

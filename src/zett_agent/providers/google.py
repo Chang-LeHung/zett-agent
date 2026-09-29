@@ -238,6 +238,9 @@ class GoogleProvider(RetryingProvider):
                         output_tokens=(info.candidates_token_count or 0) + (info.thoughts_token_count or 0),
                         reasoning_tokens=info.thoughts_token_count or 0,
                         cache_read_tokens=info.cached_content_token_count or 0,
+                        # Implicit caching reports the field; a response without
+                        # it says nothing about cache usage.
+                        cache_reported=info.cached_content_token_count is not None,
                     )
         finally:
             await stream.aclose()

@@ -256,6 +256,34 @@ async def test_openai_responses_streams_local_and_server_tools() -> None:
     assert response.usage.reasoning_tokens == 3
 
 
+async def test_responses_usage_reports_unknown_when_cache_details_are_absent() -> None:
+    """A gateway that relays usage without details must not look like a full miss."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        completed = {
+            "type": "response.completed",
+            "sequence_number": 99,
+            "response": _response(
+                [],
+                model="deepseek-flash",
+                usage={"input_tokens": 20, "output_tokens": 8, "total_tokens": 28},
+            ),
+        }
+        return httpx.Response(200, content=_responses_sse([completed]), headers={"content-type": "text/event-stream"})
+
+    provider = OpenAIProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    try:
+        events = await _collect(provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),))))
+    finally:
+        await provider.aclose()
+
+    usage = events[-1].response.usage
+    assert usage.input_tokens == 20
+    assert usage.cache_read_tokens == 0
+    assert usage.cache_reported is False
+    assert usage.cache_hit_rate is None
+
+
 async def test_deepseek_responses_uses_stateless_endpoint_and_replays_output() -> None:
     captured: dict[str, Any] = {}
     prior = {"id": "reason_1", "type": "reasoning", "content": [], "summary": [], "status": "completed"}

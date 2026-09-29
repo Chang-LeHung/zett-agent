@@ -272,6 +272,11 @@ class ModelUsage:
     ``input_tokens`` is the complete model input, including cache reads and
     cache writes. ``output_tokens`` includes reasoning tokens. This invariant
     makes totals and cache-hit ratios comparable across provider schemas.
+
+    ``cache_reported`` separates a verified cache miss from a protocol that
+    never reports cache counters. Compatible gateways often relay one protocol
+    through another and drop those counters on the way, so a zero without
+    ``cache_reported`` means unknown rather than measured.
     """
 
     #: Total input tokens, including cached input and cache writes.
@@ -282,6 +287,8 @@ class ModelUsage:
     cache_read_tokens: int = 0
     #: Input tokens written to the provider cache, not extra input tokens.
     cache_write_tokens: int = 0
+    #: Whether the response carried cache counters at all; False means unknown.
+    cache_reported: bool = True
     #: Reasoning subset of output_tokens; zero when not reported.
     reasoning_tokens: int = 0
 
@@ -309,8 +316,13 @@ class ModelUsage:
 
     @property
     def cache_hit_rate(self) -> float | None:
-        """Return cached input divided by total input, or None without input."""
-        if self.input_tokens == 0:
+        """Return cached input divided by total input, or None when unknown.
+
+        None means there is no ratio to report: the request had no input tokens,
+        or the provider did not report cache counters for it. A protocol that
+        reports cache usage still yields zero for a genuine miss.
+        """
+        if self.input_tokens == 0 or not self.cache_reported:
             return None
         return self.cache_read_tokens / self.input_tokens
 

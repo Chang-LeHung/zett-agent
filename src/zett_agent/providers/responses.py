@@ -366,11 +366,13 @@ def _response_reasoning(output: Sequence[Mapping[str, Any]]) -> str:
 def _responses_usage(payload: Mapping[str, Any]) -> ModelUsage:
     input_details = _object_mapping(payload.get("input_tokens_details"))
     output_details = _object_mapping(payload.get("output_tokens_details"))
+    cache_reported = any(key in input_details for key in ("cached_tokens", "cache_write_tokens"))
     return ModelUsage(
         input_tokens=int(payload.get("input_tokens", 0) or 0),
         output_tokens=int(payload.get("output_tokens", 0) or 0),
         cache_read_tokens=int(input_details.get("cached_tokens", 0) or 0),
         cache_write_tokens=int(input_details.get("cache_write_tokens", 0) or 0),
+        cache_reported=cache_reported,
         reasoning_tokens=int(output_details.get("reasoning_tokens", 0) or 0),
     )
 

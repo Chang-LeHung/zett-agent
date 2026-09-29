@@ -168,7 +168,12 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "TodoWriteResult",
     ),
     "zett_agent.extensions.tool_guidelines": ("ToolGuidelinesExtension",),
-    "zett_agent.extensions.tool_search": ("BM25Search", "TOOL_SEARCH_TOOL_NAME", "ToolSearchExtension"),
+    "zett_agent.extensions.tool_search": (
+        "BM25Search",
+        "TOOL_SEARCH_TOOL_NAME",
+        "ToolSearchExtension",
+        "ToolSearchStorage",
+    ),
     "zett_agent.extensions.usage_activity": (
         "ModelUsageActivityDay",
         "ModelUsageActivityRecord",

@@ -614,19 +614,22 @@ agent = await Agent.create(
 )
 ```
 
-The model submits the complete list on every call. The first task starts as
-`processing`, later tasks remain `pending`, and completing the current task
-advances `processing` to exactly the next position. After the final update,
-every task is `completed` and no task is processing. Existing task content and
+The model submits the complete list on every call. Statuses are `pending`,
+`in_progress`, and `completed`; the first task starts as `in_progress`, later
+tasks remain `pending`, and each update may complete at most one task, which
+advances `in_progress` to exactly the next position. After the final update,
+every task is `completed` and none is in progress. Existing task content and
 order cannot change, and invalid updates fail atomically without replacing the
 last valid state.
 
-The Tool result contains the complete validated list, its zero-based
-`processing_index`, the current `processing` item, and a final `completed`
+The list is request-scoped: it is cleared after success, failure, or
+cancellation, so a finished request never leaks todos into a later run and the
+model rebuilds the list for the next request.
+
+The tool result contains the complete validated list, its zero-based
+`in_progress_index`, the current `in_progress` item, and a final `completed`
 flag. Applications can call `todo_extension.todos(session_id)` while the
-request is active. The extension clears request-local state after success,
-failure, or cancellation so a finished request cannot leak stale todos into a
-later run.
+request is active.
 
 ## Ask-user extension
 

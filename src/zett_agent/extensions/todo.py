@@ -20,20 +20,28 @@ TodoContent = Annotated[str, StringConstraints(strip_whitespace=True, min_length
 
 
 class TodoStatus(StrEnum):
-    """Allowed lifecycle states for one ordered todo item."""
+    """Allowed lifecycle states for one ordered todo item.
+
+    The ``in_progress`` name matches the convention used by mainstream todo
+    tools, so models select it without extra prompting.
+    """
 
     PENDING = "pending"
-    PROCESSING = "processing"
+    IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
 
 
 class TodoItem(BaseModel):
-    """One immutable-position task submitted through todo_write."""
+    """One ordered task in the request-scoped list submitted through todo_write."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    content: TodoContent
-    status: TodoStatus
+    content: TodoContent = Field(description="Task text; fixed once the list is first created.")
+    status: TodoStatus = Field(
+        description=(
+            'Lifecycle state: "pending" (not started), "in_progress" (the one current task), or "completed" (finished).'
+        )
+    )
 
 
 TodoList = Annotated[list[TodoItem], Field(min_length=1, max_length=100)]
@@ -44,29 +52,36 @@ class TodoWriteResult(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    todos: tuple[TodoItem, ...]
-    processing_index: int | None = Field(
-        description="Zero-based index of the only processing task, or null after every task completes"
+    todos: tuple[TodoItem, ...] = Field(description="Complete ordered list after this update.")
+    in_progress_index: int | None = Field(
+        description="Zero-based index of the single in_progress task, or null when every task is completed"
     )
-    processing: TodoItem | None = Field(description="Current processing task, or null after every task completes")
+    in_progress: TodoItem | None = Field(
+        description="The single in_progress task, or null when every task is completed"
+    )
     completed: bool = Field(description="Whether every task in the list is completed")
 
 
 class TodoWriteExtension(AgentExtension):
     """Register todo_write and enforce strictly sequential task progress.
 
-    The first write starts the first task and leaves every later task pending.
-    Each subsequent write submits the complete list and may either preserve the
-    current state or complete exactly one task. When a task completes, the next
-    item must become processing; after the final task, every item is completed.
-    Existing task content and order cannot change during the session.
+    The model submits the complete ordered list on every call. The first write
+    starts the first task as ``in_progress`` and leaves every later task
+    ``pending``. Each later write may preserve the state or complete exactly one
+    task, in which case the next task becomes ``in_progress``; after the last
+    task every item is ``completed``. Task content and order are fixed once the
+    list is created.
+
+    The list is request-working state, not durable task storage. It is cleared
+    after the request succeeds, fails, or is cancelled, so the model builds a
+    fresh list on the next request.
 
     Example progression::
 
-        [processing, pending,    pending]
-        [completed,  processing, pending]
-        [completed,  completed,  processing]
-        [completed,  completed,  completed]
+        [in_progress, pending,     pending]
+        [completed,   in_progress, pending]
+        [completed,   completed,   in_progress]
+        [completed,   completed,   completed]
 
     Examples:
         Inspect progress from application code while a request is active::
@@ -76,8 +91,8 @@ class TodoWriteExtension(AgentExtension):
             async for event in client.stream("Implement and test the change"):
                 if event.type is AgentEventType.TOOL_COMPLETED:
                     progress = extension.todos(event.session_id)
-                    if progress is not None and progress.processing is not None:
-                        print(progress.processing.content)
+                    if progress is not None and progress.in_progress is not None:
+                        print(progress.in_progress.content)
 
     .. note::
         The list is request-working state, not durable task storage. It is
@@ -124,19 +139,26 @@ class TodoWriteExtension(AgentExtension):
 
         @tool(name=TODO_WRITE_TOOL_NAME)
         async def todo_write(todos: TodoList) -> TodoWriteResult:
-            """Create or advance the ordered todo list for the current session.
+            """Create or advance the ordered todo list for the current request.
+            Allowed status values are exactly "pending", "in_progress", and "completed".
+            The list is request-scoped: it is discarded when the request ends and is not
+            remembered in later requests, so send the complete list, starting over each request.
+            Exactly one task stays in_progress until every task is completed, and one call may
+            complete at most one task. Task text and order are fixed after the first call.
 
             Args:
-                todos: Complete ordered list with the current status of every task.
+                todos: Complete ordered list with the current status of every
+                    task, not just the tasks that changed.
 
             Snippet:
-                todo_write(todos=[{"content": "Inspect code", "status": "processing"}])
+                todo_write(todos=[{"content": "Inspect code", "status": "in_progress"}])
 
             Guidelines:
-                - On the first call, mark only the first task as processing and every other task as pending.
-                - Keep task content and order unchanged after creating the list.
-                - Complete only the current task, then mark exactly the next task as processing.
-                - When the final task completes, mark every task as completed with none processing.
+                - The list is request-scoped: it is discarded when the request ends, so recreate it and resend every task next time.
+                - Always send the complete list; never change task text or order after the first call.
+                - Keep exactly one task in_progress; every later task stays pending.
+                - Complete at most one task per call; then the next pending task becomes in_progress.
+                - Mark a task completed only after the work is done; finish with every task completed.
             """
             return self._write(context.config.session_id, tuple(todos))
 
@@ -147,7 +169,10 @@ class TodoWriteExtension(AgentExtension):
         completed_count = self._validate_shape(todos)
         if previous is None:
             if completed_count != 0:
-                raise ValueError("The first todo_write call must start with the first task processing")
+                raise ValueError(
+                    "The first todo_write call must start with the first task in_progress and no "
+                    f"completed tasks, but {completed_count} task(s) are already completed."
+                )
         else:
             self._validate_transition(previous, todos, completed_count)
         self._sessions[session_id] = todos
@@ -160,10 +185,14 @@ class TodoWriteExtension(AgentExtension):
             completed_count += 1
         if completed_count == len(todos):
             return completed_count
-        if todos[completed_count].status is not TodoStatus.PROCESSING:
-            raise ValueError("The first incomplete todo must be processing")
+        if todos[completed_count].status is not TodoStatus.IN_PROGRESS:
+            raise ValueError(
+                f"Exactly one task must be in_progress, but the first unfinished task (index "
+                f"{completed_count}) is {todos[completed_count].status.value!r}. Mark it "
+                '"in_progress" and every later task "pending".'
+            )
         if any(item.status is not TodoStatus.PENDING for item in todos[completed_count + 1 :]):
-            raise ValueError("Todos after the processing task must be pending")
+            raise ValueError("Every task after the in_progress task must be pending")
         return completed_count
 
     @staticmethod
@@ -173,30 +202,42 @@ class TodoWriteExtension(AgentExtension):
         completed_count: int,
     ) -> None:
         if len(todos) != len(previous):
-            raise ValueError("A todo list cannot add or remove tasks after its first write")
+            raise ValueError(
+                f"A todo list cannot gain or lose tasks after the first write: resubmit all "
+                f"{len(previous)} tasks in the original order."
+            )
         if any(current.content != old.content for old, current in zip(previous, todos, strict=True)):
-            raise ValueError("Todo content and order cannot change after the first write")
+            raise ValueError(
+                "Task text and order are fixed after the first write: resubmit the original content "
+                "in the original order."
+            )
 
         previous_completed = sum(item.status is TodoStatus.COMPLETED for item in previous)
         if previous_completed == len(previous):
             if todos != previous:
-                raise ValueError("A completed todo list cannot transition to another state")
+                raise ValueError("A completed todo list cannot be reopened or changed")
             return
-        if completed_count not in (previous_completed, previous_completed + 1):
-            raise ValueError("todo_write can complete at most the current processing task")
+        if completed_count < previous_completed:
+            raise ValueError("A completed task cannot be reopened: keep every completed task completed")
+        if completed_count > previous_completed + 1:
+            raise ValueError(
+                "todo_write completes at most one task per call, but this call completed "
+                f"{completed_count - previous_completed} tasks. Resubmit the list with only the "
+                "current in_progress task marked completed."
+            )
 
     @staticmethod
     def _result(todos: tuple[TodoItem, ...]) -> TodoWriteResult:
-        processing_index = next(
-            (index for index, item in enumerate(todos) if item.status is TodoStatus.PROCESSING),
+        in_progress_index = next(
+            (index for index, item in enumerate(todos) if item.status is TodoStatus.IN_PROGRESS),
             None,
         )
-        processing = None if processing_index is None else todos[processing_index]
+        in_progress = None if in_progress_index is None else todos[in_progress_index]
         return TodoWriteResult(
             todos=todos,
-            processing_index=processing_index,
-            processing=processing,
-            completed=processing_index is None,
+            in_progress_index=in_progress_index,
+            in_progress=in_progress,
+            completed=in_progress_index is None,
         )
 
     @staticmethod

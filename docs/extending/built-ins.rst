@@ -38,7 +38,7 @@ SteeringExtension remain Agent-owned built-ins and must not be registered again.
      - UI must implement its external-response protocol.
    * - TodoWriteExtension
      - Track ordered tasks within the current request.
-     - Only one processing item; lists are cleared at request end.
+     - Only one in_progress item; lists are cleared at request end.
    * - CompactionExtension
      - Summarize older complete turns before a model step.
      - Token estimates and model context limits must be configured appropriately.

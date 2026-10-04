@@ -56,7 +56,7 @@ def tool_result(request) -> dict:
 
 
 async def test_todo_write_advances_every_task_in_order_until_complete():
-    first = ("Inspect code", TodoStatus.PROCESSING)
+    first = ("Inspect code", TodoStatus.IN_PROGRESS)
     second = ("Implement change", TodoStatus.PENDING)
     third = ("Run tests", TodoStatus.PENDING)
     model = ScriptedModel(
@@ -64,14 +64,14 @@ async def test_todo_write_advances_every_task_in_order_until_complete():
         todo_call(
             "todo-2",
             (first[0], TodoStatus.COMPLETED),
-            (second[0], TodoStatus.PROCESSING),
+            (second[0], TodoStatus.IN_PROGRESS),
             third,
         ),
         todo_call(
             "todo-3",
             (first[0], TodoStatus.COMPLETED),
             (second[0], TodoStatus.COMPLETED),
-            (third[0], TodoStatus.PROCESSING),
+            (third[0], TodoStatus.IN_PROGRESS),
         ),
         todo_call(
             "todo-4",
@@ -91,13 +91,13 @@ async def test_todo_write_advances_every_task_in_order_until_complete():
     reply = await agent.run("Complete this task")
 
     assert reply.content == "All tasks completed"
-    assert [tool_result(request)["processing_index"] for request in model.requests[1:]] == [0, 1, 2, None]
+    assert [tool_result(request)["in_progress_index"] for request in model.requests[1:]] == [0, 1, 2, None]
     assert [tool_result(request)["completed"] for request in model.requests[1:]] == [False, False, False, True]
-    assert tool_result(model.requests[1])["processing"] == {
+    assert tool_result(model.requests[1])["in_progress"] == {
         "content": "Inspect code",
-        "status": "processing",
+        "status": "in_progress",
     }
-    assert tool_result(model.requests[4])["processing"] is None
+    assert tool_result(model.requests[4])["in_progress"] is None
     assert extension.todos("todo-lifecycle") is None
 
     definitions = {registered.name: registered for registered in model.requests[0].tools}
@@ -114,12 +114,12 @@ async def test_todo_write_advances_every_task_in_order_until_complete():
     "items",
     [
         (),
-        (("", TodoStatus.PROCESSING),),
-        (("   ", TodoStatus.PROCESSING),),
+        (("", TodoStatus.IN_PROGRESS),),
+        (("   ", TodoStatus.IN_PROGRESS),),
         (("First", TodoStatus.PENDING),),
         (("First", TodoStatus.COMPLETED),),
-        (("First", TodoStatus.PROCESSING), ("Second", TodoStatus.PROCESSING)),
-        (("First", TodoStatus.PENDING), ("Second", TodoStatus.PROCESSING)),
+        (("First", TodoStatus.IN_PROGRESS), ("Second", TodoStatus.IN_PROGRESS)),
+        (("First", TodoStatus.PENDING), ("Second", TodoStatus.IN_PROGRESS)),
     ],
 )
 async def test_invalid_initial_todo_list_fails_without_storing_state(items):
@@ -142,20 +142,20 @@ async def test_invalid_initial_todo_list_fails_without_storing_state(items):
         (
             ("First", TodoStatus.COMPLETED),
             ("Second", TodoStatus.COMPLETED),
-            ("Third", TodoStatus.PROCESSING),
+            ("Third", TodoStatus.IN_PROGRESS),
         ),
         (
             ("First", TodoStatus.PENDING),
-            ("Second", TodoStatus.PROCESSING),
+            ("Second", TodoStatus.IN_PROGRESS),
             ("Third", TodoStatus.PENDING),
         ),
         (
-            ("Changed", TodoStatus.PROCESSING),
+            ("Changed", TodoStatus.IN_PROGRESS),
             ("Second", TodoStatus.PENDING),
             ("Third", TodoStatus.PENDING),
         ),
         (
-            ("Second", TodoStatus.PROCESSING),
+            ("Second", TodoStatus.IN_PROGRESS),
             ("First", TodoStatus.PENDING),
             ("Third", TodoStatus.PENDING),
         ),
@@ -163,7 +163,7 @@ async def test_invalid_initial_todo_list_fails_without_storing_state(items):
 )
 async def test_invalid_update_fails_atomically_and_preserves_current_task(updated):
     initial = (
-        ("First", TodoStatus.PROCESSING),
+        ("First", TodoStatus.IN_PROGRESS),
         ("Second", TodoStatus.PENDING),
         ("Third", TodoStatus.PENDING),
     )
@@ -173,7 +173,7 @@ async def test_invalid_update_fails_atomically_and_preserves_current_task(update
         todo_call(
             "valid-update",
             ("First", TodoStatus.COMPLETED),
-            ("Second", TodoStatus.PROCESSING),
+            ("Second", TodoStatus.IN_PROGRESS),
             ("Third", TodoStatus.PENDING),
         ),
         AssistantMessage(content="Recovered"),
@@ -187,19 +187,19 @@ async def test_invalid_update_fails_atomically_and_preserves_current_task(update
     assert len(successful) == 2
     assert len([event for event in events if event.type is AgentEventType.TOOL_FAILED]) == 1
     result = tool_result(model.requests[3])
-    assert result["processing_index"] == 1
-    assert result["processing"]["content"] == "Second"
+    assert result["in_progress_index"] == 1
+    assert result["in_progress"]["content"] == "Second"
     assert extension.todos("invalid-update") is None
 
 
 async def test_successful_requests_clear_session_state_and_clear_handles_empty_state():
     extension = TodoWriteExtension()
     first_model = ScriptedModel(
-        todo_call("first", ("First session", TodoStatus.PROCESSING)),
+        todo_call("first", ("First session", TodoStatus.IN_PROGRESS)),
         AssistantMessage(content="done"),
     )
     second_model = ScriptedModel(
-        todo_call("second", ("Second session", TodoStatus.PROCESSING)),
+        todo_call("second", ("Second session", TodoStatus.IN_PROGRESS)),
         AssistantMessage(content="done"),
     )
     first_agent = await Agent.create(first_model, config=AgentRunConfig("first"), extensions=[extension])
@@ -222,7 +222,7 @@ async def test_model_error_clears_active_todo_state():
         async def stream(self, request):
             self.calls += 1
             if self.calls == 1:
-                yield ModelEvent.completed(ModelResponse(todo_call("start", ("Task", TodoStatus.PROCESSING))))
+                yield ModelEvent.completed(ModelResponse(todo_call("start", ("Task", TodoStatus.IN_PROGRESS))))
                 return
             raise RuntimeError("model failed")
             yield
@@ -238,7 +238,7 @@ async def test_model_error_clears_active_todo_state():
 
 async def test_stream_keeps_todos_until_successful_terminal_cleanup():
     model = ScriptedModel(
-        todo_call("start", ("Task", TodoStatus.PROCESSING)),
+        todo_call("start", ("Task", TodoStatus.IN_PROGRESS)),
         AssistantMessage(content="Finished"),
     )
     extension = TodoWriteExtension()
@@ -253,18 +253,18 @@ async def test_stream_keeps_todos_until_successful_terminal_cleanup():
             state_at_run_completion = extension.todos("stream-cleanup")
 
     assert state_at_tool_completion is not None
-    assert state_at_tool_completion.processing is not None
-    assert state_at_tool_completion.processing.content == "Task"
+    assert state_at_tool_completion.in_progress is not None
+    assert state_at_tool_completion.in_progress.content == "Task"
     assert state_at_run_completion is None
 
 
 async def test_successful_cleanup_allows_a_fresh_list_in_the_next_run():
     model = ScriptedModel(
-        todo_call("first", ("Old task", TodoStatus.PROCESSING)),
+        todo_call("first", ("Old task", TodoStatus.IN_PROGRESS)),
         AssistantMessage(content="First run finished"),
         todo_call(
             "second",
-            ("New task one", TodoStatus.PROCESSING),
+            ("New task one", TodoStatus.IN_PROGRESS),
             ("New task two", TodoStatus.PENDING),
         ),
         AssistantMessage(content="Second run finished"),
@@ -279,7 +279,7 @@ async def test_successful_cleanup_allows_a_fresh_list_in_the_next_run():
     assert second_reply.content == "Second run finished"
     second_result = tool_result(model.requests[3])
     assert [item["content"] for item in second_result["todos"]] == ["New task one", "New task two"]
-    assert second_result["processing_index"] == 0
+    assert second_result["in_progress_index"] == 0
     assert extension.todos("success-reuse") is None
 
 
@@ -294,7 +294,7 @@ async def test_cancellation_clears_active_todo_state():
             self.requests.append(request)
             self.calls += 1
             if self.calls == 1:
-                yield ModelEvent.completed(ModelResponse(todo_call("start", ("Task", TodoStatus.PROCESSING))))
+                yield ModelEvent.completed(ModelResponse(todo_call("start", ("Task", TodoStatus.IN_PROGRESS))))
                 return
             self.blocked.set()
             await asyncio.Event().wait()
@@ -307,7 +307,7 @@ async def test_cancellation_clears_active_todo_state():
     await asyncio.wait_for(model.blocked.wait(), timeout=1)
 
     active = extension.todos("cancel-cleanup")
-    assert active is not None and active.processing is not None
+    assert active is not None and active.in_progress is not None
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -327,13 +327,13 @@ async def test_cancelled_agent_can_restart_with_a_fresh_todo_list():
             self.calls += 1
             match self.calls:
                 case 1:
-                    yield ModelEvent.completed(ModelResponse(todo_call("old", ("Old task", TodoStatus.PROCESSING))))
+                    yield ModelEvent.completed(ModelResponse(todo_call("old", ("Old task", TodoStatus.IN_PROGRESS))))
                 case 2:
                     self.blocked.set()
                     await asyncio.Event().wait()
                 case 3:
                     yield ModelEvent.completed(
-                        ModelResponse(todo_call("new", ("Replacement task", TodoStatus.PROCESSING)))
+                        ModelResponse(todo_call("new", ("Replacement task", TodoStatus.IN_PROGRESS)))
                     )
                 case 4:
                     yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Restarted")))
@@ -351,7 +351,7 @@ async def test_cancelled_agent_can_restart_with_a_fresh_todo_list():
 
     assert reply.content == "Restarted"
     new_result = tool_result(model.requests[3])
-    assert new_result["processing"]["content"] == "Replacement task"
+    assert new_result["in_progress"]["content"] == "Replacement task"
     assert extension.todos("cancel-reuse") is None
 
 
@@ -366,12 +366,12 @@ async def test_failed_agent_can_restart_with_a_fresh_todo_list():
             self.calls += 1
             match self.calls:
                 case 1:
-                    yield ModelEvent.completed(ModelResponse(todo_call("old", ("Old task", TodoStatus.PROCESSING))))
+                    yield ModelEvent.completed(ModelResponse(todo_call("old", ("Old task", TodoStatus.IN_PROGRESS))))
                 case 2:
                     raise RuntimeError("temporary model failure")
                 case 3:
                     yield ModelEvent.completed(
-                        ModelResponse(todo_call("new", ("Replacement task", TodoStatus.PROCESSING)))
+                        ModelResponse(todo_call("new", ("Replacement task", TodoStatus.IN_PROGRESS)))
                     )
                 case 4:
                     yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Recovered")))
@@ -386,7 +386,7 @@ async def test_failed_agent_can_restart_with_a_fresh_todo_list():
 
     assert reply.content == "Recovered"
     new_result = tool_result(model.requests[3])
-    assert new_result["processing"]["content"] == "Replacement task"
+    assert new_result["in_progress"]["content"] == "Replacement task"
     assert extension.todos("error-reuse") is None
 
 
@@ -405,7 +405,7 @@ async def test_request_without_todo_calls_completes_with_empty_state():
 
 
 async def test_completed_list_can_be_repeated_but_cannot_be_reopened():
-    processing = (("Only task", TodoStatus.PROCESSING),)
+    processing = (("Only task", TodoStatus.IN_PROGRESS),)
     completed = (("Only task", TodoStatus.COMPLETED),)
     model = ScriptedModel(
         todo_call("start", *processing),
@@ -423,7 +423,7 @@ async def test_completed_list_can_be_repeated_but_cannot_be_reopened():
     assert len([event for event in events if event.type is AgentEventType.TOOL_COMPLETED]) == 4
     failures = [event for event in events if event.type is AgentEventType.TOOL_FAILED]
     assert len(failures) == 1
-    assert "cannot transition" in failures[0].message.content
+    assert "cannot be reopened" in failures[0].message.content
     assert extension.todos("completed-list") is None
 
 
@@ -433,3 +433,67 @@ def test_todo_extension_rejects_empty_session_ids():
         extension.todos(" ")
     with pytest.raises(ValueError, match="session_id"):
         extension.clear("")
+
+
+async def test_model_facing_docs_publish_scope_statuses_and_single_completion():
+    model = ScriptedModel(AssistantMessage(content="No task list needed"))
+    extension = TodoWriteExtension()
+    agent = await Agent.create(
+        model,
+        config=AgentRunConfig("tool-docs"),
+        extensions=[extension, ToolGuidelinesExtension()],
+    )
+
+    await agent.run("Answer directly")
+
+    definition = next(item for item in model.requests[0].tools if item.name == TODO_WRITE_TOOL_NAME)
+    assert '"pending"' in definition.description
+    assert '"in_progress"' in definition.description
+    assert '"completed"' in definition.description
+    assert "request-scoped" in definition.description
+    assert "at most one task" in definition.description
+    assert definition.parameters["$defs"]["TodoStatus"]["enum"] == ["pending", "in_progress", "completed"]
+
+    guidance = "\n".join(
+        message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)
+    )
+    assert "request-scoped" in guidance
+    assert "Complete at most one task per call" in guidance
+    assert '"in_progress"' in guidance
+
+
+async def test_batching_two_completions_fails_with_actionable_recovery_hint():
+    model = ScriptedModel(
+        todo_call(
+            "start",
+            ("First", TodoStatus.IN_PROGRESS),
+            ("Second", TodoStatus.PENDING),
+            ("Third", TodoStatus.PENDING),
+        ),
+        todo_call(
+            "batch",
+            ("First", TodoStatus.COMPLETED),
+            ("Second", TodoStatus.COMPLETED),
+            ("Third", TodoStatus.IN_PROGRESS),
+        ),
+        todo_call(
+            "single",
+            ("First", TodoStatus.COMPLETED),
+            ("Second", TodoStatus.IN_PROGRESS),
+            ("Third", TodoStatus.PENDING),
+        ),
+        AssistantMessage(content="Recovered"),
+    )
+    extension = TodoWriteExtension()
+    agent = await Agent.create(model, config=AgentRunConfig("batch"), extensions=[extension])
+
+    state_at_failure = None
+    async for event in agent.stream("Work through tasks"):
+        if event.type is AgentEventType.TOOL_FAILED:
+            state_at_failure = extension.todos("batch")
+            assert "at most one task per call" in event.message.content
+            assert "completed 2 tasks" in event.message.content
+
+    assert state_at_failure is not None and state_at_failure.in_progress is not None
+    assert state_at_failure.in_progress.content == "First"
+    assert tool_result(model.requests[3])["in_progress"]["content"] == "Second"

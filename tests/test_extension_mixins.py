@@ -3,6 +3,7 @@
 from zett_agent.extensions.base import (
     AgentEventHooksMixin,
     AgentExtension,
+    AgentMaintenanceHooksMixin,
     AgentModelHooksMixin,
     AgentRunHooksMixin,
     AgentSetupHooksMixin,
@@ -21,6 +22,7 @@ def test_agent_extension_composes_each_hook_group_once() -> None:
         AgentModelHooksMixin,
         AgentToolHooksMixin,
         AgentEventHooksMixin,
+        AgentMaintenanceHooksMixin,
     )
 
 
@@ -42,6 +44,7 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
             "accept",
             "on_event",
         },
+        AgentMaintenanceHooksMixin: {"on_compact"},
     }
 
     observed: set[str] = set()
@@ -69,4 +72,5 @@ def test_hook_groups_own_disjoint_lifecycle_methods() -> None:
         "accept",
         "on_model_request",
         "on_tool_call",
+        "on_compact",
     }

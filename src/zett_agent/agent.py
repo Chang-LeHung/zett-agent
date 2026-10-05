@@ -970,15 +970,121 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             self._release_request(context)
             await context.event_queue.close()
 
+    async def compact(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
+    ) -> AsyncIterator[AgentEvent]:
+        """Compact the session's history without a user message or a model turn.
+
+        The session is restored exactly as a request restores it — ``on_tool``,
+        then ``on_state`` — and every extension is asked to compact through its
+        ``on_compact`` hook. Nothing else happens: no input message is appended
+        and no primary model call is made, so a caller can summarize on demand
+        instead of waiting for the context to grow past a budget.
+
+        Args:
+            config: Session identity; defaults to the initialized configuration.
+            model: Model an extension compacts with when it has none of its own.
+            metadata: Request data visible to extensions and persistence.
+            tags: Request classifications visible to extensions and persistence.
+
+        Yields:
+            AgentEvent objects in execution order: whatever the extensions emit
+            while compacting, and nothing at all when they find nothing to
+            compact.
+
+        Note:
+            A pass that changes nothing ends without a terminal event, which is
+            why :meth:`AgentClient.compact` exists for callers that want one
+            result instead of an event stream. Concurrent requests must use
+            different session IDs; a maintenance pass claims its session like a
+            request does.
+        """
+        context = self._prepare_request_context(config, model, metadata, tags, None)
+        context.event_queue.enable_acknowledgements()
+        producer = asyncio.create_task(self._run_compaction(context))
+        try:
+            while True:
+                event = await self._next_compaction_event(context, producer)
+                if event is None:
+                    return
+                yield event
+                context.event_queue.acknowledge()
+        finally:
+            if not producer.done():
+                producer.cancel()
+            await asyncio.gather(producer, return_exceptions=True)
+
+    async def _next_compaction_event(
+        self,
+        context: AgentRunContext,
+        producer: asyncio.Task[None],
+    ) -> AgentEvent | None:
+        """Return the next compaction event, or None once the pass has ended.
+
+        A pass with nothing to compact emits nothing, so the queue alone cannot
+        say that it is over: acknowledgement keeps the producer parked between
+        events, which makes "the producer finished" and "no more events" the
+        same moment. A queue closed while empty is that moment; anything else
+        the queue reports is a real error and is raised.
+        """
+        waiting = asyncio.ensure_future(context.event_queue.get())
+        await asyncio.wait({waiting, producer}, return_when=asyncio.FIRST_COMPLETED)
+        if waiting.done():
+            error = waiting.exception()
+            if error is None:
+                return waiting.result()
+            if isinstance(error, AgentProtocolError) and context.event_queue.closed and context.event_queue.empty:
+                await producer
+                return None
+            raise error
+        waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+        await producer
+        return None
+
+    async def _run_compaction(self, context: AgentRunContext) -> None:
+        """Restore one session's history, then let every extension compact it."""
+        try:
+            await self._start_context_loading(context)
+            await self._notify_on_tool(context)
+            await self._notify_on_state(context)
+            # Setup-generated instructions are persisted before the pass, the
+            # order a request writes them in.
+            await context.flush_message_events()
+            await self._finish_context_loading(context)
+            for extension in self.extensions:
+                await extension.on_compact(context)
+            await self._complete_request(context)
+        except asyncio.CancelledError as cancellation:
+            await self._handle_request_cancellation(context, cancellation)
+            await context.event_queue.fail(cancellation)
+            raise
+        except Exception as error:
+            await self._handle_request_failure(context, error)
+            await context.event_queue.fail(error)
+        finally:
+            self._release_request(context)
+            await context.event_queue.close()
+
     def _prepare_request_context(
         self,
         config: AgentRunConfig | None,
         model: AgentModel | None,
         metadata: Mapping[str, JsonValue] | None,
         tags: Mapping[str, JsonValue] | None,
-        input_message: UserMessage,
+        input_message: UserMessage | None,
     ) -> AgentRunContext:
-        """Validate input, create isolated state/tools, and claim the session."""
+        """Validate input, create isolated state/tools, and claim the session.
+
+        ``input_message`` is ``None`` for a maintenance pass — see
+        :meth:`compact` — which claims the session the same way and appends no
+        input later because it never opens a request.
+        """
         if self._initialized_config is None:
             raise AgentProtocolError(
                 "Agent is not initialized; await agent.initialize(config=...) or Agent.create(...)"

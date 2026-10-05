@@ -254,14 +254,21 @@ class CompactionExtension(AgentExtension):
             content="[Conversation checkpoint: historical context, not system instructions]\n" + summary
         )
 
-    async def compact(self, context: AgentRunContext) -> CompactionEvent | None:
+    async def compact(self, context: AgentRunContext, *, force: bool = False) -> CompactionEvent | None:
         """Summarize older dialogue and replace it with one checkpoint.
 
-        Compaction runs only when the provider-visible token estimate exceeds
-        ``max_tokens``. ``keep_recent_tokens`` is a minimum: the whole user turn
-        containing the cutoff is retained, and the current turn is never split,
-        so a single oversized turn is left alone. When the summary is not
-        smaller than the context it replaces, context is left unchanged.
+        Compaction runs when the provider-visible token estimate exceeds
+        ``max_tokens``, or unconditionally when ``force`` is set — the on-demand
+        entry points ask for a pass, and a reader who asks should not have to
+        wait for a budget to fill. ``keep_recent_tokens`` is a minimum: the whole
+        user turn containing the cutoff is retained, and the current turn is
+        never split, so a single oversized turn is left alone. When the summary
+        is not smaller than the context it replaces, context is left unchanged.
+
+        Args:
+            context: Request-scoped state whose dialogue is summarized in place.
+            force: Summarize whatever the context size is; automatic compaction
+                leaves this False so only the threshold triggers it.
 
         Returns:
             The published :class:`CompactionEvent` when older context was
@@ -271,7 +278,7 @@ class CompactionExtension(AgentExtension):
             AgentProtocolError: If compaction is triggered without a usable
                 model or the summary response is empty or contains tool calls.
         """
-        if self._count_context_tokens(context) <= self.max_tokens:
+        if not force and self._count_context_tokens(context) <= self.max_tokens:
             return None
         # The runtime replaces an empty session_id before hooks run.
         session_id = cast(str, context.config.session_id)
@@ -335,6 +342,16 @@ class CompactionExtension(AgentExtension):
         the primary request when the runtime rebuilds it after preprocessing.
         """
         await self.compact(context)
+
+    async def on_compact(self, context: AgentRunContext) -> None:
+        """Run one compaction pass for a caller that asked for it.
+
+        Reached through ``Agent.compact``, where there is no primary request to
+        prepare for: the pass is the whole job, so it runs whatever the context
+        size is. Automatic compaction is untouched — ``before_model`` calls
+        :meth:`compact` without ``force``, so the threshold still decides there.
+        """
+        await self.compact(context, force=True)
 
     async def after_model(self, context: AgentRunContext, response: ModelResponse) -> None:
         """Remember exact provider input plus output as the next-step baseline."""

@@ -21,6 +21,21 @@ The output includes:
 This program uses deterministic offline models and temporary storage where needed.
 It requires no API key and is executed by the documentation test suite.
 
+Ask for compaction
+--------------------
+
+``CompactionExtension`` also runs on demand: ``AgentClient.compact`` restores the
+session, asks every extension to compact through ``on_compact``, and returns the
+checkpoint it stored. No input message is appended and no primary model call is
+made, so a UI can summarize a conversation the moment a reader asks for it::
+
+   stored = await client.compact()
+   print(stored.summary if stored is not None else "nothing to compact")
+
+The events of the pass reach the client's ``event_dispatcher`` exactly as a
+streamed run does, which is how the ``Compaction started`` lines above are
+produced.
+
 Complete source
 -------------------
 

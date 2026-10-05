@@ -6,6 +6,8 @@ from zett_agent.agent import (
     AgentRunContext,
     AgentState,
 )
+from zett_agent.client import AgentClient
+from zett_agent.dispatcher import AgentEventDispatcher
 from zett_agent.events import (
     AgentEventType,
     AgentPhase,
@@ -381,6 +383,109 @@ def test_select_compaction_window_keeps_whole_turns_and_skips_checkpoint_prefixe
         )
         is None
     )
+
+
+async def test_a_forced_pass_compacts_what_the_threshold_leaves_alone():
+    """The hook asks for a pass; the automatic call keeps its threshold."""
+
+    def dialogue():
+        return [
+            UserMessage(content="Old " * 500),
+            AssistantMessage(content="Answer"),
+            UserMessage(content="Latest"),
+            AssistantMessage(content="Latest answer"),
+        ]
+
+    budgets = {"max_tokens": 1_000_000, "keep_recent_tokens": 1}
+
+    gated = SummaryModel()
+    below = context(dialogue())
+    assert await CompactionExtension(gated, **budgets).compact(below) is None
+    assert gated.requests == []
+    assert len(below.state.messages) == 4
+
+    hooked = SummaryModel()
+    on_demand = context(dialogue())
+    extension = CompactionExtension(hooked, **budgets)
+    await extension.on_compact(on_demand)
+
+    assert hooked.requests
+    assert isinstance(on_demand.state.messages[0], CompactedMessage)
+    # ``force`` is the explicit form of the same ask.
+    explicit = SummaryModel()
+    assert await CompactionExtension(explicit, **budgets).compact(context(dialogue()), force=True) is not None
+
+
+async def test_compact_asks_an_agent_for_compaction_without_a_message():
+    """A caller can compact on demand: no input, no primary model call."""
+
+    class Restore(AgentExtension):
+        async def on_state(self, context):
+            context.add_message(UserMessage(content="Old " * 500))
+            context.add_message(AssistantMessage(content="Answer"))
+            context.add_message(UserMessage(content="Latest"))
+            context.add_message(AssistantMessage(content="Latest answer"))
+
+    class PrimaryModel:
+        async def stream(self, request):
+            raise AssertionError("compaction must not call the primary model")
+            yield  # pragma: no cover
+
+    received = []
+
+    class Handler(AgentEventDispatcher):
+        async def on_compaction_started_event(self, event):
+            received.append(event.type)
+
+        async def on_compaction_text_delta_event(self, event):
+            received.append(event.type)
+
+        async def on_compaction_completed_event(self, event):
+            received.append(event.type)
+
+    agent = await Agent.create(
+        PrimaryModel(),
+        extensions=[Restore(), CompactionExtension(SummaryModel(), max_tokens=100, keep_recent_tokens=1)],
+        config=AgentRunConfig(session_id="test"),
+    )
+    client = AgentClient(agent, event_dispatcher=Handler())
+
+    stored = await client.compact()
+
+    assert stored is not None
+    assert stored.summary.startswith("[Conversation checkpoint:")
+    assert received == [
+        AgentEventType.COMPACTION_STARTED,
+        AgentEventType.COMPACTION_TEXT_DELTA,
+        AgentEventType.COMPACTION_COMPLETED,
+    ]
+    # The session holds the checkpoint and the turn it kept — and nothing else:
+    # the pass is not a turn, so no input was appended for it.
+    assert isinstance(agent.state.messages[1], CompactedMessage)
+    kept = [
+        message
+        for message in agent.state.messages
+        if isinstance(message, UserMessage) and not isinstance(message, CompactedMessage)
+    ]
+    assert [message.content for message in kept] == ["Latest"]
+
+
+async def test_compact_that_finds_nothing_returns_none_and_keeps_the_session():
+    model = SummaryModel()
+    agent = await Agent.create(
+        model,
+        extensions=[CompactionExtension(model, max_tokens=100_000, keep_recent_tokens=1)],
+        config=AgentRunConfig(session_id="test"),
+    )
+    client = AgentClient(agent)
+
+    assert await client.compact() is None
+    assert model.requests == []
+
+    # A maintenance pass leaves the session as reusable as a request does.
+    streamed = [event async for event in agent.stream("Latest", config=AgentRunConfig(session_id="test"))]
+
+    assert streamed[-1].type is AgentEventType.RUN_COMPLETED
 
 
 async def test_compact_replaces_context_without_running_before_model():

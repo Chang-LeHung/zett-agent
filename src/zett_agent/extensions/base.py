@@ -236,6 +236,26 @@ class AgentToolHooksMixin:
         """
 
 
+class AgentMaintenanceHooksMixin:
+    """Hooks for work a caller asks for outside a model turn."""
+
+    async def on_compact(self, context: AgentRunContext) -> None:
+        """Summarize restored context when a caller asks for compaction.
+
+        ``Agent.compact`` restores the session through ``on_tool`` and
+        ``on_state`` exactly as a request does, appends no input message, and
+        makes no primary model call: the only work a compaction pass does is
+        what this hook performs. The default does nothing, so an extension with
+        nothing to compact pays nothing.
+
+        Examples:
+            Usage::
+
+                async def on_compact(self, context):
+                    await self.compact(context)
+        """
+
+
 class AgentEventHooksMixin:
     """Hooks for internal notifications and external input."""
 
@@ -264,6 +284,7 @@ class AgentExtension(
     AgentModelHooksMixin,
     AgentToolHooksMixin,
     AgentEventHooksMixin,
+    AgentMaintenanceHooksMixin,
 ):
     """Combine all optional hooks for the model-tool request lifecycle.
 

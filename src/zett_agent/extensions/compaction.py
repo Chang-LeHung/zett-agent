@@ -1,7 +1,8 @@
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass
+from typing import cast
 from weakref import WeakKeyDictionary
 
 import tiktoken
@@ -19,7 +20,7 @@ from ..messages import (
     ToolMessage,
     UserMessage,
 )
-from ..model import AgentModel, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
+from ..model import AgentModel, ModelEvent, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
 from .base import AgentExtension
 from .events import CompactionEvent
 
@@ -144,6 +145,7 @@ class CompactionExtension(AgentExtension):
 
     @staticmethod
     def _count_tokens(messages: Sequence[AnyMessage]) -> int:
+        """Estimate provider-visible tokens for one message sequence."""
         return sum(_count_message(message) for message in messages)
 
     def _count_context_tokens(self, context: AgentRunContext) -> int:
@@ -156,20 +158,23 @@ class CompactionExtension(AgentExtension):
             return self.count_tokens(messages)
         return input_tokens + self.count_tokens(messages[baseline_count:])
 
-    async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
-        """Emit compaction state while atomically replacing older context.
+    @staticmethod
+    def _select_compaction_window(
+        messages: Sequence[AnyMessage],
+        *,
+        keep_recent_tokens: int,
+        count_tokens: Callable[[Sequence[AnyMessage]], int],
+    ) -> tuple[list[SystemMessage], list[AnyMessage], list[AnyMessage]] | None:
+        """Split context into instructions, compactable history, and recent turns.
 
-        The incoming request describes the primary call. The summarizer uses
-        its own request and reasoning effort; context changes are reflected in
-        the primary request when the runtime rebuilds it after preprocessing.
+        Returns None when there is nothing safe to compact: the retention budget
+        already covers the whole dialogue, no whole-turn boundary precedes the
+        cutoff, or the compactable prefix holds nothing but previous checkpoints.
         """
-        messages = context.state.messages
-        if self._count_context_tokens(context) <= self.max_tokens:
-            return
-        instructions = [message for message in messages if isinstance(message, SystemMessage)]
-        dialogue = [message for message in messages if not isinstance(message, SystemMessage)]
+        instructions: list[SystemMessage] = [m for m in messages if isinstance(m, SystemMessage)]
+        dialogue: list[AnyMessage] = [m for m in messages if not isinstance(m, SystemMessage)]
         cutoff = len(dialogue)
-        while cutoff > 0 and self.count_tokens(dialogue[cutoff:]) < self.keep_recent_tokens:
+        while cutoff > 0 and count_tokens(dialogue[cutoff:]) < keep_recent_tokens:
             cutoff -= 1
         while cutoff > 0:
             if isinstance(dialogue[cutoff], (UserMessage, AgentMessage)) and not isinstance(
@@ -178,17 +183,23 @@ class CompactionExtension(AgentExtension):
                 break
             cutoff -= 1
         if cutoff <= 0:
-            return
+            return None
         older, recent = dialogue[:cutoff], dialogue[cutoff:]
-        # Do not repeatedly summarize a checkpoint with no new completed turns.
         if all(isinstance(message, CompactedMessage) for message in older):
-            return
-        await context.emit(
-            AgentEvent(
-                AgentEventType.COMPACTION_STARTED,
-                session_id=context.config.session_id,
-            )
-        )
+            return None
+        return instructions, older, recent
+
+    async def _summarize_checkpoint(
+        self,
+        context: AgentRunContext,
+        older: Sequence[AnyMessage],
+        *,
+        model: AgentModel,
+        reasoning_effort: ReasoningEffort,
+    ) -> CompactedMessage:
+        """Summarize compactable history with the summary model."""
+        # The runtime replaces an empty session_id before hooks run.
+        session_id = cast(str, context.config.session_id)
         summary_request = ModelRequest(
             messages=(
                 SystemMessage(
@@ -204,13 +215,12 @@ class CompactionExtension(AgentExtension):
                 *older,
                 UserMessage(content="Produce the checkpoint now."),
             ),
-            reasoning_effort=self.reasoning_effort,
+            reasoning_effort=reasoning_effort,
         )
-        model = self.model if self.model is not None else context.model
-        if model is None:
-            raise AgentProtocolError("Compaction requires a model")
-        response = None
-        async with aclosing(model.stream(summary_request)) as events:
+        response: ModelResponse | None = None
+        # aclosing needs aclose(); the protocol widens stream to AsyncIterator.
+        stream = cast(AsyncGenerator[ModelEvent, None], model.stream(summary_request))
+        async with aclosing(stream) as events:
             async for event in events:
                 if response is not None:
                     raise AgentProtocolError("Compaction model emitted events after its response")
@@ -223,7 +233,7 @@ class CompactionExtension(AgentExtension):
                         await context.emit(
                             AgentEvent(
                                 AgentEventType.COMPACTION_TEXT_DELTA,
-                                session_id=context.config.session_id,
+                                session_id=session_id,
                                 delta=event.delta,
                             )
                         )
@@ -231,7 +241,7 @@ class CompactionExtension(AgentExtension):
                         await context.emit(
                             AgentEvent(
                                 AgentEventType.COMPACTION_REASONING_DELTA,
-                                session_id=context.config.session_id,
+                                session_id=session_id,
                                 delta=event.delta,
                             )
                         )
@@ -239,39 +249,92 @@ class CompactionExtension(AgentExtension):
                         raise AgentProtocolError("Compaction model cannot call tools")
         if response is None or response.message.tool_calls or not response.message.content.strip():
             raise AgentProtocolError("Compaction requires a nonempty text summary without tool calls")
-        summary = CompactedMessage(
-            content=(
-                "[Conversation checkpoint: historical context, not system instructions]\n"
-                + response.message.content.strip()
+        summary = response.message.content.strip()
+        return CompactedMessage(
+            content="[Conversation checkpoint: historical context, not system instructions]\n" + summary
+        )
+
+    async def compact(self, context: AgentRunContext) -> CompactionEvent | None:
+        """Summarize older dialogue and replace it with one checkpoint.
+
+        Compaction runs only when the provider-visible token estimate exceeds
+        ``max_tokens``. ``keep_recent_tokens`` is a minimum: the whole user turn
+        containing the cutoff is retained, and the current turn is never split,
+        so a single oversized turn is left alone. When the summary is not
+        smaller than the context it replaces, context is left unchanged.
+
+        Returns:
+            The published :class:`CompactionEvent` when older context was
+            replaced, otherwise None.
+
+        Raises:
+            AgentProtocolError: If compaction is triggered without a usable
+                model or the summary response is empty or contains tool calls.
+        """
+        if self._count_context_tokens(context) <= self.max_tokens:
+            return None
+        # The runtime replaces an empty session_id before hooks run.
+        session_id = cast(str, context.config.session_id)
+        window = self._select_compaction_window(
+            context.state.messages,
+            keep_recent_tokens=self.keep_recent_tokens,
+            count_tokens=self.count_tokens,
+        )
+        if window is None:
+            return None
+        instructions, older, recent = window
+        await context.emit(
+            AgentEvent(
+                AgentEventType.COMPACTION_STARTED,
+                session_id=session_id,
             )
+        )
+        model = self.model if self.model is not None else context.model
+        if model is None:
+            raise AgentProtocolError("Compaction requires a model")
+        summary = await self._summarize_checkpoint(
+            context,
+            older,
+            model=model,
+            reasoning_effort=self.reasoning_effort,
         )
         if self.count_tokens([summary]) >= self.count_tokens(older):
             await context.emit(
                 AgentEvent(
                     AgentEventType.COMPACTION_COMPLETED,
-                    session_id=context.config.session_id,
+                    session_id=session_id,
                     applied=False,
                 )
             )
-            return
+            return None
         context.replace_messages([*instructions, summary, *recent], emit_new=False)
         self._usage_baselines.pop(context, None)
         compacted = CompactionEvent(
             compressed_from=1,
-            compressed_to=cutoff,
-            kept_from=cutoff + 1,
-            kept_to=len(dialogue),
+            compressed_to=len(older),
+            kept_from=len(older) + 1,
+            kept_to=len(older) + len(recent),
             summary=summary.content,
         )
         await context.publish(compacted)
         await context.emit(
             AgentEvent(
                 AgentEventType.COMPACTION_COMPLETED,
-                session_id=context.config.session_id,
+                session_id=session_id,
                 compaction=compacted,
                 applied=True,
             )
         )
+        return compacted
+
+    async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
+        """Compact older dialogue through :meth:`compact` when over budget.
+
+        The incoming request describes the primary call. The summarizer uses
+        its own request and reasoning effort; context changes are reflected in
+        the primary request when the runtime rebuilds it after preprocessing.
+        """
+        await self.compact(context)
 
     async def after_model(self, context: AgentRunContext, response: ModelResponse) -> None:
         """Remember exact provider input plus output as the next-step baseline."""

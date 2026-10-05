@@ -358,3 +358,51 @@ async def test_compaction_rejects_invalid_model_protocol_without_rewriting_conte
         )
     assert state.state.messages == tuple(messages)
     assert state.extensions[0].events == []
+
+
+def test_select_compaction_window_keeps_whole_turns_and_skips_checkpoint_prefixes():
+    instructions = SystemMessage(content="Base instructions")
+    old_user = UserMessage(content="Old request")
+    old_answer = AssistantMessage(content="Old answer")
+    current = UserMessage(content="Current request")
+
+    window = CompactionExtension._select_compaction_window(
+        [instructions, old_user, old_answer, current],
+        keep_recent_tokens=1,
+        count_tokens=CompactionExtension._count_tokens,
+    )
+
+    assert window == ([instructions], [old_user, old_answer], [current])
+    assert (
+        CompactionExtension._select_compaction_window(
+            [instructions, CompactedMessage(content="checkpoint"), current],
+            keep_recent_tokens=1,
+            count_tokens=CompactionExtension._count_tokens,
+        )
+        is None
+    )
+
+
+async def test_compact_replaces_context_without_running_before_model():
+    model = SummaryModel()
+    state = context(
+        [UserMessage(content="Old " * 500), AssistantMessage(content="Old answer"), UserMessage(content="Current")]
+    )
+    extension = CompactionExtension(model, max_tokens=100, keep_recent_tokens=1)
+
+    event = await extension.compact(state)
+
+    assert event is not None
+    assert event.summary.startswith("[Conversation checkpoint:")
+    assert isinstance(state.state.messages[0], CompactedMessage)
+    assert state.extensions[0].events == [event]
+    assert model.requests
+
+
+async def test_compact_returns_none_below_threshold_without_a_model_call():
+    model = SummaryModel()
+    state = context([UserMessage(content="Hello"), AssistantMessage(content="Hi")])
+    extension = CompactionExtension(model, max_tokens=100_000, keep_recent_tokens=1)
+
+    assert await extension.compact(state) is None
+    assert model.requests == []

@@ -8,6 +8,7 @@ from .dispatcher import AgentEventDispatcher
 from .events import AgentEvent, AgentEventType
 from .exceptions import AgentProtocolError
 from .extensions.base import AgentExtension
+from .extensions.events import CompactionEvent
 from .json_types import JsonValue
 from .messages import AssistantMessage, UserMessage
 from .model import AgentModel, ReasoningEffort
@@ -86,6 +87,45 @@ class AgentClient(SyncMethodsMixin):
                 if self.event_dispatcher is not None:
                     await self.event_dispatcher.dispatch(event)
                 yield event
+
+    async def compact(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
+    ) -> CompactionEvent | None:
+        """Compact the session's history now, dispatching every event it emits.
+
+        This is the one-call form of :meth:`Agent.compact`: the pass runs to
+        completion, each event reaches the bound dispatcher in order — so a UI
+        shows the same progress a streamed run shows — and nothing is appended
+        to the conversation or sent to the primary model.
+
+        Args:
+            config: Session identity; defaults to the initialized configuration.
+            model: Model an extension compacts with when it has none of its own.
+            metadata: Request data visible to extensions and persistence.
+            tags: Request classifications visible to extensions and persistence.
+
+        Returns:
+            The checkpoint the pass stored, or None when the extensions found
+            nothing worth replacing.
+
+        Examples:
+            Usage::
+
+                stored = await client.compact()
+        """
+        checkpoint: CompactionEvent | None = None
+        async with aclosing(self.agent.compact(config=config, model=model, metadata=metadata, tags=tags)) as events:
+            async for event in events:
+                if isinstance(event.compaction, CompactionEvent):
+                    checkpoint = event.compaction
+                if self.event_dispatcher is not None:
+                    await self.event_dispatcher.dispatch(event)
+        return checkpoint
 
     async def run(
         self,

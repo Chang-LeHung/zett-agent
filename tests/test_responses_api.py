@@ -746,6 +746,9 @@ def test_responses_input_maps_fallback_history_and_ordered_images() -> None:
     assert items[1]["content"][1]["image_url"].startswith("data:image/png;base64,")
     assert items[2] == {"role": "assistant", "content": "Result"}
     assert responses_reasoning(ReasoningEffort.XHIGH) == {"effort": "high", "summary": "auto"}
+    assert responses_reasoning(ReasoningEffort.MAX) == {"effort": "high", "summary": "auto"}
+    assert responses_reasoning(ReasoningEffort.ULTRA) == {"effort": "high", "summary": "auto"}
+    assert responses_reasoning(ReasoningEffort.MINIMAL) == {"effort": "minimal", "summary": "auto"}
 
 
 async def _objects(*events: Any):

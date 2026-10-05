@@ -10,7 +10,11 @@ from .messages import AnyMessage, AssistantMessage
 
 
 class ReasoningEffort(StrEnum):
-    """Provider-neutral levels for controlling model reasoning effort."""
+    """Provider-neutral levels for controlling model reasoning effort.
+
+    The levels increase from ``minimal`` to ``ultra``. A provider maps the
+    levels it cannot express onto its closest supported value.
+    """
 
     OFF = "off"
     MINIMAL = "minimal"
@@ -18,6 +22,8 @@ class ReasoningEffort(StrEnum):
     MEDIUM = "medium"
     HIGH = "high"
     XHIGH = "xhigh"
+    MAX = "max"
+    ULTRA = "ultra"
 
 
 @dataclass(frozen=True, slots=True)

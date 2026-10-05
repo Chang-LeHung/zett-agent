@@ -89,7 +89,9 @@ def _reasoning_effort_to_budget(effort: ReasoningEffort) -> int:
             return 8192
         case ReasoningEffort.HIGH:
             return 16384
-        case ReasoningEffort.XHIGH:
+        # Budget-based vendors saturate here; higher levels only exist as
+        # native effort names on providers that expose them.
+        case ReasoningEffort.XHIGH | ReasoningEffort.MAX | ReasoningEffort.ULTRA:
             return 32768
 
 

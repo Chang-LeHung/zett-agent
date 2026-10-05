@@ -52,6 +52,8 @@ async def _collect(stream):
         (ReasoningEffort.MEDIUM, 8192),
         (ReasoningEffort.HIGH, 16384),
         (ReasoningEffort.XHIGH, 32768),
+        (ReasoningEffort.MAX, 32768),
+        (ReasoningEffort.ULTRA, 32768),
     ],
 )
 def test_reasoning_effort_budget_mapping_is_exhaustive(effort, budget):
@@ -232,8 +234,11 @@ async def test_openai_request_supports_temperature_forced_tool_and_no_tool_omiss
     ("effort", "expected"),
     [
         (ReasoningEffort.MINIMAL, "low"),
+        (ReasoningEffort.MEDIUM, "high"),
         (ReasoningEffort.HIGH, "high"),
         (ReasoningEffort.XHIGH, "max"),
+        (ReasoningEffort.MAX, "max"),
+        (ReasoningEffort.ULTRA, "max"),
     ],
 )
 def test_deepseek_v4_maps_reasoning_effort_levels(effort, expected):

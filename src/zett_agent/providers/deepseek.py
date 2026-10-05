@@ -82,7 +82,7 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         match request.reasoning_effort:
             case ReasoningEffort.MINIMAL | ReasoningEffort.LOW:
                 effort = "low"
-            case ReasoningEffort.XHIGH:
+            case ReasoningEffort.XHIGH | ReasoningEffort.MAX | ReasoningEffort.ULTRA:
                 effort = "max"
             case _:
                 effort = "high"

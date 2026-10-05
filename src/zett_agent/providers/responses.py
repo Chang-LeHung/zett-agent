@@ -182,7 +182,8 @@ def responses_reasoning(effort: ReasoningEffort) -> dict[str, str] | None:
     match effort:
         case ReasoningEffort.OFF:
             return None
-        case ReasoningEffort.XHIGH:
+        # The Responses protocol tops out at "high".
+        case ReasoningEffort.XHIGH | ReasoningEffort.MAX | ReasoningEffort.ULTRA:
             return {"effort": "high", "summary": "auto"}
         case _:
             return {"effort": effort.value, "summary": "auto"}

@@ -24,6 +24,9 @@ SteeringExtension remain Agent-owned built-ins and must not be registered again.
    * - ToolGuidelinesExtension
      - Include tool snippets and guidelines in model instructions.
      - Include explicitly when supplying a custom extension list.
+   * - AgentsMdExtension
+     - Load working-directory AGENTS.md files into model instructions.
+     - Reads parent directories too; treat files as external input, not authorization.
    * - FileSystemExtension
      - Read/search or edit files through relative or absolute paths.
      - Injects the current directory; read_only limits tools, not OS permissions.

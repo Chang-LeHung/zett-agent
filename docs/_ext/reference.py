@@ -26,6 +26,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "ModelOutputTracker",
     ),
     "zett_agent.exceptions": ("AgentError", "AgentIterationLimitError", "AgentProtocolError"),
+    "zett_agent.extensions.agents_md": ("AGENTS_FILE_NAME", "AgentsMdExtension"),
     "zett_agent.extensions.ask_user": (
         "ASK_USER_EVENT_NAME",
         "ASK_USER_RESPONSE_EVENT_NAME",

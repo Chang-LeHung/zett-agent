@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeAlias
 
 from ._compat import StrEnum, TypeAliasType
 
@@ -293,4 +293,4 @@ class AgentMessage(Message):
     content: str
 
 
-AnyMessage = TypeAliasType("AnyMessage", SystemMessage | UserMessage | AssistantMessage | ToolMessage | AgentMessage)
+AnyMessage: TypeAlias = SystemMessage | UserMessage | AssistantMessage | ToolMessage | AgentMessage

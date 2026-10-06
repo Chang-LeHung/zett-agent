@@ -816,7 +816,10 @@ environment proxy mounts, which keeps mocked and embedded transports isolated.
 
 ## Documentation
 
-From the repository root:
+The built manual is published to GitHub Pages at
+<https://chang-lehung.github.io/zett-agent/> whenever documentation or runtime
+docstrings change on `main`. Build and check it locally from the repository
+root:
 
 ```bash
 make docs                         # Build HTML from public source docstrings

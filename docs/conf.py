@@ -21,6 +21,8 @@ extensions = [
 ]
 html_theme = "pydata_sphinx_theme"
 html_title = "Zett Agent"
+#: Canonical base for the GitHub Pages project site.
+html_baseurl = "https://chang-lehung.github.io/zett-agent/"
 html_theme_options = {
     "navigation_depth": 4,
     "show_nav_level": 2,

@@ -1,6 +1,8 @@
 <nav class="zett-navigation" aria-label="Documentation navigation">
-  <a class="zett-docs-home" href="{{ pathto(root_doc) }}">Zett Agent documentation</a>
-  <p class="zett-version">{{ release }}</p>
+  <div class="zett-navigation-heading">
+    <a class="zett-docs-home" href="{{ pathto(root_doc) }}">Documentation</a>
+    <span class="zett-version">v{{ release }}</span>
+  </div>
   <a class="zett-search-link" href="{{ pathto('search') }}">Search documentation</a>
   {{ toctree(includehidden=True, collapse=False, maxdepth=2, titles_only=True) }}
 </nav>

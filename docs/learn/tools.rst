@@ -1,148 +1,166 @@
 Define and register tools
-=============================
+=========================
 
-Tools are typed operations the model can request. A call carries a name,
-arguments, and an ID; a ToolMessage answers that ID. The Agent handles validation,
-execution, serialization, and another model step after the result.
+Tools are the operations you let the model request. The runtime validates the
+arguments, runs the function, appends the result, and asks the model to continue
+— you only write the function.
 
-Write the function and its model-facing documentation
----------------------------------------------------------
+Write a typed function
+----------------------
 
 .. literalinclude:: ../_examples/streaming_tools.py
    :language: python
    :pyobject: add
 
-``@tool`` reads type annotations to generate JSON Schema. ``Args`` adds parameter
-descriptions; ``Snippet`` and ``Guidelines`` supply model-facing usage guidance.
-Both ``@tool`` and ``@tool(name="public_name")`` are supported.
+``@tool`` reads the type annotations to build a JSON Schema. The docstring is
+model-facing documentation: ``Args`` describes each parameter, ``Snippet`` shows
+the call shape, and ``Guidelines`` states when to use the tool. ``@tool`` and
+``@tool(name="public_name")`` both work.
 
-Register it with the client
--------------------------------
-
-.. literalinclude:: ../_examples/streaming_tools.py
-   :language: python
-   :pyobject: main
-
-The model first requests the tool, the runtime appends its result, and the model
-uses that result to answer. Run the full :doc:`../examples/streaming-tools`
-program to see reasoning, arguments, result, and answer in sequence.
-
-Direct Python invocation has a different syntax
----------------------------------------------------
-
-Decoration returns an :class:`~zett_agent.tools.base.AgentTool`, not the original function.
-To test it directly::
-
-    value = await add({"left": 20, "right": 22})
-    assert value == 42
-
-The snippet ``add(left=20, right=22)`` describes the model-facing call, not this
-Python interface. Decorated sync functions run in a worker thread; async ones
-are awaited on the event loop. Invalid arguments fail schema validation.
-
-Filesystem and shell tools
-------------------------------
-
-``FileSystemExtension(read_only=True)`` grants read, glob, and grep.
-Writable mode adds editing tools; ``CodingExtension`` also adds shell execution.
-They run relative to the host process's working directory, with its permissions.
-They are not a security sandbox. Restrict the process/container and validate
-your trust boundary before enabling write or shell capabilities.
-
-Long outputs are bounded so they cannot occupy the entire model context.
-File reads support windows; search results have limits; shell previews retain
-both startup and final output while preserving full output in a reported file.
-Inspect each :doc:`tool schema <../_generated/group-tools>` for exact parameters.
-
-Register tools dynamically: :doc:`../extending/first-extension`.
-
-Local tool search
----------------------
-
-Keep optional tools out of the request and load them on demand with
-:class:`~zett_agent.extensions.tool_search.ToolSearchExtension`:
-
-.. code-block:: python
-
-   agent = await Agent.create(
-       model,
-       tools=[warehouse_stock, billing_lookup],
-       extensions=[ToolSearchExtension()],
-   )
-
-Tools are registered as usual, and the ones to discover are marked
-``deferred=True``. The extension adds its internal ``tool_search`` tool and hides
-every deferred definition from provider requests, so a first request declares
-``{"type": "tool_search", "execution": "client"}`` plus the schemas of the tools
-that are *not* deferred. Deferred tools stay registered for local execution,
-their definitions reach the model through ``tool_search_output``, and the model
-then calls the discovered tool as an ordinary ``function_call``. Each returned
-definition carries the tool's name, description, parameter schema, and
-guidelines, so a deferred tool's rules arrive together with the definition that
-makes it callable.
-
-Tools without ``deferred`` are untouched: they keep their ordinary function
-schema, and :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` renders their snippets
-and guidelines as before.
-
-The extension defines and registers one real ``@tool``-decorated search function.
-That function directly uses :class:`~zett_agent.extensions.tool_search.BM25Search` over the currently
-registered tools' names, descriptions, Args, snippets, and guidelines. There is
-no replacement handler, sentinel return value, or custom search callback.
-
-The search tool declares its own parameters, so the model passes one or more
-keyword ``queries`` plus an optional ``score`` that overrides the default
-threshold for that search. The schema comes from the search function's signature,
-and its description travels in the ``tool_search`` declaration itself. The search
-tool is not deferred, so adding :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` also
-renders its snippet and guidelines in the prompt — pair the two when the model
-should read that guidance. Set ``min_score`` on the extension or on
-:class:`~zett_agent.extensions.tool_search.BM25Search` to raise the bar for every search; results scoring
-at or below it are dropped. Omitting ``score`` uses the configured default;
-passing ``score=0.0`` explicitly overrides that default.
-
-A definition is handed to the model once per session. The loaded definition
-stays declared in the conversation as a ``tool_search_output`` item, and strict
-endpoints reject a later result that repeats a name the history already
-declares, so the extension records what it sent. The record is kept in memory
-for the lifetime of the extension; pass ``storage=`` with a
-:class:`~zett_agent.extensions.tool_search.ToolSearchStorage` to keep it across
-process restarts. A compaction replaces the messages that declared those
-definitions, so the record is dropped and a later search may offer them again.
-Pass ``resend_definitions_after_compaction=False`` to keep suppressing them
-after a checkpoint instead.
-
-To answer searches yourself, mark one tool with ``local_tool_search=True``. The
-Responses adapter then declares ``tool_search`` with ``execution: "client"``
-instead of exposing that tool as a function, and every search request arrives as
-a normal local tool call:
+A description and at least one nonempty guideline are required. For a small
+tool, provide the guideline on the decorator:
 
 .. code-block:: python
 
    from zett_agent.tools.base import tool
-   from openai.types.responses import FunctionToolParam
 
-   @tool(local_tool_search=True, guidelines="Use to find optional tools.")
-   def find_tools(queries: list[str]) -> list[FunctionToolParam]:
-       """Return the tool definitions that match the requested queries.
+   @tool(guidelines="Use for exact integer addition.")
+   def add(left: int, right: int) -> int:
+       """Add two integers exactly."""
+       return left + right
 
-       Args:
-           queries: What the model wants to do.
-       """
-       return [
-           FunctionToolParam(
-               type="function",
-               name="warehouse_stock",
-               description="Return stock for one warehouse",
-               parameters={"type": "object", "properties": {"warehouse": {"type": "string"}}},
-               strict=None,
-           )
-       ]
+Guidelines and snippets help the model choose the right operation. They are
+not permission checks. Decorator ``guidelines`` or ``snippet`` values override
+the corresponding docstring sections.
 
-The handler receives the provider's search arguments as its keyword arguments and
-returns the OpenAI function definitions the model may load; the Agent validates
-that list against ``FunctionToolParam`` and answers with ``tool_search_output``.
-Keep discoverable tools out of the request yourself, for example by filtering
-``request.tools`` in ``on_model_request``, and mark a tool ``deferred=True`` when
-the endpoint may keep a declared schema unloaded. Chat Completions, Anthropic,
-Google, and Ollama reject ``local_tool_search`` tools.
+Design arguments the model can supply
+------------------------------------------------------------
+
+Every parameter needs a type annotation. Named positional-or-keyword and
+keyword-only parameters work; positional-only arguments, ``*args``, and
+``**kwargs`` do not. Defaults make arguments optional, and Pydantic-supported
+types such as ``Literal``, lists, and nested models can express constraints.
+
+.. code-block:: python
+
+   from typing import Literal
+
+   @tool(guidelines="Choose a supported format for the answer.")
+   def choose_format(style: Literal["brief", "detailed"] = "brief") -> str:
+       """Choose an answer format."""
+       return style
+
+Validation rejects unknown fields and invalid inputs before the function runs,
+but it follows Pydantic's normal coercion rules rather than guaranteeing strict
+JSON types. Add explicit constraints or checks when conversions are unsafe.
+Names must be unique across both static and extension-registered tools. Keep
+them stable because they are the model-facing API, not just implementation names.
+
+Register it
+-----------
+
+Pass tools to the client; the model can now request them.
+
+.. code-block:: python
+
+   client = await create_agent(model, tools=[add])
+
+The model requests the call, the runtime executes it, and the model answers using
+the result. Run :doc:`../examples/streaming-tools` to watch reasoning, arguments,
+the result, and the final answer in order.
+
+Calling a tool from Python
+--------------------------
+
+Decoration returns an :class:`~zett_agent.tools.base.AgentTool`, which is invoked
+with a mapping of arguments:
+
+.. code-block:: python
+
+   value = await add({"left": 20, "right": 22})
+
+Synchronous functions run in a worker thread; ``async def`` tools are awaited on
+the event loop. Invalid arguments fail schema validation before your code runs.
+
+Choose a result type
+--------------------
+
+* Strings reach the model as plain text without extra JSON quoting.
+* JSON-compatible values, Pydantic models, and dataclasses are serialized to JSON.
+* ``TextContent``, ``ImageContent``, or a nonempty list of these becomes typed
+  multimodal tool content; the selected model must support images.
+
+Return a useful, bounded result instead of an open file, client object, or
+arbitrary exception. Include the facts the model needs for its next step,
+and avoid leaking secrets or returning unnecessarily large data. A return
+annotation documents the function; the decorator does not enforce an output
+schema for your result.
+
+Handle tool failures safely
+------------------------------------------------------------
+
+An ordinary exception from a handler or argument validation becomes an
+unsuccessful ``ToolMessage`` and a ``TOOL_FAILED`` event. The next model call
+sees ``str(exception)`` and may retry with better arguments or explain the
+failure. The original exception is available to callbacks and after-tool hooks.
+Cancellation and other ``BaseException`` subclasses are not converted into
+recoverable tool results.
+
+Direct Python calls such as ``await add({...})`` still raise the exception.
+Sanitize integration errors yourself: exception text from a tool can expose
+credentials, paths, or service responses to the model. An exception in a
+``before_tool`` lifecycle hook fails the whole request; use tool middleware
+when you want a recoverable rejection. See :doc:`../extending/middleware`.
+
+Control concurrent execution
+----------------------------
+
+Tools default to ``ToolExecutionMode.PARALLEL``. A model response with several
+parallel tools can execute them concurrently; their result events arrive as
+each handler finishes. For an operation that needs exclusive local execution,
+mark it serial:
+
+.. code-block:: python
+
+   from zett_agent.tools.base import ToolExecutionMode
+
+   @tool(
+       execution_mode=ToolExecutionMode.SERIAL,
+       guidelines="Use to prepare a mutation; obtain approval before applying it.",
+   )
+   def prepare_change(description: str) -> str:
+       """Prepare a proposed change without applying it."""
+       return description
+
+The runtime finishes the parallel batch before running serial tools one at a
+time. ``SERIAL`` is not a global lock across sessions or workers. To preserve
+the model's call order for the whole response, set
+``parallel_tool_call=False`` on the agent or request. Shared mutable resources
+still need application-level synchronization and authorization.
+
+Filesystem and shell tools
+--------------------------
+
+``FileSystemExtension(read_only=True)`` adds read, image viewing, glob, and grep.
+Writable mode also adds write, replacement, and deletion tools;
+``CodingExtension`` adds shell execution.
+
+These tools run with the permissions of your process, relative to its working
+directory. They are not a security sandbox: restrict the process or container,
+and add approval rules before enabling write or shell access for untrusted
+input. Long outputs are bounded so a single command cannot consume the whole
+context; full output is preserved in a reported file when truncated.
+
+Load optional tools on demand
+-----------------------------
+
+For a large toolbox, :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`
+keeps tools marked ``deferred=True`` out of the initial provider request and
+lets the model search for their definitions. This requires a compatible
+Responses endpoint; ordinary tool calling works with all built-in providers.
+
+See :doc:`on-demand` for setup, a skill-loading example, and the distinction
+between loading instructions and executing tools.
+
+Next: :doc:`sessions` to keep the conversation, or
+:doc:`../extending/first-extension` to register tools dynamically.

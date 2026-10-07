@@ -1,9 +1,10 @@
 Compose built-in extensions
 ===============================
 
-Start with the capability you need, then choose explicit dependencies. Passing
-an extension list replaces optional defaults; InternalMessageExtension and
-SteeringExtension remain Agent-owned built-ins and must not be registered again.
+Start with the capability you need. Passing an extension list replaces optional
+defaults, so explicitly include history and tool guidance if you want them.
+Do not add ``InternalMessageExtension`` or ``SteeringExtension`` yourself; the
+runtime already provides them.
 
 .. list-table:: Capability map
    :header-rows: 1
@@ -54,6 +55,9 @@ SteeringExtension remain Agent-owned built-ins and must not be registered again.
    * - SkillExtension
      - Discover skill descriptions and lazily load complete instructions.
      - Treat skill files as external input, not authorization.
+   * - ToolSearchExtension
+     - Search for optional tools instead of sending every definition up front.
+     - Requires a compatible Responses tool-search endpoint; see :doc:`../learn/on-demand`.
    * - McpExtension
      - Register remote or subprocess MCP tools.
      - Trust and resource ownership remain application responsibilities.
@@ -70,5 +74,7 @@ interaction, and :doc:`../examples/compaction` for context management. The
 :doc:`subagent <../examples/subagent>` and :doc:`goal <../examples/goal>` examples
 show two distinct delegation patterns.
 
-Browse :doc:`../_generated/group-extensions` for constructor signatures, event
-payload models, hook implementations, and links to source.
+For complete setup guides, see :doc:`../learn/project-instructions` for AGENTS.md,
+:doc:`../learn/on-demand` for skills and deferred tools, and :doc:`../learn/mcp`
+for remote tool servers. Browse :doc:`../_generated/group-extensions` for exact
+configuration options and event payloads.

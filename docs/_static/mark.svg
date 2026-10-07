@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Zett Agent monochrome creature</title>
+  <defs>
+    <mask id="eyes">
+      <rect width="64" height="64" fill="white"/>
+      <g data-part="eyes" fill="black">
+        <ellipse cx="24" cy="32" rx="4.8" ry="4.3" transform="rotate(-18 24 32)"/>
+        <ellipse cx="37" cy="28.5" rx="5.4" ry="4.8" transform="rotate(-18 37 28.5)"/>
+      </g>
+      <g data-part="pupils" fill="white">
+        <ellipse cx="26" cy="31" rx="2.1" ry="2.7" transform="rotate(-18 26 31)"/>
+        <ellipse cx="39.2" cy="27.4" rx="2.3" ry="3" transform="rotate(-18 39.2 27.4)"/>
+      </g>
+    </mask>
+  </defs>
+  <path d="M8 25C18 29 20 16 32 14C37 13 40 14 43 17C45 12 48 9 53 8C55 18 50 26 46 31C55 35 55 44 48 48C43 51 37 48 34 46C30 56 20 60 9 53C18 51 22 46 21 40C12 43 5 38 6 31C7 28 9 27 8 25Z" fill="currentColor" mask="url(#eyes)"/>
+</svg>

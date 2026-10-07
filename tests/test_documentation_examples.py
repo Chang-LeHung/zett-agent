@@ -2,6 +2,7 @@
 
 import ast
 import asyncio
+import re
 import runpy
 import subprocess
 import sys
@@ -14,6 +15,7 @@ EXPECTED = {
     "synchronous": "Synchronous history persisted",
     "first_agent": "Turn 2: Remember this conversation",
     "streaming_tools": "Answer: 42",
+    "on_demand": "Skill loaded: code-review",
     "custom_extension": "Request state cleared",
     "approval": "Response accepted; duplicate rejected",
     "sessions": "Raw roles: system, user, assistant, system, user, assistant",
@@ -23,6 +25,11 @@ EXPECTED = {
     "cancellation": "Cancelled request; extension state cleared",
     "goal": "Implementation and tests are complete.",
     "storage_adapter": "load, append:system, append:user, append:assistant",
+    "project_instructions": "Project guidance: concise reviews",
+    "images": "Received text and image in order.",
+    "application": "Timeout cleaned up; session reused.",
+    "mcp_tools": "MCP connection closed.",
+    "provider_mock": "Mock provider reply: Hello from a mock endpoint.",
 }
 
 
@@ -100,3 +107,67 @@ async def test_approval_example_rejection_validation_and_routing(answer):
         )
         == []
     )
+
+
+@pytest.mark.parametrize("source", ["readme", "provider-example"])
+def test_public_quickstarts_complete_an_offline_tool_round_trip(source, monkeypatch, capsys):
+    """Execute public quickstarts through the actual provider and tool handler."""
+    import json
+
+    import httpx
+
+    import zett_agent.providers.openai as openai_module
+
+    original = openai_module.OpenAIProvider
+    models = []
+    requests = []
+
+    def offline_provider(**options):
+        model = original(**options, transport=httpx.MockTransport(respond))
+        models.append(model)
+        return model
+
+    def respond(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert any(item["function"]["name"] == "add" for item in payload["tools"])
+        if payload["messages"][-1]["role"] == "tool":
+            assert payload["messages"][-1]["content"] == "42"
+            delta = {"content": "Offline README answer: 42"}
+            finish_reason = "stop"
+        else:
+            delta = {
+                "tool_calls": [
+                    {
+                        "index": 0,
+                        "id": "readme-add",
+                        "type": "function",
+                        "function": {"name": "add", "arguments": '{"left":20,"right":22}'},
+                    }
+                ]
+            }
+            finish_reason = "tool_calls"
+        chunks = [
+            {"choices": [{"delta": delta}]},
+            {"choices": [{"delta": {}, "finish_reason": finish_reason}]},
+        ]
+        body = "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=body + "data: [DONE]\n\n",
+        )
+
+    monkeypatch.setattr(openai_module, "OpenAIProvider", offline_provider)
+    monkeypatch.setenv("OPENAI_MODEL", "offline-fixture")
+    monkeypatch.setenv("OPENAI_API_KEY", "offline-test-key")
+    readme = EXAMPLES.parents[1] / "README.md"
+    programs = [code for code in re.findall(r"```python\n(.*?)```", readme.read_text(), re.S) if "asyncio.run(" in code]
+    assert len(programs) == 1
+    if source == "readme":
+        exec(compile(programs[0], str(readme), "exec"), {"__name__": "__main__"})
+    else:
+        runpy.run_path(str(EXAMPLES / "real_provider.py"), run_name="__main__")
+    assert "Offline README answer: 42" in capsys.readouterr().out
+    assert len(requests) == 2
+    assert models and all(model._http_client.is_closed for model in models)

@@ -252,6 +252,16 @@ def test_landing_page_exposes_installation_and_learning_paths(documentation):
         ast.parse(block.get_text())
 
 
+def test_readme_logo_uses_picture_to_avoid_github_image_fallback():
+    """GitHub adds a muted background to bare external images, but not pictures."""
+    soup = BeautifulSoup((ROOT / "README.md").read_text(), "html.parser")
+    logo = soup.select_one('p[align="center"] > picture > img[alt="Zett Agent"]')
+    assert logo is not None
+    assert logo["src"] == "https://raw.githubusercontent.com/Chang-LeHung/zett-agent/main/docs/_static/logo.svg"
+    assert logo["width"] == logo["height"] == "88"
+    assert "style" not in logo.attrs
+
+
 def test_logo_and_favicon_keep_the_same_accessible_mark(documentation):
     _, output = documentation
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -260,6 +270,7 @@ def test_logo_and_favicon_keep_the_same_accessible_mark(documentation):
         root = ElementTree.parse(output / "_static" / filename).getroot()
         assert root.attrib["viewBox"] == "0 0 64 64"
         assert root.find("svg:title", namespace).text == "Zett Agent"
+        assert root.find(".//svg:rect", namespace) is None
         marks.append([path.attrib["d"] for path in root.findall("svg:path", namespace)])
     assert marks[0] and marks[0] == marks[1]
 

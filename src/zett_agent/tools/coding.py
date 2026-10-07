@@ -11,18 +11,15 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .._compat import timeout
+from .._compat import TypeAliasType, timeout
 from .base import tool
 from .output import MAX_MATCH_BYTES, MAX_OUTPUT_BYTES, shell_preview, utf8_prefix
 
-FilePath = Annotated[
-    str,
-    Field(min_length=1),
-]
-StartLine = Annotated[int, Field(ge=1)]
-LineCount = Annotated[int, Field(ge=1, le=2_000)]
-TimeoutSeconds = Annotated[int, Field(ge=1, le=300)]
-MaxResults = Annotated[int, Field(ge=1, le=5_000)]
+FilePath = TypeAliasType("FilePath", Annotated[str, Field(min_length=1)])
+StartLine = TypeAliasType("StartLine", Annotated[int, Field(ge=1)])
+LineCount = TypeAliasType("LineCount", Annotated[int, Field(ge=1, le=2_000)])
+TimeoutSeconds = TypeAliasType("TimeoutSeconds", Annotated[int, Field(ge=1, le=300)])
+MaxResults = TypeAliasType("MaxResults", Annotated[int, Field(ge=1, le=5_000)])
 
 
 MAX_FILE_BYTES = 2 * 1024 * 1024

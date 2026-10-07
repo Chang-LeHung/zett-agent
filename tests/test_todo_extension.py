@@ -103,7 +103,8 @@ async def test_todo_write_advances_every_task_in_order_until_complete():
     definitions = {registered.name: registered for registered in model.requests[0].tools}
     assert set(definitions) == {TODO_WRITE_TOOL_NAME}
     schema = definitions[TODO_WRITE_TOOL_NAME].parameters
-    assert schema["properties"]["todos"]["minItems"] == 1
+    assert schema["properties"]["todos"]["$ref"] == "#/$defs/TodoList"
+    assert schema["$defs"]["TodoList"]["minItems"] == 1
     guidance = "\n".join(
         message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)
     )

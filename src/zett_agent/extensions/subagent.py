@@ -10,6 +10,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
+from .._compat import TypeAliasType
 from ..agent import Agent, AgentRunConfig, AgentRunContext
 from ..ids import new_uuid7
 from ..model import AgentModel, ReasoningEffort
@@ -24,9 +25,9 @@ from .tool_guidelines import ToolGuidelinesExtension
 
 TASK_TOOL_NAME = "task"
 
-TaskDescription = Annotated[str, Field(min_length=1, max_length=120)]
-TaskPrompt = Annotated[str, Field(min_length=1, max_length=100_000)]
-SubAgentName = Annotated[str, Field(min_length=1, max_length=64)]
+TaskDescription = TypeAliasType("TaskDescription", Annotated[str, Field(min_length=1, max_length=120)])
+TaskPrompt = TypeAliasType("TaskPrompt", Annotated[str, Field(min_length=1, max_length=100_000)])
+SubAgentName = TypeAliasType("SubAgentName", Annotated[str, Field(min_length=1, max_length=64)])
 
 
 @dataclass(frozen=True, slots=True)

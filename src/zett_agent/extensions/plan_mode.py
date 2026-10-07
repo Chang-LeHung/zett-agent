@@ -5,6 +5,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
+from .._compat import TypeAliasType
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
@@ -30,8 +31,12 @@ EXIT_PLAN_MODE_EVENT_NAME = "exit_plan_mode"
 EXIT_PLAN_MODE_RESPONSE_EVENT_NAME = "exit_plan_mode_response"
 PLAN_MODE_EXITED_EVENT_NAME = "plan_mode_exited"
 
-PlanReason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2_000)]
-PlanContent = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100_000)]
+PlanReason = TypeAliasType(
+    "PlanReason", Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2_000)]
+)
+PlanContent = TypeAliasType(
+    "PlanContent", Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100_000)]
+)
 
 PLAN_MODE_SYSTEM_PROMPT = """You are in Plan Mode. Investigate and design before implementation.
 

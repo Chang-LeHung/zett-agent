@@ -137,8 +137,11 @@ async def test_local_tools_export_typed_schemas():
         for registered in (glob, grep, read_file, write_file, replace_in_file, delete_file, run_shell)
     }
     assert set(tools) == {"glob", "grep", "read_file", "write_file", "replace_in_file", "delete_file", "run_shell"}
-    assert tools["read_file"].parameters["properties"]["start_line"]["minimum"] == 1
-    assert tools["read_file"].parameters["properties"]["line_count"]["maximum"] == 2_000
+    schema = tools["read_file"].parameters
+    assert schema["properties"]["start_line"]["$ref"] == "#/$defs/StartLine"
+    assert schema["$defs"]["StartLine"]["minimum"] == 1
+    assert schema["properties"]["line_count"]["$ref"] == "#/$defs/LineCount"
+    assert schema["$defs"]["LineCount"]["maximum"] == 2_000
     assert tools["read_file"].parameters["properties"]["path"]["description"].startswith("Absolute path")
     assert tools["read_file"].snippet.startswith("read_file(")
     assert tools["read_file"].guidelines == (

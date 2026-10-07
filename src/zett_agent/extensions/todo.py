@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from .._compat import StrEnum
+from .._compat import StrEnum, TypeAliasType
 from ..agent import AgentRunContext
 from ..messages import AssistantMessage
 from ..tools.base import (
@@ -16,7 +16,9 @@ from .events import ExtensionEvent, RunCancelledEvent
 
 TODO_WRITE_TOOL_NAME = "todo_write"
 
-TodoContent = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4_000)]
+TodoContent = TypeAliasType(
+    "TodoContent", Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4_000)]
+)
 
 
 class TodoStatus(StrEnum):
@@ -44,7 +46,7 @@ class TodoItem(BaseModel):
     )
 
 
-TodoList = Annotated[list[TodoItem], Field(min_length=1, max_length=100)]
+TodoList = TypeAliasType("TodoList", Annotated[list[TodoItem], Field(min_length=1, max_length=100)])
 
 
 class TodoWriteResult(BaseModel):

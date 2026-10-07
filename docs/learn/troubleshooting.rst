@@ -1,77 +1,137 @@
 Troubleshooting
-===================
+===============
 
-No navigation on the page
------------------------------
+Start with the exception and the last event you received. A tool error can be
+recoverable; a provider or lifecycle error ends the request. Use
+:doc:`application` for failure boundaries and :doc:`testing` to reproduce the
+behavior without a live model. Never include credentials or full private
+prompts in a public error report.
 
-Run ``make docs-serve`` from the current checkout and open the printed URL.
-The left sidebar is global, including on the homepage; on a narrow screen, open
-it with the navigation toggle. The right sidebar is only the current page's
-outline. If an older server is running, stop it before rebuilding. Browser search
-and the sidebar Search documentation link both open the generated search index.
+A decorated tool fails at import time
+------------------------------------------------------------
+
+``A tool needs at least one non-empty guideline`` means the function has a
+description but no usage guidance. Add ``@tool(guidelines="When to use it.")``
+or a nonempty ``Guidelines:`` docstring section. Every argument also needs a
+type annotation. ``Args`` entries must match real parameter names; unknown
+entries and unnamed variadic parameters are rejected. See :doc:`tools`.
+
+The endpoint rejects reasoning or tool search
+------------------------------------------------------------
+
+The adapter does not negotiate model capabilities. Verify the endpoint supports
+the selected protocol and reasoning level. On Responses, the current adapter
+maps the highest levels to ``high``; on Chat Completions an unsupported named
+level may be rejected. ``OFF`` can omit the setting rather than disabling
+provider-default reasoning.
+
+``ToolSearchExtension`` needs a compatible Responses tool-search endpoint,
+not just ordinary tool calling. Use ``response=True`` and a model supporting
+that protocol, or omit tool search and expose tools normally. Skill loading
+does not require Responses. See :doc:`providers` and :doc:`on-demand`.
 
 The second turn forgot the first
-------------------------------------
+--------------------------------
 
-Check ``extensions``. Passing an explicit list removes the default memory
-extension. Include InMemoryMessageAccumulator or a persistence extension, and
-reuse the same session ID. Different clients with different accumulator instances
-do not share process memory simply because their IDs match.
+History comes from an extension. Passing ``extensions=[...]`` replaces the
+defaults, so add :class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator`
+or a persistence extension, and keep using the same ``session_id``. Two clients
+with different accumulator instances do not share memory just because the IDs
+match.
 
-The model never sees my injected message
---------------------------------------------
-
-Use ``on_state`` for restoring context, ``on_message`` for replacing the current
-input, and ``before_model`` for per-step changes. Do not write to ``agent.state``
-from a shared extension: use the supplied ``context.state``. Other earlier/later
-hooks may replace messages; inspect priorities and the :doc:`lifecycle <../concepts/lifecycle>`.
-
-My custom event never reaches the UI
+The model never sees a message you added
 ----------------------------------------
 
-``context.publish`` broadcasts ExtensionEvent internally. For UI output, call
-``await context.emit(AgentEvent(...))`` from a lifecycle hook. The hook still
-returns None; ``Agent.stream`` alone yields the queued event. See
+Add context in a lifecycle hook, not by editing shared state:
+
+* ``on_state`` — restore history and inject system instructions.
+* ``on_message`` — replace the pending user input before it is sent.
+* ``before_model`` — adjust context before each model step.
+
+Use the ``context`` passed to the hook. See
+:doc:`../concepts/lifecycle` for exactly when each hook runs.
+
+Your custom event never reaches the UI
+--------------------------------------
+
+Internal notifications and UI events are different channels. ``context.publish``
+delivers an :class:`~zett_agent.extensions.events.ExtensionEvent` to extensions;
+``await context.emit(AgentEvent(...))`` queues something for ``Agent.stream``.
+Use the second one for anything the user should see. See
 :doc:`../extending/events`.
 
-Approval remains pending
-----------------------------
+An approval stays pending
+-------------------------
 
-Match the outbound event's session ID and tool-call ID; provide the expected
-external event name and payload. An empty accepting-extension list means no
-pending receiver matched. Do not block the asyncio loop with ``input()``; use an
-async UI or ``asyncio.to_thread`` for terminal input. Cancellation invalidates
-pending routes, so a late response will not resume a closed request.
+The response must match the request's session ID, external event name, and
+payload shape. If no registered extension accepts it, the request keeps waiting.
+Do not block the loop with ``input()`` — use an async UI or
+``asyncio.to_thread`` for terminal input. A cancelled request invalidates its
+pending routes, so a late reply is ignored.
 
-Reasoning or cache statistics are missing
----------------------------------------------
+Reasoning or cache numbers are missing
+--------------------------------------
 
-The model must actually return them. Reasoning effort is a request preference,
-not a promise of visible reasoning. Usage belongs to MODEL_COMPLETED, not every
-text fragment. Missing counters default to zero. ``cache_hit_rate`` is None
-without input tokens and also when the provider reported no cache counters at
-all, which :attr:`~zett_agent.model.ModelUsage.cache_reported` records; a
-reported zero stays a real 0% miss. It is a ratio, so multiply by 100 for a
-percentage.
+Reasoning text appears only when the model returns it; the effort level is a
+request preference, not a promise. Usage is reported on ``MODEL_COMPLETED``, not
+on every text fragment. ``cache_hit_rate`` is ``None`` both when the provider
+reported nothing and when there were no input tokens;
+``ModelUsage.cache_reported`` tells the two apart. Gateways that translate
+protocols often drop the cache breakdown, so prefer a Responses adapter when
+cache visibility matters.
 
-A gateway that relays OpenAI Chat Completions can drop the cache counters while
-forwarding usage: requests then cost the same but cache statistics read as
-unknown. Endpoints that translate protocols usually keep the breakdown on the
-Responses API, so run those models with a Responses adapter, or make the
-gateway pass ``prompt_tokens_details`` through instead of rebuilding usage from
-its own fields.
+Retries duplicated text
+-----------------------
 
-A retry duplicated text
----------------------------
+Built-in retries stop after the first streamed event, so a retry should never
+replay visible output. Check application-level retries and make sure you are not
+appending both the final message text and every ``TEXT_DELTA`` fragment to the
+same buffer.
 
-The built-in providers do not retry after an event has escaped. Check application
-retry code and double-dispatching. Do not append final message.content after
-already appending all TEXT_DELTA fragments to the same answer buffer.
+Project instructions or a skill did not appear
+------------------------------------------------------------
+
+``AgentsMdExtension`` loads the chosen directory and its ancestors, not every
+nested file in the workspace. Check ``sources()`` and ``instructions()``, and
+verify the extension is in your explicit list. Empty or unreadable files are
+skipped. ``directory`` does not change tool paths. See :doc:`project-instructions`.
+
+For skills, check ``extension.skills``. Discovery occurs at construction time;
+new files or catalog metadata need a new extension. Existing skill bodies are
+read on demand, but editing a file does not replace instructions already in
+history. Pass explicit project roots rather than assuming defaults include
+the working directory. See :doc:`on-demand`.
+
+An MCP server has no tools or fails before generation
+------------------------------------------------------------
+
+Check ``extension.servers`` and ``extension.config_path``. A missing config
+loads no servers, whereas a bad config raises. Discovery connects on every
+request; a server that cannot be reached fails setup rather than silently
+disappearing. By default a remote ``search`` tool on ``catalog`` is named
+``catalog__search``. See :doc:`mcp` for transports and namespaces.
+
+The runtime rejects a second request
+------------------------------------------------------------
+
+Two requests for the same session cannot overlap. Queue them or finish/close
+the first stream, including cleanup. Breaking out of a bare async iterator
+without ``aclosing`` can leave unfinished work. Different session IDs may run
+concurrently, but separate runtimes and workers do not share an admission lock.
+See :doc:`application`.
 
 Compaction did not run
+----------------------
+
+It needs a crossed size threshold *and* an older completed turn it can replace.
+The current turn is kept whole, so a single oversized turn is left alone. When
+the generated summary would not be smaller than the messages it replaces,
+``COMPACTION_COMPLETED`` reports ``applied=False``. See
+:doc:`../examples/compaction` for a reproducible test.
+
+The page has no navigation
 --------------------------
 
-It requires a crossed threshold and a completed older turn that can be replaced.
-The current turn is retained whole; a single oversized turn cannot be split.
-If the generated summary is not smaller, COMPACTION_COMPLETED has applied=False.
-Use :doc:`../examples/compaction` for a reproducible test.
+If you are reading this locally, rebuild with ``make docs-serve`` and open the
+printed URL. The left sidebar is global; on a narrow screen, open it with the
+navigation toggle.

@@ -52,7 +52,8 @@ The extension itself stays small:
    :pyobject: AuditedPersistence
 
 Run the :doc:`complete program <../examples/storage-adapter>` to verify that one
-request causes ``load, append:user, append:assistant`` and no unnecessary snapshot.
+request causes ``load, append:system, append:user, append:assistant`` and no
+unnecessary snapshot.
 
 Snapshot consistency checklist
 ----------------------------------

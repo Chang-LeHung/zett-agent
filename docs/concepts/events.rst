@@ -1,89 +1,67 @@
-Three event channels
-========================
+Three kinds of events
+=====================
 
-The framework separates UI output, internal notifications, and external input.
-All three are called events, but their destinations and delivery rules differ.
+Zett Agent uses the word "event" for three different things. Choosing the right
+one is the difference between a UI that updates and one that silently does
+nothing.
 
-.. list-table:: Choose the right channel
+.. list-table::
    :header-rows: 1
-   :widths: 22 28 25 25
+   :widths: 20 27 23 30
 
-   * - Type
-     - Producer
-     - Consumer
-     - Delivery
-   * - AgentEvent
-     - Runtime or lifecycle hook using context.emit
-     - UI / AgentEventDispatcher
-     - Request queue drained by Agent.stream, in order
-   * - ExtensionEvent
-     - context.publish(event)
-     - Every extension's on_event by default, or one named extension
-     - Awaited sequential broadcast or targeted delivery
-   * - ExternalEvent
-     - Application / UI callback
-     - Extension.accept(config, event)
-     - Synchronous routed broadcast
+   * - Kind
+     - Sent with
+     - Received by
+     - Typical use
+   * - :class:`~zett_agent.events.AgentEvent`
+     - ``await context.emit(...)``
+     - ``Agent.stream`` and your dispatcher
+     - Anything the user should see
+   * - :class:`~zett_agent.extensions.events.ExtensionEvent`
+     - ``await context.publish(...)``
+     - Other extensions' ``on_event``
+     - Coordination between extensions
+   * - :class:`~zett_agent.extensions.external.ExternalEvent`
+     - ``agent.emit_external_event(...)``
+     - An extension's ``accept``
+     - A reply from your UI back into a waiting request
 
 UI output
--------------
+---------
 
-A CUSTOM AgentEvent has a non-empty ``name`` and an application-defined ``payload``.
-It retains the session ID. The dispatcher calls ``on_custom_event``; the custom
-name is data, not a Python method to dynamically invoke.
+Emit an ``AgentEvent`` for anything a person should see. A custom event carries a
+``name`` and a ``payload`` you define, and the dispatcher calls
+``on_custom_event``; the name is data, not a Python method.
 
-Output segment boundaries
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Streamed output arrives in a predictable order, so a UI can open and close
+loading states:
 
-Primary model calls expose ``REASONING_STARTED``, ``REASONING_COMPLETED``,
-``CONTENT_STARTED``, and ``CONTENT_COMPLETED`` in both asynchronous and
-synchronous streams. A typical sequence is::
+.. code-block:: text
 
-    MODEL_STARTED
-        REASONING_STARTED
-        REASONING_DELTA ...
-        REASONING_COMPLETED
-        CONTENT_STARTED
-        TEXT_DELTA ...
-        CONTENT_COMPLETED
-    MODEL_COMPLETED
+   MODEL_STARTED
+     REASONING_STARTED → REASONING_DELTA … → REASONING_COMPLETED
+     CONTENT_STARTED   → TEXT_DELTA …      → CONTENT_COMPLETED
+   MODEL_COMPLETED
 
-The corresponding dispatcher methods are ``on_reasoning_started_event``,
-``on_reasoning_completed_event``, ``on_content_started_event``, and
-``on_content_completed_event``. Boundaries retain the current session ID and
-the GENERATING request phase. Extension subscribers still receive the typed
-output lifecycle notifications containing UTC and monotonic timestamps.
+An empty delta does not open a segment, and a failure or cancellation leaves the
+open segment without a completion — close your indicator in a ``finally`` block.
 
-An empty delta does not open a segment. A response without streamed content
-does not invent content boundaries. Tool arguments close any active reasoning
-segment; reasoning cannot start again after content or tool arguments. Each
-completion requires an open matching segment. Events after a final response
-and output outside GENERATING raise AgentProtocolError.
+Coordination between extensions
+-------------------------------
 
-Failure or cancellation leaves an interrupted segment without a successful
-completion event. Consumers should handle the stream exception and close their
-loading indicator in a finally block. Compaction retains its separate events.
+``context.publish`` notifies extensions, not the UI. Use it for things like
+"history was compacted" (:class:`~zett_agent.extensions.events.CompactionEvent`)
+or "a message was appended". Pass ``target="Name"`` to reach one extension, or
+omit it to broadcast. An internal notification is never shown to the user
+automatically.
 
-Internal notifications
---------------------------
+Input from your UI
+------------------
 
-``MessageAppendedEvent`` contains original output plus timing/usage;
-``PhaseTransitionEvent`` contains the previous/next phases and timestamps;
-``RunCancelledEvent`` tells subscribers to release pending work. Publishing an
-``InternalMessageEvent`` queues an AgentMessage for another model iteration.
+When the model asks a question or requests approval, the request pauses and your
+application replies with ``emit_external_event``. The reply must match the
+request's session ID and the expected event name and payload. If no extension
+accepts it, nothing happens and the request keeps waiting.
 
-An internal event is not retained or forwarded to the UI automatically. Pass a
-unique extension name as ``target`` for one recipient; omit it to broadcast.
-Subscriber exceptions stop delivery; previously processed subscribers are not
-rolled back. Avoid recursive publishing of the same event from its own handler.
-
-External replies
---------------------
-
-The application supplies routing in AgentRunConfig and business data in the event
-payload. ``emit_external_event`` returns the names of extensions that accepted it.
-Acceptance means delivery was claimed, not that the pending tool succeeded.
-Duplicate or stale approval replies are rejected by ExternalEventExtension.
-
-Implement all three channels in :doc:`../extending/events`, or run the
+See :doc:`../extending/events` to implement all three, or run the
 :doc:`approval round trip <../examples/approval>`.

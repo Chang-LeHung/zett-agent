@@ -1,7 +1,8 @@
 Stream a tool round trip
 ============================
 
-Observe reasoning, execute add, and return its result to the next model step.
+Turn a Python function into a tool and show its progress in your application.
+The model asks for ``add``, receives ``42``, and produces a final answer.
 
 Run it
 ----------
@@ -21,6 +22,33 @@ The output includes:
 This program uses deterministic offline models and temporary storage where needed.
 It requires no API key and is executed by the documentation test suite.
 
+The three pieces to reuse
+-------------------------
+
+**Define the capability.** Type annotations describe the arguments, and the
+docstring tells the model when to call it:
+
+.. literalinclude:: ../_examples/streaming_tools.py
+   :language: python
+   :pyobject: add
+
+**Display progress.** Event callbacks receive reasoning, the tool call, its
+result, and incremental answer text:
+
+.. literalinclude:: ../_examples/streaming_tools.py
+   :language: python
+   :pyobject: ConsoleEvents
+
+**Connect them to a client.** Replace ``MathModel()`` with your provider when
+you are ready to make real requests:
+
+.. literalinclude:: ../_examples/streaming_tools.py
+   :language: python
+   :pyobject: main
+
+The scripted model always calls the tool. A real model chooses whether to call
+it, and may not return visible reasoning even when it reasons internally.
+
 Complete source
 -------------------
 
@@ -30,5 +58,5 @@ Complete source
    :language: python
    :linenos:
 
-See :doc:`../extending/hooks` for lifecycle ordering and
-:doc:`../reference/index` for the complete API reference.
+Next: :doc:`../learn/streaming` for event handling and cancellation, or
+:doc:`../learn/tools` for schemas, errors, and safe execution.

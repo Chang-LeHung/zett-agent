@@ -1,78 +1,82 @@
-Messages, context, and persistence
-======================================
+What the model sees
+===================
+
+"Context" is the list of messages sent with a request. Understanding it explains
+most surprising behavior: why a turn was forgotten, why compaction changed the
+prompt, and why a UI transcript can be longer than what the model received.
 
 Message roles
------------------
+-------------
 
-.. list-table:: Provider-neutral messages
+.. list-table::
    :header-rows: 1
+   :widths: 30 70
 
-   * - Role / class
+   * - Role
      - Meaning
-   * - system / SystemMessage
-     - Application instructions rebuilt for the current request.
-   * - user / UserMessage
-     - User text or ordered text/image content.
-   * - assistant / AssistantMessage
-     - Model answer, optional reasoning, complete tool calls, and replay data.
-   * - tool / ToolMessage
-     - Serialized result linked to an assistant call by tool_call_id.
-   * - agent / AgentMessage
-     - Internal continuation instruction; mapped to user at provider boundaries.
+   * - system
+     - Application instructions, rebuilt for every request.
+   * - user
+     - User text, or ordered text and images.
+   * - assistant
+     - The model's answer, its reasoning, and any tool calls it requested.
+   * - tool
+     - A result linked to the assistant call by ``tool_call_id``.
+   * - agent
+     - An internal continuation; providers see it as user input.
 
-``Message.attributes`` holds per-message application information. Provider adapters
-do not automatically send arbitrary attributes as model content. Request-level
-``metadata`` and ``tags`` live on context and are captured by persistence when
-records are appended; they do not rewrite every Message object.
-
-Restored context is not a new message
+System instructions are rebuilt each time
 -----------------------------------------
 
-Use ``on_state`` to restore existing messages directly into state. Use
-``on_message`` to replace the pending current input. The Agent then calls
-``context.append_message`` to publish the new raw record once.
+History extensions restore dialogue, not prompts. Instructions are added again
+for every request, so changing your system prompt or tools takes effect on the
+next turn without stale instructions piling up.
 
-Calling append_message while restoring history would create duplicate raw events.
-Appending directly for newly produced messages bypasses persistence notifications.
-These are different operations, not interchangeable convenience methods.
+That is also why ``extensions=[]`` loses the conversation: no extension restores
+the messages. See :doc:`../learn/sessions`.
 
-Snapshot boundaries
------------------------
+Transcript versus model input
+-----------------------------
+
+After compaction the two diverge, and both are useful:
 
 .. code-block:: text
 
-   Raw Log:  1  2  3  4  5  6  7  8
-             \___________/  \______/
-                snapshot      raw tail
-                through=5      6..8
+   raw log      1  2  3  4  5  6  7  8      what the user saw
+                └──── checkpoint ────┘
+   model input  [checkpoint]  6  7  8        what the model receives
 
-   Model context = checkpoint message + raw messages 6, 7, 8
-   Conversation UI = original messages 1 through 8
+* Show the raw log in a UI: ``await storage.list_raw_messages(session_id)``.
+* Send the model input: the latest checkpoint plus the raw messages after it.
 
-Snapshots are immutable checkpoints created on compaction, not copies of every
-successful request. ``compacted_through_sequence`` is the last original record
-already represented by the checkpoint. Restoring starts strictly after it, so
-summarized messages are not sent twice.
+A checkpoint records the last original message it covers, so restoring starts
+after that point and summarized messages are never sent twice.
 
-Use :class:`~zett_agent.extensions.persistence.SessionView` for the restored model context and
-``await storage.list_raw_messages(...)`` for full UI history. Request IDs
-correlate records but do not automatically make appends idempotent. Storage
-restoration is asynchronous: the runtime awaits the snapshot and raw tail before
-the first model call of a request.
+Keep model context and display history separate
+------------------------------------------------------------
 
-Compaction retains coherent turns
--------------------------------------
+Choose what you persist and what you send back to the model independently.
+``Message.persist=False`` asks persistence subscribers not to store a message;
+it does not hide it from the current request. ``include_in_messages=False``
+keeps a message out of future restored context, not necessarily out of the
+raw transcript. Use message attributes for application data instead of
+putting private routing information in prompt text.
 
-Recent-token limits are extended to whole turns, including tool calls and results.
-The current turn cannot be split away. A threshold crossing does not guarantee a
-summary: there must be an older completed region, and the summary must be smaller.
-If not, the extension preserves the existing messages.
+Do not rebuild provider context by concatenating visible chat bubbles. Tool
+calls and matching results are part of the conversation even when a UI hides
+them. A restored context must preserve their IDs and structure; a persistence
+extension handles that projection for you. See :doc:`../learn/sessions`.
 
-Signed model replay data
-----------------------------
+When context runs out
+---------------------
 
-Some providers require opaque signed thinking/tool parts on later round trips.
-AssistantMessage stores these as provider/model-scoped ``replay_blocks``. They are
-not the displayable ``reasoning`` field. Persist them unchanged and do not reuse
-signed blocks with a different provider/model identity. See provider reference
-pages for their mapping implementations.
+:class:`~zett_agent.extensions.compaction.CompactionExtension` watches the size
+of the request and, when it crosses a threshold, replaces older turns with one
+summary.
+
+* Recent turns are kept whole, including their tool calls and results.
+* The current turn is never split, so one oversized turn is left alone.
+* If the summary would not be smaller than what it replaces, nothing changes.
+
+Configure it with ``max_tokens`` and ``keep_recent_tokens`` and watch the
+``COMPACTION_*`` events. See :doc:`../examples/compaction`.

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 960" role="img" aria-labelledby="title desc">
+  <title id="title">Zett Agent growing identity</title>
+  <desc id="desc">An alert iris-colored creature with a forward-looking gaze, three related growth forms, monochrome marks, and small-size previews. These are visual studies for a future reusable, session-shaped harness.</desc>
+  <defs>
+    <linearGradient id="iris" x1="14" y1="10" x2="48" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8b7cf4"/>
+      <stop offset="1" stop-color="#6350cf"/>
+    </linearGradient>
+    <path id="body" d="M8 25C18 29 20 16 32 14C37 13 40 14 43 17C45 12 48 9 53 8C55 18 50 26 46 31C55 35 55 44 48 48C43 51 37 48 34 46C30 56 20 60 9 53C18 51 22 46 21 40C12 43 5 38 6 31C7 28 9 27 8 25Z"/>
+    <g id="eyes">
+      <g data-part="eyes" fill="#fff">
+        <ellipse cx="24" cy="32" rx="4.8" ry="4.3" transform="rotate(-18 24 32)"/>
+        <ellipse cx="37" cy="28.5" rx="5.4" ry="4.8" transform="rotate(-18 37 28.5)"/>
+      </g>
+      <g data-part="pupils" fill="#2c224b">
+        <ellipse cx="26" cy="31" rx="2.1" ry="2.7" transform="rotate(-18 26 31)"/>
+        <ellipse cx="39.2" cy="27.4" rx="2.3" ry="3" transform="rotate(-18 39.2 27.4)"/>
+      </g>
+    </g>
+    <g id="creature">
+      <use href="#body" fill="url(#iris)"/>
+      <use href="#eyes"/>
+    </g>
+    <g id="curious">
+      <path d="M8 25C18 29 20 16 32 14C37 13 40 14 43 17C43 10 49 6 56 5C58 17 52 27 46 31C55 35 55 44 48 48C43 51 37 48 34 46C30 56 20 60 9 53C18 51 22 46 21 40C12 43 5 38 6 31C7 28 9 27 8 25Z" fill="url(#iris)"/>
+      <use href="#eyes"/>
+    </g>
+    <g id="focused">
+      <path d="M11 25C20 27 22 17 32 16C37 15 40 16 43 20C47 15 51 13 54 15C55 22 51 27 46 31C53 35 53 42 47 46C42 49 36 46 33 45C29 53 22 56 14 50C20 47 22 43 21 40C13 42 7 37 9 31C10 28 12 27 11 25Z" fill="url(#iris)"/>
+      <use href="#eyes"/>
+    </g>
+    <g id="expansive">
+      <path d="M5 23C17 30 20 16 32 14C37 13 40 14 43 17C43 11 46 6 50 5C52 9 52 12 51 15C55 12 59 13 60 15C59 22 54 28 46 31C57 34 61 45 54 49C49 52 43 49 41 44C39 52 30 60 21 57C15 57 10 57 5 53C16 51 22 46 21 40C11 44 2 39 4 30C5 27 6 26 5 23Z" fill="url(#iris)"/>
+      <use href="#eyes"/>
+    </g>
+    <mask id="eye-cutouts">
+      <rect width="64" height="64" fill="white"/>
+      <g fill="black">
+        <ellipse cx="24" cy="32" rx="4.8" ry="4.3" transform="rotate(-18 24 32)"/>
+        <ellipse cx="37" cy="28.5" rx="5.4" ry="4.8" transform="rotate(-18 37 28.5)"/>
+      </g>
+      <g fill="white">
+        <ellipse cx="26" cy="31" rx="2.1" ry="2.7" transform="rotate(-18 26 31)"/>
+        <ellipse cx="39.2" cy="27.4" rx="2.3" ry="3" transform="rotate(-18 39.2 27.4)"/>
+      </g>
+    </mask>
+    <g id="mono"><use href="#body" fill="currentColor" mask="url(#eye-cutouts)"/></g>
+  </defs>
+  <rect width="1120" height="960" rx="24" fill="#fffdfa"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="56" y="48" fill="#6650c4" font-size="11" font-weight="650" letter-spacing="2">ZETT AGENT / GROWING IDENTITY</text>
+    <text x="1064" y="48" text-anchor="end" fill="#686273" font-size="11">02 / Same core. Different character.</text>
+    <line x1="56" y1="72" x2="1064" y2="72" stroke="#e5dfec"/>
+    <rect x="56" y="104" width="1008" height="252" rx="20" fill="#f3eefb"/>
+    <use href="#creature" transform="translate(88 124) scale(3.2)"/>
+    <text x="356" y="202" fill="#2b2738" font-size="60" font-weight="700" letter-spacing="-2.5">Zett Agent</text>
+    <text x="360" y="242" fill="#6650c4" font-size="22">Small core. Yours to shape.</text>
+    <text x="360" y="284" fill="#686273" font-size="14">An attentive gaze. A forward lean. Ready to explore.</text>
+    <text x="360" y="310" fill="#686273" font-size="14">One continuous silhouette. One coherent iris palette.</text>
+    <text x="56" y="398" fill="#6650c4" font-size="11" font-weight="650" letter-spacing="1.5">01 / RELATED FORMS</text>
+    <text x="1064" y="398" text-anchor="end" fill="#686273" font-size="11">Shared eyes and palette. Different silhouettes, not just recolors.</text>
+    <rect x="56" y="424" width="320" height="232" rx="16" fill="#f8f5fc" stroke="#e5dfec"/>
+    <rect x="400" y="424" width="320" height="232" rx="16" fill="#f8f5fc" stroke="#e5dfec"/>
+    <rect x="744" y="424" width="320" height="232" rx="16" fill="#f8f5fc" stroke="#e5dfec"/>
+    <use href="#curious" transform="translate(152 446) scale(2)"/>
+    <use href="#focused" transform="translate(496 446) scale(2)"/>
+    <use href="#expansive" transform="translate(840 446) scale(2)"/>
+    <text x="216" y="606" text-anchor="middle" fill="#2b2738" font-size="16" font-weight="650">Curious</text>
+    <text x="216" y="633" text-anchor="middle" fill="#686273" font-size="12">Reaches outward</text>
+    <text x="560" y="606" text-anchor="middle" fill="#2b2738" font-size="16" font-weight="650">Focused</text>
+    <text x="560" y="633" text-anchor="middle" fill="#686273" font-size="12">Poised and precise</text>
+    <text x="904" y="606" text-anchor="middle" fill="#2b2738" font-size="16" font-weight="650">Expansive</text>
+    <text x="904" y="633" text-anchor="middle" fill="#686273" font-size="12">Grows new branches</text>
+    <text x="56" y="700" fill="#6650c4" font-size="11" font-weight="650" letter-spacing="1.5">02 / SMALL SIZES</text>
+    <use href="#creature" transform="translate(56 731) scale(1.5)"/>
+    <use href="#creature" transform="translate(172 747)"/>
+    <use href="#creature" transform="translate(256 763) scale(0.5)"/>
+    <use href="#creature" transform="translate(310 771) scale(0.25)"/>
+    <text x="104" y="858" text-anchor="middle" fill="#686273" font-size="11">96 px</text>
+    <text x="204" y="858" text-anchor="middle" fill="#686273" font-size="11">64 px</text>
+    <text x="272" y="858" text-anchor="middle" fill="#686273" font-size="11">32 px</text>
+    <text x="318" y="858" text-anchor="middle" fill="#686273" font-size="11">16 px</text>
+    <text x="400" y="700" fill="#6650c4" font-size="11" font-weight="650" letter-spacing="1.5">03 / MONOCHROME</text>
+    <rect x="400" y="731" width="104" height="104" rx="16" fill="#f0eaf9"/>
+    <use href="#mono" color="#6650c4" transform="translate(416 747) scale(1.125)"/>
+    <rect x="522" y="731" width="104" height="104" rx="16" fill="#221b35"/>
+    <use href="#mono" color="#fff" transform="translate(538 747) scale(1.125)"/>
+    <text x="452" y="858" text-anchor="middle" fill="#686273" font-size="11">Light</text>
+    <text x="574" y="858" text-anchor="middle" fill="#686273" font-size="11">Dark</text>
+    <text x="744" y="700" fill="#6650c4" font-size="11" font-weight="650" letter-spacing="1.5">04 / PALETTE</text>
+    <rect x="744" y="731" width="94" height="104" rx="14" fill="#7663e0"/>
+    <rect x="854" y="731" width="94" height="104" rx="14" fill="#c1b4ff"/>
+    <rect x="964" y="731" width="100" height="104" rx="14" fill="#2c224b"/>
+    <text x="791" y="858" text-anchor="middle" fill="#686273" font-size="11">Iris</text>
+    <text x="901" y="858" text-anchor="middle" fill="#686273" font-size="11">Lilac</text>
+    <text x="1014" y="858" text-anchor="middle" fill="#686273" font-size="11">Ink</text>
+    <line x1="56" y1="898" x2="1064" y2="898" stroke="#e5dfec"/>
+    <text x="56" y="930" fill="#686273" font-size="11">Visual studies for a future session-shaped, reusable harness. Not a shipped capability or UI.</text>
+  </g>
+</svg>

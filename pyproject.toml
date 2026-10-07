@@ -1,7 +1,7 @@
 [project]
 name = "zett-agent"
 dynamic = ["version"]
-description = "A small readable model and tool loop"
+description = "A small Python agent runtime with typed tools, streaming, and on-demand skills"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -46,6 +46,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.urls]
+Documentation = "https://chang-lehung.github.io/zett-agent/"
 Repository = "https://github.com/Chang-LeHung/zett-agent"
 Issues = "https://github.com/Chang-LeHung/zett-agent/issues"
 
@@ -68,7 +69,9 @@ dev = [
 docs = [
     "pydata-sphinx-theme>=0.16,<1",
     "sphinx>=8,<10",
+    "sphinx-autobuild>=2024.10,<2026; python_version >= '3.11'",
     "sphinx-copybutton>=0.5,<1",
+    "sphinx-design>=0.6,<1",
     "sphinxcontrib-mermaid>=2,<3",
 ]
 docs-test = [

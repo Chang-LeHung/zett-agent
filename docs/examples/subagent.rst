@@ -21,6 +21,22 @@ The output includes:
 This program uses deterministic offline models and temporary storage where needed.
 It requires no API key and is executed by the documentation test suite.
 
+Choose the child's capabilities explicitly
+------------------------------------------
+
+Give a child profile its own instructions, model, and tools. The parent can
+delegate work to the profile without giving it every capability the parent
+has:
+
+.. literalinclude:: ../_examples/subagent.py
+   :language: python
+   :pyobject: main
+
+The example stores the parent and child as separate sessions in the same
+temporary database. A parent-session link lets your application show how
+they relate. Read-only filesystem tools restrict the exposed operations;
+they do not isolate the process or prevent arbitrary code from writing.
+
 Complete source
 -------------------
 
@@ -30,5 +46,5 @@ Complete source
    :language: python
    :linenos:
 
-See :doc:`../extending/hooks` for lifecycle ordering and
-:doc:`../reference/index` for the complete API reference.
+Next: :doc:`../extending/built-ins` for the subagent profile options, or
+:doc:`goal` for evaluation-driven continuation.

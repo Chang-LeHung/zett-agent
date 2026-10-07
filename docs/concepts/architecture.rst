@@ -1,69 +1,86 @@
-Architecture and ownership
-==============================
+How the pieces fit
+==================
 
-The runtime is intentionally small
---------------------------------------
+One loop, several useful boundaries
+------------------------------------------------------------
 
-An Agent alternates model calls and tool execution until it has a final answer
-and no higher-priority input remains. It does not know about HTTP endpoints,
-web components, database tables, or a specific LLM vendor.
+An agent alternates model calls and tool execution until it has a final answer.
+Providers, tools, and extensions supply the capabilities around that loop.
+Your application can adopt them separately without adopting a web server,
+UI, or another application's data model.
 
 .. code-block:: text
 
-   Application / UI
-          |
-          v
-     AgentClient ----------> AgentEventDispatcher ---> on_*_event callbacks
-          |
-          v
-        Agent <-----------> AgentModel -----> provider SDK
-          |                     |
-          |                     +-- ModelEvent deltas + ModelResponse
-          +-- AgentTool ----------> typed function
-          +-- AgentExtension -----> context / storage / approval / compaction
+   your application / UI
+          │
+          ▼
+     AgentClient ─────────▶ AgentEventDispatcher ──▶ your callbacks
+          │
+          ▼
+        Agent ◀───────────▶ AgentModel ──────────▶ provider SDK
+          │
+          ├── AgentTool ───────▶ your typed function
+          └── AgentExtension ──▶ context, sessions, approvals, compaction
 
-What each object owns
--------------------------
+Who owns what
+-------------
 
-.. list-table:: Responsibilities
+.. list-table::
    :header-rows: 1
-   :widths: 26 74
+   :widths: 30 70
 
    * - Object
      - Responsibility
-   * - Agent
-     - Request admission, phase transitions, the model/tool loop, and cleanup.
-   * - AgentClient
-     - Convenience creation and event-aware stream collection; exposes the runtime as client.agent.
-   * - AgentModel
-     - Provider requests, event normalization, and pre-output retry policy.
-   * - AgentRunContext
-     - Per-request references shared with extensions. Use it instead of global Agent state.
-   * - AgentExtension
-     - Optional behavior at documented hooks; default hooks do nothing.
-   * - AgentEventDispatcher
-     - Application-side callbacks; it does not inject context or register tools.
-   * - SessionStorage
-     - Durable raw records, snapshot boundaries, and restoration consistency.
+   * - :class:`~zett_agent.agent.Agent`
+     - Admits requests, runs the model/tool loop, cleans up.
+   * - :class:`~zett_agent.client.AgentClient`
+     - Convenient creation and event handling; exposes the runtime as ``client.agent``.
+   * - :class:`~zett_agent.model.AgentModel`
+     - Talks to one provider and normalizes its stream.
+   * - :class:`~zett_agent.agent.AgentRunContext`
+     - Per-request state shared with extensions; use it instead of global state.
+   * - :class:`~zett_agent.extensions.base.AgentExtension`
+     - Optional behavior at documented hooks; defaults do nothing.
+   * - :class:`~zett_agent.dispatcher.AgentEventDispatcher`
+     - Your callbacks for a stream; it never injects context or runs tools.
 
-Composition rather than a second runtime
---------------------------------------------
+Composition, not a second runtime
+---------------------------------
 
-``create_agent`` returns a wrapper, not a different loop. You can wrap an existing
-Agent with AgentClient, or use Agent directly with ``async for``. Supplying an
-extension does not require subclassing Agent.
+``create_agent`` wraps an Agent; it does not create a different loop. You can use
+:class:`~zett_agent.agent.Agent` directly with ``async for``, wrap an existing
+Agent in a client, and add behavior through extensions without subclassing the
+Agent.
 
-The application owns provider and database lifetimes. The runtime closes nested
-streams on completion/cancellation but does not close a shared provider after
-every request. Do not create clients at module import time in libraries.
+Your application owns the resources it passes in. The runtime closes the streams
+it opens, but it never closes a provider or database you supplied — release those
+yourself when the application shuts down.
 
-Limits and security boundaries
-----------------------------------
+Which boundary should I use?
+------------------------------------------------------------
 
-``max_iterations`` limits model calls per user/internal input. Tool round trips
-consume that budget. ``max_internal_messages`` bounds queued internal continuations
-per request. Neither limit is a spending cap or an OS permission boundary.
+* Use a provider adapter to connect an endpoint, not to manage conversation history.
+* Use a tool for an operation the model may request, not a second model loop.
+* Use an extension for context, permissions, persistence, or behavior during a request.
+* Use a dispatcher for presentation and telemetry that only observe UI events.
 
-Filesystem, shell, and MCP tools execute with the permissions of their host
-process or server. Tool guidance is not enforcement. Use explicit allow-lists,
-resource limits, approval rules, and process isolation at the application boundary.
+For example, a review assistant can compose a provider, read-only tools,
+project guidance, and session storage. Its UI displays the resulting events
+without needing to know how those capabilities are implemented. See
+:doc:`../learn/configuration` for composition and
+:doc:`../extending/first-extension` when the built-ins do not cover your workflow.
+
+Limits and safety
+-----------------
+
+* ``max_iterations`` caps model calls per user or internal input. Tool round
+  trips consume that budget.
+* ``max_internal_messages`` caps queued internal continuations in one request.
+* Neither limit is a spending cap or a permission boundary.
+
+Filesystem, shell, and MCP tools run with the permissions of your process or
+server. Tool guidance is documentation, not enforcement. Guard untrusted input
+with explicit allow-lists, approval rules, resource limits, and process
+isolation.
+
+Next: :doc:`lifecycle` for the exact order of hooks inside one request.

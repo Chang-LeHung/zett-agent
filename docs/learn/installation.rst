@@ -1,60 +1,58 @@
-Install and run from source
-===============================
+Install Zett Agent
+========================
 
-Prerequisites
------------------
+.. tab-set::
 
-The standalone package requires Python 3.10 or newer, and continuous integration
-covers 3.10 through 3.14. This repository develops and tests with Python 3.14 and
-uses ``uv`` for dependency management. Node.js is not required for the Agent
-library or its documentation.
+   .. tab-item:: pip
 
-From the repository root::
+      .. code-block:: bash
 
-    uv sync
-    uv run python -c "import zett_agent; print(zett_agent.__file__)"
+         pip install zett-agent
 
-The printed path should point into this checkout's ``src/zett_agent`` directory.
-That confirms examples will use the source you are reading.
+   .. tab-item:: uv
 
-Run without an API key
---------------------------
+      .. code-block:: bash
+
+         uv add zett-agent
+
+Zett Agent requires Python 3.10 or newer; continuous integration covers 3.10
+through 3.14. The library needs no Node.js and no external service to run. Every
+built-in provider is a package dependency, so there are no extras to install.
+
+Verify the install
+------------------
 
 .. code-block:: bash
 
+   python -c "import zett_agent; print(zett_agent.__version__)"
+
+Run something immediately
+-------------------------
+
+:doc:`first-agent` is a complete program with a deterministic model, so it needs
+no API key and makes no network request. It runs the real loop — messages,
+streaming and session history — with a scripted model in place of a provider.
+Try :doc:`../examples/streaming-tools` next for a complete tool round trip.
+
+Work from a checkout
+--------------------
+
+To read and modify the source, clone the repository and let ``uv`` create the
+environment:
+
+.. code-block:: bash
+
+   git clone https://github.com/Chang-LeHung/zett-agent
+   cd zett-agent
+   uv sync
    uv run python docs/_examples/first_agent.py
 
-Expected output::
+Use ``uv run python your_script.py`` to run code against the checkout instead of
+an installed release.
 
-    Turn 1: Hello
-    Turn 2: Remember this conversation
+.. note::
 
-This example uses a deterministic model adapter, but exercises the real runtime,
-stream collection, typed messages, and in-memory conversation history. It makes
-no network requests and creates no user database.
-
-Build this documentation
-----------------------------
-
-.. code-block:: bash
-
-   make docs-serve
-   # Open http://127.0.0.1:8000
-
-Use ``DOCS_PORT=8080`` to change the port. The command builds before serving;
-after edits, stop it with Ctrl+C and rerun it. ``make docs-check`` builds a fresh
-copy, checks navigation and links, and runs the offline examples.
-
-``make docs-examples`` runs just the downloadable offline programs.
-``make docs-ui-check`` installs a test Chromium browser and verifies real desktop
-and mobile navigation and search. This browser is isolated from your own profile.
-
-Resource ownership
-----------------------
-
-The caller owns provider clients and explicitly created persistence extensions.
-Await ``model.aclose()`` and ``persistence.close()`` when finished: storage I/O
-is asynchronous, so both are coroutines. Closing a stream is different: it stops
-one request, not the entire provider or database.
+   Providers and storage you create are yours to close. Call
+   ``await model.aclose()`` and ``await storage.close()`` when finished.
 
 Next: :doc:`first-agent`.

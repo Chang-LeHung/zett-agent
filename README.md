@@ -1,5 +1,7 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Chang-LeHung/zett-agent/main/docs/_static/logo.svg" width="88" height="88" alt="Zett Agent" />
+  <picture>
+    <img src="https://raw.githubusercontent.com/Chang-LeHung/zett-agent/main/docs/_static/logo.svg" width="88" height="88" alt="Zett Agent" />
+  </picture>
 </p>
 
 <h1 align="center">Zett Agent</h1>

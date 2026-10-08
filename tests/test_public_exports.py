@@ -116,10 +116,23 @@ def test_runtime_modules_and_adapters_defer_their_sdks():
         "import sys; "
         "import zett_agent.agent, zett_agent.events, zett_agent.messages, zett_agent.model, zett_agent.tools.base; "
         "import zett_agent.providers.base, zett_agent.providers.responses, zett_agent.providers.anthropic, "
-        "zett_agent.providers.openai, zett_agent.extensions.mcp, zett_agent.extensions.coding; "
+        "zett_agent.providers.openai, zett_agent.extensions.mcp, zett_agent.extensions.coding, "
+        "zett_agent.extensions.subagent, zett_agent.extensions.goal; "
         f"print(*[name for name in {DEFERRED_THIRD_PARTY!r} if name in sys.modules])"
     )
     assert fields == [], f"importing runtime or adapter modules pulled in {fields}"
+
+
+def test_builtin_subagents_import_their_sqlite_persistence_lazily():
+    """Importing the module stays cheap; only building a profile pays for SQLAlchemy."""
+    fields = run_python(
+        "import sys; "
+        "import zett_agent.extensions.subagent as subagent; "
+        "imported = 'sqlalchemy' in sys.modules; "
+        "subagent.default_subagents(object()); "
+        "print(imported, 'sqlalchemy' in sys.modules)"
+    )
+    assert fields == ["False", "True"]
 
 
 def test_constructing_a_provider_imports_its_sdk():

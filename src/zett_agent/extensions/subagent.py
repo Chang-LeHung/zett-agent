@@ -19,7 +19,6 @@ from ..tools.base import (
 )
 from .base import AgentExtension
 from .file_system import FileSystemExtension
-from .sqlite import SQLiteSessionExtension
 from .tool_guidelines import ToolGuidelinesExtension
 
 TASK_TOOL_NAME = "task"
@@ -78,6 +77,11 @@ class SubAgentResult(BaseModel):
 
 def default_subagents(model: AgentModel) -> tuple[SubAgentDefinition, ...]:
     """Return built-in profiles with their complete extension configuration."""
+    # Imported here because zett_agent.extensions.sqlite pulls in SQLAlchemy
+    # through the storage layer. Most imports of this module never build a
+    # built-in subagent, and paying that cost at import time is wasteful.
+    from .sqlite import SQLiteSessionExtension
+
     return (
         SubAgentDefinition(
             name="reasoning",

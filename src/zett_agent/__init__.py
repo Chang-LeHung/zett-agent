@@ -8,4 +8,4 @@ only the version, so importing it never imports a subsystem, a provider SDK, or
 a storage engine.
 """
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"

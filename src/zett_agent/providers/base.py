@@ -11,10 +11,6 @@ from functools import wraps
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-import httpx
-import truststore
-from json_repair import repair_json
-
 from ..exceptions import AgentError
 from ..messages import (
     AnyMessage,
@@ -46,6 +42,7 @@ from ..model import (
 )
 
 if TYPE_CHECKING:
+    import httpx
     from openai.types.chat import (
         ChatCompletionAssistantMessageParam,
         ChatCompletionContentPartImageParam,
@@ -293,6 +290,8 @@ def _parse_tool_arguments(payload: str, *, index: int) -> dict[str, Any]:
         stripped = payload.strip()
         if not (stripped.startswith("{") and stripped.endswith("}")):
             raise ProviderResponseError(f"Invalid tool-call arguments for index {index}: {error}") from error
+        from json_repair import repair_json
+
         try:
             parsed = repair_json(stripped, return_objects=True, skip_json_loads=True)
         except (ValueError, TypeError, RecursionError) as repair_error:
@@ -420,6 +419,8 @@ class RetryingProvider(SyncMethodsMixin):
     @staticmethod
     def _retryable(error: BaseException) -> bool:
         """Inspect SDK status codes and wrapped transport causes without optional imports."""
+        import httpx
+
         seen: set[int] = set()
         while id(error) not in seen:
             seen.add(id(error))
@@ -486,6 +487,11 @@ class _OpenAIStyleProvider(RetryingProvider):
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
         send_prompt_cache_key: bool = True,
     ) -> None:
+        # HTTP clients and the trust store are only needed once a provider is
+        # constructed, so importing them here keeps module import cheap.
+        import httpx
+        import truststore
+
         validate_retry(retry)
         validate_response(response)
         self.retry = retry

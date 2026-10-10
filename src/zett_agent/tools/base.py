@@ -6,9 +6,8 @@ import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, ParamSpec, Protocol, TypeVar, get_type_hints, overload
-
-from pydantic import ConfigDict, TypeAdapter, create_model
 
 from .._compat import StrEnum, TypeAliasType
 from ..model import ToolDefinition
@@ -26,6 +25,18 @@ ToolResult = TypeAliasType("ToolResult", Any)
 
 _DecoratedParameters = ParamSpec("_DecoratedParameters")
 _DecoratedResult = TypeVar("_DecoratedResult")
+
+
+@lru_cache(maxsize=1)
+def _result_serializer() -> Any:
+    """Build the permissive JSON adapter once, on the first serialized result.
+
+    Pydantic is imported here rather than at module scope so importing the tool
+    framework does not pay for it; only serializing a non-string result does.
+    """
+    from pydantic import TypeAdapter
+
+    return TypeAdapter(Any)
 
 
 def _bind_tool_call(call_id: str) -> Token[str | None]:
@@ -134,7 +145,7 @@ class AgentTool(SyncMethodsMixin):
         """
         if isinstance(value, str):
             return value
-        return json.dumps(TypeAdapter(Any).dump_python(value, mode="json"), ensure_ascii=False)
+        return json.dumps(_result_serializer().dump_python(value, mode="json"), ensure_ascii=False)
 
 
 class _ToolDecorator(Protocol):
@@ -225,6 +236,8 @@ def _build_input_schema(
     function: Callable[..., Any], documentation: _ToolDocumentation
 ) -> tuple[type[Any], tuple[str, ...], dict[str, Any]]:
     """Build the validator and JSON schema for one typed function."""
+    from pydantic import ConfigDict, create_model
+
     hints = get_type_hints(function, include_extras=True)
     fields: dict[str, tuple[Any, Any]] = {}
     for parameter in inspect.signature(function).parameters.values():

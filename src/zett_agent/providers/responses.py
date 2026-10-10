@@ -8,8 +8,6 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast
 
-from pydantic import TypeAdapter, ValidationError
-
 from ..messages import (
     AnyMessage,
     AssistantMessage,
@@ -36,6 +34,7 @@ from .tool_images import expand_tool_images
 
 if TYPE_CHECKING:
     from openai.types.responses import FunctionToolParam, ToolParam
+    from pydantic import TypeAdapter
 
 
 @lru_cache(maxsize=1)
@@ -46,6 +45,7 @@ def _searched_tools() -> TypeAdapter[list[FunctionToolParam]]:
     SDK, which this module imports only when a request needs it.
     """
     from openai.types.responses import FunctionToolParam
+    from pydantic import TypeAdapter
 
     return TypeAdapter(list[FunctionToolParam])
 
@@ -115,6 +115,8 @@ def _tool_search_output(message: ToolMessage) -> dict[str, Any]:
         tools = json.loads(message.content)
     except json.JSONDecodeError as error:
         raise ValueError("A local tool search tool must return JSON tool definitions") from error
+    from pydantic import ValidationError
+
     try:
         definitions = _searched_tools().validate_python(tools)
     except ValidationError as error:

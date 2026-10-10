@@ -20,7 +20,19 @@ from zett_agent.model import (
     ModelEvent,
     ModelResponse,
 )
-from zett_agent.storage import decode_messages, encode_messages
+from zett_agent.storage import _message_adapter, decode_messages, encode_messages
+
+
+def test_decoding_reuses_one_pydantic_adapter_per_message_kind():
+    _message_adapter.cache_clear()
+    messages = [UserMessage(content=f"item-{index}") for index in range(5)]
+    messages.append(AssistantMessage(content="answer"))
+
+    decoded = decode_messages(encode_messages(messages))
+
+    assert decoded[0].content == "item-0" and decoded[-1].content == "answer"
+    cache = _message_adapter.cache_info()
+    assert (cache.misses, cache.hits) == (2, 4)
 
 
 class AnswerModel:

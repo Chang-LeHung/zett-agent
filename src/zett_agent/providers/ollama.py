@@ -4,10 +4,7 @@ import base64
 import json
 import ssl
 from collections.abc import AsyncIterator, Sequence
-from typing import Any
-
-import httpx
-import truststore
+from typing import TYPE_CHECKING, Any
 
 from ..messages import AssistantMessage, ImageBytesSource, ImageContent, ImageUrlSource, ToolCall
 from ..model import (
@@ -25,6 +22,9 @@ from ..model import (
 )
 from .base import ProviderResponseError, RetryingProvider, reject_local_tool_search, retry_model_stream
 from .tool_images import expand_tool_images
+
+if TYPE_CHECKING:
+    import httpx
 
 
 def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
@@ -86,6 +86,7 @@ class OllamaProvider(RetryingProvider):
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
+        import truststore
         from ollama import AsyncClient
 
         validate_response(response)

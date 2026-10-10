@@ -2,6 +2,8 @@
 
 import asyncio
 
+import pytest
+
 from zett_agent._compat import timeout
 from zett_agent.agent import (
     Agent,
@@ -15,6 +17,7 @@ from zett_agent.extensions.shell_approval import (
     SHELL_APPROVAL_RESPONSE_EVENT_NAME,
     ShellApprovalExtension,
     ShellApprovalMode,
+    ShellApprovalResponse,
 )
 from zett_agent.messages import (
     AssistantMessage,
@@ -36,7 +39,7 @@ class ShellModel:
     async def stream(self, request):
         self.requests.append(request)
         message = (
-            AssistantMessage(tool_calls=(ToolCall("shell-1", "run_shell", {"command": self.command}),))
+            AssistantMessage(tool_calls=(ToolCall("shell-1", "bash", {"command": self.command}),))
             if len(self.requests) == 1
             else AssistantMessage(content="finished")
         )
@@ -48,8 +51,8 @@ class FakeShellTool(AgentExtension):
         self.commands: list[str] = []
 
     async def on_tool(self, context: AgentRunContext) -> None:
-        @tool(name="run_shell")
-        async def run_shell(command: str, timeout_seconds: int = 30) -> str:
+        @tool(name="bash")
+        async def bash(command: str, timeout_seconds: int = 30) -> str:
             """Run a test shell command.
 
             Guidelines:
@@ -59,7 +62,7 @@ class FakeShellTool(AgentExtension):
             self.commands.append(command)
             return f"ran: {command}"
 
-        context.register_tool(run_shell)
+        context.register_tool(bash)
 
 
 class ParallelShellModel:
@@ -71,8 +74,8 @@ class ParallelShellModel:
         message = (
             AssistantMessage(
                 tool_calls=(
-                    ToolCall("shell-1", "run_shell", {"command": "first"}),
-                    ToolCall("shell-2", "run_shell", {"command": "second"}),
+                    ToolCall("shell-1", "bash", {"command": "first"}),
+                    ToolCall("shell-2", "bash", {"command": "second"}),
                 )
             )
             if len(self.requests) == 1
@@ -88,9 +91,9 @@ class SequentialShellModel:
     async def stream(self, request):
         self.requests.append(request)
         if len(self.requests) == 1:
-            message = AssistantMessage(tool_calls=(ToolCall("shell-1", "run_shell", {"command": "first"}),))
+            message = AssistantMessage(tool_calls=(ToolCall("shell-1", "bash", {"command": "first"}),))
         elif len(self.requests) == 2:
-            message = AssistantMessage(tool_calls=(ToolCall("shell-2", "run_shell", {"command": "second"}),))
+            message = AssistantMessage(tool_calls=(ToolCall("shell-2", "bash", {"command": "second"}),))
         else:
             message = AssistantMessage(content="finished")
         yield ModelEvent.completed(ModelResponse(message))
@@ -324,6 +327,55 @@ async def test_session_mode_change_applies_during_active_run() -> None:
 
     assert shell.commands == ["first", "second"]
     assert [event.name for event in events].count(SHELL_APPROVAL_EVENT_NAME) == 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"decision": "maybe"},
+        {},
+        {"decision": "execute", "remember": "yes"},
+        {"decision": None},
+    ],
+    ids=["unknown-decision", "missing-decision", "non-boolean-remember", "null-decision"],
+)
+async def test_invalid_shell_approval_responses_fail_the_tool_without_running(payload) -> None:
+    storage = MemoryShellApprovalStorage()
+    shell = FakeShellTool()
+    model = ShellModel()
+    config = AgentRunConfig("invalid-approval")
+    agent = await Agent.create(
+        model,
+        config=config,
+        extensions=[ShellApprovalExtension(storage), shell],
+    )
+    ready = asyncio.Event()
+
+    async def consume() -> None:
+        async for event in agent.stream("run"):
+            if event.name == SHELL_APPROVAL_EVENT_NAME:
+                ready.set()
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(ready.wait(), timeout=1)
+    agent.emit_external_event(
+        ExternalEvent(SHELL_APPROVAL_RESPONSE_EVENT_NAME, {"tool_call_id": "shell-1", **payload}),
+        config=config,
+    )
+    await asyncio.wait_for(task, timeout=1)
+
+    assert shell.commands == []
+    result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
+    assert result.success is False
+    assert "Invalid shell approval response" in str(result.content)
+
+
+def test_shell_approval_response_parses_only_known_fields() -> None:
+    response = ShellApprovalResponse.from_payload(
+        {"tool_call_id": "shell-1", "decision": "execute", "remember": True, "extra": 1}
+    )
+    assert response.decision == "execute" and response.remember is True
+    assert ShellApprovalResponse.from_payload({"decision": "abort"}) == ShellApprovalResponse("abort")
 
 
 async def wait_until(predicate, *, seconds: float = 1) -> None:

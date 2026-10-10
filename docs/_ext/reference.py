@@ -245,12 +245,12 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "tool",
     ),
     "zett_agent.tools.coding": (
+        "bash",
         "delete_file",
         "glob",
         "grep",
         "read_file",
         "replace_in_file",
-        "run_shell",
         "write_file",
     ),
     "zett_agent.tools.images": ("view_image",),

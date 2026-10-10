@@ -1,9 +1,12 @@
-from typing import Any
+from __future__ import annotations
 
-import httpx
+from typing import TYPE_CHECKING, Any
 
 from ..model import DEFAULT_RETRY_OPTIONS, ModelRequest, RetryOptions
 from .base import _OpenAIStyleProvider
+
+if TYPE_CHECKING:
+    import httpx
 
 
 class OpenAIProvider(_OpenAIStyleProvider):

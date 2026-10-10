@@ -117,7 +117,7 @@ def test_runtime_modules_and_adapters_defer_their_sdks():
         "import zett_agent.agent, zett_agent.events, zett_agent.messages, zett_agent.model, zett_agent.tools.base; "
         "import zett_agent.providers.base, zett_agent.providers.responses, zett_agent.providers.anthropic, "
         "zett_agent.providers.openai, zett_agent.extensions.mcp, zett_agent.extensions.coding, "
-        "zett_agent.extensions.subagent, zett_agent.extensions.goal; "
+        "zett_agent.extensions.subagent, zett_agent.extensions.goal, zett_agent.extensions.tool_search; "
         f"print(*[name for name in {DEFERRED_THIRD_PARTY!r} if name in sys.modules])"
     )
     assert fields == [], f"importing runtime or adapter modules pulled in {fields}"
@@ -141,5 +141,90 @@ def test_constructing_a_provider_imports_its_sdk():
         "from zett_agent.providers.openai import OpenAIProvider; "
         "provider = OpenAIProvider(model='m', api_key='k', base_url='http://localhost/v1'); "
         "print('openai' in sys.modules)"
+    )
+    assert fields == ["True"]
+
+
+#: Modules a leaf runtime module must never pull in just by being imported.
+EAGER_LEAF_IMPORTS = ("asyncio", "httpx", "tiktoken", "sqlalchemy", "truststore", "uuid6")
+
+
+def test_leaf_runtime_modules_avoid_heavy_eager_imports():
+    fields = run_python(
+        "import sys; "
+        "import zett_agent.messages, zett_agent.model, zett_agent.json_types, zett_agent.ids; "
+        f"print(*[name for name in {EAGER_LEAF_IMPORTS!r} if name in sys.modules])"
+    )
+    assert fields == [], f"leaf runtime modules pulled in {fields}"
+
+
+def test_extension_modules_defer_clients_and_tokenizers():
+    fields = run_python(
+        "import sys; "
+        "import zett_agent.extensions.coding, zett_agent.extensions.goal, "
+        "zett_agent.extensions.compaction, zett_agent.extensions.jsonl; "
+        "print(*[name for name in ('httpx', 'tiktoken', 'truststore', 'sqlalchemy') if name in sys.modules])"
+    )
+    assert fields == [], f"extension modules pulled in {fields}"
+
+
+def test_uuid_helper_resolves_lazily_and_prefers_the_standard_library():
+    fields = run_python(
+        "import sys, zett_agent.ids; "
+        "print('uuid6' in sys.modules); "
+        "zett_agent.ids.new_uuid7(); "
+        "print('uuid6' in sys.modules)"
+    )
+    # uuid.uuid7 is stdlib from 3.14; older interpreters fall back to uuid6 only
+    # when an identifier is actually requested.
+    assert fields == ["False", "False" if sys.version_info >= (3, 14) else "True"]
+
+
+def test_provider_modules_defer_http_clients_and_json_repair():
+    fields = run_python(
+        "import sys; "
+        "import zett_agent.providers.base, zett_agent.providers.openai, zett_agent.providers.anthropic, "
+        "zett_agent.providers.google, zett_agent.providers.ollama, zett_agent.providers.deepseek; "
+        "print(*[name for name in ('httpx', 'truststore', 'json_repair', 'pydantic') if name in sys.modules])"
+    )
+    assert fields == [], f"provider modules pulled in {fields}"
+
+
+def test_sqlite_storage_imports_sqlalchemy_only_when_asked_for():
+    """The message codec is cheap; the ORM layer loads on first attribute access."""
+    fields = run_python(
+        "import sys; "
+        "import zett_agent.storage; "
+        "from zett_agent.storage import encode_messages, MessageKind; "
+        "print('sqlalchemy' in sys.modules)"
+    )
+    assert fields == ["False"]
+    fields = run_python(
+        "import sys; "
+        "from zett_agent.storage import SQLiteSessionStorage; "
+        "print('sqlalchemy' in sys.modules, SQLiteSessionStorage.__name__)"
+    )
+    assert fields == ["True", "SQLiteSessionStorage"]
+    fields = run_python("import zett_agent.storage as storage; print(hasattr(storage, 'AgentSessionModel'))")
+    assert fields == ["False"]
+
+
+def test_pydantic_loads_only_when_validation_is_needed():
+    """Core modules defer pydantic; the first decode or tool call pays for it."""
+    fields = run_python(
+        "import sys; "
+        "import zett_agent.agent, zett_agent.tools.base, zett_agent.storage, "
+        "zett_agent.providers.responses; "
+        "print('pydantic' in sys.modules)"
+    )
+    assert fields == ["False"]
+    fields = run_python("import sys; import zett_agent.tools.coding; print('pydantic' in sys.modules)")
+    assert fields == ["True"], "declaring tools must build their schema"
+    fields = run_python(
+        "import sys; "
+        "from zett_agent.messages import UserMessage; "
+        "from zett_agent.storage import decode_messages, encode_messages; "
+        "decode_messages(encode_messages([UserMessage(content='x')])); "
+        "print('pydantic' in sys.modules)"
     )
     assert fields == ["True"]

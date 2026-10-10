@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from ..agent import AgentRunContext
-from ..tools.coding import run_shell
+from ..tools.coding import bash
 from .file_system import FileSystemExtension
 
 
@@ -24,7 +24,7 @@ class CodingExtension(FileSystemExtension):
             )
 
     .. warning::
-        ``run_shell`` and writable filesystem tools execute with the host
+        ``bash`` and writable filesystem tools execute with the host
         process's permissions. This extension is a capability bundle, not a
         sandbox.
 
@@ -43,4 +43,4 @@ class CodingExtension(FileSystemExtension):
     async def on_tool(self, context: AgentRunContext) -> None:
         """Register writable filesystem tools followed by shell execution."""
         await super().on_tool(context)
-        context.register_tool(run_shell)
+        context.register_tool(bash)

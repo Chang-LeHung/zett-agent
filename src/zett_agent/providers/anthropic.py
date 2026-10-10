@@ -4,10 +4,7 @@ import base64
 import ssl
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import replace
-from typing import Any
-
-import httpx
-import truststore
+from typing import TYPE_CHECKING, Any
 
 from ..messages import (
     AssistantMessage,
@@ -46,6 +43,9 @@ from .base import (
     retry_model_stream,
 )
 from .tool_images import expand_tool_images
+
+if TYPE_CHECKING:
+    import httpx
 
 
 def _tools_to_anthropic_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
@@ -181,6 +181,9 @@ class AnthropicProvider(RetryingProvider):
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
+        import httpx
+        import truststore
+
         validate_response(response)
         if response:
             raise ValueError("AnthropicProvider does not support the Responses API")

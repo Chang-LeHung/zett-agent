@@ -10,10 +10,10 @@ import pytest
 
 from zett_agent.tools import output as tool_output
 from zett_agent.tools.coding import (
+    bash,
     glob,
     grep,
     read_file,
-    run_shell,
 )
 
 RESUME = re.compile(r"start_line=(\d+)(?:, start_column=(\d+))?\]")
@@ -92,7 +92,7 @@ async def test_search_caps_output_and_preserves_distant_match(tmp_path, monkeypa
 async def test_shell_full_output_is_readable_after_preview_truncation(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     program = "import sys; print('START'); print('x'*3000000); print('END'); print('ERROR', file=sys.stderr)"
-    result = await run_shell({"command": f"{shlex.quote(sys.executable)} -c {shlex.quote(program)}"})
+    result = await bash({"command": f"{shlex.quote(sys.executable)} -c {shlex.quote(program)}"})
     assert result.startswith("START")
     assert "END\n" in result
     assert "[stderr]\nERROR" in result
@@ -113,6 +113,6 @@ async def test_timeout_stops_child_processes(tmp_path, monkeypatch):
     program = "import time; from pathlib import Path; time.sleep(2); Path('survived').touch()"
     command = f"{shlex.quote(sys.executable)} -c {shlex.quote(program)} & wait"
     with pytest.raises(RuntimeError, match="timed out"):
-        await asyncio.wait_for(run_shell({"command": command, "timeout_seconds": 1}), timeout=5)
+        await asyncio.wait_for(bash({"command": command, "timeout_seconds": 1}), timeout=5)
     await asyncio.sleep(1.2)
     assert not (tmp_path / "survived").exists()

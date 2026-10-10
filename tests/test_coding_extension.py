@@ -45,7 +45,7 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
         await agent.run("Inspect the workspace")
 
         assert {definition.name for definition in model.requests[0].tools} == tool_names
-        assert "run_shell" not in tool_names
+        assert "bash" not in tool_names
         guidance = "\n".join(
             message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)
         )
@@ -70,7 +70,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
         ToolCall("read", "read_file", {"path": "note.txt"}),
         ToolCall("glob", "glob", {"pattern": "*.txt"}),
         ToolCall("grep", "grep", {"pattern": "world"}),
-        ToolCall("shell", "run_shell", {"command": "printf coding-extension"}),
+        ToolCall("shell", "bash", {"command": "printf coding-extension"}),
         ToolCall("delete", "delete_file", {"path": "note.txt"}),
     )
 
@@ -106,7 +106,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
     }
     assert results["write_file"] == "Created note.txt"
     assert results["read_file"] == "world"
-    assert results["run_shell"] == "coding-extension"
+    assert results["bash"] == "coding-extension"
     assert results["replace_in_file"] == "Replaced 1 occurrence in note.txt"
     assert results["glob"] == "note.txt"
     assert results["grep"] == "note.txt:1: world"

@@ -5,12 +5,12 @@ import pytest
 from pydantic import ValidationError
 
 from zett_agent.tools.coding import (
+    bash,
     delete_file,
     glob,
     grep,
     read_file,
     replace_in_file,
-    run_shell,
     write_file,
 )
 
@@ -134,9 +134,9 @@ async def test_file_tools_reject_invalid_or_ambiguous_operations(tmp_path, monke
 async def test_local_tools_export_typed_schemas():
     tools = {
         registered.name: registered
-        for registered in (glob, grep, read_file, write_file, replace_in_file, delete_file, run_shell)
+        for registered in (glob, grep, read_file, write_file, replace_in_file, delete_file, bash)
     }
-    assert set(tools) == {"glob", "grep", "read_file", "write_file", "replace_in_file", "delete_file", "run_shell"}
+    assert set(tools) == {"glob", "grep", "read_file", "write_file", "replace_in_file", "delete_file", "bash"}
     assert tools["read_file"].parameters["properties"]["start_line"]["minimum"] == 1
     assert tools["read_file"].parameters["properties"]["line_count"]["maximum"] == 2_000
     assert tools["read_file"].parameters["properties"]["path"]["description"].startswith("Absolute path")
@@ -233,7 +233,7 @@ async def test_shell_tool_reports_failure_and_retains_truncated_output(tmp_path,
     output_module = importlib.import_module("zett_agent.tools.output")
     monkeypatch.setattr(output_module, "MAX_OUTPUT_BYTES", 100)
     with pytest.raises(RuntimeError, match="exited with code 3") as captured:
-        await run_shell({"command": "printf START; printf '%0200d' 0; printf END; printf 'error' >&2; exit 3"})
+        await bash({"command": "printf START; printf '%0200d' 0; printf END; printf 'error' >&2; exit 3"})
 
     message = str(captured.value)
     assert message.startswith("Command exited with code 3")
@@ -246,18 +246,18 @@ async def test_shell_tool_reports_failure_and_retains_truncated_output(tmp_path,
     assert output_files[0].read_text().endswith("END")
 
     with pytest.raises(ValueError, match="blank"):
-        await run_shell({"command": "   "})
+        await bash({"command": "   "})
 
 
 async def test_shell_tool_terminates_after_timeout(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(RuntimeError, match="timed out after 1 second"):
-        await run_shell({"command": "while :; do :; done", "timeout_seconds": 1})
+        await bash({"command": "while :; do :; done", "timeout_seconds": 1})
 
 
 async def test_shell_tool_terminates_when_its_task_is_cancelled(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    task = asyncio.create_task(run_shell({"command": "while :; do :; done"}))
+    task = asyncio.create_task(bash({"command": "while :; do :; done"}))
     await asyncio.sleep(0.05)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):

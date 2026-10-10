@@ -198,7 +198,7 @@ async def test_model_proposal_waits_for_approval_then_enters_plan_mode():
 
     initial_tools = {tool.name for tool in model.requests[0].tools}
     assert ENTER_PLAN_MODE_TOOL_NAME in initial_tools
-    assert "run_shell" in initial_tools
+    assert "bash" in initial_tools
     plan_tools = {tool.name for tool in model.requests[1].tools}
     assert plan_tools == {
         "read_file",
@@ -208,7 +208,7 @@ async def test_model_proposal_waits_for_approval_then_enters_plan_mode():
         "delete_file",
         "glob",
         "grep",
-        "run_shell",
+        "bash",
         EXIT_PLAN_MODE_TOOL_NAME,
     }
     instructions = [message.content for message in model.requests[1].messages if isinstance(message, SystemMessage)]
@@ -216,7 +216,7 @@ async def test_model_proposal_waits_for_approval_then_enters_plan_mode():
     assert instructions[0].startswith(PLAN_MODE_SYSTEM_PROMPT)
     assert "Normal implementation prompt" not in instructions[0]
     assert "## write_file" in instructions[0]
-    assert "## run_shell" in instructions[0]
+    assert "## bash" in instructions[0]
     assert f"## {EXIT_PLAN_MODE_TOOL_NAME}" in instructions[0]
 
     decision = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
@@ -378,7 +378,7 @@ async def test_active_plan_mode_executes_filesystem_and_shell_tools(tmp_path, mo
             tool_calls=(
                 ToolCall("write", "write_file", {"path": "plan.md", "content": "# Plan"}),
                 ToolCall("read", "read_file", {"path": "plan.md"}),
-                ToolCall("shell", "run_shell", {"command": "printf plan-mode"}),
+                ToolCall("shell", "bash", {"command": "printf plan-mode"}),
             )
         ),
         AssistantMessage(content="Updated plan"),
@@ -399,7 +399,7 @@ async def test_active_plan_mode_executes_filesystem_and_shell_tools(tmp_path, mo
     }
     assert (tmp_path / "plan.md").read_text() == "# Plan"
     assert results["read_file"] == "# Plan"
-    assert results["run_shell"] == "plan-mode"
+    assert results["bash"] == "plan-mode"
     assert all(message.success for message in model.requests[3].messages if isinstance(message, ToolMessage))
 
 
@@ -445,7 +445,7 @@ async def test_model_submits_plan_and_approved_exit_restores_normal_mode():
     restored_tools = {tool.name for tool in model.requests[3].tools}
     assert ENTER_PLAN_MODE_TOOL_NAME in restored_tools
     assert EXIT_PLAN_MODE_TOOL_NAME not in restored_tools
-    assert "run_shell" in restored_tools
+    assert "bash" in restored_tools
     instructions = [message.content for message in model.requests[3].messages if isinstance(message, SystemMessage)]
     assert instructions[0] == "Normal implementation prompt"
     assert all(PLAN_MODE_SYSTEM_PROMPT not in instruction for instruction in instructions)
@@ -535,7 +535,7 @@ async def test_full_lifecycle_restores_empty_prompt_and_empty_original_tool_set(
         "delete_file",
         "glob",
         "grep",
-        "run_shell",
+        "bash",
         EXIT_PLAN_MODE_TOOL_NAME,
     }
     restored_request = model.requests[3]

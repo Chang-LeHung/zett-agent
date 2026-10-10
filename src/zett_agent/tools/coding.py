@@ -359,7 +359,7 @@ def delete_file(path: FilePath) -> str:
 
 
 @tool
-async def run_shell(
+async def bash(
     command: Annotated[str, Field(min_length=1)],
     timeout_seconds: TimeoutSeconds = 30,
 ) -> str:
@@ -370,7 +370,7 @@ async def run_shell(
         timeout_seconds: Maximum command runtime in seconds.
 
     Snippet:
-        run_shell(command="git status --short", timeout_seconds=30)
+        bash(command="git status --short", timeout_seconds=30)
 
     Guidelines:
         - Use only for bounded commands in a trusted working directory.

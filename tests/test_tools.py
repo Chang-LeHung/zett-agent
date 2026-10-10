@@ -1,3 +1,4 @@
+import json
 from typing import Annotated
 
 import pytest
@@ -22,6 +23,11 @@ class Order(BaseModel):
     items: list[Item]
 
 
+class TreeNode(BaseModel):
+    label: str = "node"
+    children: list["TreeNode"] = []
+
+
 @tool(guidelines="Sum a validated order.")
 def total(order: Order) -> int:
     """Sum the item amounts."""
@@ -36,11 +42,22 @@ async def test_nested_models_are_validated_before_execution():
         await total({"order": {"items": []}, "unexpected": True})
 
 
-def test_pydantic_exports_resolvable_nested_schemas():
+def test_nested_models_export_a_self_contained_schema():
     schema = total.parameters
-    assert schema["properties"]["order"]["$ref"] == "#/$defs/Order"
-    assert schema["$defs"]["Order"]["properties"]["items"]["items"]["$ref"] == "#/$defs/Item"
-    assert schema["$defs"]["Item"]["properties"]["amount"]["exclusiveMinimum"] == 0
+    assert "$defs" not in schema
+    assert "$ref" not in json.dumps(schema)
+    order = schema["properties"]["order"]
+    assert order["title"] == "Order"
+    assert order["properties"]["items"]["items"]["properties"]["amount"]["exclusiveMinimum"] == 0
+
+
+def test_recursive_argument_models_are_rejected_because_refs_cannot_be_expanded():
+    with pytest.raises(ValueError, match="recursive model"):
+
+        @tool(guidelines="Walk a recursive tree.")
+        def walk(tree: TreeNode) -> int:
+            """Count nodes in a tree."""
+            return 0
 
 
 async def test_async_tool_defaults_and_field_descriptions():

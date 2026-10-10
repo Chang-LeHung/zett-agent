@@ -232,6 +232,47 @@ def get_tool_guidelines(function: Callable[..., Any]) -> tuple[str, ...]:
     return _parse_tool_docstring(function).guidelines
 
 
+def _inline_schema_references(schema: dict[str, Any]) -> dict[str, Any]:
+    """Expand every local ``$ref`` so a tool schema stands on its own.
+
+    Pydantic publishes nested argument models under ``$defs`` and points at them
+    with ``$ref``. Some provider gateways reject that indirection, so tool
+    schemas ship the expanded form instead. A recursive model cannot be expanded
+    at all and is rejected with an explicit error.
+    """
+    raw_definitions = schema.get("$defs")
+    definitions = raw_definitions if isinstance(raw_definitions, Mapping) else {}
+    prefix = "#/$defs/"
+
+    def expand(node: Any, stack: tuple[str, ...]) -> Any:
+        if isinstance(node, list):
+            return [expand(item, stack) for item in node]
+        if not isinstance(node, Mapping):
+            return node
+        reference = node.get("$ref")
+        # Pydantic adds an OpenAPI ``discriminator`` whose ``mapping`` values are
+        # ``$ref`` strings. Those cannot survive inlining, and the ``oneOf``
+        # members keep their own ``const`` constraints, so the keyword is dropped.
+        siblings = {key: value for key, value in node.items() if key not in {"$ref", "$defs", "discriminator"}}
+        if reference is None:
+            return {key: expand(value, stack) for key, value in siblings.items()}
+        if not isinstance(reference, str) or not reference.startswith(prefix):
+            raise ValueError(f"Tool arguments use an unsupported schema reference: {reference!r}")
+        name = reference[len(prefix) :]
+        if name in stack:
+            raise ValueError(
+                f"Tool arguments cannot use the recursive model {name!r}: a self-referencing schema "
+                "cannot be expanded for providers that reject $ref"
+            )
+        target = definitions.get(name)
+        if not isinstance(target, Mapping):
+            raise ValueError(f"Tool arguments reference a missing schema definition: {name!r}")
+        # Sibling keywords such as a field description override the definition.
+        return {**expand(target, (*stack, name)), **expand(siblings, stack)}
+
+    return expand({key: value for key, value in schema.items() if key != "$defs"}, ())
+
+
 def _build_input_schema(
     function: Callable[..., Any], documentation: _ToolDocumentation
 ) -> tuple[type[Any], tuple[str, ...], dict[str, Any]]:
@@ -256,7 +297,7 @@ def _build_input_schema(
         __module__=getattr(function, "__module__", __name__),
         **fields,
     )
-    parameters = inputs.model_json_schema()
+    parameters = _inline_schema_references(inputs.model_json_schema())
     unknown_parameters = documentation.parameter_descriptions.keys() - fields.keys()
     if unknown_parameters:
         unknown = ", ".join(sorted(unknown_parameters))

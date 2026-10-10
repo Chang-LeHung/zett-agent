@@ -10,13 +10,8 @@ from collections import Counter
 from collections.abc import AsyncIterator, Sequence
 from contextlib import aclosing
 from dataclasses import replace
-from typing import Protocol
+from typing import Any, Literal, Protocol, TypedDict
 from weakref import WeakKeyDictionary
-
-# ``tools.base`` builds the search tool's schema with ``get_type_hints``, which
-# evaluates annotations against this module's globals, so the SDK type stays a
-# real import even though it is only used for typing.
-from openai.types.responses import FunctionToolParam
 
 from ..agent import AgentRunContext
 from ..model import ModelEvent, ModelRequest
@@ -110,7 +105,23 @@ class BM25Search:
         return [candidate for _, _, candidate in scored[: self.limit]]
 
 
-def _definition(tool: AgentTool) -> FunctionToolParam:
+class SearchedToolDefinition(TypedDict):
+    """One Responses function definition returned by client-side tool search.
+
+    The runtime owns this shape so importing this extension never imports a
+    provider SDK. ``tools.base`` resolves it through this module's globals when
+    it builds the search tool schema, and the Responses adapter validates the
+    payload against its own wire contract when the model loads a definition.
+    """
+
+    type: Literal["function"]
+    name: str
+    description: str
+    parameters: dict[str, Any]
+    strict: bool | None
+
+
+def _definition(tool: AgentTool) -> SearchedToolDefinition:
     """Render one tool as the definition the model loads.
 
     A deferred tool never reaches the provider schema and
@@ -122,7 +133,7 @@ def _definition(tool: AgentTool) -> FunctionToolParam:
     if tool.guidelines:
         rules = "\n".join(f"- {guideline}" for guideline in tool.guidelines)
         description = f"{description}\n\nGuidelines:\n{rules}"
-    return FunctionToolParam(
+    return SearchedToolDefinition(
         type="function",
         name=tool.name,
         description=description,
@@ -320,7 +331,7 @@ class ToolSearchExtension(AgentExtension):
         # unless the caller opted out with ``resend_definitions_after_compaction``.
 
         @tool(name=TOOL_SEARCH_TOOL_NAME, local_tool_search=True)
-        async def search(queries: list[str], score: float = self._min_score) -> list[FunctionToolParam]:
+        async def search(queries: list[str], score: float = self._min_score) -> list[SearchedToolDefinition]:
             """Search registered tools by BM25 keyword relevance.
 
             Args:

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Literal, Protocol
-
-from pydantic import BaseModel, ConfigDict, ValidationError
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
+from typing import Literal, Protocol, cast
 
 from .._compat import StrEnum
 from ..agent import AgentRunContext
@@ -14,7 +13,7 @@ from ..messages import ToolCall
 from ..tools.base import ToolResult
 from .external import ExternalEventExtension
 
-SHELL_APPROVAL_TOOL_NAME = "run_shell"
+SHELL_APPROVAL_TOOL_NAME = "bash"
 SHELL_APPROVAL_EVENT_NAME = "shell_approval_requested"
 SHELL_APPROVAL_RESPONSE_EVENT_NAME = "shell_approval_response"
 
@@ -47,13 +46,28 @@ class ShellApprovalStorage(Protocol):
         """Persist one command in the allowlist."""
 
 
-class ShellApprovalResponse(BaseModel):
-    """External decision for one pending shell command."""
+@dataclass(frozen=True, slots=True)
+class ShellApprovalResponse:
+    """External decision for one pending shell command.
 
-    model_config = ConfigDict(extra="ignore")
+    Args:
+        decision: ``"execute"`` runs the command; ``"abort"`` refuses it.
+        remember: Whether the command should join this session's allowlist.
+    """
 
     decision: Literal["execute", "abort"]
     remember: bool = False
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, object]) -> ShellApprovalResponse:
+        """Validate one external response payload; unknown keys are ignored."""
+        decision = payload.get("decision")
+        if decision not in ("execute", "abort"):
+            raise ValueError(f"Unsupported shell approval decision: {decision!r}")
+        remember = payload.get("remember", False)
+        if not isinstance(remember, bool):
+            raise ValueError("Shell approval 'remember' must be a boolean")
+        return cls(decision=cast('Literal["execute", "abort"]', decision), remember=remember)
 
 
 class ShellCommandAborted(RuntimeError):
@@ -91,7 +105,7 @@ class ShellApprovalRequestedEvent(AgentEvent):
 
 
 class ShellApprovalExtension(ExternalEventExtension):
-    """Intercept run_shell and pause until a trusted external decision arrives.
+    """Intercept bash and pause until a trusted external decision arrives.
 
     Multiple shell calls may wait concurrently. Each response is correlated by
     its own tool-call ID, so approving one call releases that call immediately
@@ -137,8 +151,8 @@ class ShellApprovalExtension(ExternalEventExtension):
             )
         event = self._take_external_event(context)
         try:
-            response = ShellApprovalResponse.model_validate(event.payload)
-        except ValidationError as error:
+            response = ShellApprovalResponse.from_payload(event.payload)
+        except ValueError as error:
             raise ValueError("Invalid shell approval response") from error
         if response.decision == "abort":
             raise ShellCommandAborted(f"Shell command aborted by user: {command}")

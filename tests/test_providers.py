@@ -749,14 +749,20 @@ async def test_anthropic_provider_streams_text_and_tool_use() -> None:
     assert captured["url"] == "https://api.anthropic.com/v1/messages"
     assert captured["headers"]["x-api-key"] == "sk-ant"
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
-    assert captured["body"]["system"] == "Be concise."
+    # Pydantic-free caching: the system prompt becomes a block so it can carry a
+    # breakpoint, and the last tool plus the newest turn are marked too.
+    assert captured["body"]["system"] == [
+        {"type": "text", "text": "Be concise.", "cache_control": {"type": "ephemeral"}}
+    ]
     assert captured["body"]["messages"][1] == {
         "role": "user",
-        "content": [{"type": "text", "text": "Verify the arithmetic."}],
+        "content": [{"type": "text", "text": "Verify the arithmetic.", "cache_control": {"type": "ephemeral"}}],
     }
     assert captured["body"]["messages"][0]["role"] == "user"
     assert captured["body"]["tools"][0]["name"] == "add"
     assert "input_schema" in captured["body"]["tools"][0]
+    assert captured["body"]["tools"][0]["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in captured["body"]["messages"][0]["content"][0]
     assert captured["body"]["thinking"] == {"type": "enabled", "budget_tokens": 8192}
 
     text = [event.delta for event in events if event.type == ModelEventType.TEXT_DELTA]
@@ -770,6 +776,39 @@ async def test_anthropic_provider_streams_text_and_tool_use() -> None:
     assert response.usage.cache_read_tokens == 6
     assert response.usage.cache_write_tokens == 2
     assert response.message.provider == "anthropic"
+
+
+async def test_anthropic_provider_can_disable_prompt_cache() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            content=_anthropic_sse_body(
+                [
+                    {"type": "message_start", "message": {"id": "msg_1", "usage": {"input_tokens": 5}}},
+                    {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+                    {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hi"}},
+                    {"type": "content_block_stop", "index": 0},
+                    {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider(
+        model="claude-3-5-sonnet",
+        api_key="sk-ant",
+        base_url="https://api.anthropic.com",
+        transport=_mock_transport(handler),
+        prompt_cache=False,
+    )
+    await _collect(provider.stream(_request_with_text_and_tools()))
+
+    assert captured["body"]["system"] == "Be concise."
+    assert "cache_control" not in json.dumps(captured["body"])
 
 
 async def test_anthropic_provider_streams_thinking_delta() -> None:
@@ -892,7 +931,14 @@ async def test_anthropic_provider_streams_request_with_tool_and_multimodal_block
         "disable_parallel_tool_use": True,
     }
     assert tool_message["content"] == [
-        {"type": "tool_result", "tool_use_id": "toolu_1", "content": '{"ok":true}', "is_error": False}
+        {
+            "type": "tool_result",
+            "tool_use_id": "toolu_1",
+            "content": '{"ok":true}',
+            "is_error": False,
+            # The newest turn is the conversation cache breakpoint.
+            "cache_control": {"type": "ephemeral"},
+        }
     ]
 
 

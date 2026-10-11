@@ -67,6 +67,30 @@ def _server_tools_to_anthropic_payload(tools: Sequence[ServerToolDefinition]) ->
     return [{"type": tool.type, **dict(tool.configuration)} for tool in tools]
 
 
+def _apply_prompt_cache(body: dict[str, Any], client_tools: Sequence[dict[str, Any]]) -> None:
+    """Mark Anthropic cache breakpoints on the largest stable request prefixes.
+
+    Anthropic caches only what a ``cache_control`` marker asks for, then reads
+    each cached prefix at a fraction of the input price. The three markers below
+    cover the tool definitions, the whole system prompt, and the conversation so
+    far, so a repeated prefix is read instead of re-billed as fresh input. A
+    prefix shorter than the model's minimum cacheable length is ignored
+    silently.
+    """
+    breakpoint = {"type": "ephemeral"}
+    # Server tools are provider-owned definitions and must not carry the marker.
+    if client_tools:
+        client_tools[-1]["cache_control"] = breakpoint
+    system = body.get("system")
+    if isinstance(system, str) and system:
+        body["system"] = [{"type": "text", "text": system, "cache_control": breakpoint}]
+    messages = body.get("messages")
+    if messages:
+        content = messages[-1].get("content")
+        if isinstance(content, list) and content and isinstance(content[-1], dict):
+            content[-1]["cache_control"] = breakpoint
+
+
 def _to_anthropic_content_blocks(message: Any, *, model: str | None = None) -> list[dict[str, Any]]:
     """Convert a domain message into Anthropic content blocks."""
     role = message.role
@@ -142,6 +166,10 @@ class AnthropicProvider(RetryingProvider):
         transport: Optional HTTPX transport for isolated tests or custom routing.
         response: Must remain false; this adapter uses Anthropic Messages API.
         retry: Exponential backoff for transient failures before output starts.
+        prompt_cache: Mark cache breakpoints on the tool definitions, the system
+            prompt, and the conversation so far. Anthropic caches only what a
+            marker asks for, so disabling this trades prompt-cache reads for a
+            payload without ``cache_control``.
 
     Note:
         Signed replay blocks belong to the originating provider and model.
@@ -180,6 +208,7 @@ class AnthropicProvider(RetryingProvider):
         *,
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
+        prompt_cache: bool = True,
     ) -> None:
         import httpx
         import truststore
@@ -190,8 +219,11 @@ class AnthropicProvider(RetryingProvider):
         if not api_key:
             raise ValueError("api_key is required")
         validate_retry(retry)
+        if not isinstance(prompt_cache, bool):
+            raise ValueError("prompt_cache must be a boolean")
         self.retry = retry
         self.response = response
+        self.prompt_cache = prompt_cache
         self.model = model
         self._http_client = httpx.AsyncClient(
             transport=transport,
@@ -227,12 +259,13 @@ class AnthropicProvider(RetryingProvider):
                     if content:
                         messages.append({"role": "user", "content": content})
 
+        client_tools = _tools_to_anthropic_payload(request.tools)
         body = {
             "model": self.model,
             "system": "\n\n".join(system),
             "messages": messages,
             "tools": [
-                *_tools_to_anthropic_payload(request.tools),
+                *client_tools,
                 *_server_tools_to_anthropic_payload(request.server_tools),
             ],
             "max_tokens": 4096,
@@ -240,6 +273,8 @@ class AnthropicProvider(RetryingProvider):
         }
         if not system:
             body.pop("system")
+        if self.prompt_cache:
+            _apply_prompt_cache(body, client_tools)
         if request.tool_choice:
             body["tool_choice"] = {
                 "type": "tool",

@@ -584,6 +584,10 @@ class _OpenAIStyleProvider(RetryingProvider):
         reasoning = responses_reasoning(request.reasoning_effort)
         if reasoning is not None:
             payload["reasoning"] = reasoning
+            # Stateless reasoning models only hand back the opaque reasoning
+            # state that continues a chain of thought when it is requested, and
+            # the replayed reasoning items are worthless without it.
+            payload["include"] = ["reasoning.encrypted_content"]
         if self.send_prompt_cache_key and request.cache_key:
             payload["prompt_cache_key"] = request.cache_key
         from openai import APIStatusError

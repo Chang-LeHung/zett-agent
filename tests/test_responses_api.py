@@ -225,6 +225,9 @@ async def test_openai_responses_streams_local_and_server_tools() -> None:
     assert captured["body"]["store"] is False
     assert captured["body"]["parallel_tool_calls"] is False
     assert captured["body"]["reasoning"] == {"effort": "high", "summary": "auto"}
+    # Stateless requests need the opaque reasoning state back to continue a
+    # chain of thought; without the include the item carries no encrypted text.
+    assert captured["body"]["include"] == ["reasoning.encrypted_content"]
     assert captured["body"]["tools"] == [
         {
             "type": "function",
@@ -352,6 +355,7 @@ async def test_responses_history_uses_function_call_output_items() -> None:
         await provider.aclose()
 
     assert "reasoning" not in captured["body"]
+    assert "include" not in captured["body"]
     assert captured["body"]["input"] == [
         {
             "type": "function_call",

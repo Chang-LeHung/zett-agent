@@ -262,3 +262,37 @@ async def test_shell_tool_terminates_when_its_task_is_cancelled(tmp_path, monkey
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_replace_in_file_failures_tell_the_model_how_to_recover(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "code.py").write_text("def run():\n    return 1\n\nvalue = 1\nvalue = 1\n")
+
+    # Indentation drift is the usual reason an exact match fails.
+    with pytest.raises(ValueError, match="differs only in whitespace or indentation") as raised:
+        await replace_in_file({"path": "code.py", "edits": [{"old_text": "def run():\n  return 1", "new_text": "x"}]})
+    assert "Nothing was written" in str(raised.value)
+    with pytest.raises(ValueError, match="copy old_text from its current content"):
+        await replace_in_file({"path": "code.py", "edits": [{"old_text": "no such line", "new_text": "x"}]})
+
+    # In a batch the failing edit is identified, and the earlier ones are not written.
+    with pytest.raises(ValueError, match=r"Edit 2 of 2: Text to replace is not unique.*surrounding lines"):
+        await replace_in_file(
+            {
+                "path": "code.py",
+                "edits": [{"old_text": "return 1", "new_text": "return 2"}, {"old_text": "value = 1", "new_text": "x"}],
+            }
+        )
+    assert (tmp_path / "code.py").read_text().count("return 1") == 1
+
+
+def test_file_tool_guidance_steers_models_away_from_shell_edits():
+    from zett_agent.tools.coding import bash, replace_in_file
+
+    guidance = " ".join(replace_in_file.guidelines)
+    assert "for normal edits to an existing file, instead of sed" in guidance
+    assert "bulk or mechanical rewrites" in guidance  # shell edits stay possible when needed
+    assert "rather than switching to a shell command" in guidance
+    assert "never" not in guidance.lower()
+    assert replace_in_file.description.startswith("Edit an existing UTF-8 file")
+    assert "Prefer read_file, grep, glob, write_file, and replace_in_file" in " ".join(bash.guidelines)

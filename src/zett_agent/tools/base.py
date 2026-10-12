@@ -75,7 +75,9 @@ class AgentTool(SyncMethodsMixin):
     parameters: dict[str, Any]
     #: Async handler that validates arguments and performs the local operation.
     handler: Callable[..., Awaitable[ToolResult]]
-    #: Model-facing rules rendered beside this tool in prompt guidance.
+    #: Model-facing rules rendered beside this tool in prompt guidance. Tools
+    #: that share one rule through another channel, such as a server-level system
+    #: message, may leave this empty so the rule is not repeated per tool.
     guidelines: tuple[str, ...]
     #: Optional invocation examples rendered into prompt guidance.
     snippet: str = ""
@@ -95,8 +97,8 @@ class AgentTool(SyncMethodsMixin):
     def __post_init__(self) -> None:
         if not self.description.strip():
             raise ValueError("A tool description cannot be empty")
-        if not self.guidelines or any(not guideline.strip() for guideline in self.guidelines):
-            raise ValueError("A tool needs at least one non-empty guideline")
+        if any(not guideline.strip() for guideline in self.guidelines):
+            raise ValueError("Tool guidelines cannot be blank")
         if not isinstance(self.execution_mode, ToolExecutionMode):
             raise ValueError("execution_mode must be a ToolExecutionMode")
         if not isinstance(self.deferred, bool):
@@ -339,12 +341,15 @@ def _build_agent_tool(
             return await function(**values)
         return await asyncio.to_thread(function, **values)
 
+    resolved_guidelines = _resolve_guidelines(documentation, guidelines)
+    if not resolved_guidelines:
+        raise ValueError("A tool needs at least one non-empty guideline")
     return AgentTool(
         name=name or function.__name__,
         description=documentation.description,
         parameters=parameters,
         handler=invoke,
-        guidelines=_resolve_guidelines(documentation, guidelines),
+        guidelines=resolved_guidelines,
         snippet=snippet if snippet is not None else documentation.snippet,
         execution_mode=execution_mode,
         deferred=deferred,

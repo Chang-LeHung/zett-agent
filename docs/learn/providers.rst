@@ -232,6 +232,29 @@ three retries. Authentication and validation failures are not blindly retried.
 The policy belongs to the model adapter, not ``create_agent``. For a total
 request deadline, see :doc:`application`; retries do not bound elapsed time.
 
+Streams that end early or carry broken tool calls
+-------------------------------------------------
+
+Providers keep a request alive through three failures that used to end it.
+
+* **Malformed or truncated tool arguments.** If a tool call's JSON is invalid,
+  for example because the response hit its output limit or a gateway cut the
+  stream, the call is not run. It becomes a failed tool result that says what
+  happened and how to retry, so the model can resend a smaller call. Slightly
+  malformed but complete JSON is still repaired silently. A cut-off payload is
+  never completed by guesswork, because that could write truncated content.
+  ``AnthropicProvider(max_tokens=...)`` sets the per-response output budget
+  (default 16384); raise it for large writes, or lower it for a model with a
+  smaller limit.
+* **Responses ``error`` events.** A mid-stream ``error`` event (rate limit,
+  overload) is raised with its own code and message instead of surfacing as a
+  missing terminal response.
+* **Responses streams without a terminal event.** If a gateway drops
+  ``response.completed`` after every output item finished, the finished items
+  are used and ``finish_reason`` is ``"incomplete"``. If an item never
+  finished, or nothing arrived, the stream raised ``ProviderResponseError``;
+  an empty stream is retried because nothing had been shown yet.
+
 Prompt caching
 --------------
 

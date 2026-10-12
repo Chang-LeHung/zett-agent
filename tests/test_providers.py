@@ -763,6 +763,7 @@ async def test_anthropic_provider_streams_text_and_tool_use() -> None:
     assert "input_schema" in captured["body"]["tools"][0]
     assert captured["body"]["tools"][0]["cache_control"] == {"type": "ephemeral"}
     assert "cache_control" not in captured["body"]["messages"][0]["content"][0]
+    # display is left unset: the API documents summarized as its default.
     assert captured["body"]["thinking"] == {"type": "enabled", "budget_tokens": 8192}
 
     text = [event.delta for event in events if event.type == ModelEventType.TEXT_DELTA]

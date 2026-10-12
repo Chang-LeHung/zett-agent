@@ -41,7 +41,6 @@ from zett_agent.model import (
 from zett_agent.providers.anthropic import AnthropicProvider, _tools_to_anthropic_payload
 from zett_agent.providers.base import (
     ProviderAuthError,
-    ProviderResponseError,
     _message_to_openai_payload,
     _normalize_image_source,
     _tools_to_openai_payload,
@@ -597,7 +596,7 @@ async def test_openai_provider_raises_on_auth_error() -> None:
         await _collect(provider.stream(_request_with_text_and_tools()))
 
 
-async def test_openai_provider_rejects_invalid_tool_arguments() -> None:
+async def test_openai_provider_flags_invalid_tool_arguments_for_the_model() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         body = _sse_body(
             [
@@ -622,8 +621,11 @@ async def test_openai_provider_rejects_invalid_tool_arguments() -> None:
         return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
 
     provider = OpenAIProvider(model="gpt-4o", api_key="sk-test", transport=_mock_transport(handler))
-    with pytest.raises(ProviderResponseError):
-        await _collect(provider.stream(_request_with_text_and_tools()))
+    events = await _collect(provider.stream(_request_with_text_and_tools()))
+
+    [call] = [event for event in events if event.type == ModelEventType.RESPONSE][0].response.message.tool_calls
+    assert (call.id, call.name, call.arguments) == ("call_1", "add", {})
+    assert call.error is not None and "Invalid tool-call arguments for index 0" in call.error
 
 
 # ----------------------------------------------------------------------
@@ -1072,3 +1074,64 @@ async def test_ollama_provider_streams_text_and_tool_calls() -> None:
     assert response.usage.cache_reported is False
     assert response.usage.cache_hit_rate is None
     assert response.message.provider == "ollama"
+
+
+async def test_anthropic_truncated_tool_call_is_reported_instead_of_failing_the_request() -> None:
+    """A tool block cut off mid-stream (relay drop or output limit) must not abort the turn."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            content=_anthropic_sse_body(
+                [
+                    {"type": "message_start", "message": {"id": "msg_1", "usage": {"input_tokens": 5}}},
+                    {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}},
+                    {"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "hm"}},
+                    {"type": "content_block_stop", "index": 0},
+                    {"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}},
+                    {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "Writing."}},
+                    {"type": "content_block_stop", "index": 1},
+                    {
+                        "type": "content_block_start",
+                        "index": 2,
+                        "content_block": {"type": "tool_use", "id": "toolu_9", "name": "write_file"},
+                    },
+                    {
+                        "type": "content_block_delta",
+                        "index": 2,
+                        "delta": {"type": "input_json_delta", "partial_json": '{"path": "a.md", "content": "hi"'},
+                    },
+                    {"type": "content_block_stop", "index": 2},
+                    {"type": "message_delta", "delta": {"stop_reason": "max_tokens"}, "usage": {"output_tokens": 9}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet",
+        api_key="sk-ant",
+        transport=_mock_transport(handler),
+        max_tokens=2048,
+    )
+    events = await _collect(provider.stream(_request_with_text_and_tools()))
+
+    # ``thinking`` is enabled by the request: its budget is added on top of max_tokens.
+    assert captured["body"]["max_tokens"] == 8192 + 2048
+    response = [event for event in events if event.type == ModelEventType.RESPONSE][0].response
+    [call] = response.message.tool_calls
+    assert (call.id, call.name, call.arguments) == ("toolu_9", "write_file", {})
+    assert call.error is not None and "output limit" in call.error and "not run" in call.error
+    # The signed replay block keeps a valid (empty) input object, so history stays replayable.
+    tool_block = [block for block in response.message.replay_blocks if block["type"] == "tool_use"][0]
+    assert tool_block["input"] == {}
+
+
+def test_anthropic_provider_validates_max_tokens() -> None:
+    assert AnthropicProvider(model="m", api_key="k").max_tokens == 16_384
+    for invalid in (0, -1, True, "10"):
+        with pytest.raises(ValueError, match="max_tokens"):
+            AnthropicProvider(model="m", api_key="k", max_tokens=invalid)  # type: ignore[arg-type]

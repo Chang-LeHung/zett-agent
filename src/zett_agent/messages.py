@@ -108,6 +108,10 @@ class ToolCall:
     name: str
     #: Complete parsed keyword arguments, not a partial JSON delta.
     arguments: dict[str, Any] = field(default_factory=dict)
+    #: Why the provider's arguments could not be decoded, if they could not.
+    #: Such a call is never executed; the Agent reports this text to the model
+    #: as a failed tool result so it can resend the call.
+    error: str | None = None
 
 
 @dataclass(slots=True, kw_only=True)

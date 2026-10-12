@@ -106,6 +106,10 @@ failure. The original exception is available to callbacks and after-tool hooks.
 Cancellation and other ``BaseException`` subclasses are not converted into
 recoverable tool results.
 
+A call whose arguments the provider could not decode, usually because the
+response was cut off, never reaches the handler. ``ToolCall.error`` holds the
+reason and the model receives it as a failed result, so it can retry.
+
 Direct Python calls such as ``await add({...})`` still raise the exception.
 Sanitize integration errors yourself: exception text from a tool can expose
 credentials, paths, or service responses to the model. An exception in a

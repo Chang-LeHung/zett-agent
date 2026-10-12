@@ -100,6 +100,18 @@ server list can be combined; duplicate server names are rejected. A missing
 configuration file loads no servers, while malformed configuration raises an
 error when the extension is constructed.
 
+By default (``strict_config=True``) one invalid server entry makes the whole
+file invalid, so a typo is never silently ignored. Pass
+``McpExtension(strict_config=False)``, or ``McpConfiguration.from_file(path,
+strict=False)``, to skip invalid entries instead: each is logged and listed in
+``McpConfiguration.skipped``, and the valid servers still load. A file that is
+not valid JSON or has no server mapping still raises.
+
+The file is checked at the start of every request and re-read only when its
+modification time or size changed, so edits apply to the next request without
+restarting the application. A file that becomes invalid while the application
+is running is logged and the last valid server list stays in use.
+
 Tool names and results
 ----------------------
 
@@ -119,16 +131,37 @@ model can see.
 Connections and failure
 -----------------------
 
-The extension connects and discovers the complete paginated tool list at the
-start of **each request**, then keeps those connections for the model/tool
-round trips. Success, failure, and cancellation close them. A stdio process
-may therefore be launched again on the next request.
+At the start of each request every server's tool list is discovered
+**concurrently**, so total latency is that of the slowest server instead of the
+sum. Tool lists are cached per server configuration for ``tools_cache_ttl``
+seconds (default 300; ``0`` disables the cache). While the cache is warm a
+request starts no process and opens no socket: a server connects lazily the
+first time the model calls one of its tools, and only that server connects.
+Success, failure, cancellation, and :meth:`~zett_agent.agent.Agent.compact`
+passes close every connection the request opened.
 
-If connection or discovery fails, setup fails and the request raises; it does
-not silently omit a broken server. An ordinary failure during a tool call
-produces ``TOOL_FAILED`` and permits the model to continue. Bound the request
-with an application timeout and choose which remote error text can be shown.
-The extension does not grant remote servers additional authorization.
+A server that cannot connect or list its tools within ``connect_timeout``
+seconds (default 30) is skipped. The model is told which server was
+unavailable, and the other servers keep working. A tool call that exceeds
+``call_timeout`` seconds (default 300) fails with a ``TimeoutError`` the model
+can see; set either timeout to ``None`` to disable it. An ordinary failure
+during a tool call produces ``TOOL_FAILED`` and permits the model to continue.
+Choose which remote error text can be shown. The extension does not grant
+remote servers additional authorization.
+
+Tool schemas are sent without ``title`` and ``$schema`` annotations, which
+server generators attach to every property and which only repeat the property
+name. Per-tool usage guidelines are omitted too: the system message already
+states that ``<server>__<tool>`` names belong to their server, so repeating it
+for every tool only costs prompt tokens. Property names, types, descriptions,
+and constraints are untouched.
+
+Exposed tool names are limited to letters, digits, ``_`` and ``-`` and at most
+64 characters, the intersection of what model providers accept; longer names
+are shortened with a stable hash. A tool whose exposed name is already
+registered is skipped with a warning instead of failing the request. Servers
+that repeat a pagination cursor or return more than 100 pages are treated as
+unavailable.
 
 Verify the integration offline
 ------------------------------

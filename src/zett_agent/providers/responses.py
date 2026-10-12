@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from collections.abc import AsyncIterator, Mapping, Sequence
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast
@@ -30,7 +31,10 @@ from ..model import (
     ToolCallDelta,
     ToolDefinition,
 )
+from .tool_arguments import tool_call_from_arguments
 from .tool_images import expand_tool_images
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from openai.types.responses import FunctionToolParam, ToolParam
@@ -191,6 +195,24 @@ def responses_reasoning(effort: ReasoningEffort) -> dict[str, str] | None:
             return {"effort": effort.value, "summary": "auto"}
 
 
+class ResponsesStreamInterrupted(RuntimeError):
+    """The endpoint closed a Responses stream before its terminal event.
+
+    The Responses protocol ends every stream with ``response.completed``,
+    ``response.incomplete``, ``response.failed``, or an ``error`` event. Seeing
+    none of them means the connection was cut, usually by a gateway or proxy,
+    rather than that the model finished. Nothing was lost if no event had been
+    emitted yet, so the provider retries that case.
+    """
+
+
+def _stream_error_message(event: Any) -> str:
+    """Render an ``error`` stream event, which carries ``code`` and ``message`` directly."""
+    code = getattr(event, "code", None)
+    message = str(getattr(event, "message", "") or "Responses API stream failed")
+    return f"Responses API error ({code}): {message}" if code else f"Responses API error: {message}"
+
+
 async def stream_responses(
     stream: Any,
     *,
@@ -203,9 +225,14 @@ async def stream_responses(
     reasoning = ""
     terminal: Any = None
     server_calls: dict[str, ServerToolCall] = {}
+    #: Output items by ``output_index``: opened by ``output_item.added``, closed by ``.done``.
+    open_items: set[int] = set()
+    done_items: dict[int, dict[str, Any]] = {}
+    last_event = ""
 
     async for event in stream:
         event_type = str(getattr(event, "type", ""))
+        last_event = event_type or last_event
         match event_type:
             case "response.output_text.delta":
                 delta = str(getattr(event, "delta", ""))
@@ -217,9 +244,16 @@ async def stream_responses(
                 if delta:
                     reasoning += delta
                     yield ModelEvent.reasoning(delta)
+            case "response.refusal.delta":
+                # A refusal is the model's answer; show it like any other text.
+                delta = str(getattr(event, "delta", ""))
+                if delta:
+                    text += delta
+                    yield ModelEvent.text(delta)
             case "response.output_item.added":
                 item = _object_mapping(getattr(event, "item", None))
                 item_type = str(item.get("type", ""))
+                open_items.add(int(getattr(event, "output_index", 0)))
                 if item_type == "function_call":
                     yield ModelEvent.tool_call(_function_call_start(item, int(getattr(event, "output_index", 0))))
                 elif _is_client_tool_search(item) and local_search_tool is not None:
@@ -240,6 +274,9 @@ async def stream_responses(
             case "response.output_item.done":
                 item = _object_mapping(getattr(event, "item", None))
                 item_type = str(item.get("type", ""))
+                item_index = int(getattr(event, "output_index", 0))
+                open_items.discard(item_index)
+                done_items[item_index] = item
                 if _is_server_tool_item(item_type) and not (
                     _is_client_tool_search(item) and local_search_tool is not None
                 ):
@@ -266,17 +303,27 @@ async def stream_responses(
                 error = _object_mapping(response.get("error"))
                 message = error.get("message") or "Responses API stream failed"
                 raise RuntimeError(str(message))
+            case "error":
+                # Mid-stream failures (rate limits, overload, context overflow)
+                # arrive as a bare ``error`` event, after which the stream just
+                # ends. Without this the real cause was reported as a missing
+                # terminal response.
+                raise RuntimeError(_stream_error_message(event))
 
     if terminal is None:
-        raise RuntimeError("Responses API stream ended without a terminal response")
-    payload = _object_mapping(terminal)
+        payload = _recover_unterminated(done_items, open_items, last_event)
+    else:
+        payload = _object_mapping(terminal)
     output = [_object_mapping(item) for item in payload.get("output", ())]
     if not text:
         text = _response_text(output)
     if not reasoning:
         reasoning = _response_reasoning(output)
+    reason = _finish_reason(payload)
     calls = tuple(
-        call for call in (_local_or_function_call(item, local_search_tool) for item in output) if call is not None
+        call
+        for index, item in enumerate(output)
+        if (call := _local_or_function_call(item, local_search_tool, index=index, finish_reason=reason)) is not None
     )
     yield ModelEvent.completed(
         ModelResponse(
@@ -288,9 +335,43 @@ async def stream_responses(
                 model=model,
                 replay_blocks=tuple(output),
             ),
-            finish_reason=str(payload.get("status")) if payload.get("status") is not None else None,
+            finish_reason=_finish_reason(payload),
             usage=_responses_usage(_object_mapping(payload.get("usage"))),
         )
+    )
+
+
+def _finish_reason(payload: Mapping[str, Any]) -> str | None:
+    """Prefer why a response is incomplete over the bare ``incomplete`` status."""
+    details = _object_mapping(payload.get("incomplete_details"))
+    reason = details.get("reason")
+    if reason:
+        return str(reason)
+    return str(payload["status"]) if payload.get("status") is not None else None
+
+
+def _recover_unterminated(
+    done_items: Mapping[int, Mapping[str, Any]], open_items: set[int], last_event: str
+) -> dict[str, Any]:
+    """Rebuild a response from finished output items when the terminal event is missing.
+
+    Some gateways drop the final ``response.completed`` after forwarding every
+    item. If at least one item finished and none is still open, the model's
+    output is complete as far as this stream shows, so it is used instead of
+    discarding a good answer. Usage is unknown and the status is marked
+    ``incomplete`` so callers can tell. An item that never finished means the
+    stream was cut mid-output; guessing would hand a truncated answer or tool
+    call to the agent, so that case raises and the provider may retry it.
+    """
+    if done_items and not open_items:
+        logger.warning("Responses stream ended without a terminal event; using %d finished item(s)", len(done_items))
+        return {"status": "incomplete", "output": [done_items[index] for index in sorted(done_items)]}
+    detail = f"last event: {last_event or 'none'}"
+    if open_items:
+        detail += f"; {len(open_items)} output item(s) never finished"
+    raise ResponsesStreamInterrupted(
+        f"Responses API stream ended without a terminal response ({detail}); "
+        "the endpoint or a proxy closed the connection early"
     )
 
 
@@ -334,25 +415,26 @@ def _function_call_start(item: Mapping[str, Any], index: int) -> ToolCallDelta:
     )
 
 
-def _response_tool_call(item: Mapping[str, Any]) -> ToolCall:
+def _response_tool_call(
+    item: Mapping[str, Any], *, index: int = 0, finish_reason: str | None = "completed"
+) -> ToolCall:
+    """Decode one function call; undecodable arguments become a model-visible failure."""
     arguments = item.get("arguments") or "{}"
-    parsed = json.loads(arguments) if isinstance(arguments, str) else arguments
-    if not isinstance(parsed, dict):
+    call_id, name = str(item.get("call_id") or item.get("id")), str(item.get("name"))
+    if isinstance(arguments, str):
+        return tool_call_from_arguments(call_id, name, arguments, index=index, finish_reason=finish_reason)
+    if not isinstance(arguments, Mapping):
         raise TypeError("Responses function-call arguments must be an object")
-    return ToolCall(
-        id=str(item.get("call_id") or item.get("id")),
-        name=str(item.get("name")),
-        arguments=parsed,
-    )
+    return ToolCall(id=call_id, name=name, arguments=dict(arguments))
 
 
 def _response_text(output: Sequence[Mapping[str, Any]]) -> str:
     return "".join(
-        str(part.get("text", ""))
+        str(part.get("text") or part.get("refusal") or "")
         for item in output
         if item.get("type") == "message"
         for part in item.get("content", ())
-        if isinstance(part, Mapping) and part.get("type") == "output_text"
+        if isinstance(part, Mapping) and part.get("type") in {"output_text", "refusal"}
     )
 
 
@@ -409,10 +491,12 @@ def _client_tool_search_call(item: Mapping[str, Any], tool_name: str) -> ToolCal
     )
 
 
-def _local_or_function_call(item: Mapping[str, Any], local_search_tool: str | None) -> ToolCall | None:
+def _local_or_function_call(
+    item: Mapping[str, Any], local_search_tool: str | None, *, index: int = 0, finish_reason: str | None = None
+) -> ToolCall | None:
     """Normalize one response output item into a local tool call when it is one."""
     if item.get("type") == "function_call":
-        return _response_tool_call(item)
+        return _response_tool_call(item, index=index, finish_reason=finish_reason)
     if local_search_tool is not None and _is_client_tool_search(item):
         return _client_tool_search_call(item, local_search_tool)
     return None

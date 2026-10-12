@@ -416,7 +416,9 @@ def test_mcp_scope_is_entered_and_exited_by_the_same_task():
                 assert asyncio.current_task() is owner
                 scopes.append(server.name)
 
-    extension = McpExtension([McpHttpServer("test", "http://unused.invalid")], client_factory=factory)
+    extension = McpExtension(
+        [McpHttpServer("test", "http://unused.invalid")], client_factory=factory, tools_cache_ttl=0
+    )
     with SyncAgent(EchoModel(), extensions=[extension]) as agent:
         assert agent.run("first").content == "1:first"
         assert list(agent.stream("second"))[-1].type is AgentEventType.RUN_COMPLETED

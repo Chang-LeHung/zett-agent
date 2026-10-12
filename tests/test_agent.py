@@ -1140,3 +1140,45 @@ async def test_in_memory_accumulator_retains_tool_calls_and_results():
     second = await Agent.create(next_model, system_prompt="", extensions=[accumulator], config=CONFIG)
     await second.run("Continue")
     assert next_model.requests[0].messages[:-1] == remembered
+
+
+async def test_agent_reports_an_undecodable_tool_call_to_the_model_without_running_it():
+    from zett_agent.messages import ToolMessage
+    from zett_agent.model import ModelEvent, ModelResponse
+    from zett_agent.tools.base import tool
+
+    ran: list[str] = []
+
+    @tool(guidelines="Echo a value.")
+    def echo(value: str) -> str:
+        """Echo one value."""
+        ran.append(value)
+        return value
+
+    class Model:
+        def __init__(self):
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                message = AssistantMessage(
+                    tool_calls=(ToolCall("c1", "echo", error="Invalid arguments for tool 'echo': cut off"),)
+                )
+            else:
+                message = AssistantMessage(content="recovered")
+            yield ModelEvent.completed(ModelResponse(message))
+
+    class Register(AgentExtension):
+        async def on_tool(self, context):
+            context.register_tool(echo)
+
+    model = Model()
+    agent = await Agent.create(model, config=AgentRunConfig("bad-args"), extensions=[Register()])
+    reply = await agent.run("go")
+
+    assert reply.content == "recovered"
+    assert ran == []
+    result = next(item for item in model.requests[1].messages if isinstance(item, ToolMessage))
+    assert result.success is False
+    assert "cut off" in result.content

@@ -8,7 +8,6 @@ from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import asdict, dataclass
 from functools import wraps
-from json import JSONDecodeError
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ..exceptions import AgentError
@@ -57,7 +56,15 @@ if TYPE_CHECKING:
 #: milliseconds. Payload rendering therefore uses plain dictionaries that still
 #: type-check against the SDK's TypedDicts.
 from ..sync_runtime import SyncMethodsMixin
-from .responses import local_tool_search_name, responses_input, responses_reasoning, responses_tools, stream_responses
+from .responses import (
+    ResponsesStreamInterrupted,
+    local_tool_search_name,
+    responses_input,
+    responses_reasoning,
+    responses_tools,
+    stream_responses,
+)
+from .tool_arguments import ToolArgumentsError, decode_tool_arguments, tool_call_from_arguments
 from .tool_images import expand_tool_images
 
 
@@ -255,52 +262,36 @@ class _ToolCallAccumulator:
         self.argument_buffer += delta.arguments_delta
 
 
-def _parse_tool_calls(streams: Mapping[int, _ToolCallAccumulator]) -> tuple[ToolCall, ...]:
+def _parse_tool_calls(
+    streams: Mapping[int, _ToolCallAccumulator], finish_reason: str | None = None
+) -> tuple[ToolCall, ...]:
+    """Finish accumulated calls; undecodable arguments become model-visible failures."""
     calls: list[ToolCall] = []
     for index in sorted(streams):
         stream = streams[index]
-        args = _parse_tool_arguments(stream.argument_buffer, index=index)
         if not stream.call_id:
             stream.call_id = f"call_{index}"
         if not stream.name:
             raise ProviderResponseError(f"Tool call at index {index} did not provide a name")
-        calls.append(ToolCall(id=stream.call_id, name=stream.name, arguments=args))
+        calls.append(
+            tool_call_from_arguments(
+                stream.call_id, stream.name, stream.argument_buffer, index=index, finish_reason=finish_reason
+            )
+        )
     return tuple(calls)
 
 
 def _parse_tool_arguments(payload: str, *, index: int) -> dict[str, Any]:
-    """Decode one accumulated tool argument object from a provider stream.
+    """Decode one argument object, raising ProviderResponseError when it is unusable.
 
-    Some OpenAI-compatible providers, including DeepSeek, occasionally expose
-    decoded newlines or tabs inside the nested ``function.arguments`` string.
-    ``strict=False`` accepts those control characters without changing valid
-    JSON semantics. Models can also occasionally omit a comma or fail to escape
-    a quote in a long argument string. For a complete top-level object, use the
-    bounded ``json-repair`` fallback before rejecting the model response.
-
-    The fallback deliberately requires both outer braces. A payload cut off by
-    a token limit must fail instead of being completed heuristically and passed
-    to a mutating tool with silently truncated content. Tool arguments must
-    remain an object because the runtime invokes tools with named keyword
-    arguments; the tool's Pydantic input model performs the final schema check.
+    See :func:`~zett_agent.providers.tool_arguments.decode_tool_arguments` for
+    the repair rules. Adapters that can keep going after a bad call use
+    :func:`~zett_agent.providers.tool_arguments.tool_call_from_arguments`.
     """
     try:
-        parsed = json.loads(payload, strict=False) if payload else {}
-    except JSONDecodeError as error:
-        stripped = payload.strip()
-        if not (stripped.startswith("{") and stripped.endswith("}")):
-            raise ProviderResponseError(f"Invalid tool-call arguments for index {index}: {error}") from error
-        from json_repair import repair_json
-
-        try:
-            parsed = repair_json(stripped, return_objects=True, skip_json_loads=True)
-        except (ValueError, TypeError, RecursionError) as repair_error:
-            raise ProviderResponseError(
-                f"Invalid tool-call arguments for index {index}: {error}; repair failed: {repair_error}"
-            ) from error
-    if not isinstance(parsed, dict):
-        raise ProviderResponseError(f"Tool-call arguments for index {index} must be a JSON object")
-    return parsed
+        return decode_tool_arguments(payload, index=index)
+    except ToolArgumentsError as error:
+        raise ProviderResponseError(str(error)) from error
 
 
 #: Cache counters accepted from OpenAI-compatible payloads. Gateways regularly
@@ -424,6 +415,8 @@ class RetryingProvider(SyncMethodsMixin):
         seen: set[int] = set()
         while id(error) not in seen:
             seen.add(id(error))
+            if isinstance(error, ResponsesStreamInterrupted):
+                return True
             status = getattr(error, "status_code", None) or getattr(error, "code", None)
             if isinstance(status, int):
                 return status in (408, 409, 429) or 500 <= status < 600
@@ -692,7 +685,7 @@ class _OpenAIStyleProvider(RetryingProvider):
         finally:
             await response.close()
 
-        tool_calls = _parse_tool_calls(streams)
+        tool_calls = _parse_tool_calls(streams, finish_reason)
         response_message = AssistantMessage(
             content=text,
             reasoning=reasoning or None,

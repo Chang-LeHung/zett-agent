@@ -1554,6 +1554,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         token = _bind_tool_call(call.id)
         try:
             try:
+                if call.error is not None:
+                    raise ValueError(call.error)
                 registered = context.tools.get(call.name)
                 if registered is None:
                     raise ValueError(f"Unknown tool: {call.name}")

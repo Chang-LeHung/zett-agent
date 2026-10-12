@@ -30,6 +30,7 @@ from zett_agent.model import (
     ModelEventType,
     ModelRequest,
     ReasoningEffort,
+    RetryOptions,
     ServerToolDefinition,
     ToolDefinition,
 )
@@ -39,6 +40,7 @@ from zett_agent.providers.google import GoogleProvider
 from zett_agent.providers.ollama import OllamaProvider
 from zett_agent.providers.openai import OpenAIProvider
 from zett_agent.providers.responses import (
+    ResponsesStreamInterrupted,
     _object_mapping,
     responses_input,
     responses_reasoning,
@@ -818,3 +820,107 @@ def test_responses_mapping_rejects_unknown_sdk_objects() -> None:
     assert _object_mapping(None) == {}
     with pytest.raises(TypeError, match="did not normalize"):
         _object_mapping(object())
+
+
+async def test_responses_error_event_reports_the_real_cause_instead_of_a_missing_terminal() -> None:
+    error = SimpleNamespace(type="error", code="rate_limit_exceeded", message="Slow down", param=None)
+    with pytest.raises(RuntimeError, match=r"Responses API error \(rate_limit_exceeded\): Slow down"):
+        _ = [event async for event in stream_responses(_objects(error), provider="openai", model="gpt-5")]
+    bare = SimpleNamespace(type="error", code=None, message="")
+    with pytest.raises(RuntimeError, match="Responses API error: Responses API stream failed"):
+        _ = [event async for event in stream_responses(_objects(bare), provider="openai", model="gpt-5")]
+
+
+async def test_responses_recovers_finished_items_when_the_gateway_drops_the_terminal_event() -> None:
+    reasoning = {"type": "reasoning", "summary": [{"type": "summary_text", "text": "think"}]}
+    message = {"type": "message", "content": [{"type": "output_text", "text": "All done"}]}
+    events = [
+        SimpleNamespace(type="response.output_item.added", item=reasoning, output_index=0),
+        SimpleNamespace(type="response.output_item.done", item=reasoning, output_index=0),
+        SimpleNamespace(type="response.output_item.added", item=message, output_index=1),
+        SimpleNamespace(type="response.output_text.delta", delta="All done"),
+        SimpleNamespace(type="response.output_item.done", item=message, output_index=1),
+    ]
+
+    result = [event async for event in stream_responses(_objects(*events), provider="openai", model="gpt-5")]
+
+    response = result[-1].response
+    assert response is not None
+    assert response.message.content == "All done"
+    assert response.finish_reason == "incomplete"
+    assert response.message.replay_blocks == (reasoning, message)
+
+
+async def test_responses_refuses_to_guess_when_an_item_never_finished() -> None:
+    call = {"type": "function_call", "call_id": "c1", "name": "write_file", "arguments": '{"path": "a'}
+    events = [
+        SimpleNamespace(type="response.output_item.added", item=call, output_index=0),
+        SimpleNamespace(type="response.function_call_arguments.delta", delta='{"path": "a', output_index=0),
+    ]
+    with pytest.raises(ResponsesStreamInterrupted, match=r"1 output item\(s\) never finished") as raised:
+        _ = [event async for event in stream_responses(_objects(*events), provider="openai", model="gpt-5")]
+    assert "last event: response.function_call_arguments.delta" in str(raised.value)
+
+
+async def test_responses_streams_refusals_as_text() -> None:
+    refusal = {"type": "message", "content": [{"type": "refusal", "refusal": "I can't help with that."}]}
+    events = [
+        SimpleNamespace(type="response.refusal.delta", delta="I can't help with that."),
+        SimpleNamespace(type="response.completed", response=_response([refusal], model="gpt-5")),
+    ]
+    result = [event async for event in stream_responses(_objects(*events), provider="openai", model="gpt-5")]
+    assert [event.delta for event in result if event.type == ModelEventType.TEXT_DELTA] == ["I can't help with that."]
+    assert result[-1].response.message.content == "I can't help with that."
+
+    final_only = SimpleNamespace(type="response.completed", response=_response([refusal], model="gpt-5"))
+    result = [event async for event in stream_responses(_objects(final_only), provider="openai", model="gpt-5")]
+    assert result[-1].response.message.content == "I can't help with that."
+
+
+async def test_responses_flags_a_function_call_cut_off_by_the_output_limit() -> None:
+    call = {"type": "function_call", "call_id": "c1", "name": "write_file", "arguments": '{"path": "a.md", "x": "y"'}
+    response = _response([call], model="gpt-5")
+    response["status"] = "incomplete"
+    response["incomplete_details"] = {"reason": "max_output_tokens"}
+    terminal = SimpleNamespace(type="response.incomplete", response=response)
+
+    result = [event async for event in stream_responses(_objects(terminal), provider="openai", model="gpt-5")]
+
+    final = result[-1].response
+    assert final.finish_reason == "max_output_tokens"
+    [tool_call] = final.message.tool_calls
+    assert tool_call.arguments == {}
+    assert tool_call.error is not None and "output limit" in tool_call.error
+
+    object_arguments = {"type": "function_call", "call_id": "c2", "name": "t", "arguments": {"a": 1}}
+    terminal = SimpleNamespace(type="response.completed", response=_response([object_arguments], model="gpt-5"))
+    result = [event async for event in stream_responses(_objects(terminal), provider="openai", model="gpt-5")]
+    assert result[-1].response.message.tool_calls[0].arguments == {"a": 1}
+    list_arguments = {"type": "function_call", "call_id": "c3", "name": "t", "arguments": [1]}
+    terminal = SimpleNamespace(type="response.completed", response=_response([list_arguments], model="gpt-5"))
+    with pytest.raises(TypeError, match="must be an object"):
+        _ = [event async for event in stream_responses(_objects(terminal), provider="openai", model="gpt-5")]
+
+
+async def test_openai_responses_retries_a_stream_that_ended_before_any_event() -> None:
+    attempts = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        events = [] if attempts["count"] == 1 else [_completed_event([], model="gpt-5")]
+        return httpx.Response(200, content=_responses_sse(events), headers={"content-type": "text/event-stream"})
+
+    provider = OpenAIProvider(
+        "gpt-5",
+        "key",
+        response=True,
+        transport=httpx.MockTransport(handler),
+        retry=RetryOptions(max_retries=1, base_delay=0.0, max_delay=0.0),
+    )
+    try:
+        events = await _collect(provider.stream(ModelRequest((UserMessage(content="hi"),))))
+    finally:
+        await provider.aclose()
+
+    assert attempts["count"] == 2
+    assert events[-1].response is not None

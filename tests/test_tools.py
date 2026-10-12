@@ -108,6 +108,18 @@ def test_tool_definition_requires_guidelines():
             return value
 
 
+def test_agent_tool_may_share_guidance_elsewhere_but_not_hold_blank_guidelines():
+    from zett_agent.tools.base import AgentTool, render_tool_guidance
+
+    async def handler(**_: object) -> str:
+        return ""
+
+    bare = AgentTool(name="bare", description="No per-tool rules.", parameters={}, handler=handler, guidelines=())
+    assert render_tool_guidance([bare]) == ""
+    with pytest.raises(ValueError, match="cannot be blank"):
+        AgentTool(name="blank", description="Blank rule.", parameters={}, handler=handler, guidelines=(" ",))
+
+
 def test_result_serialization_supports_models():
     assert total.serialize_result(Item(amount=2)) == '{"amount": 2}'
     assert total.serialize_result("plain text") == "plain text"

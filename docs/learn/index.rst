@@ -129,18 +129,34 @@ If you need behavior the built-ins do not provide, follow
 
 .. toctree::
    :hidden:
+   :caption: Basics
 
    Installation <installation>
    First agent <first-agent>
    Model providers <providers>
    Tools <tools>
+
+.. toctree::
+   :hidden:
+   :caption: Conversations
+
    Streaming <streaming>
    Sessions <sessions>
    Images <images>
    Project instructions <project-instructions>
+
+.. toctree::
+   :hidden:
+   :caption: Capabilities
+
    On-demand loading <on-demand>
    JIT harness <jit-harness>
    MCP <mcp>
+
+.. toctree::
+   :hidden:
+   :caption: Production
+
    Configuration <configuration>
    Synchronous use <synchronous>
    Applications <application>

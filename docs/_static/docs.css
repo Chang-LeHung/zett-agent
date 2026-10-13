@@ -350,25 +350,40 @@ html[data-theme="dark"] {
   transform: rotate(-90deg);
 }
 
-/* Pages inside a section: a guide line and one amber marker. */
+/* Pages inside a section: small group headings, indented rows, one filled
+ * pill for the current page. No guide line, so rows read as a list. */
 .zett-navigation details > ul {
-  margin: 0.1rem 0 0.5rem 1rem;
-  border-left: 1px solid var(--zett-surface-border);
+  margin: 0.15rem 0 0.75rem;
+  padding-left: 0.35rem;
+}
+.zett-navigation .zett-group-heading {
+  margin: 1rem 0 0.25rem;
+  padding: 0 0.7rem;
+  color: var(--pst-color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.zett-navigation details > ul > .zett-group-heading:first-child {
+  margin-top: 0.4rem;
 }
 .zett-navigation .toctree-l2 > a.reference {
-  padding: 0.3rem 0.7rem;
-  margin-left: -1px;
-  border-left: 2px solid transparent;
-  border-radius: 0 var(--zett-radius-small) var(--zett-radius-small) 0;
+  padding: 0.32rem 0.7rem;
+  border-radius: var(--zett-radius-small);
 }
 .zett-navigation .toctree-l2 > a.reference:hover {
   background: var(--pst-color-surface);
 }
 .zett-navigation .toctree-l2.current > a.reference {
-  border-left-color: var(--zett-ember);
   background: var(--zett-glow);
-  color: var(--pst-color-text-base);
+  color: var(--zett-accent);
   font-weight: 600;
+}
+html[data-theme="dark"] .zett-navigation .toctree-l2.current > a.reference {
+  color: var(--pst-color-text-base);
 }
 
 /* ---- Reading typography ------------------------------------------------ */

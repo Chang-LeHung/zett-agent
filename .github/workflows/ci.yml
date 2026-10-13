@@ -93,16 +93,31 @@ jobs:
       - name: Build
         run: uv build
 
-      - name: Verify the wheel only ships the runtime
+      - name: Verify runtime packaging and JIT prompt resources
         run: |
           python3 - <<'PY'
           import glob
+          import tarfile
           import zipfile
+          from pathlib import Path
 
           wheel = glob.glob("dist/*.whl")[0]
           names = zipfile.ZipFile(wheel).namelist()
           assert any(name.startswith("zett_agent/") for name in names), names
           unexpected = [name for name in names if not name.startswith(("zett_agent/", "zett_agent-"))]
           assert not unexpected, unexpected
+          resource = "zett_agent/jit_harness/instructions.md"
+          inspection = "zett_agent/jit_harness/inspection.md"
+          with zipfile.ZipFile(wheel) as archive:
+              for name in (resource, inspection):
+                  assert archive.read(name) == (Path("src") / name).read_bytes(), name
+          sdist = glob.glob("dist/*.tar.gz")[0]
+          with tarfile.open(sdist) as archive:
+              names = archive.getnames()
+              for name in (resource, inspection):
+                  matches = [item for item in names if item.endswith("/" + name)]
+                  assert len(matches) == 1, matches
+                  assert archive.extractfile(matches[0]).read() == (Path("src") / name).read_bytes()
           print(f"{wheel}: {len(names)} files")
+          print(f"{sdist}: JIT prompt resource verified")
           PY

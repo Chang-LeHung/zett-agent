@@ -70,13 +70,24 @@ only when an existing one cannot satisfy your application boundary.
 
 .. toctree::
    :hidden:
+   :caption: Start here
 
    First extension <first-extension>
    Hooks <hooks>
    Middleware <middleware>
+
+.. toctree::
+   :hidden:
+   :caption: Runtime behavior
+
    Events and input <events>
    State and cleanup <state>
+   Built-in extensions <built-ins>
+
+.. toctree::
+   :hidden:
+   :caption: Integrations
+
    Model adapters <model-adapter>
    Hosted tools <server-tools>
    Storage adapters <storage-adapter>
-   Built-in extensions <built-ins>

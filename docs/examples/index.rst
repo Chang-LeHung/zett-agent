@@ -77,13 +77,24 @@ connections and use a temporary working directory for each program.
 
 .. toctree::
    :hidden:
+   :caption: Conversations
 
    Streaming tools <streaming-tools>
    Sessions <sessions>
    Compaction <compaction>
+
+.. toctree::
+   :hidden:
+   :caption: Control
+
    Approval <approval>
-   Observability <observability>
-   Subagents <subagent>
    Cancellation <cancellation>
    Goals <goal>
+
+.. toctree::
+   :hidden:
+   :caption: Systems
+
+   Observability <observability>
+   Subagents <subagent>
    Storage adapter <storage-adapter>

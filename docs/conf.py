@@ -19,6 +19,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinxcontrib.mermaid",
     "diagrams",
+    "pagetoc",
 ]
 html_theme = "pydata_sphinx_theme"
 html_title = "Zett Agent"

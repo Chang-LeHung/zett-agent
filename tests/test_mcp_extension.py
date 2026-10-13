@@ -1,6 +1,7 @@
 """MCP server discovery, tool dispatch, and transport cleanup."""
 
 import asyncio
+import contextlib
 import json
 import socket
 import sys
@@ -40,6 +41,7 @@ from zett_agent.model import (
     ModelEvent,
     ModelResponse,
 )
+from zett_agent.tools.base import render_tool_guidance
 
 
 class FakeClient:
@@ -472,14 +474,14 @@ async def test_mcp_extension_closes_connections_on_cancellation():
     assert factory.closed == ["server"]
 
 
-async def test_mcp_extension_unwinds_open_connections_when_discovery_fails():
+async def test_mcp_extension_skips_a_failing_server_and_reports_it_to_the_model():
     class BrokenClient(FakeClient):
         async def list_tools(self, *, cursor=None):
             raise RuntimeError("discovery failed")
 
     factory = ClientFactory(
         {
-            "first": FakeClient({None: ListToolsResult(tools=[])}),
+            "first": FakeClient({None: ListToolsResult(tools=[remote_tool("search")])}),
             "broken": BrokenClient({}),
         }
     )
@@ -492,11 +494,152 @@ async def test_mcp_extension_unwinds_open_connections_when_discovery_fails():
     )
     context = AgentRunContext(AgentRunConfig("failure"), AgentState(), {})
 
-    with pytest.raises(RuntimeError, match="discovery failed"):
-        await extension.on_tool(context)
+    await extension.on_tool(context)
+    await extension.on_state(context)
 
-    assert factory.opened == ["first", "broken"]
-    assert factory.closed == ["broken", "first"]
+    assert set(context.tools) == {"first__search"}
+    assert "broken: streamable HTTP (unavailable in this request: RuntimeError)" in context.state.messages[0].content
+    assert factory.closed == ["broken"]
+    await extension.on_error(context, RuntimeError("done"))
+    assert sorted(factory.closed) == ["broken", "first"]
+
+
+async def test_mcp_extension_connects_servers_concurrently_and_lazily_with_a_warm_cache():
+    gate = asyncio.Event()
+    active = 0
+    peak = 0
+
+    class SlowFactory(ClientFactory):
+        def __call__(self, server):
+            @asynccontextmanager
+            async def connect():
+                nonlocal active, peak
+                active += 1
+                peak = max(peak, active)
+                self.opened.append(server.name)
+                if active == 3:
+                    gate.set()
+                await asyncio.wait_for(gate.wait(), 2)  # deadlocks if connections were sequential
+                try:
+                    yield self.clients[server.name]
+                finally:
+                    active -= 1
+                    self.closed.append(server.name)
+
+            return connect()
+
+    names = ("a", "b", "c")
+    factory = SlowFactory(
+        {
+            name: FakeClient(
+                {None: ListToolsResult(tools=[remote_tool("t")])},
+                {"t": CallToolResult(content=[TextContent(text=name)])},
+            )
+            for name in names
+        }
+    )
+    extension = McpExtension([McpHttpServer(n, f"https://{n}.test/mcp") for n in names], client_factory=factory)
+
+    first = AgentRunContext(AgentRunConfig("cold"), AgentState(), {})
+    await extension.on_tool(first)
+    assert peak == 3
+    assert set(first.tools) == {"a__t", "b__t", "c__t"}
+    await extension.on_success(first, AssistantMessage(content="done"))
+    assert sorted(factory.closed) == ["a", "b", "c"]
+
+    factory.opened.clear()
+    second = AgentRunContext(AgentRunConfig("warm"), AgentState(), {})
+    await extension.on_tool(second)
+    assert factory.opened == []  # cached tool lists start nothing
+    assert await second.tools["b__t"]({}) == [{"type": "text", "text": "b"}]
+    assert factory.opened == ["b"]  # only the server that is actually used connects
+    await extension.on_success(second, AssistantMessage(content="done"))
+    assert factory.closed.count("b") == 2
+
+
+async def test_mcp_extension_reloads_a_changed_configuration_file(tmp_path):
+    path = tmp_path / "mcp.json"
+    path.write_text(json.dumps({"servers": {"a": {"type": "http", "url": "http://a"}}}), encoding="utf-8")
+    extension = McpExtension(config_path=path)
+    assert [server.name for server in extension.servers] == ["a"]
+
+    path.write_text(
+        json.dumps({"servers": {"a": {"type": "http", "url": "http://a"}, "b": {"type": "http", "url": "http://b"}}}),
+        encoding="utf-8",
+    )
+    factory = ClientFactory(
+        {name: FakeClient({None: ListToolsResult(tools=[remote_tool("t")])}) for name in ("a", "b")}
+    )
+    extension._client_factory = factory
+    context = AgentRunContext(AgentRunConfig("reload"), AgentState(), {})
+    await extension.on_tool(context)
+    assert set(context.tools) == {"a__t", "b__t"}
+
+    path.write_text("{not json", encoding="utf-8")  # a broken edit keeps the last good servers
+    other = AgentRunContext(AgentRunConfig("reload-bad"), AgentState(), {})
+    await extension.on_tool(other)
+    assert set(other.tools) == {"a__t", "b__t"}
+    await extension.on_success(context, AssistantMessage(content="x"))
+    await extension.on_success(other, AssistantMessage(content="x"))
+
+
+async def test_mcp_extension_closes_transports_after_compaction_and_via_request_finished():
+    factory = ClientFactory({"server": FakeClient({None: ListToolsResult(tools=[remote_tool("t")])})})
+    extension = McpExtension(
+        [McpHttpServer("server", "https://example.test/mcp")], client_factory=factory, tools_cache_ttl=0
+    )
+    context = AgentRunContext(AgentRunConfig("compact"), AgentState(), {})
+    await extension.on_tool(context)
+    await extension.on_compact(context)
+    assert factory.closed == ["server"]
+
+    again = AgentRunContext(AgentRunConfig("finished"), AgentState(), {})
+    await extension.on_tool(again)
+    extension._request_finished(again)  # synchronous safety net
+    await asyncio.sleep(0.05)
+    assert factory.closed == ["server", "server"]
+
+
+async def test_mcp_extension_times_out_slow_tools_and_connections():
+    class SlowClient(FakeClient):
+        async def call_tool(self, name, arguments=None):
+            await asyncio.sleep(10)
+
+    factory = ClientFactory({"slow": SlowClient({None: ListToolsResult(tools=[remote_tool("t")])})})
+    extension = McpExtension([McpHttpServer("slow", "http://slow")], client_factory=factory, call_timeout=0.05)
+    context = AgentRunContext(AgentRunConfig("slow-call"), AgentState(), {})
+    await extension.on_tool(context)
+    with pytest.raises(TimeoutError, match="timed out"):
+        await context.tools["slow__t"]({})
+    await extension.on_error(context, RuntimeError("x"))
+
+    @asynccontextmanager
+    async def hang(server):
+        await asyncio.sleep(10)
+        yield None
+
+    stuck = McpExtension([McpHttpServer("stuck", "http://stuck")], client_factory=hang, connect_timeout=0.05)
+    other = AgentRunContext(AgentRunConfig("slow-connect"), AgentState(), {})
+    await stuck.on_tool(other)
+    assert other.tools == {}
+
+
+async def test_mcp_extension_rejects_repeating_cursors_and_sanitizes_tool_names():
+    loop_client = FakeClient(
+        {None: ListToolsResult(tools=[], nextCursor="x"), "x": ListToolsResult(tools=[], nextCursor="x")}
+    )
+    odd = FakeClient({None: ListToolsResult(tools=[remote_tool("a.b c"), remote_tool("n" * 100)])})
+    factory = ClientFactory({"loop": loop_client, "odd": odd})
+    extension = McpExtension(
+        [McpHttpServer("loop", "http://loop"), McpHttpServer("odd", "http://odd")], client_factory=factory
+    )
+    context = AgentRunContext(AgentRunConfig("names"), AgentState(), {})
+    await extension.on_tool(context)
+
+    assert "loop__" not in "".join(context.tools)
+    assert "odd__a_b_c" in context.tools
+    assert all(len(name) <= 64 for name in context.tools)
+    await extension.on_success(context, AssistantMessage(content="x"))
 
 
 def test_mcp_configuration_rejects_ambiguous_or_invalid_names():
@@ -564,8 +707,10 @@ async def test_default_client_factory_passes_headers_to_streamable_http_client(m
         async def __aexit__(self, exc_type, exc_value, traceback):
             captured["mcp_closed"] = True
 
-    def fake_create_http_client(*, headers):
+    def fake_create_http_client(*, headers, timeout, follow_redirects):
         captured["headers"] = headers
+        captured["follow_redirects"] = follow_redirects
+        captured["read_timeout"] = timeout.read
         return FakeHttpClient()
 
     def fake_streamable_http_client(url, *, http_client):
@@ -573,7 +718,7 @@ async def test_default_client_factory_passes_headers_to_streamable_http_client(m
         captured["http_client"] = http_client
         return "transport"
 
-    monkeypatch.setattr("mcp.shared._httpx_utils.create_mcp_http_client", fake_create_http_client)
+    monkeypatch.setattr("httpx2.AsyncClient", fake_create_http_client)
     monkeypatch.setattr("mcp.client.streamable_http.streamable_http_client", fake_streamable_http_client)
     monkeypatch.setattr("mcp.Client", FakeSdkClient)
     server = McpHttpServer(
@@ -588,6 +733,8 @@ async def test_default_client_factory_passes_headers_to_streamable_http_client(m
 
     assert captured == {
         "headers": {"Authorization": "Bearer secret", "X-Tenant-ID": "tenant-1"},
+        "follow_redirects": True,
+        "read_timeout": 300.0,
         "http_entered": True,
         "url": "https://secure.test/mcp",
         "http_client": captured["http_client"],
@@ -804,3 +951,175 @@ def test_mcp_configuration_rejects_invalid_server_root_keys(server_keys, message
         McpConfiguration.from_mapping({"servers": {}}, server_keys=server_keys)
     with pytest.raises(ValueError, match=message):
         McpExtension(servers=[], server_keys=server_keys)
+
+
+async def test_mcp_extension_handles_duplicate_names_page_limits_and_repeated_setup():
+    duplicate = FakeClient({None: ListToolsResult(tools=[remote_tool("same")])})
+    endless = FakeClient(
+        {
+            None: ListToolsResult(tools=[], nextCursor="0"),
+            **{str(i): ListToolsResult(tools=[], nextCursor=str(i + 1)) for i in range(200)},
+        }
+    )
+    factory = ClientFactory({"one": duplicate, "two": duplicate, "endless": endless})
+    extension = McpExtension(
+        [McpHttpServer(n, f"http://{n}") for n in ("one", "two", "endless")],
+        namespace_tools=False,
+        client_factory=factory,
+    )
+    context = AgentRunContext(AgentRunConfig("dup"), AgentState(), {})
+    await extension.on_tool(context)
+    await extension.on_tool(context)  # a repeated setup closes the previous attempt first
+    assert factory.closed.count("endless") == 2
+    assert set(context.tools) == {"same"}
+    await extension.on_state(context)
+    assert "endless: streamable HTTP (unavailable" in context.state.messages[0].content
+    await extension.on_success(context, AssistantMessage(content="x"))
+
+
+async def test_mcp_extension_survives_close_errors_and_stuck_transports(monkeypatch):
+    monkeypatch.setattr(mcp_module, "_CLOSE_TIMEOUT", 0.05)
+    state = {"mode": "error"}
+
+    @asynccontextmanager
+    async def factory(server):
+        try:
+            yield FakeClient({None: ListToolsResult(tools=[])})
+        finally:
+            if state["mode"] == "error":
+                raise RuntimeError("close failed")
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.sleep(10)  # ignores the first cancellation
+
+    extension = McpExtension([McpHttpServer("s", "http://s")], client_factory=factory, tools_cache_ttl=0)
+    for mode in ("error", "stuck"):
+        state["mode"] = mode
+        context = AgentRunContext(AgentRunConfig(mode), AgentState(), {})
+        await extension.on_tool(context)
+        await extension.on_success(context, AssistantMessage(content="done"))  # never raises
+
+    connection = mcp_module._Connection(McpHttpServer("s", "http://s"), factory, 1)
+    await connection.close()
+    with pytest.raises(RuntimeError, match="already closed"):
+        await connection.client()
+
+
+async def test_mcp_extension_closes_everything_when_discovery_is_cancelled():
+    started = asyncio.Event()
+
+    @asynccontextmanager
+    async def factory(server):
+        started.set()
+        await asyncio.sleep(10)
+        yield None
+
+    closed = ClientFactory({"fast": FakeClient({None: ListToolsResult(tools=[])})})
+    extension = McpExtension(
+        [McpHttpServer("fast", "http://fast")],
+        client_factory=lambda server: factory(server),
+    )
+    context = AgentRunContext(AgentRunConfig("cancel-discovery"), AgentState(), {})
+    task = asyncio.create_task(extension.on_tool(context))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert extension._requests == {}
+    assert closed.opened == []
+
+
+async def test_mcp_extension_tracks_the_configuration_file_lifecycle(tmp_path):
+    path = tmp_path / "mcp.json"
+    extension = McpExtension(config_path=path)
+    assert extension.servers == ()
+    path.write_text(json.dumps({"servers": {"a": {"type": "http", "url": "http://a"}}}), encoding="utf-8")
+    context = AgentRunContext(AgentRunConfig("file"), AgentState(), {})
+    await extension.on_state(context)  # reads the file lazily when no request owns the servers
+    await extension.on_tool(context)
+    assert [server.name for server in extension.servers] == ["a"]
+    path.unlink()
+    await extension.on_tool(context)
+    assert extension.servers == ()
+    with pytest.raises(ValueError, match="Invalid MCP configuration JSON"):
+        path.write_text("{", encoding="utf-8")
+        McpExtension(config_path=path)
+    with pytest.raises(ValueError, match="Unsupported MCP server"):
+        mcp_module._transport_label(object())
+
+
+def test_non_strict_configuration_skips_invalid_entries_instead_of_failing_the_file(tmp_path, caplog):
+    payload = {
+        "servers": {
+            "good": {"type": "http", "url": "http://good"},
+            "bad-transport": {"type": "sse", "url": "http://sse"},
+            "bad-url": {"type": "http", "url": "  "},
+            "not-an-object": 3,
+        }
+    }
+    with pytest.raises(ValueError, match="unsupported transport"):
+        McpConfiguration.from_mapping(payload)  # strict is the default
+
+    configuration = McpConfiguration.from_mapping(payload, strict=False)
+    assert [server.name for server in configuration.servers] == ["good"]
+    assert set(configuration.skipped) == {"bad-transport", "bad-url", "not-an-object"}
+    assert "unsupported transport" in configuration.skipped["bad-transport"]
+    assert "Skipping invalid MCP server" in caplog.text
+
+    # A document with no usable server mapping still raises: nothing to salvage.
+    with pytest.raises(ValueError, match="must contain one of"):
+        McpConfiguration.from_mapping({}, strict=False)
+
+    path = tmp_path / "mcp.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported transport"):
+        McpExtension(config_path=path)
+    extension = McpExtension(config_path=path, strict_config=False)
+    assert [server.name for server in extension.servers] == ["good"]
+    assert [server.name for server in McpConfiguration.from_file(path, strict=False).servers] == ["good"]
+
+
+async def test_mcp_tools_send_a_compact_schema_and_no_repeated_guidance():
+    noisy = Tool(
+        name="search",
+        description="Search the docs.",
+        inputSchema={
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "searchArguments",
+            "type": "object",
+            "properties": {
+                "query": {"title": "Query", "type": "string", "description": "What to find"},
+                "filters": {
+                    "title": "Filters",
+                    "type": "object",
+                    "properties": {"title": {"title": "Title", "type": "string"}},
+                    "additionalProperties": {"title": "Extra", "type": "number"},
+                },
+                "mode": {"title": "Mode", "anyOf": [{"title": "A", "const": "a"}, {"title": "B", "const": "b"}]},
+            },
+            "required": ["query"],
+        },
+    )
+    factory = ClientFactory({"docs": FakeClient({None: ListToolsResult(tools=[noisy, remote_tool("fetch")])})})
+    extension = McpExtension([McpHttpServer("docs", "http://docs")], client_factory=factory)
+    context = AgentRunContext(AgentRunConfig("schema"), AgentState(), {})
+    await extension.on_tool(context)
+
+    search = context.tools["docs__search"]
+    assert search.parameters == {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "What to find"},
+            # A property *named* "title" is a name, not an annotation, and is kept.
+            "filters": {
+                "type": "object",
+                "properties": {"title": {"type": "string"}},
+                "additionalProperties": {"type": "number"},
+            },
+            "mode": {"anyOf": [{"const": "a"}, {"const": "b"}]},
+        },
+        "required": ["query"],
+    }
+    # The server-level system message already explains namespacing; no per-tool boilerplate.
+    assert all(registered.guidelines == () for registered in context.tools.values())
+    assert render_tool_guidance(tuple(context.tools.values())) == ""
+    await extension.on_success(context, AssistantMessage(content="done"))

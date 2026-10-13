@@ -282,7 +282,7 @@ def replace_in_file(
     path: FilePath,
     edits: Annotated[list[FileEdit], Field(min_length=1, description="Ordered exact-text edits applied in one call")],
 ) -> str:
-    """Replace exact text in a UTF-8 file with one or more edits.
+    """Edit an existing UTF-8 file by replacing exact text; the tool for every code or text change.
 
     Args:
         path: Absolute path or a path relative to the current working directory.
@@ -294,9 +294,11 @@ def replace_in_file(
         replace_in_file(path="notes/plan.md", edits=[{"old_text": "First", "new_text": "1st"}, {"old_text": "Second", "new_text": "2nd", "replace_all": True}])
 
     Guidelines:
-        - Send every change you already know in one call: each edit sees the result of the previous one and the file is written once.
-        - Keep replace_all false unless every occurrence should change.
-        - Read the file first when the target text may be ambiguous.
+        - Use this tool for normal edits to an existing file, instead of sed, awk, perl -i, python -c, tee, or shell redirection. Reserve those for bulk or mechanical rewrites this tool cannot express, such as renaming a symbol across many files.
+        - Read the target lines with read_file first and copy old_text exactly: same indentation, quotes, and line breaks.
+        - Make old_text unique by including a neighbouring line or two; set replace_all only when every occurrence must change.
+        - Send every change for the file in one call: edits apply in order, each one sees the previous result, and nothing is written if any edit fails.
+        - When an edit fails, read the file again and retry with corrected old_text rather than switching to a shell command.
     """
     working_directory, target = _resolve_file_path(path)
     if not target.is_file():
@@ -312,18 +314,31 @@ def replace_in_file(
 def _apply_edits(content: str, edits: Sequence[FileEdit]) -> tuple[str, int]:
     """Apply exact-text edits in order, validating each against the current text."""
     replacements = 0
-    for edit in edits:
+    for number, edit in enumerate(edits, start=1):
+        label = f"Edit {number} of {len(edits)}: " if len(edits) > 1 else ""
         matches = content.count(edit.old_text)
         if matches == 0:
-            raise ValueError(f"Text to replace was not found: {_excerpt(edit.old_text)}")
+            raise ValueError(
+                f"{label}Text to replace was not found: {_excerpt(edit.old_text)}. {_miss_hint(content, edit.old_text)}"
+            )
         if matches > 1 and not edit.replace_all:
             raise ValueError(
-                f"Text to replace is not unique; found {matches} matches "
-                f"(set replace_all to change every one): {_excerpt(edit.old_text)}"
+                f"{label}Text to replace is not unique; found {matches} matches "
+                f"(include more surrounding lines, or set replace_all to change every one): {_excerpt(edit.old_text)}"
             )
         content = content.replace(edit.old_text, edit.new_text, -1 if edit.replace_all else 1)
         replacements += matches if edit.replace_all else 1
     return content, replacements
+
+
+def _miss_hint(content: str, old_text: str) -> str:
+    """Say why an exact match failed, so the model fixes old_text instead of leaving the tool."""
+    if " ".join(content.split()).count(" ".join(old_text.split())) > 0:
+        return (
+            "A match exists that differs only in whitespace or indentation; "
+            "read the file again and copy the lines exactly. Nothing was written."
+        )
+    return "Read the file again and copy old_text from its current content. Nothing was written."
 
 
 def _excerpt(value: str, *, limit: int = 60) -> str:
@@ -356,7 +371,7 @@ def delete_file(path: FilePath) -> str:
 
 
 @tool
-async def run_shell(
+async def bash(
     command: Annotated[str, Field(min_length=1)],
     timeout_seconds: TimeoutSeconds = 30,
 ) -> str:
@@ -367,9 +382,10 @@ async def run_shell(
         timeout_seconds: Maximum command runtime in seconds.
 
     Snippet:
-        run_shell(command="git status --short", timeout_seconds=30)
+        bash(command="git status --short", timeout_seconds=30)
 
     Guidelines:
+        - Use for builds, tests, git, and other commands that have no dedicated tool. Prefer read_file, grep, glob, write_file, and replace_in_file for reading, searching, listing, and editing files.
         - Use only for bounded commands in a trusted working directory.
         - A non-zero exit code or a timeout is reported as an error carrying the output.
         - Output previews keep startup and final results within byte and line limits.

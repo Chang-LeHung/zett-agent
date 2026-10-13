@@ -118,7 +118,10 @@ def test_tool_call_parser_accepts_control_characters_but_rejects_non_objects():
     )
 
     with pytest.raises(ProviderResponseError, match="must be a JSON object"):
-        _parse_tool_calls({0: _ToolCallAccumulator(index=0, name="write", argument_buffer='["value"]')})
+        _parse_tool_arguments('["value"]', index=0)
+    [call] = _parse_tool_calls({0: _ToolCallAccumulator(index=0, name="write", argument_buffer='["value"]')})
+    assert call.arguments == {}
+    assert call.error is not None and "must be a JSON object" in call.error
 
 
 def test_tool_call_parser_repairs_complete_malformed_llm_json():
@@ -134,6 +137,29 @@ def test_tool_call_parser_repairs_complete_malformed_llm_json():
         "title": "Notes",
         "content": f'{long_content}Use the "parse" phase',
     }
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "expected"),
+    [
+        ("max_tokens", "output limit"),
+        ("length", "output limit"),
+        (None, "stream ended before the model finished"),
+        ("end_turn", "Resend the call"),
+    ],
+)
+def test_truncated_tool_arguments_become_a_model_visible_failure(finish_reason, expected):
+    # Valid up to the last value, then cut off: "Expecting ',' delimiter" at the end.
+    truncated = '{"path": "notes.md", "content": "hello"'
+    accumulator = _ToolCallAccumulator(index=2, call_id="toolu_1", name="write_file", argument_buffer=truncated)
+
+    [call] = _parse_tool_calls({2: accumulator}, finish_reason=finish_reason)
+
+    assert (call.id, call.name, call.arguments) == ("toolu_1", "write_file", {})
+    assert call.error is not None
+    assert "Expecting ',' delimiter" in call.error
+    assert "The tool was not run" in call.error
+    assert expected in call.error
 
 
 @pytest.mark.parametrize("payload", ['{"content":"truncated', '"content":"missing object"}'])

@@ -5,12 +5,12 @@ import pytest
 from pydantic import ValidationError
 
 from zett_agent.tools.coding import (
+    bash,
     delete_file,
     glob,
     grep,
     read_file,
     replace_in_file,
-    run_shell,
     write_file,
 )
 
@@ -134,14 +134,11 @@ async def test_file_tools_reject_invalid_or_ambiguous_operations(tmp_path, monke
 async def test_local_tools_export_typed_schemas():
     tools = {
         registered.name: registered
-        for registered in (glob, grep, read_file, write_file, replace_in_file, delete_file, run_shell)
+        for registered in (glob, grep, read_file, write_file, replace_in_file, delete_file, bash)
     }
-    assert set(tools) == {"glob", "grep", "read_file", "write_file", "replace_in_file", "delete_file", "run_shell"}
-    schema = tools["read_file"].parameters
-    assert schema["properties"]["start_line"]["$ref"] == "#/$defs/StartLine"
-    assert schema["$defs"]["StartLine"]["minimum"] == 1
-    assert schema["properties"]["line_count"]["$ref"] == "#/$defs/LineCount"
-    assert schema["$defs"]["LineCount"]["maximum"] == 2_000
+    assert set(tools) == {"glob", "grep", "read_file", "write_file", "replace_in_file", "delete_file", "bash"}
+    assert tools["read_file"].parameters["properties"]["start_line"]["minimum"] == 1
+    assert tools["read_file"].parameters["properties"]["line_count"]["maximum"] == 2_000
     assert tools["read_file"].parameters["properties"]["path"]["description"].startswith("Absolute path")
     assert tools["read_file"].snippet.startswith("read_file(")
     assert tools["read_file"].guidelines == (
@@ -236,7 +233,7 @@ async def test_shell_tool_reports_failure_and_retains_truncated_output(tmp_path,
     output_module = importlib.import_module("zett_agent.tools.output")
     monkeypatch.setattr(output_module, "MAX_OUTPUT_BYTES", 100)
     with pytest.raises(RuntimeError, match="exited with code 3") as captured:
-        await run_shell({"command": "printf START; printf '%0200d' 0; printf END; printf 'error' >&2; exit 3"})
+        await bash({"command": "printf START; printf '%0200d' 0; printf END; printf 'error' >&2; exit 3"})
 
     message = str(captured.value)
     assert message.startswith("Command exited with code 3")
@@ -249,19 +246,53 @@ async def test_shell_tool_reports_failure_and_retains_truncated_output(tmp_path,
     assert output_files[0].read_text().endswith("END")
 
     with pytest.raises(ValueError, match="blank"):
-        await run_shell({"command": "   "})
+        await bash({"command": "   "})
 
 
 async def test_shell_tool_terminates_after_timeout(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(RuntimeError, match="timed out after 1 second"):
-        await run_shell({"command": "while :; do :; done", "timeout_seconds": 1})
+        await bash({"command": "while :; do :; done", "timeout_seconds": 1})
 
 
 async def test_shell_tool_terminates_when_its_task_is_cancelled(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    task = asyncio.create_task(run_shell({"command": "while :; do :; done"}))
+    task = asyncio.create_task(bash({"command": "while :; do :; done"}))
     await asyncio.sleep(0.05)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_replace_in_file_failures_tell_the_model_how_to_recover(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "code.py").write_text("def run():\n    return 1\n\nvalue = 1\nvalue = 1\n")
+
+    # Indentation drift is the usual reason an exact match fails.
+    with pytest.raises(ValueError, match="differs only in whitespace or indentation") as raised:
+        await replace_in_file({"path": "code.py", "edits": [{"old_text": "def run():\n  return 1", "new_text": "x"}]})
+    assert "Nothing was written" in str(raised.value)
+    with pytest.raises(ValueError, match="copy old_text from its current content"):
+        await replace_in_file({"path": "code.py", "edits": [{"old_text": "no such line", "new_text": "x"}]})
+
+    # In a batch the failing edit is identified, and the earlier ones are not written.
+    with pytest.raises(ValueError, match=r"Edit 2 of 2: Text to replace is not unique.*surrounding lines"):
+        await replace_in_file(
+            {
+                "path": "code.py",
+                "edits": [{"old_text": "return 1", "new_text": "return 2"}, {"old_text": "value = 1", "new_text": "x"}],
+            }
+        )
+    assert (tmp_path / "code.py").read_text().count("return 1") == 1
+
+
+def test_file_tool_guidance_steers_models_away_from_shell_edits():
+    from zett_agent.tools.coding import bash, replace_in_file
+
+    guidance = " ".join(replace_in_file.guidelines)
+    assert "for normal edits to an existing file, instead of sed" in guidance
+    assert "bulk or mechanical rewrites" in guidance  # shell edits stay possible when needed
+    assert "rather than switching to a shell command" in guidance
+    assert "never" not in guidance.lower()
+    assert replace_in_file.description.startswith("Edit an existing UTF-8 file")
+    assert "Prefer read_file, grep, glob, write_file, and replace_in_file" in " ".join(bash.guidelines)

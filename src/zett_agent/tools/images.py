@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
 
-import httpx
-import truststore
 from pydantic import Field
 
 from ..messages import ImageBytesSource, ImageContent
@@ -41,6 +39,11 @@ def _read_local_image(path: str, max_bytes: int) -> bytes:
 
 async def _read_remote_image(url: str, max_bytes: int) -> bytes:
     """Download one bounded image from an HTTP(S) URL."""
+    # Imported here because only remote URLs need them; local files should not
+    # pay for an HTTP client and a trust store at import time.
+    import httpx
+    import truststore
+
     try:
         async with httpx.AsyncClient(
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),

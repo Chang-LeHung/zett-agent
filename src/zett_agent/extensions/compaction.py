@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from typing import cast
 from weakref import WeakKeyDictionary
 
-import tiktoken
-
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
@@ -28,6 +26,10 @@ _IMAGE_TOKEN_ESTIMATE = 1_100
 
 
 def _count_text(value: str) -> int:
+    # Imported here because token counting only happens when an application
+    # enables compaction; persistence imports this module for one message type.
+    import tiktoken
+
     encoding = tiktoken.get_encoding("o200k_base")
     return len(encoding.encode_ordinary(value))
 

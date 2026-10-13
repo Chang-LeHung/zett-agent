@@ -103,8 +103,8 @@ async def test_todo_write_advances_every_task_in_order_until_complete():
     definitions = {registered.name: registered for registered in model.requests[0].tools}
     assert set(definitions) == {TODO_WRITE_TOOL_NAME}
     schema = definitions[TODO_WRITE_TOOL_NAME].parameters
-    assert schema["properties"]["todos"]["$ref"] == "#/$defs/TodoList"
-    assert schema["$defs"]["TodoList"]["minItems"] == 1
+    assert schema["properties"]["todos"]["minItems"] == 1
+    assert "$defs" not in schema
     guidance = "\n".join(
         message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)
     )
@@ -453,7 +453,8 @@ async def test_model_facing_docs_publish_scope_statuses_and_single_completion():
     assert '"completed"' in definition.description
     assert "request-scoped" in definition.description
     assert "at most one task" in definition.description
-    assert definition.parameters["$defs"]["TodoStatus"]["enum"] == ["pending", "in_progress", "completed"]
+    todos = definition.parameters["properties"]["todos"]
+    assert todos["items"]["properties"]["status"]["enum"] == ["pending", "in_progress", "completed"]
 
     guidance = "\n".join(
         message.content for message in model.requests[0].messages if isinstance(message, SystemMessage)

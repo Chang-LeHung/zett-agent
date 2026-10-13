@@ -402,11 +402,9 @@ async def test_ask_user_tool_schema_and_guidance_are_visible_to_model():
     definition = next(tool for tool in model.request.tools if tool.name == "ask_user")
     assert definition.parameters["required"] == ["question"]
     options_schema = definition.parameters["properties"]["options"]["anyOf"][0]
-    assert options_schema["$ref"] == "#/$defs/Options"
-    options_schema = definition.parameters["$defs"]["Options"]
     assert options_schema["maxItems"] == 20
-    assert options_schema["items"]["$ref"] == "#/$defs/Option"
-    assert definition.parameters["$defs"]["Option"]["minLength"] == 1
+    assert options_schema["items"]["minLength"] == 1
+    assert "$defs" not in definition.parameters
     guidance = "\n".join(message.content for message in model.request.messages if isinstance(message, SystemMessage))
     assert "## ask_user" in guidance
     assert "Use only when user input is required" in guidance

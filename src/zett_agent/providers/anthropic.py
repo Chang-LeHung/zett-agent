@@ -4,10 +4,7 @@ import base64
 import ssl
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import replace
-from typing import Any
-
-import httpx
-import truststore
+from typing import TYPE_CHECKING, Any
 
 from ..messages import (
     AssistantMessage,
@@ -37,7 +34,6 @@ from .base import (
     ProviderAuthError,
     ProviderResponseError,
     RetryingProvider,
-    _parse_tool_arguments,
     _parse_tool_calls,
     _reasoning_effort_to_budget,
     _to_model_data,
@@ -45,7 +41,15 @@ from .base import (
     reject_local_tool_search,
     retry_model_stream,
 )
+from .tool_arguments import ToolArgumentsError, decode_tool_arguments
 from .tool_images import expand_tool_images
+
+if TYPE_CHECKING:
+    import httpx
+
+#: Output budget per response. The original 4096 truncated any tool call that wrote a
+#: sizeable file, leaving its JSON arguments incomplete.
+DEFAULT_MAX_TOKENS = 16_384
 
 
 def _tools_to_anthropic_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
@@ -65,6 +69,30 @@ def _tools_to_anthropic_payload(tools: Sequence[ToolDefinition]) -> list[dict[st
 def _server_tools_to_anthropic_payload(tools: Sequence[ServerToolDefinition]) -> list[dict[str, Any]]:
     """Render Anthropic server tools using their versioned native schemas."""
     return [{"type": tool.type, **dict(tool.configuration)} for tool in tools]
+
+
+def _apply_prompt_cache(body: dict[str, Any], client_tools: Sequence[dict[str, Any]]) -> None:
+    """Mark Anthropic cache breakpoints on the largest stable request prefixes.
+
+    Anthropic caches only what a ``cache_control`` marker asks for, then reads
+    each cached prefix at a fraction of the input price. The three markers below
+    cover the tool definitions, the whole system prompt, and the conversation so
+    far, so a repeated prefix is read instead of re-billed as fresh input. A
+    prefix shorter than the model's minimum cacheable length is ignored
+    silently.
+    """
+    breakpoint = {"type": "ephemeral"}
+    # Server tools are provider-owned definitions and must not carry the marker.
+    if client_tools:
+        client_tools[-1]["cache_control"] = breakpoint
+    system = body.get("system")
+    if isinstance(system, str) and system:
+        body["system"] = [{"type": "text", "text": system, "cache_control": breakpoint}]
+    messages = body.get("messages")
+    if messages:
+        content = messages[-1].get("content")
+        if isinstance(content, list) and content and isinstance(content[-1], dict):
+            content[-1]["cache_control"] = breakpoint
 
 
 def _to_anthropic_content_blocks(message: Any, *, model: str | None = None) -> list[dict[str, Any]]:
@@ -142,6 +170,15 @@ class AnthropicProvider(RetryingProvider):
         transport: Optional HTTPX transport for isolated tests or custom routing.
         response: Must remain false; this adapter uses Anthropic Messages API.
         retry: Exponential backoff for transient failures before output starts.
+        prompt_cache: Mark cache breakpoints on the tool definitions, the system
+            prompt, and the conversation so far. Anthropic caches only what a
+            marker asks for, so disabling this trades prompt-cache reads for a
+            payload without ``cache_control``.
+        max_tokens: Output budget for one response, excluding thinking. A tool
+            call that writes a large file must fit in it: a response cut off by
+            this limit leaves the call's JSON incomplete, and the model is then
+            told to retry with a smaller call. Lower it for models with a
+            smaller output limit.
 
     Note:
         Signed replay blocks belong to the originating provider and model.
@@ -180,15 +217,26 @@ class AnthropicProvider(RetryingProvider):
         *,
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
+        prompt_cache: bool = True,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> None:
+        import httpx
+        import truststore
+
         validate_response(response)
         if response:
             raise ValueError("AnthropicProvider does not support the Responses API")
         if not api_key:
             raise ValueError("api_key is required")
         validate_retry(retry)
+        if not isinstance(prompt_cache, bool):
+            raise ValueError("prompt_cache must be a boolean")
+        if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
+            raise ValueError("max_tokens must be a positive integer")
+        self.max_tokens = max_tokens
         self.retry = retry
         self.response = response
+        self.prompt_cache = prompt_cache
         self.model = model
         self._http_client = httpx.AsyncClient(
             transport=transport,
@@ -224,19 +272,22 @@ class AnthropicProvider(RetryingProvider):
                     if content:
                         messages.append({"role": "user", "content": content})
 
+        client_tools = _tools_to_anthropic_payload(request.tools)
         body = {
             "model": self.model,
             "system": "\n\n".join(system),
             "messages": messages,
             "tools": [
-                *_tools_to_anthropic_payload(request.tools),
+                *client_tools,
                 *_server_tools_to_anthropic_payload(request.server_tools),
             ],
-            "max_tokens": 4096,
+            "max_tokens": self.max_tokens,
             "stream": True,
         }
         if not system:
             body.pop("system")
+        if self.prompt_cache:
+            _apply_prompt_cache(body, client_tools)
         if request.tool_choice:
             body["tool_choice"] = {
                 "type": "tool",
@@ -246,7 +297,7 @@ class AnthropicProvider(RetryingProvider):
         elif not request.parallel_tool_call and (request.tools or request.server_tools):
             body["tool_choice"] = {"type": "auto", "disable_parallel_tool_use": True}
         if request.reasoning_effort != ReasoningEffort.OFF and not request.tool_choice:
-            body["max_tokens"] = _reasoning_effort_to_budget(request.reasoning_effort) + 4096
+            body["max_tokens"] = _reasoning_effort_to_budget(request.reasoning_effort) + self.max_tokens
             body["thinking"] = {
                 "type": "enabled",
                 "budget_tokens": _reasoning_effort_to_budget(request.reasoning_effort),
@@ -361,15 +412,15 @@ class AnthropicProvider(RetryingProvider):
                                 pass
                     case "content_block_stop":
                         index = int(data.get("index", 0))
+                        # A malformed block is not fatal here: the replay input
+                        # falls back to an empty object, and the completed
+                        # response reports the call as failed to the model.
                         if index in streams:
-                            replay[index]["input"] = _parse_tool_arguments(
-                                streams[index].argument_buffer,
-                                index=index,
-                            )
+                            replay[index]["input"] = _lenient_arguments(streams[index].argument_buffer, index)
                         if index in server_streams:
                             stream = server_streams[index]
                             replay[index]["input"] = (
-                                _parse_tool_arguments(stream.argument_buffer, index=index)
+                                _lenient_arguments(stream.argument_buffer, index)
                                 if stream.argument_buffer
                                 else server_initial_inputs[index]
                             )
@@ -386,9 +437,9 @@ class AnthropicProvider(RetryingProvider):
         finally:
             await response.close()
 
-        tool_calls = _parse_tool_calls(streams)
+        tool_calls = _parse_tool_calls(streams, finish_reason)
         for index, stream in streams.items():
-            replay[index]["input"] = _parse_tool_arguments(stream.argument_buffer, index=index)
+            replay[index]["input"] = _lenient_arguments(stream.argument_buffer, index)
         yield ModelEvent.completed(
             ModelResponse(
                 message=AssistantMessage(
@@ -403,6 +454,14 @@ class AnthropicProvider(RetryingProvider):
                 usage=usage,
             )
         )
+
+
+def _lenient_arguments(payload: str, index: int) -> dict[str, Any]:
+    """Decode a replay block's input, using an empty object when it is unusable."""
+    try:
+        return decode_tool_arguments(payload, index=index)
+    except ToolArgumentsError:
+        return {}
 
 
 def _anthropic_server_tool_error(output: Any) -> str | None:

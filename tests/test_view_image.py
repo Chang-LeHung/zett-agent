@@ -25,7 +25,6 @@ from zett_agent.providers.base import _message_to_openai_payload
 from zett_agent.providers.responses import responses_input
 from zett_agent.providers.tool_images import expand_tool_images
 from zett_agent.storage import SQLiteSessionStorage, decode_messages, encode_messages
-from zett_agent.tools import images as image_tools
 from zett_agent.tools.images import view_image
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
@@ -83,7 +82,8 @@ async def test_view_image_reads_http_url(monkeypatch):
     def client_factory(**kwargs):
         return client(transport=transport, **kwargs)
 
-    monkeypatch.setattr(image_tools.httpx, "AsyncClient", client_factory)
+    # The reader imports httpx lazily, so the patch targets the module itself.
+    monkeypatch.setattr(httpx, "AsyncClient", client_factory)
     image = await view_image({"path": "https://example.com/assets/pixel.png"})
 
     assert requested_urls == ["https://example.com/assets/pixel.png"]
@@ -106,7 +106,7 @@ async def test_view_image_bounds_and_validates_remote_sources(monkeypatch):
     def client_factory(**kwargs):
         return client(transport=transport, **kwargs)
 
-    monkeypatch.setattr(image_tools.httpx, "AsyncClient", client_factory)
+    monkeypatch.setattr(httpx, "AsyncClient", client_factory)
     with pytest.raises(ValueError, match="limit"):
         await view_image({"path": "https://example.com/too-large.png", "max_bytes": 4})
     with pytest.raises(ValueError, match="Unable to download"):

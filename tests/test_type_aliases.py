@@ -220,5 +220,5 @@ async def test_custom_tools_accept_named_aliases_in_function_annotations():
     assert await bounded({"value": 2_000}) == 2_000
     with pytest.raises(ValidationError):
         await bounded({"value": 2_001})
-    assert bounded.parameters["properties"]["value"]["$ref"] == "#/$defs/LineCount"
-    assert bounded.parameters["$defs"]["LineCount"]["maximum"] == 2_000
+    assert bounded.parameters["properties"]["value"]["maximum"] == 2_000
+    assert "$defs" not in bounded.parameters

@@ -6,9 +6,8 @@ import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, ParamSpec, Protocol, TypeVar, get_type_hints, overload
-
-from pydantic import ConfigDict, TypeAdapter, create_model
 
 from .._compat import StrEnum, TypeAliasType
 from ..model import ToolDefinition
@@ -29,6 +28,18 @@ ToolResult = TypeAliasType("ToolResult", Any)
 
 _DecoratedParameters = ParamSpec("_DecoratedParameters")
 _DecoratedResult = TypeVar("_DecoratedResult")
+
+
+@lru_cache(maxsize=1)
+def _result_serializer() -> Any:
+    """Build the permissive JSON adapter once, on the first serialized result.
+
+    Pydantic is imported here rather than at module scope so importing the tool
+    framework does not pay for it; only serializing a non-string result does.
+    """
+    from pydantic import TypeAdapter
+
+    return TypeAdapter(Any)
 
 
 def _bind_tool_call(call_id: str) -> Token[str | None]:
@@ -67,7 +78,9 @@ class AgentTool(SyncMethodsMixin):
     parameters: dict[str, Any]
     #: Async handler that validates arguments and performs the local operation.
     handler: Callable[..., Awaitable[ToolResult]]
-    #: Model-facing rules rendered beside this tool in prompt guidance.
+    #: Model-facing rules rendered beside this tool in prompt guidance. Tools
+    #: that share one rule through another channel, such as a server-level system
+    #: message, may leave this empty so the rule is not repeated per tool.
     guidelines: tuple[str, ...]
     #: Optional invocation examples rendered into prompt guidance.
     snippet: str = ""
@@ -87,8 +100,8 @@ class AgentTool(SyncMethodsMixin):
     def __post_init__(self) -> None:
         if not self.description.strip():
             raise ValueError("A tool description cannot be empty")
-        if not self.guidelines or any(not guideline.strip() for guideline in self.guidelines):
-            raise ValueError("A tool needs at least one non-empty guideline")
+        if any(not guideline.strip() for guideline in self.guidelines):
+            raise ValueError("Tool guidelines cannot be blank")
         if not isinstance(self.execution_mode, ToolExecutionMode):
             raise ValueError("execution_mode must be a ToolExecutionMode")
         if not isinstance(self.deferred, bool):
@@ -137,7 +150,7 @@ class AgentTool(SyncMethodsMixin):
         """
         if isinstance(value, str):
             return value
-        return json.dumps(TypeAdapter(Any).dump_python(value, mode="json"), ensure_ascii=False)
+        return json.dumps(_result_serializer().dump_python(value, mode="json"), ensure_ascii=False)
 
 
 class _ToolDecorator(Protocol):
@@ -224,10 +237,53 @@ def get_tool_guidelines(function: Callable[..., Any]) -> tuple[str, ...]:
     return _parse_tool_docstring(function).guidelines
 
 
+def _inline_schema_references(schema: dict[str, Any]) -> dict[str, Any]:
+    """Expand every local ``$ref`` so a tool schema stands on its own.
+
+    Pydantic publishes nested argument models under ``$defs`` and points at them
+    with ``$ref``. Some provider gateways reject that indirection, so tool
+    schemas ship the expanded form instead. A recursive model cannot be expanded
+    at all and is rejected with an explicit error.
+    """
+    raw_definitions = schema.get("$defs")
+    definitions = raw_definitions if isinstance(raw_definitions, Mapping) else {}
+    prefix = "#/$defs/"
+
+    def expand(node: Any, stack: tuple[str, ...]) -> Any:
+        if isinstance(node, list):
+            return [expand(item, stack) for item in node]
+        if not isinstance(node, Mapping):
+            return node
+        reference = node.get("$ref")
+        # Pydantic adds an OpenAPI ``discriminator`` whose ``mapping`` values are
+        # ``$ref`` strings. Those cannot survive inlining, and the ``oneOf``
+        # members keep their own ``const`` constraints, so the keyword is dropped.
+        siblings = {key: value for key, value in node.items() if key not in {"$ref", "$defs", "discriminator"}}
+        if reference is None:
+            return {key: expand(value, stack) for key, value in siblings.items()}
+        if not isinstance(reference, str) or not reference.startswith(prefix):
+            raise ValueError(f"Tool arguments use an unsupported schema reference: {reference!r}")
+        name = reference[len(prefix) :]
+        if name in stack:
+            raise ValueError(
+                f"Tool arguments cannot use the recursive model {name!r}: a self-referencing schema "
+                "cannot be expanded for providers that reject $ref"
+            )
+        target = definitions.get(name)
+        if not isinstance(target, Mapping):
+            raise ValueError(f"Tool arguments reference a missing schema definition: {name!r}")
+        # Sibling keywords such as a field description override the definition.
+        return {**expand(target, (*stack, name)), **expand(siblings, stack)}
+
+    return expand({key: value for key, value in schema.items() if key != "$defs"}, ())
+
+
 def _build_input_schema(
     function: Callable[..., Any], documentation: _ToolDocumentation
 ) -> tuple[type[Any], tuple[str, ...], dict[str, Any]]:
     """Build the validator and JSON schema for one typed function."""
+    from pydantic import ConfigDict, create_model
+
     hints = get_type_hints(function, include_extras=True)
     fields: dict[str, tuple[Any, Any]] = {}
     for parameter in inspect.signature(function).parameters.values():
@@ -246,7 +302,7 @@ def _build_input_schema(
         __module__=getattr(function, "__module__", __name__),
         **fields,
     )
-    parameters = inputs.model_json_schema()
+    parameters = _inline_schema_references(inputs.model_json_schema())
     unknown_parameters = documentation.parameter_descriptions.keys() - fields.keys()
     if unknown_parameters:
         unknown = ", ".join(sorted(unknown_parameters))
@@ -290,12 +346,15 @@ def _build_agent_tool(
             return await runner(function, **values)
         return await asyncio.to_thread(function, **values)
 
+    resolved_guidelines = _resolve_guidelines(documentation, guidelines)
+    if not resolved_guidelines:
+        raise ValueError("A tool needs at least one non-empty guideline")
     return AgentTool(
         name=name or function.__name__,
         description=documentation.description,
         parameters=parameters,
         handler=invoke,
-        guidelines=_resolve_guidelines(documentation, guidelines),
+        guidelines=resolved_guidelines,
         snippet=snippet if snippet is not None else documentation.snippet,
         execution_mode=execution_mode,
         deferred=deferred,

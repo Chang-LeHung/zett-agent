@@ -4,10 +4,7 @@ import base64
 import json
 import ssl
 from collections.abc import AsyncIterator
-from typing import Any
-
-import httpx
-import truststore
+from typing import TYPE_CHECKING, Any
 
 from ..messages import (
     AssistantMessage,
@@ -38,6 +35,9 @@ from .base import (
     retry_model_stream,
 )
 from .tool_images import expand_tool_images
+
+if TYPE_CHECKING:
+    import httpx
 
 
 class GoogleProvider(RetryingProvider):
@@ -85,6 +85,8 @@ class GoogleProvider(RetryingProvider):
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
     ) -> None:
+        import httpx
+        import truststore
         from google import genai
         from google.genai import types
 

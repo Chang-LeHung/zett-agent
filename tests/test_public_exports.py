@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -14,7 +15,10 @@ import zett_agent
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "zett_agent"
 
-#: Packages that must not re-export the modules they contain.
+#: Packages that must not re-export the modules they contain. ``jit_harness`` is
+#: the deliberate exception: it is a documented facade whose exports must equal
+#: its reference page, enforced by
+#: ``test_jit_harness_facade_is_the_documented_contract``.
 THIN_PACKAGES = (
     "zett_agent",
     "zett_agent.tools",
@@ -52,6 +56,35 @@ def run_python(code: str) -> list[str]:
     """Run one snippet in a fresh interpreter and return its stdout fields."""
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     return result.stdout.split()
+
+
+#: The reference table is the published contract; the manual and the docs check
+#: both read it, so the facade cannot drift from what is documented.
+REFERENCE = Path(__file__).resolve().parents[1] / "docs" / "_ext" / "reference.py"
+
+
+def test_jit_harness_facade_is_the_documented_contract():
+    """jit_harness re-exports on purpose, so its facade mirrors its reference page."""
+    import zett_agent.jit_harness as jit_harness
+
+    spec = importlib.util.spec_from_file_location("reference_contract", REFERENCE)
+    assert spec is not None and spec.loader is not None
+    reference = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reference)
+    documented = {
+        name
+        for module_name, names in reference.PUBLIC_API.items()
+        if module_name.startswith("zett_agent.jit_harness.")
+        for name in names
+    }
+    exported = list(jit_harness.__all__)
+    assert len(set(exported)) == len(exported), exported
+    assert set(exported) == documented, sorted(set(exported) ^ documented)
+    for name in documented:
+        exported_object = getattr(jit_harness, name)
+        module_name = getattr(exported_object, "__module__", None)
+        if module_name is not None:
+            assert module_name.startswith("zett_agent.jit_harness."), (name, module_name)
 
 
 @pytest.mark.parametrize("package", THIN_PACKAGES)

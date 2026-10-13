@@ -38,6 +38,7 @@ ALIASES = {
     "extensions.shell_approval": ("ShellCommandNext",),
     "extensions.subagent": ("TaskDescription", "TaskPrompt", "SubAgentName"),
     "extensions.todo": ("TodoContent", "TodoList"),
+    "jit_harness.results": ("ToolStatus",),
     "json_types": ("JsonValue",),
     "messages": ("ImageSource", "UserContentPart", "UserContent", "AnyMessage"),
     "tools.base": ("ToolResult",),

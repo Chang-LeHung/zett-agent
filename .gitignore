@@ -13,3 +13,6 @@ docs/_generated/
 .env
 .DS_Store
 e2e/
+
+# Compiled translation catalogs are build output; the .po files are the source.
+*.mo

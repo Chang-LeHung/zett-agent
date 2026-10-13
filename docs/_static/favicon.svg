@@ -1,12 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">Zett Agent</title>
-  <path d="M8 25C18 29 20 16 32 14C37 13 40 14 43 17C45 12 48 9 53 8C55 18 50 26 46 31C55 35 55 44 48 48C43 51 37 48 34 46C30 56 20 60 9 53C18 51 22 46 21 40C12 43 5 38 6 31C7 28 9 27 8 25Z" fill="#7663e0"/>
-  <g data-part="eyes" fill="#fff">
-    <ellipse cx="24" cy="32" rx="4.8" ry="4.3" transform="rotate(-18 24 32)"/>
-    <ellipse cx="37" cy="28.5" rx="5.4" ry="4.8" transform="rotate(-18 37 28.5)"/>
-  </g>
-  <g data-part="pupils" fill="#2c224b">
-    <ellipse cx="26" cy="31" rx="2.1" ry="2.7" transform="rotate(-18 26 31)"/>
-    <ellipse cx="39.2" cy="27.4" rx="2.3" ry="3" transform="rotate(-18 39.2 27.4)"/>
+  <defs>
+    <linearGradient id="tile" x1="8" y1="0" x2="56" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#222a35"/>
+      <stop offset="1" stop-color="#0b0e12"/>
+    </linearGradient>
+    <linearGradient id="heat" x1="0" y1="2" x2="0" y2="42" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff2c4"/>
+      <stop offset=".3" stop-color="#ffb020"/>
+      <stop offset=".6" stop-color="#ff6a1f"/>
+      <stop offset=".8" stop-color="#e3e9f0"/>
+      <stop offset="1" stop-color="#b3bfce"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#tile)"/>
+  <g data-part="sword" transform="translate(32 33) rotate(45) scale(1.06) translate(-32 -30.6)">
+    <path data-part="blade" fill="url(#heat)" d="M32 1.5 L37.6 12.5 V40 H26.4 V12.5 Z"/>
+    <rect data-part="guard" fill="#e7edf4" x="19.5" y="40" width="25" height="5" rx="2.5"/>
+    <rect data-part="grip" fill="#9aa7b8" x="29.4" y="45" width="5.2" height="8.6" rx="1.2"/>
+    <circle data-part="pommel" fill="#e7edf4" cx="32" cy="56.6" r="3.2"/>
   </g>
 </svg>

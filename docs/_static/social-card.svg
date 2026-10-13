@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-labelledby="title desc">
+  <title id="title">Zett Agent</title>
+  <desc id="desc">Zett Agent: agents that forge the tools they need.</desc>
+  <defs>
+    <radialGradient id="ember" cx="20%" cy="22%" r="70%">
+      <stop stop-color="#ff7a1f" stop-opacity=".26"/>
+      <stop offset="1" stop-color="#ff7a1f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#0d1014"/>
+  <rect width="1200" height="630" fill="url(#ember)"/>
+  <g transform="translate(96 88) scale(3)">
+  <defs>
+    <linearGradient id="tile" x1="8" y1="0" x2="56" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#222a35"/>
+      <stop offset="1" stop-color="#0b0e12"/>
+    </linearGradient>
+    <linearGradient id="heat" x1="0" y1="2" x2="0" y2="42" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff2c4"/>
+      <stop offset=".18" stop-color="#ffb020"/>
+      <stop offset=".42" stop-color="#ff6a1f"/>
+      <stop offset=".62" stop-color="#d6dde6"/>
+      <stop offset="1" stop-color="#9aa7b8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50" cy="12" r="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff7a1f" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#ff7a1f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#tile)"/>
+  <rect width="64" height="64" rx="15" fill="url(#glow)"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="14.5" fill="none" stroke="#3a4554"/>
+  <g data-part="sword" transform="translate(32 33) rotate(45) scale(.9) translate(-32 -30.6)">
+    <path data-part="blade" fill="url(#heat)" d="M32 2 L36.4 12.5 V40 H27.6 V12.5 Z"/>
+    <path data-part="facet" fill="#000" opacity=".16" d="M32 2 L36.4 12.5 V40 H32 Z"/>
+    <rect data-part="guard" fill="#dfe6ee" x="20.5" y="40" width="23" height="4.2" rx="2.1"/>
+    <rect data-part="grip" fill="#8795a8" x="29.8" y="44.2" width="4.4" height="9" rx="1"/>
+    <circle data-part="pommel" fill="#dfe6ee" cx="32" cy="56.4" r="2.9"/>
+  </g>
+  <g data-part="sparks" fill="#ffc15a">
+    <circle cx="56" cy="9" r="1.5"/>
+    <circle cx="57.5" cy="17" r="1"/>
+    <circle cx="48" cy="5.5" r="1"/>
+  </g>
+</g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="96" y="440" fill="#f3f5f8" font-size="104" font-weight="700" letter-spacing="-3">Zett Agent</text>
+    <text x="100" y="508" fill="#ffb020" font-size="42" font-weight="500">Agents that forge the tools they need.</text>
+    <text x="100" y="574" fill="#8a96a6" font-size="28" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">pip install zett-agent</text>
+  </g>
+</svg>

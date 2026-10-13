@@ -71,12 +71,12 @@ only when an existing one cannot satisfy your application boundary.
 .. toctree::
    :hidden:
 
-   first-extension
-   hooks
-   middleware
-   events
-   state
-   model-adapter
-   server-tools
-   storage-adapter
-   built-ins
+   First extension <first-extension>
+   Hooks <hooks>
+   Middleware <middleware>
+   Events and input <events>
+   State and cleanup <state>
+   Model adapters <model-adapter>
+   Hosted tools <server-tools>
+   Storage adapters <storage-adapter>
+   Built-in extensions <built-ins>

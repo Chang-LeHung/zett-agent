@@ -188,8 +188,8 @@ html[data-theme="dark"] {
 /* ---- Sidebar navigation ------------------------------------------------ */
 
 .zett-navigation {
-  font-size: 0.86rem;
-  line-height: 1.45;
+  font-size: 0.875rem;
+  line-height: 1.4;
   padding-bottom: 2rem;
 }
 .zett-navigation-heading {
@@ -197,13 +197,14 @@ html[data-theme="dark"] {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
+  padding: 0 0.5rem;
 }
 .zett-navigation .zett-docs-home {
-  padding: 0;
   color: var(--pst-color-text-base);
-  font-size: 0.86rem;
+  font-size: 0.95rem;
   font-weight: 700;
+  text-decoration: none;
 }
 .zett-version {
   padding: 0.1rem 0.5rem;
@@ -214,49 +215,92 @@ html[data-theme="dark"] {
   font-family: var(--pst-font-family-monospace);
   font-size: 0.7rem;
 }
-.zett-navigation a {
-  text-decoration: none;
-}
-.zett-navigation ul {
+.zett-navigation ul,
+.zett-navigation ul.nav {
+  display: block;
   list-style: none;
   margin: 0;
   padding: 0;
 }
-.zett-navigation > ul > li {
-  margin-bottom: 1.4rem;
-}
-.zett-navigation > ul > li > a {
-  display: block;
-  padding: 0 0.6rem;
-  margin-bottom: 0.35rem;
-  color: var(--pst-color-text-base);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  pointer-events: auto;
-}
-.zett-navigation > ul > li > ul {
-  margin-left: 0.6rem;
-  border-left: 1px solid var(--zett-surface-border);
-}
-.zett-navigation li li {
+.zett-navigation li {
+  position: relative;
   margin: 0;
 }
-.zett-navigation li li > a {
+.zett-navigation a.reference {
   display: block;
-  padding: 0.32rem 0.7rem;
-  margin-left: -1px;
-  border-left: 2px solid transparent;
-  border-radius: 0 var(--zett-radius-small) var(--zett-radius-small) 0;
   color: var(--pst-color-text-muted);
   text-decoration: none;
 }
-.zett-navigation li li > a:hover {
+.zett-navigation a.reference:hover {
   color: var(--pst-color-text-base);
+}
+
+/* Top-level sections: bold rows that fold open. */
+.zett-navigation .toctree-l1 {
+  margin-bottom: 0.15rem;
+}
+.zett-navigation .toctree-l1 > a.reference {
+  padding: 0.45rem 2rem 0.45rem 0.6rem;
+  border-radius: var(--zett-radius-small);
+  color: var(--pst-color-text-base);
+  font-weight: 600;
+}
+.zett-navigation .toctree-l1 > a.reference:hover {
   background: var(--pst-color-surface);
 }
-.zett-navigation li li.current > a {
+.zett-navigation .toctree-l1.current > a.reference {
+  color: var(--pst-color-text-base);
+}
+.zett-navigation .toctree-l1 > details {
+  display: block;
+}
+.zett-navigation summary {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.1rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  list-style: none;
+  cursor: pointer;
+}
+.zett-navigation summary::-webkit-details-marker {
+  display: none;
+}
+.zett-navigation summary .toctree-toggle {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--zett-radius-small);
+  color: var(--pst-color-text-muted);
+}
+.zett-navigation summary:hover .toctree-toggle {
+  background: var(--pst-color-surface);
+  color: var(--pst-color-text-base);
+}
+.zett-navigation summary .toctree-toggle i {
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+}
+.zett-navigation details:not([open]) > summary .toctree-toggle i {
+  transform: rotate(-90deg);
+}
+
+/* Pages inside a section: a guide line and one amber marker. */
+.zett-navigation details > ul {
+  margin: 0.1rem 0 0.5rem 1rem;
+  border-left: 1px solid var(--zett-surface-border);
+}
+.zett-navigation .toctree-l2 > a.reference {
+  padding: 0.3rem 0.7rem;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--zett-radius-small) var(--zett-radius-small) 0;
+}
+.zett-navigation .toctree-l2 > a.reference:hover {
+  background: var(--pst-color-surface);
+}
+.zett-navigation .toctree-l2.current > a.reference {
   border-left-color: var(--zett-ember);
   background: var(--zett-glow);
   color: var(--pst-color-text-base);

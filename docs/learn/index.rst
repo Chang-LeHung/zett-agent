@@ -130,19 +130,19 @@ If you need behavior the built-ins do not provide, follow
 .. toctree::
    :hidden:
 
-   installation
-   first-agent
-   providers
-   tools
-   streaming
-   sessions
-   images
-   project-instructions
-   on-demand
-   jit-harness
-   mcp
-   configuration
-   synchronous
-   application
-   testing
-   troubleshooting
+   Installation <installation>
+   First agent <first-agent>
+   Model providers <providers>
+   Tools <tools>
+   Streaming <streaming>
+   Sessions <sessions>
+   Images <images>
+   Project instructions <project-instructions>
+   On-demand loading <on-demand>
+   JIT harness <jit-harness>
+   MCP <mcp>
+   Configuration <configuration>
+   Synchronous use <synchronous>
+   Applications <application>
+   Testing <testing>
+   Troubleshooting <troubleshooting>

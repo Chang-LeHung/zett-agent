@@ -22,7 +22,7 @@ If you are new here, start with :doc:`../learn/index` or
    ../_generated/group-storage
    ../_generated/group-extensions
    ../_generated/group-constants
-   ../docstrings
+   Writing API docs <../docstrings>
 
 Common entry points
 -------------------

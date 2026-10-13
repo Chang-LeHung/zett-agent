@@ -385,6 +385,9 @@ def test_desktop_mobile_navigation_and_search(documentation):
             page.locator('.theme-change-button[data-mode="light"]').filter(visible=True).click()
             page.wait_for_function("document.documentElement.dataset.theme === 'light'")
             page.screenshot(path=str(output / "desktop.png"), full_page=True)
+            section = navigation.locator("li.toctree-l1").filter(has_text="Extend the runtime").first
+            assert section.locator("details").get_attribute("open") is None, "sections start folded"
+            section.locator("summary").click()
             navigation.locator('a[href="extending/first-extension.html"]').click()
             assert page.locator("h1").inner_text().startswith("Write your first extension")
             assert page.locator(".bd-sidebar-secondary").is_visible()
@@ -419,6 +422,9 @@ def test_desktop_mobile_navigation_and_search(documentation):
             page.screenshot(path=str(output / "mobile-home.png"), full_page=True)
             page.get_by_role("button", name="Site navigation", exact=True).click()
             assert navigation.is_visible()
+            section = navigation.locator("li.toctree-l1").filter(has_text="Extend the runtime").first
+            assert section.locator("details").get_attribute("open") is None, "sections start folded"
+            section.locator("summary").click()
             navigation.locator('a[href="extending/first-extension.html"]').click()
             page.locator("h1").wait_for()
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")

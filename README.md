@@ -6,7 +6,7 @@
 
 <h1 align="center">Zett Agent</h1>
 
-<p align="center">Small core. Yours to shape.</p>
+<p align="center">Agents that forge the tools they need.</p>
 
 <p align="center">
   <a href="https://chang-lehung.github.io/zett-agent/">Documentation</a> ·
@@ -14,7 +14,7 @@
   <a href="https://chang-lehung.github.io/zett-agent/examples/">Examples</a>
 </p>
 
-[![PyPI](https://img.shields.io/pypi/v/zett-agent?color=7663e0)](https://pypi.org/project/zett-agent/)
+[![PyPI](https://img.shields.io/pypi/v/zett-agent?color=d97706)](https://pypi.org/project/zett-agent/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-7663e0)](https://pypi.org/project/zett-agent/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-7663e0)](https://github.com/Chang-LeHung/zett-agent/blob/main/LICENSE)
 [![CI](https://github.com/Chang-LeHung/zett-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Chang-LeHung/zett-agent/actions/workflows/ci.yml)

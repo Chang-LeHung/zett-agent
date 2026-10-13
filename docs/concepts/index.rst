@@ -39,7 +39,7 @@ If you only read one page before writing a stateful extension, read
 .. toctree::
    :hidden:
 
-   architecture
-   lifecycle
-   context
-   events
+   Architecture <architecture>
+   Request lifecycle <lifecycle>
+   Model context <context>
+   Events <events>

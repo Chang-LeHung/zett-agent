@@ -281,17 +281,17 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
 }
 
 GROUPS = {
-    "client": "Application client",
-    "agent": "Runtime and configuration",
-    "messages": "Messages and images",
-    "events": "Events and dispatch",
-    "model": "Model protocol and usage",
-    "providers": "Provider adapters",
-    "tools": "Tools and filesystem operations",
-    "jit_harness": "JIT Python tool environments",
-    "storage": "Session storage",
-    "extensions": "Extensions and lifecycle hooks",
-    "constants": "Constants and type aliases",
+    "client": "Client",
+    "agent": "Agent runtime",
+    "messages": "Messages",
+    "events": "Events",
+    "model": "Models",
+    "providers": "Providers",
+    "tools": "Tools",
+    "jit_harness": "JIT harness",
+    "storage": "Storage",
+    "extensions": "Extensions",
+    "constants": "Constants",
 }
 
 GUIDES = {

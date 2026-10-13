@@ -1,7 +1,7 @@
 :html_theme.sidebar_secondary.remove:
 
 .. meta::
-   :description: Build Python agents with typed tools, streaming, persistent sessions, and on-demand skills. A small, provider-neutral runtime you can extend and embed.
+   :description: Agents that forge the tools they need. A small Python runtime for tool-calling agents, with a JIT harness that lets a model write, reuse, and inspect its own tools in the middle of a run.
 
 .. rst-class:: zett-landing
 
@@ -15,16 +15,18 @@ Zett Agent
       .. raw:: html
 
          <div class="zett-hero-identity">
-           <img class="dark-light" src="_static/logo.svg" width="64" height="64" alt=""/>
-           <span>YOUR AGENT. YOUR WAY.</span>
+           <img class="dark-light" src="_static/logo.svg" width="52" height="52" alt=""/>
+           <a class="zett-hero-badge" href="learn/jit-harness.html">Meet the JIT harness →</a>
          </div>
-         <p class="zett-hero-title">Small core.<br/><span>Yours to shape.</span></p>
+         <p class="zett-hero-title">Agents that forge<br/><span>the tools they need.</span></p>
 
-      Build Python agents with your choice of model, ordinary functions as
-      tools, and a stream your application can use. Add skills, persistence,
-      and delegation when you need them.
+      Zett Agent is a small Python runtime for tool-calling agents. Its JIT
+      harness lets a model write, reuse, and inspect its own tools in the
+      middle of a run, so a long task stops paying for the same exploration
+      twice.
 
-      Your tools. Your instructions. Your choice of model.
+      Bring your own model and ordinary Python functions. Add skills,
+      persistence, and delegation when you need them.
 
       .. container:: zett-actions
 
@@ -34,10 +36,10 @@ Zett Agent
 
             Build your first agent →
 
-         .. button-ref:: examples/index
+         .. button-ref:: learn/jit-harness
             :ref-type: doc
 
-            Explore examples
+            Meet the JIT harness
 
       .. raw:: html
 
@@ -51,26 +53,43 @@ Zett Agent
 
       .. raw:: html
 
-         <div class="zett-code-caption"><span>YOUR MODEL. YOUR TOOLS.</span><span>Python</span></div>
+         <div class="zett-code-caption"><span>YOUR APPLICATION</span><span>Python</span></div>
 
       .. code-block:: python
 
          from zett_agent.client import create_agent
-         from zett_agent.tools.base import tool
+         from zett_agent.extensions.memory import InMemoryMessageAccumulator
+         from zett_agent.jit_harness import JITHarnessExtension
 
-         @tool(guidelines="Use for exact integer addition.")
-         def add(left: int, right: int) -> int:
-             """Add two integers exactly."""
-             return left + right
+         client = await create_agent(
+             model,
+             tools=[add],
+             extensions=[
+                 InMemoryMessageAccumulator(),
+                 JITHarnessExtension(),
+             ],
+         )
+         await client.run("Build a tool that doubles 21, then use it.")
 
-         client = await create_agent(model, tools=[add])
-         reply = await client.run("What is 20 plus 22?")
-         print(reply.content)
+      .. raw:: html
+
+         <div class="zett-code-caption"><span>WRITTEN BY THE MODEL, MID-RUN</span><span>Python</span></div>
+
+      .. code-block:: python
+
+         @tool(guidelines="Use to add an integer to itself.")
+         async def twice(value: int) -> int:
+             """Add the same integer twice."""
+             return await harness.call_tool(
+                 "add", left=value, right=value
+             )
 
       .. container:: zett-code-note
 
          Use a configured model inside an async function. Start with
-         :doc:`the complete, no-key example <learn/first-agent>`.
+         :doc:`the complete, no-key example <learn/first-agent>`. Generated
+         tools are trusted code, not a sandbox:
+         :doc:`read the JIT harness guide <learn/jit-harness>`.
 
 .. container:: zett-install
 
@@ -87,6 +106,41 @@ Zett Agent
          .. code-block:: bash
 
             uv add zett-agent
+
+Let the model forge what it needs
+---------------------------------
+
+JIT here means building the tool environment when a task needs it, not a
+Python just-in-time compiler. The harness works through ordinary function
+calling, so it runs on Responses and Chat Completions alike.
+
+.. container:: zett-steps
+
+   .. container:: zett-step
+
+      **Forge**
+
+      ``create_tool`` registers a Python tool or a Markdown procedure the
+      model just wrote. A Python tool can span several files that import each
+      other.
+
+   .. container:: zett-step
+
+      **Reuse and compose**
+
+      Tools call each other through ``harness.call_tool``. One outer call can
+      drive a loop of nested calls whose results never enter the context.
+
+   .. container:: zett-step
+
+      **Inspect and unload**
+
+      Source, profiles, and recent errors stay inspectable. Unload what the
+      task no longer needs, and carry the toolbox to the next session in a
+      snapshot.
+
+:doc:`Read the JIT harness guide <learn/jit-harness>` for the control loop,
+what the model sees, and the trust boundary.
 
 Everything you need. Only when you need it.
 ------------------------------------------------

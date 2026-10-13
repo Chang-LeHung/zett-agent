@@ -3,6 +3,15 @@
     <a class="zett-docs-home" href="{{ pathto(root_doc) }}">Documentation</a>
     <span class="zett-version">v{{ release }}</span>
   </div>
-  <a class="zett-search-link" href="{{ pathto('search') }}">Search documentation</a>
-  {{ toctree(includehidden=True, collapse=False, maxdepth=2, titles_only=True) }}
+  <div class="bd-toc-item navbar-nav">
+    {{- generate_toctree_html(
+      "sidebar",
+      startdepth=0,
+      show_nav_level=0,
+      maxdepth=2,
+      collapse=False,
+      includehidden=True,
+      titles_only=True
+    ) -}}
+  </div>
 </nav>

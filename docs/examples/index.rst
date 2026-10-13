@@ -78,12 +78,12 @@ connections and use a temporary working directory for each program.
 .. toctree::
    :hidden:
 
-   streaming-tools
-   sessions
-   compaction
-   approval
-   observability
-   subagent
-   cancellation
-   goal
-   storage-adapter
+   Streaming tools <streaming-tools>
+   Sessions <sessions>
+   Compaction <compaction>
+   Approval <approval>
+   Observability <observability>
+   Subagents <subagent>
+   Cancellation <cancellation>
+   Goals <goal>
+   Storage adapter <storage-adapter>

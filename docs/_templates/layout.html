@@ -1,0 +1,15 @@
+{% extends "!layout.html" %}
+
+{% block extrahead %}
+{{ super() }}
+<meta name="theme-color" content="#6650c4">
+<meta property="og:site_name" content="Zett Agent">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ title|striptags|e }}">
+<meta property="og:description" content="{{ site_description|e }}">
+<meta property="og:image" content="{{ social_card }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{ social_card }}">
+{% endblock %}

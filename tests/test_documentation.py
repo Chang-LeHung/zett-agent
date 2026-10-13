@@ -265,48 +265,35 @@ def test_readme_logo_uses_picture_to_avoid_github_image_fallback():
 def test_logo_and_favicon_keep_the_same_accessible_mark(documentation):
     _, output = documentation
     namespace = {"svg": "http://www.w3.org/2000/svg"}
-    marks = []
+    parts = []
     for filename in ("logo.svg", "favicon.svg"):
         root = ElementTree.parse(output / "_static" / filename).getroot()
         assert root.attrib["viewBox"] == "0 0 64 64"
         assert root.find("svg:title", namespace).text == "Zett Agent"
-        assert root.find(".//svg:rect", namespace) is None
-        marks.append([path.attrib["d"] for path in root.findall("svg:path", namespace)])
-    assert marks[0] and marks[0] == marks[1]
+        assert root.find("svg:rect", namespace).attrib["rx"], "the mark sits on a rounded tile"
+        sword = root.find("svg:g[@data-part='sword']", namespace)
+        assert sword is not None
+        parts.append([element.attrib["data-part"] for element in sword])
+    for each in parts:
+        assert {"blade", "guard", "grip", "pommel"} <= set(each)
 
 
-def test_creature_forms_share_a_core_but_have_distinct_silhouettes(documentation):
+def test_brand_assets_describe_one_sword(documentation):
     _, output = documentation
+    static = output / "_static"
     namespace = {"svg": "http://www.w3.org/2000/svg"}
-    filenames = ("logo.svg", "creature-curious.svg", "creature-focused.svg", "creature-expansive.svg")
-    silhouettes = []
-    eyes = []
-    pupils = []
-    for filename in filenames:
-        root = ElementTree.parse(output / "_static" / filename).getroot()
-        assert root.attrib["viewBox"] == "0 0 64 64"
-        assert root.find("svg:title", namespace).text.startswith("Zett Agent")
-        assert len(root.findall("svg:path", namespace)) == 1
-        assert root.find("svg:path", namespace).attrib["fill"] == "url(#iris)"
-        assert root.find("svg:g[@data-part='eyes']", namespace).attrib["fill"] == "#fff"
-        assert root.find("svg:g[@data-part='pupils']", namespace).attrib["fill"] == "#2c224b"
-        silhouettes.append(root.find("svg:path", namespace).attrib["d"])
-        eyes.append([eye.attrib for eye in root.findall("svg:g[@data-part='eyes']/svg:ellipse", namespace)])
-        pupils.append([pupil.attrib for pupil in root.findall("svg:g[@data-part='pupils']/svg:ellipse", namespace)])
-    assert len(set(silhouettes)) == len(filenames)
-    assert len(eyes[0]) == 2 and all(pair == eyes[0] for pair in eyes)
-    assert len(pupils[0]) == 2 and all(pair == pupils[0] for pair in pupils)
-    for eye, pupil in zip(eyes[0], pupils[0], strict=True):
-        assert float(pupil["cx"]) > float(eye["cx"])
-        assert float(pupil["cy"]) < float(eye["cy"])
-    monochrome = ElementTree.parse(output / "_static" / "mark.svg").getroot()
-    assert monochrome.find("svg:path", namespace).attrib["d"] == silhouettes[0]
-    assert monochrome.find("svg:path", namespace).attrib["fill"] == "currentColor"
-    preview = ElementTree.parse(output / "_static" / "brand-preview.svg").getroot()
-    assert preview.find("svg:defs/svg:path[@id='body']", namespace).attrib["d"] == silhouettes[0]
-    for name, silhouette in zip(("curious", "focused", "expansive"), silhouettes[1:], strict=True):
-        paths = preview.findall(f"svg:defs/svg:g[@id='{name}']/svg:path", namespace)
-        assert len(paths) == 1 and paths[0].attrib["d"] == silhouette
+    monochrome = ElementTree.parse(static / "mark.svg").getroot()
+    swords = monochrome.findall("svg:g[@data-part='sword']", namespace)
+    assert len(swords) == 1 and swords[0].attrib["fill"] == "currentColor"
+    assert monochrome.find(".//svg:linearGradient", namespace) is None
+    card = ElementTree.parse(static / "social-card.svg").getroot()
+    assert card.attrib["viewBox"] == "0 0 1200 630"
+    assert card.find(".//svg:g[@data-part='sword']", namespace) is not None
+    png = (static / "social-card.png").read_bytes()
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    assert int.from_bytes(png[16:20], "big") == 1200 and int.from_bytes(png[20:24], "big") == 630
+    for retired in ("creature-curious.svg", "creature-focused.svg", "creature-expansive.svg", "brand-preview.svg"):
+        assert not (static / retired).exists(), f"{retired} belongs to the retired identity"
 
 
 @pytest.mark.parametrize(
@@ -388,8 +375,8 @@ def test_desktop_mobile_navigation_and_search(documentation):
             page.wait_for_function("document.documentElement.dataset.theme === 'dark'")
             assert page.locator(".navbar-brand .logo__image.only-dark").is_visible()
             primary = page.locator(".zett-actions .sd-btn-primary")
-            playwright.expect(primary).to_have_css("background-color", "rgb(193, 180, 255)")
-            playwright.expect(primary).to_have_css("color", "rgb(34, 27, 53)")
+            playwright.expect(primary).to_have_css("background-color", "rgb(251, 191, 36)")
+            playwright.expect(primary).to_have_css("color", "rgb(26, 18, 3)")
             hero_icon = page.locator(".zett-hero-identity img")
             playwright.expect(hero_icon).to_have_css("filter", "none")
             playwright.expect(hero_icon).to_have_css("background-color", "rgba(0, 0, 0, 0)")
@@ -419,7 +406,7 @@ def test_desktop_mobile_navigation_and_search(documentation):
             assert "ExternalEventExtension" in page.locator("#search-results").inner_text()
             page.goto(f"{base}/learn/providers.html", wait_until="networkidle")
             labels = page.locator("label.sd-tab-label")
-            playwright.expect(labels.filter(has_text="Anthropic")).to_have_css("color", "rgb(104, 98, 115)")
+            playwright.expect(labels.filter(has_text="Anthropic")).to_have_css("color", "rgb(91, 100, 114)")
             for name in ("Anthropic", "Google", "DeepSeek", "Ollama", "OpenAI"):
                 labels.filter(has_text=name).click()
             assert "OpenAIProvider" in page.locator(".sd-tab-content").filter(visible=True).inner_text()

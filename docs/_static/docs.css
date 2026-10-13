@@ -1,3 +1,11 @@
+/*
+ * Zett Agent documentation theme.
+ *
+ * Identity: forged steel and ember. Neutral charcoal surfaces carry the
+ * reading experience; one amber accent marks what is interactive or hot.
+ * Built on pydata-sphinx-theme variables so the theme keeps working.
+ */
+
 html {
   --pst-font-size-base: 16px;
   --pst-font-family-base:
@@ -9,115 +17,179 @@ html {
   --pst-font-family-monospace: var(--pst-font-family-monospace-system);
   --bs-font-monospace: var(--pst-font-family-monospace-system);
   --zett-radius: 0.75rem;
-  --pst-header-height: 4.25rem;
+  --zett-radius-small: 0.5rem;
+  --pst-header-height: 3.75rem;
+  scroll-padding-top: 5rem;
 }
 
 html[data-theme="light"] {
-  --pst-color-primary: #6650c4;
+  --pst-color-primary: #b45309;
   --pst-color-primary-text: #fff;
-  --pst-color-primary-highlight: #5139ac;
+  --pst-color-primary-highlight: #92400e;
   --pst-color-primary-highlight-text: #fff;
-  --pst-color-secondary: #6650c4;
+  --pst-color-secondary: #b45309;
   --pst-color-secondary-text: #fff;
-  --pst-color-secondary-highlight: #5139ac;
+  --pst-color-secondary-highlight: #92400e;
   --pst-color-secondary-highlight-text: #fff;
-  --pst-color-link: #6650c4;
-  --pst-color-link-hover: #5139ac;
-  --pst-color-text-base: #2b2738;
-  --pst-color-text-muted: #686273;
-  --pst-color-background: #fffdfa;
-  --pst-color-on-background: #fffdfa;
-  --pst-color-surface: #f4f0fa;
-  --pst-color-on-surface: #eae3f5;
-  --pst-color-border: #e5dfec;
-  --pst-color-inline-code: #6650c4;
-  --pst-color-target: #f0eaf9;
-  --zett-surface: #f8f5fc;
-  --zett-surface-border: #e5dfec;
-  --zett-hero-surface: #f3eefb;
-  --zett-code-surface: #fdfbf8;
-  --zett-accent: #6650c4;
-  --sd-color-primary-bg: #f0eaf9;
-  --sd-color-primary-bg-text: #2b2738;
-  --zett-shadow: 0 2px 4px rgb(43 33 66 / 3%), 0 12px 32px rgb(43 33 66 / 4%);
+  --pst-color-link: #b45309;
+  --pst-color-link-hover: #92400e;
+  --pst-color-text-base: #14171c;
+  --pst-color-text-muted: #5b6472;
+  --pst-color-background: #fff;
+  --pst-color-on-background: #fff;
+  --pst-color-surface: #f6f7f9;
+  --pst-color-on-surface: #eceff3;
+  --pst-color-border: #e3e6eb;
+  --pst-color-inline-code: #92400e;
+  --pst-color-target: #fff3e0;
+  --zett-surface: #f6f7f9;
+  --zett-surface-border: #e3e6eb;
+  --zett-hero-surface: #fff7ed;
+  --zett-code-surface: #fafbfc;
+  --zett-accent: #b45309;
+  --zett-ember: #f59e0b;
+  --zett-glow: rgb(245 158 11 / 14%);
+  --zett-gradient: linear-gradient(100deg, #c2410c, #d97706 70%);
+  --sd-color-primary-bg: #fff3e0;
+  --sd-color-primary-bg-text: #14171c;
+  --zett-shadow: 0 1px 2px rgb(16 24 40 / 4%), 0 12px 32px rgb(16 24 40 / 6%);
 }
 
 html[data-theme="dark"] {
-  --pst-color-primary: #c1b4ff;
-  --pst-color-primary-text: #221b35;
-  --pst-color-primary-highlight: #d5caff;
-  --pst-color-primary-highlight-text: #221b35;
-  --pst-color-secondary: #c1b4ff;
-  --pst-color-secondary-text: #221b35;
-  --pst-color-secondary-highlight: #d5caff;
-  --pst-color-secondary-highlight-text: #221b35;
-  --pst-color-link: #c1b4ff;
-  --pst-color-link-hover: #e0d7ff;
-  --pst-color-text-base: #eee8f5;
-  --pst-color-text-muted: #b4aabe;
-  --pst-color-background: #18151f;
-  --pst-color-on-background: #1e1928;
-  --pst-color-surface: #262030;
-  --pst-color-on-surface: #342b42;
-  --pst-color-border: #3b314a;
-  --pst-color-inline-code: #c1b4ff;
-  --pst-color-target: #342b42;
-  --zett-surface: #211b2b;
-  --zett-surface-border: #3b314a;
-  --zett-hero-surface: #292034;
-  --zett-code-surface: #1c1725;
-  --zett-accent: #c1b4ff;
-  --sd-color-primary-bg: #342b42;
-  --sd-color-primary-bg-text: #eee8f5;
-  --zett-shadow: 0 2px 4px rgb(0 0 0 / 8%), 0 12px 32px rgb(0 0 0 / 12%);
+  --pst-color-primary: #fbbf24;
+  --pst-color-primary-text: #1a1203;
+  --pst-color-primary-highlight: #fcd34d;
+  --pst-color-primary-highlight-text: #1a1203;
+  --pst-color-secondary: #fbbf24;
+  --pst-color-secondary-text: #1a1203;
+  --pst-color-secondary-highlight: #fcd34d;
+  --pst-color-secondary-highlight-text: #1a1203;
+  --pst-color-link: #fbbf24;
+  --pst-color-link-hover: #fde68a;
+  --pst-color-text-base: #e8ecf1;
+  --pst-color-text-muted: #9aa5b4;
+  --pst-color-background: #0d1014;
+  --pst-color-on-background: #12161b;
+  --pst-color-surface: #151a21;
+  --pst-color-on-surface: #1d242d;
+  --pst-color-border: #262e39;
+  --pst-color-inline-code: #fbbf24;
+  --pst-color-target: #2a2110;
+  --zett-surface: #12161b;
+  --zett-surface-border: #262e39;
+  --zett-hero-surface: #17140d;
+  --zett-code-surface: #0f1318;
+  --zett-accent: #fbbf24;
+  --zett-ember: #f59e0b;
+  --zett-glow: rgb(245 158 11 / 12%);
+  --zett-gradient: linear-gradient(100deg, #fb923c, #fbbf24 70%);
+  --sd-color-primary-bg: #2a2110;
+  --sd-color-primary-bg-text: #e8ecf1;
+  --zett-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 16px 40px rgb(0 0 0 / 35%);
 }
+
+::selection {
+  background: var(--zett-glow);
+}
+
+/* ---- Layout ------------------------------------------------------------ */
 
 .bd-page-width {
-  max-width: 100rem;
+  max-width: 96rem;
 }
 .bd-main .bd-content .bd-article-container {
-  max-width: 68rem;
+  max-width: 64rem;
+}
+.bd-main .bd-content .bd-article-container:has(.zett-landing) {
+  max-width: 78rem;
 }
 .bd-article {
-  line-height: 1.75;
-  padding: 1.5rem 2rem 2.5rem;
+  padding: 1.5rem 2.25rem 3rem;
+  line-height: 1.7;
 }
-
 .bd-sidebar-primary {
-  width: 17.5rem;
-  flex: 0 0 17.5rem;
-  padding: 1.5rem 1.25rem;
-  background: var(--zett-code-surface);
+  width: 16.5rem;
+  flex: 0 0 16.5rem;
+  padding: 1.25rem 1rem;
+  background: var(--pst-color-background);
   border-right: 1px solid var(--zett-surface-border);
 }
-
 .bd-sidebar-secondary {
   font-size: 0.82rem;
 }
-.bd-header {
-  border-bottom: 1px solid var(--zett-surface-border);
-  box-shadow: none;
+.bd-sidebar-secondary .nav-link,
+.bd-sidebar-secondary code {
+  overflow-wrap: anywhere;
 }
-.navbar-brand.logo {
-  gap: 0.65rem;
-}
-.navbar-brand img.logo__image {
-  width: 2.25rem;
-  height: 2.25rem;
-}
-.navbar-brand p.logo__title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: -0.035em;
-}
-.bd-header .navbar-nav {
-  font-size: 0.85rem;
-  gap: 0.3rem;
+.bd-sidebar-secondary code {
+  font-size: 0.72rem;
+  white-space: normal;
+  word-break: break-all;
 }
 
-.zett-navigation {
+/* ---- Header ------------------------------------------------------------ */
+
+.bd-header {
+  border-bottom: 1px solid var(--zett-surface-border);
+  background: color-mix(in srgb, var(--pst-color-background) 86%, transparent);
+  box-shadow: none;
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  backdrop-filter: saturate(160%) blur(14px);
+}
+.navbar-brand.logo {
+  gap: 0.7rem;
+}
+.navbar-brand img.logo__image {
+  width: 2rem;
+  height: 2rem;
+}
+.navbar-brand p.logo__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.bd-header .navbar-nav {
+  gap: 0.15rem;
+  font-size: 0.88rem;
+}
+.bd-header .navbar-nav > li > a.nav-link {
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--zett-radius-small);
+  color: var(--pst-color-text-muted);
+  font-weight: 500;
+}
+.bd-header .navbar-nav > li > a.nav-link:hover,
+.bd-header .navbar-nav > li.current > a.nav-link {
+  color: var(--pst-color-text-base);
+  background: var(--pst-color-surface);
+}
+.bd-header .navbar-nav > li.current > a.nav-link {
+  box-shadow: inset 0 -2px var(--zett-ember);
+  border-radius: var(--zett-radius-small) var(--zett-radius-small) 0 0;
+}
+.bd-header .search-button__button {
+  max-width: 100%;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--zett-surface-border);
+  border-radius: var(--zett-radius-small);
+  background: var(--zett-surface);
+  color: var(--pst-color-text-muted);
   font-size: 0.84rem;
-  line-height: 1.5;
+}
+.bd-header .search-button__button:hover {
+  border-color: var(--zett-ember);
+}
+@media (min-width: 992px) {
+  .bd-header .search-button__button {
+    width: 14rem;
+  }
+}
+
+/* ---- Sidebar navigation ------------------------------------------------ */
+
+.zett-navigation {
+  font-size: 0.86rem;
+  line-height: 1.45;
   padding-bottom: 2rem;
 }
 .zett-navigation-heading {
@@ -125,121 +197,391 @@ html[data-theme="dark"] {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 .zett-navigation .zett-docs-home {
   padding: 0;
   color: var(--pst-color-text-base);
-  font-size: 0.84rem;
-  font-weight: 650;
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 .zett-version {
-  padding: 0.12rem 0.45rem;
+  padding: 0.1rem 0.5rem;
   border: 1px solid var(--zett-surface-border);
-  border-radius: 0.35rem;
+  border-radius: 999px;
+  background: var(--zett-surface);
   color: var(--pst-color-text-muted);
-  font-size: 0.72rem;
+  font-family: var(--pst-font-family-monospace);
+  font-size: 0.7rem;
 }
-
-.zett-navigation .zett-search-link {
-  padding: 0.6rem 0.7rem;
-  border: 1px solid var(--zett-surface-border);
-  border-radius: 0.45rem;
-  margin-bottom: 1.5rem;
-  background: var(--pst-color-background);
-  color: var(--pst-color-text-muted);
-  font-size: 0.8rem;
-}
-
-.zett-search-link:hover {
-  border-color: var(--zett-accent);
+.zett-navigation a {
+  text-decoration: none;
 }
 .zett-navigation ul {
   list-style: none;
-  padding-left: 0.65rem;
-}
-.zett-navigation > ul {
-  padding-left: 0;
-}
-.zett-navigation li {
-  margin: 0.15rem 0;
+  margin: 0;
+  padding: 0;
 }
 .zett-navigation > ul > li {
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.4rem;
 }
 .zett-navigation > ul > li > a {
-  margin-bottom: 0.45rem;
-  color: var(--pst-color-text-base);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-.zett-navigation a {
   display: block;
-  padding: 0.35rem 0.65rem;
-  border-radius: 0.35rem;
+  padding: 0 0.6rem;
+  margin-bottom: 0.35rem;
+  color: var(--pst-color-text-base);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: auto;
+}
+.zett-navigation > ul > li > ul {
+  margin-left: 0.6rem;
+  border-left: 1px solid var(--zett-surface-border);
+}
+.zett-navigation li li {
+  margin: 0;
+}
+.zett-navigation li li > a {
+  display: block;
+  padding: 0.32rem 0.7rem;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--zett-radius-small) var(--zett-radius-small) 0;
   color: var(--pst-color-text-muted);
   text-decoration: none;
 }
-.zett-navigation a:hover {
-  color: var(--zett-accent);
+.zett-navigation li li > a:hover {
+  color: var(--pst-color-text-base);
   background: var(--pst-color-surface);
 }
-.zett-navigation li.current > a {
-  color: var(--zett-accent);
-  background: var(--pst-color-surface);
-  font-weight: 650;
-  box-shadow: inset 2px 0 var(--zett-accent);
+.zett-navigation li li.current > a {
+  border-left-color: var(--zett-ember);
+  background: var(--zett-glow);
+  color: var(--pst-color-text-base);
+  font-weight: 600;
 }
 
-.zett-landing > h1 {
-  color: var(--zett-accent);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  margin: 0.7rem 0 1.25rem;
+/* ---- Reading typography ------------------------------------------------ */
+
+a {
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
 }
-.zett-landing > h1 a.headerlink {
-  display: none;
+h1,
+h2,
+h3,
+h4 {
+  color: var(--pst-color-text-base);
+  letter-spacing: -0.02em;
+}
+.bd-article h1 {
+  margin-bottom: 1.25rem;
+  font-size: 2.3rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.bd-article h2 {
+  margin-top: 3rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--zett-surface-border);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.bd-article h3 {
+  margin-top: 2rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+.bd-breadcrumbs {
+  font-size: 0.8rem;
+}
+
+/* ---- Code, tables, admonitions ----------------------------------------- */
+
+div.highlight {
+  border: 1px solid var(--zett-surface-border);
+  border-radius: var(--zett-radius-small);
+  background: var(--zett-code-surface);
+}
+div.highlight pre {
+  padding: 1rem 1.1rem;
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+code.literal {
+  padding: 0.1em 0.38em;
+  border: 1px solid var(--zett-surface-border);
+  border-radius: 0.3rem;
+  background: var(--zett-surface);
+  font-size: 0.86em;
+}
+.bd-article table {
+  font-size: 0.87rem;
+  line-height: 1.6;
+}
+table.docutils thead th {
+  background: var(--zett-surface);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+.bd-article table.docutils td,
+.bd-article table.docutils th {
+  padding: 0.7rem 0.85rem;
+  border-color: var(--zett-surface-border);
+}
+div.admonition,
+.admonition {
+  border: 1px solid var(--zett-surface-border);
+  border-left-width: 4px;
+  border-radius: var(--zett-radius-small);
+  background: var(--zett-surface);
+  box-shadow: none;
+  font-size: 0.92rem;
+}
+div.admonition > .admonition-title,
+.admonition > .admonition-title {
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mermaid-container {
+  margin: 1.25rem 0 1.75rem;
+}
+pre.mermaid {
+  padding: 1rem;
+  border: 1px solid var(--zett-surface-border);
+  border-radius: var(--zett-radius-small);
+  background: var(--zett-code-surface);
+}
+pre.mermaid > svg {
+  height: auto !important;
+  min-height: 12rem;
+}
+/* The theme inverts diagrams in dark mode; pin an explicit palette instead. */
+html[data-theme="dark"] pre.mermaid svg,
+html[data-theme="dark"] .mermaid-container svg {
+  filter: none !important;
+}
+html[data-theme="dark"] pre.mermaid .node rect,
+html[data-theme="dark"] pre.mermaid .node polygon,
+html[data-theme="dark"] pre.mermaid .node circle,
+html[data-theme="dark"] pre.mermaid .node path {
+  fill: #1d242d !important;
+  stroke: var(--zett-ember) !important;
+}
+html[data-theme="dark"] pre.mermaid .cluster rect {
+  fill: #12161b !important;
+  stroke: var(--zett-surface-border) !important;
+}
+html[data-theme="dark"] pre.mermaid .edgeLabel,
+html[data-theme="dark"] pre.mermaid .edgeLabel rect,
+html[data-theme="dark"] pre.mermaid .labelBkg {
+  background-color: #151a21 !important;
+  fill: #151a21 !important;
+  opacity: 1;
+}
+html[data-theme="dark"] pre.mermaid .nodeLabel,
+html[data-theme="dark"] pre.mermaid .edgeLabel,
+html[data-theme="dark"] pre.mermaid text {
+  color: var(--pst-color-text-base) !important;
+  fill: var(--pst-color-text-base) !important;
+}
+html[data-theme="dark"] pre.mermaid .flowchart-link,
+html[data-theme="dark"] pre.mermaid .edgePath path {
+  stroke: #8a96a6 !important;
+}
+html[data-theme="dark"] pre.mermaid marker path,
+html[data-theme="dark"] pre.mermaid .arrowMarkerPath {
+  fill: #8a96a6 !important;
+  stroke: #8a96a6 !important;
+}
+
+/* ---- API reference ----------------------------------------------------- */
+
+dl.py {
+  margin-bottom: 1.75rem;
+}
+dl.py > dt {
+  overflow-wrap: anywhere;
+  font-family: var(--pst-font-family-monospace);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+dl.py.class > dt,
+dl.py.function > dt,
+dl.py.exception > dt,
+dl.py.data > dt {
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--zett-surface-border);
+  border-left: 3px solid var(--zett-ember);
+  border-radius: var(--zett-radius-small);
+  background: var(--zett-surface);
+}
+dl.py.method > dt,
+dl.py.attribute > dt,
+dl.py.property > dt {
+  padding: 0.9rem 0 0.35rem;
+  border-top: 1px solid var(--zett-surface-border);
+}
+dl.py > dt .sig-name,
+dl.py > dt .descname {
+  color: var(--pst-color-text-base);
+  font-weight: 700;
+}
+dl.py > dt .sig-prename,
+dl.py > dt em.property {
+  color: var(--pst-color-text-muted);
+  font-style: normal;
+}
+dl.py > dd {
+  margin-left: 1.25rem;
+}
+dl.field-list > dt {
+  color: var(--pst-color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---- Landing: hero ----------------------------------------------------- */
+
+.zett-landing {
+  position: relative;
+}
+.zett-landing > h1 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .zett-hero {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
   align-items: center;
-  gap: 2rem;
-  padding-bottom: 2rem;
+  gap: 2.5rem;
+  padding: 1.5rem 0 3.25rem;
 }
-.zett-hero-title {
-  margin: 0 0 1.25rem;
-  color: var(--pst-color-text-base);
-  font-size: clamp(2.2rem, 3.2vw, 3.25rem);
-  font-weight: 750;
-  letter-spacing: -0.055em;
-  line-height: 1.1;
+.zett-hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -2rem 0 auto 0;
+  height: 26rem;
+  background: linear-gradient(180deg, var(--zett-glow), transparent);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 70%);
+  pointer-events: none;
 }
 .zett-hero-identity {
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  margin-bottom: 1.15rem;
-  color: var(--pst-color-text-muted);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.09em;
+  margin-bottom: 1.4rem;
 }
 .zett-hero-identity img {
-  width: 4rem;
-  height: 4rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 0.8rem;
+  box-shadow: var(--zett-shadow);
+}
+.zett-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.28rem 0.75rem;
+  border: 1px solid var(--zett-surface-border);
+  border-radius: 999px;
+  background: var(--zett-surface);
+  color: var(--pst-color-text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.zett-hero-badge::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--zett-ember);
+  box-shadow: 0 0 0 3px var(--zett-glow);
+}
+.zett-hero-badge:hover {
+  border-color: var(--zett-ember);
+  color: var(--pst-color-text-base);
+}
+.zett-hero-title {
+  margin: 0 0 1.25rem;
+  color: var(--pst-color-text-base);
+  font-size: clamp(2.2rem, 3.6vw, 3.3rem);
+  font-weight: 780;
+  letter-spacing: -0.04em;
+  line-height: 1.06;
 }
 .zett-hero-title span {
+  background: var(--zett-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
   color: var(--zett-accent);
+  -webkit-text-fill-color: transparent;
 }
 .zett-hero-copy > p:not(.zett-hero-title) {
-  max-width: 34rem;
+  max-width: 35rem;
   color: var(--pst-color-text-muted);
-  font-size: 1rem;
-  line-height: 1.8;
+  font-size: 1.05rem;
+  line-height: 1.75;
 }
+.zett-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1.75rem 0 1.4rem;
+}
+.zett-actions p {
+  margin: 0;
+}
+.zett-actions .sd-btn {
+  padding: 0.7rem 1.1rem;
+  border-radius: var(--zett-radius-small);
+  font-size: 0.88rem;
+  font-weight: 650;
+  text-decoration: none;
+  box-shadow: none;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+.zett-actions .sd-btn:hover {
+  transform: translateY(-1px);
+}
+.zett-actions .sd-btn:not(.sd-btn-primary) {
+  border: 1px solid var(--zett-surface-border);
+  color: var(--pst-color-text-base);
+  background: var(--pst-color-background);
+}
+.zett-actions .sd-btn:not(.sd-btn-primary):hover {
+  border-color: var(--zett-ember);
+}
+.zett-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  color: var(--pst-color-text-muted);
+  font-size: 0.78rem;
+}
+.zett-hero-meta a {
+  color: inherit;
+}
+
+/* The hero code card is the product in one glance. */
 .zett-hero-example {
   min-width: 0;
   overflow: hidden;
@@ -252,72 +594,51 @@ html[data-theme="dark"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.85rem 1.2rem;
+  padding: 0.7rem 1.1rem;
   border-bottom: 1px solid var(--zett-surface-border);
+  background: var(--zett-surface);
   color: var(--pst-color-text-muted);
-  font-size: 0.72rem;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 .zett-code-caption span:last-child {
   font-family: var(--pst-font-family-monospace);
   font-weight: 400;
+  letter-spacing: 0;
+}
+.zett-hero-example .zett-code-caption + div.highlight-python,
+.zett-hero-example div.highlight {
+  margin: 0;
 }
 .zett-hero-example div.highlight {
   border: 0;
   border-radius: 0;
-  margin: 0;
   background: transparent;
 }
 .zett-hero-example div.highlight pre {
-  padding: 1.2rem;
-  background: transparent;
+  overflow-x: auto;
+  padding: 1rem 1.1rem;
   font-size: 0.76rem;
-  line-height: 1.85;
+  line-height: 1.8;
 }
-.zett-code-note {
-  padding: 0.8rem 1.2rem;
+.zett-hero-example .zett-code-caption:not(:first-child) {
+  border-top: 1px solid var(--zett-surface-border);
+}
+.zett-hero-example .zett-code-note {
+  max-width: none;
+  margin: 0;
+  padding: 0.8rem 1.1rem;
   border-top: 1px solid var(--zett-surface-border);
   background: var(--zett-hero-surface);
   color: var(--pst-color-text-muted);
   font-size: 0.76rem;
   line-height: 1.6;
 }
-.zett-code-note p {
+.zett-hero-example .zett-code-note p {
   margin: 0;
 }
-.zett-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  margin: 1.5rem 0 1.25rem;
-}
-.zett-actions p {
-  margin: 0;
-}
-.zett-actions .sd-btn {
-  padding: 0.7rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-decoration: none;
-  box-shadow: none;
-}
-.zett-actions .sd-btn:not(.sd-btn-primary) {
-  border: 1px solid var(--zett-surface-border);
-  color: var(--pst-color-text-base);
-  background: var(--pst-color-background);
-}
-.zett-hero-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  color: var(--pst-color-text-muted);
-  font-size: 0.75rem;
-}
-.zett-hero-meta a {
-  color: inherit;
-}
+
 .zett-install {
   max-width: 38rem;
   margin-bottom: 2.5rem;
@@ -329,13 +650,13 @@ html[data-theme="dark"] {
   background: transparent;
   color: var(--pst-color-text-muted);
   opacity: 1;
-  font-size: 0.82rem;
+  font-size: 0.84rem;
 }
 .bd-content .sd-tab-set > input:checked + label {
   border: 0;
-  border-bottom: 2px solid var(--zett-accent);
+  border-bottom: 2px solid var(--zett-ember);
   background: transparent;
-  color: var(--zett-accent);
+  color: var(--pst-color-text-base);
   transform: none;
 }
 .bd-content .sd-tab-set .sd-tab-content {
@@ -346,17 +667,109 @@ html[data-theme="dark"] {
 .zett-install .highlight {
   margin-bottom: 0;
 }
+
+/* ---- Landing: sections ------------------------------------------------- */
+
 .zett-landing > section {
-  margin-top: 2.75rem;
+  margin-top: 3.5rem;
 }
 .zett-landing > section > h2 {
-  font-size: 1.5rem;
-  letter-spacing: -0.04em;
+  padding: 0;
+  border: 0;
+  font-size: 1.75rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
 }
 .zett-landing > section > p {
+  max-width: 44rem;
   color: var(--pst-color-text-muted);
-  font-size: 0.94rem;
+  font-size: 1rem;
 }
+
+.bd-article .sd-card {
+  border: 1px solid var(--zett-surface-border);
+  border-radius: var(--zett-radius);
+  background: var(--pst-color-background);
+  box-shadow: none !important;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.bd-article .sd-card-body {
+  padding: 1.35rem;
+  font-size: 0.9rem;
+}
+.sd-card-title {
+  color: var(--pst-color-text-base);
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.sd-card-text {
+  color: var(--pst-color-text-muted);
+  line-height: 1.7;
+}
+.bd-article .sd-card-hover:hover {
+  border-color: var(--zett-ember);
+  box-shadow: var(--zett-shadow) !important;
+  transform: translateY(-2px);
+}
+
+/* The JIT harness loop: forge, reuse, inspect. */
+.zett-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 1.5rem;
+  counter-reset: zett-step;
+}
+.bd-article .zett-step {
+  position: relative;
+  padding: 1.35rem;
+  border: 1px solid var(--zett-surface-border);
+  border-radius: var(--zett-radius);
+  background: var(--zett-surface);
+  font-size: 0.9rem;
+  counter-increment: zett-step;
+}
+.zett-step::before {
+  content: counter(zett-step);
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-bottom: 0.9rem;
+  border-radius: 50%;
+  background: var(--zett-gradient);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+html[data-theme="dark"] .zett-step::before {
+  color: #1a1203;
+}
+.zett-step strong {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--pst-color-text-base);
+  font-size: 1rem;
+}
+.zett-step p {
+  margin: 0;
+  color: var(--pst-color-text-muted);
+}
+.zett-step code.literal {
+  font-size: 0.78rem;
+}
+.zett-steps + p {
+  margin-top: 1.4rem;
+}
+.bd-article .sd-container-fluid {
+  padding-right: 0;
+  padding-left: 0;
+}
+
 .zett-paths {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -364,7 +777,7 @@ html[data-theme="dark"] {
   margin-top: 1.25rem;
 }
 .bd-article .zett-path {
-  padding: 1.25rem;
+  padding: 1.35rem;
   border: 1px solid var(--zett-surface-border);
   border-radius: var(--zett-radius);
   background: var(--zett-surface);
@@ -377,32 +790,9 @@ html[data-theme="dark"] {
   display: block;
   margin-bottom: 0.45rem;
   color: var(--pst-color-text-base);
-}
-
-.bd-article .sd-card {
-  border: 1px solid var(--zett-surface-border);
-  border-radius: var(--zett-radius);
-  background: var(--zett-code-surface);
-  box-shadow: none !important;
-}
-.bd-article .sd-card-body {
-  padding: 1.25rem;
-  font-size: 0.88rem;
-}
-.sd-card-title {
-  color: var(--pst-color-text-base);
-  font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: -0.025em;
-}
-.sd-card-text {
-  color: var(--pst-color-text-muted);
-  line-height: 1.7;
-}
-.bd-article .sd-card-hover:hover {
-  border-color: var(--zett-accent);
-  box-shadow: var(--zett-shadow);
-  transform: none;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .zett-flow {
@@ -419,89 +809,22 @@ html[data-theme="dark"] {
 .zett-flow-step {
   padding: 0.45rem 0.8rem;
   border: 1px solid var(--zett-surface-border);
-  border-radius: 0.4rem;
+  border-radius: var(--zett-radius-small);
   background: var(--pst-color-background);
   color: var(--pst-color-text-base);
   font-size: 0.83rem;
   font-weight: 550;
 }
 .zett-flow-arrow {
-  color: var(--zett-accent);
+  color: var(--zett-ember);
 }
 .zett-flow-step.zett-flow-tool {
-  border-color: var(--zett-accent);
-  color: var(--zett-accent);
+  border-color: var(--zett-ember);
+  background: var(--zett-glow);
 }
 
-a {
-  text-underline-offset: 0.2em;
-}
-h1,
-h2,
-h3 {
-  color: var(--pst-color-text-base);
-  font-weight: 650;
-  letter-spacing: -0.035em;
-}
-.bd-article h1 {
-  margin-bottom: 1.1rem;
-}
-.bd-article h2 {
-  margin-top: 2.5rem;
-  font-size: 1.5rem;
-}
-.bd-article h3 {
-  font-size: 1.15rem;
-}
-div.highlight {
-  border: 1px solid var(--zett-surface-border);
-  border-radius: 0.6rem;
-  background: var(--zett-code-surface);
-}
-div.highlight pre {
-  padding: 1rem;
-  font-size: 0.81rem;
-  line-height: 1.75;
-}
-code.literal {
-  border: 1px solid var(--zett-surface-border);
-  border-radius: 0.25rem;
-  background: var(--zett-surface);
-  font-size: 0.85em;
-}
-.bd-article table {
-  font-size: 0.86rem;
-  line-height: 1.65;
-}
-table.docutils thead th {
-  background: var(--zett-surface);
-}
-.bd-article table.docutils td,
-.bd-article table.docutils th {
-  padding: 0.7rem 0.8rem;
-  border-color: var(--zett-surface-border);
-}
-dl.py > dt {
-  overflow-wrap: anywhere;
-}
-div.admonition {
-  border-radius: 0.6rem;
-  box-shadow: none;
-  font-size: 0.91rem;
-}
-.mermaid-container {
-  margin: 1.25rem 0 1.75rem;
-}
-pre.mermaid {
-  padding: 1rem;
-  border: 1px solid var(--zett-surface-border);
-  border-radius: 0.6rem;
-  background: var(--zett-code-surface);
-}
-pre.mermaid > svg {
-  height: auto !important;
-  min-height: 12rem;
-}
+/* ---- Footer ------------------------------------------------------------ */
+
 .bd-footer {
   border-top: 1px solid var(--zett-surface-border);
 }
@@ -511,16 +834,29 @@ pre.mermaid > svg {
 .zett-footer {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1rem 2rem;
   width: 100%;
-  padding: 0.4rem 0;
+  padding: 0.6rem 0;
   color: var(--pst-color-text-muted);
-  font-size: 0.77rem;
+  font-size: 0.8rem;
 }
-.zett-footer > div {
+.zett-footer-brand {
   display: flex;
-  gap: 1.25rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+.zett-footer-brand img {
+  border-radius: 0.35rem;
+}
+.zett-footer-brand strong {
+  color: var(--pst-color-text-base);
+}
+.zett-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.4rem;
 }
 .zett-footer a {
   color: inherit;
@@ -531,27 +867,58 @@ pre.mermaid > svg {
   text-decoration: underline;
 }
 .zett-footer-separator {
-  margin: 0 0.5rem;
+  margin: 0 0.4rem;
   opacity: 0.5;
 }
+
+/* ---- Interaction ------------------------------------------------------- */
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 .bd-content .sd-tab-set > input:focus-visible + label {
-  outline: 2px solid var(--zett-accent);
+  outline: 2px solid var(--zett-ember);
   outline-offset: 3px;
 }
+
+@keyframes zett-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+}
+.zett-hero-copy > *,
+.zett-hero-example {
+  animation: zett-rise 0.5s ease both;
+}
+.zett-hero-copy > :nth-child(2) {
+  animation-delay: 0.05s;
+}
+.zett-hero-copy > :nth-child(3) {
+  animation-delay: 0.1s;
+}
+.zett-hero-copy > :nth-child(4) {
+  animation-delay: 0.15s;
+}
+.zett-hero-example {
+  animation-delay: 0.12s;
+}
+
+/* ---- Responsive -------------------------------------------------------- */
 
 @media (max-width: 1199px) {
   .zett-hero {
     grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-  .zett-hero-title {
-    font-size: 2.8rem;
+    gap: 2rem;
   }
   .zett-hero-example {
-    max-width: 38rem;
+    max-width: 40rem;
+  }
+}
+
+@media (max-width: 991px) {
+  .zett-steps {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -562,11 +929,8 @@ input:focus-visible,
   .bd-article h1 {
     font-size: 1.9rem;
   }
-  .bd-article .zett-landing > h1 {
-    font-size: 0.75rem;
-  }
   .zett-hero-title {
-    font-size: clamp(1.9rem, 7.5vw, 2.8rem);
+    font-size: clamp(2rem, 8vw, 2.8rem);
   }
   .zett-paths {
     grid-template-columns: 1fr;
@@ -577,7 +941,7 @@ input:focus-visible,
   }
   .zett-code-caption,
   .zett-code-note {
-    padding: 0.75rem 0.85rem;
+    padding: 0.7rem 0.85rem;
   }
   .zett-flow {
     padding: 1rem;
@@ -593,6 +957,7 @@ input:focus-visible,
   *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     transition-duration: 0.01ms !important;
   }
 }

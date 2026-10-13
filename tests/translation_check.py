@@ -134,6 +134,10 @@ KEEP_ENGLISH = (
     (r"\binspection\W{0,2} tier\b", r"\binspection\W{0,2} tier\b"),
 )
 
+#: Half-width punctuation that has a full-width form; Chinese text uses the latter.
+HALFWIDTH = {",": "，", ";": "；", ":": "：", "!": "！", "?": "？"}
+HALFWIDTH_NEAR_CJK = re.compile(rf"(?P<after>(?<=[{CJK}])[,;:!?])|(?P<before>[,;:!?](?=[{CJK}]))")
+
 #: Renderings that were invented for those concepts and must not come back.
 RETIRED_RENDERINGS = ("使用准则", "调用示例", "内部续接", "内部续写", "内部消息", "检查层级", "引导")
 
@@ -181,6 +185,9 @@ def check_message(source: str, translation: str) -> list[str]:
         problems.append("the source ends with '::' to introduce a literal block; keep it")
     problems.extend(glued_markup(translation))
     problems.extend(kept_english(source, translation))
+    for match in HALFWIDTH_NEAR_CJK.finditer(prose(translation).replace("::", PROTECTED)):
+        punctuation = match.group("after") or match.group("before")
+        problems.append(f"write {HALFWIDTH[punctuation]!r} instead of {punctuation!r} inside Chinese text")
     return problems
 
 
@@ -203,6 +210,28 @@ def check_catalog(path: Path) -> list[str]:
     return problems
 
 
+def fix_punctuation(text: str) -> str:
+    """Use the full-width form of the punctuation that touches a Chinese character."""
+    out, last = [], 0
+    for match in MARKUP.finditer(text):
+        out.append(_widen(text[last : match.start()]))
+        out.append(match.group(0))
+        last = match.end()
+    out.append(_widen(text[last:]))
+    return "".join(out)
+
+
+#: Literal-block markers and other ``::`` sequences are ASCII by definition.
+PROTECTED = "\x00"
+
+
+def _widen(text: str) -> str:
+    """Widen the punctuation of one stretch of prose, leaving ``::`` alone."""
+    guarded = text.replace("::", PROTECTED)
+    widened = re.sub(rf"(?<=[{CJK}])[,;:!?]|[,;:!?](?=[{CJK}])", lambda m: HALFWIDTH[m.group(0)], guarded)
+    return widened.replace(PROTECTED, "::")
+
+
 def fix_catalog(path: Path) -> int:
     """Insert missing backslash-space separators in a catalog; return how many messages changed."""
     with path.open("rb") as handle:
@@ -210,7 +239,7 @@ def fix_catalog(path: Path) -> int:
     changed = 0
     for message in catalog:
         if message.id and isinstance(message.string, str) and message.string:
-            fixed = fix_glue(message.string)
+            fixed = fix_punctuation(fix_glue(message.string))
             if fixed != message.string:
                 message.string = fixed
                 changed += 1

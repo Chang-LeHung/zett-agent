@@ -117,14 +117,78 @@ html[data-theme="dark"] {
 .bd-sidebar-secondary {
   font-size: 0.82rem;
 }
-.bd-sidebar-secondary .nav-link,
-.bd-sidebar-secondary code {
-  overflow-wrap: anywhere;
+
+/* Right-hand table of contents: one tidy column that scrolls on its own. */
+.bd-sidebar-secondary .sidebar-secondary-items {
+  max-height: calc(100vh - var(--pst-header-height) - 3rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--zett-surface-border) transparent;
 }
-.bd-sidebar-secondary code {
-  font-size: 0.72rem;
-  white-space: normal;
-  word-break: break-all;
+.bd-sidebar-secondary .page-toc.tocsection {
+  margin-bottom: 0.5rem;
+  color: var(--pst-color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.bd-sidebar-secondary .page-toc .fa-list {
+  display: none;
+}
+.page-toc .nav-link {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  padding: 0.28rem 0.75rem;
+  border-left: 2px solid transparent;
+  color: var(--pst-color-text-muted);
+  line-height: 1.4;
+}
+.page-toc .nav-link:hover {
+  color: var(--pst-color-text-base);
+}
+.page-toc .nav-link.active {
+  border-left-color: var(--zett-ember);
+  background: var(--zett-glow);
+  color: var(--pst-color-text-base);
+  font-weight: 600;
+}
+.page-toc ul ul .nav-link {
+  padding-left: 1.5rem;
+}
+.page-toc .nav-link code {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 0.78rem;
+}
+.page-toc ul,
+.page-toc li {
+  min-width: 0;
+}
+/* A wrapping column sizes itself to its widest entry; keep it the column's width. */
+.page-toc ul.nav {
+  flex-wrap: nowrap;
+}
+/* API names are identifiers: keep each on one line and clip with an ellipsis. */
+.page-toc .nav-link:has(code) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-toc .nav-link code,
+.page-toc .nav-link .pre {
+  font-weight: 500;
+}
+.page-toc .nav-link.active code,
+.page-toc .nav-link.active .pre {
+  font-weight: 650;
 }
 
 /* ---- Header ------------------------------------------------------------ */

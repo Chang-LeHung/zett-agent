@@ -335,6 +335,22 @@ def test_global_navigation_is_available_on_every_page(documentation, page):
         assert (output / target).resolve() in links, (page, target)
 
 
+def test_page_toc_drops_the_repeated_class_prefix_and_keeps_the_full_name_in_a_tooltip(documentation):
+    _, output = documentation
+    soup = BeautifulSoup((output / "_generated/Agent.html").read_text(), "html.parser")
+    entries = {link.get_text(strip=True): link for link in soup.select(".bd-sidebar-secondary nav.page-toc a")}
+    assert "Agent" in entries
+    assert "run()" in entries and entries["run()"]["title"] == "Agent.run()"
+    assert not [text for text in entries if text.startswith("Agent.")]
+    guide = BeautifulSoup((output / "learn/troubleshooting.html").read_text(), "html.parser")
+    long_labels = [
+        link
+        for link in guide.select(".bd-sidebar-secondary nav.page-toc a")
+        if len(link.get_text(" ", strip=True)) > 28
+    ]
+    assert long_labels and all(link.get("title") == link.get_text(" ", strip=True) for link in long_labels)
+
+
 def test_protected_extension_interfaces_have_anchors(documentation):
     _, output = documentation
     soup = BeautifulSoup((output / "_generated/ExternalEventExtension.html").read_text(), "html.parser")

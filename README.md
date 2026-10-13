@@ -168,6 +168,49 @@ Use `@tool(guidelines="...")` for a short function or a `Guidelines` section
 in its docstring. Guidelines help the model choose tools; they do not enforce
 permissions.
 
+## Evolve a toolbox during a session
+
+Opt in to `JITHarnessExtension` to let a model create Python tools or reusable
+Markdown workflows, compose existing tools, improve its capabilities, and unload
+or reload them. Both
+Responses and Chat Completions are supported on function-calling models.
+
+```python
+from zett_agent.agent import AgentRunConfig
+from zett_agent.extensions.memory import InMemoryMessageAccumulator
+from zett_agent.jit_harness import JITHarnessExtension
+
+jit = JITHarnessExtension()
+client = await create_agent(
+    model,
+    config=AgentRunConfig(session_id="tool-builder"),
+    tools=[add],
+    extensions=[InMemoryMessageAccumulator(), jit],
+)
+await client.run("Create and use a reusable tool that adds an integer to itself.")
+jit.get_harness("tool-builder").save("harness.json")
+```
+
+Use this inside an async function with a configured model. Each session evolves
+independently; saving is explicit. A tool can be a small package of modules, and
+its code can call other loaded tools directly, so one model call can loop over
+dozens of tool calls while only the final result enters the conversation.
+Snapshots retain source and unload state,
+not conversation history or live application resources. Session-local profiling
+records call counts, latency, and input/output character sizes; the model can
+inspect these measurements and LRU-bounded recent errors before creating or
+improving tools. Inspection tools are deferred by default, so an endpoint that
+supports deferred loading fetches them on demand while every other protocol
+receives them normally; `inspection_tools` can also hide them or send them up
+front. **Generated Python is
+trusted code with your process's privileges, not sandboxed code.** Read
+[JIT capabilities](https://chang-lehung.github.io/zett-agent/learn/jit-harness.html)
+for composition, loading, and a complete offline example.
+
+When exploration is expensive, a text tool can retain the verified path, its
+applicability, pitfalls, and checks for later tasks. Workflows load on demand;
+reading one does not execute its steps or inject its entire body into every prompt.
+
 ## Keep and restore conversations
 
 `AgentRunConfig.session_id` identifies a conversation. Add a persistence

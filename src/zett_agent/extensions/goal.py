@@ -9,6 +9,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .._compat import TypeAliasType
 from ..agent import Agent, AgentRunConfig, AgentRunContext
 from ..exceptions import AgentIterationLimitError, AgentProtocolError
 from ..ids import new_uuid7
@@ -26,9 +27,9 @@ from .tool_guidelines import ToolGuidelinesExtension
 GOAL_MODE_EVENT_NAME = "goal_mode"
 GOAL_EVALUATION_TOOL_NAME = "report_goal_evaluation"
 
-GoalSummary = Annotated[str, Field(min_length=1, max_length=8_000)]
-RemainingWork = Annotated[list[str], Field(max_length=100)]
-NextInstruction = Annotated[str | None, Field(max_length=16_000)]
+GoalSummary = TypeAliasType("GoalSummary", Annotated[str, Field(min_length=1, max_length=8_000)])
+RemainingWork = TypeAliasType("RemainingWork", Annotated[list[str], Field(max_length=100)])
+NextInstruction = TypeAliasType("NextInstruction", Annotated[str | None, Field(max_length=16_000)])
 
 
 class GoalEvaluation(BaseModel):

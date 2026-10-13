@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
-from .._compat import StrEnum
+from .._compat import StrEnum, TypeAliasType
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..messages import ToolCall
@@ -17,7 +17,7 @@ SHELL_APPROVAL_TOOL_NAME = "bash"
 SHELL_APPROVAL_EVENT_NAME = "shell_approval_requested"
 SHELL_APPROVAL_RESPONSE_EVENT_NAME = "shell_approval_response"
 
-ShellCommandNext = Callable[[], Awaitable[ToolResult]]
+ShellCommandNext = TypeAliasType("ShellCommandNext", Callable[[], Awaitable[ToolResult]])
 
 
 class ShellApprovalMode(StrEnum):

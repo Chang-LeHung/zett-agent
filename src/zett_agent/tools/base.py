@@ -14,6 +14,9 @@ from ..model import ToolDefinition
 from ..sync_runtime import SyncMethodsMixin
 
 _CURRENT_TOOL_CALL_ID: ContextVar[str | None] = ContextVar("zett_agent_tool_call_id", default=None)
+# A composing execution environment may supply non-pooling workers so a sync
+# parent waiting on another sync tool cannot exhaust the default thread pool.
+_SYNC_TOOL_RUNNER: ContextVar[Callable[..., Awaitable[Any]] | None] = ContextVar("zett_sync_tool_runner", default=None)
 
 #: Raw result of one local tool invocation, before the runtime turns it into a
 #: ``ToolMessage``. ``TextContent`` and ``ImageContent`` parts (or a list of
@@ -339,6 +342,8 @@ def _build_agent_tool(
         values = {field: getattr(parsed, field) for field in field_names}
         if inspect.iscoroutinefunction(function):
             return await function(**values)
+        if (runner := _SYNC_TOOL_RUNNER.get()) is not None:
+            return await runner(function, **values)
         return await asyncio.to_thread(function, **values)
 
     resolved_guidelines = _resolve_guidelines(documentation, guidelines)

@@ -316,6 +316,7 @@ def test_creature_forms_share_a_core_but_have_distinct_silhouettes(documentation
         ("examples/compaction.html", "Raw messages: 6; checkpoint boundary: 3; raw tail: 3"),
         ("examples/storage-adapter.html", "load, append:system, append:user, append:assistant"),
         ("learn/on-demand.html", "Skill loaded: code-review"),
+        ("learn/jit-harness.html", "JIT tool created and reused: 42"),
         ("learn/project-instructions.html", "Project guidance: concise reviews"),
         ("learn/images.html", "Received text and image in order."),
         ("learn/mcp.html", "MCP connection closed."),

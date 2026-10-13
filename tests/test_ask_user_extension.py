@@ -404,6 +404,7 @@ async def test_ask_user_tool_schema_and_guidance_are_visible_to_model():
     options_schema = definition.parameters["properties"]["options"]["anyOf"][0]
     assert options_schema["maxItems"] == 20
     assert options_schema["items"]["minLength"] == 1
+    assert "$defs" not in definition.parameters
     guidance = "\n".join(message.content for message in model.request.messages if isinstance(message, SystemMessage))
     assert "## ask_user" in guidance
     assert "Use only when user input is required" in guidance

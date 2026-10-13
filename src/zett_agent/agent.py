@@ -36,9 +36,10 @@ from .tools.base import (
     _bind_tool_call,
     _reset_tool_call,
 )
+from .tools.invocation import invoke_tool
 
 if TYPE_CHECKING:
-    from .extensions.base import AgentExtension, ModelRequestNext, ToolCallNext
+    from .extensions.base import AgentExtension, ModelRequestNext
     from .extensions.events import ExtensionEvent, MessageTiming
     from .extensions.external import ExternalEvent
 
@@ -1626,22 +1627,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
     ) -> ToolResult:
         """Build one tool middleware chain independently for each invocation task."""
 
-        async def invoke_handler() -> ToolResult:
-            return await registered(call.arguments)
-
-        call_next: ToolCallNext = invoke_handler
-        for extension in reversed(self.extensions):
-            inner = call_next
-
-            async def wrapped(
-                *,
-                hook: AgentExtension = extension,
-                next_handler: ToolCallNext = inner,
-            ) -> ToolResult:
-                return await hook.on_tool_call(context, call, next_handler)
-
-            call_next = wrapped
-        return await call_next()
+        return await invoke_tool(context, call, registered)
 
     async def _finalize_tool(
         self,

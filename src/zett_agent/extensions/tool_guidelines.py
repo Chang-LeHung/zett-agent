@@ -18,7 +18,7 @@ class ToolGuidelinesExtension(AgentExtension):
         """Place guidance after existing system instructions and before dialogue."""
         state = context.state
         visible = tuple(candidate for candidate in context.tools.values() if not candidate.deferred)
-        message = SystemMessage(content=render_tool_guidance(visible))
+        message = SystemMessage(content=render_tool_guidance(visible), attributes={"tool_guidelines": True})
         if message.content and message not in state.messages:
             instructions = [message for message in state.messages if isinstance(message, SystemMessage)]
             context.add_message(message, index=len(instructions))

@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .._compat import TypeAliasType
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType
 from ..messages import ImageContent, ImageUrlSource, TextContent, ToolCall
@@ -20,9 +21,9 @@ ASK_USER_TOOL_NAME = "ask_user"
 ASK_USER_EVENT_NAME = "ask_user"
 ASK_USER_RESPONSE_EVENT_NAME = "ask_user_response"
 
-Question = Annotated[str, Field(min_length=1, max_length=4_000)]
-Option = Annotated[str, Field(min_length=1, max_length=500)]
-Options = Annotated[list[Option], Field(max_length=20)]
+Question = TypeAliasType("Question", Annotated[str, Field(min_length=1, max_length=4_000)])
+Option = TypeAliasType("Option", Annotated[str, Field(min_length=1, max_length=500)])
+Options = TypeAliasType("Options", Annotated[list[Option], Field(max_length=20)])
 AskUserMaxImages = 32
 AskUserMaxImageBytes = 10_000_000
 _IMAGE_DATA_URL = re.compile(r"^data:(image/[A-Za-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$")
@@ -65,7 +66,7 @@ class AskUserImagePart(BaseModel):
     content_url: str = Field(min_length=1)
 
 
-AskUserPart = Annotated[AskUserTextPart | AskUserImagePart, Field(discriminator="type")]
+AskUserPart = TypeAliasType("AskUserPart", Annotated[AskUserTextPart | AskUserImagePart, Field(discriminator="type")])
 
 
 class AskUserResponse(BaseModel):

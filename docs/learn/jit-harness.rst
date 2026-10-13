@@ -10,7 +10,7 @@ JIT means building the tool environment when a task needs it, not a Python
 just-in-time compiler. This feature uses ordinary function calling on both
 Responses and Chat Completions. It does not require native ``tool_search``,
 though a Responses endpoint can defer the inspection tools described in
-`Control what the model sees`_.
+:ref:`Control what the model sees <jit-control-what-the-model-sees>`.
 
 .. warning::
 
@@ -181,8 +181,8 @@ ordinary parallel calls too, those finish before the serial management calls.
 The last five read retained details and are the *inspection* tier:
 ``read_tool_source``, ``read_tool_schema``, ``inspect_tool_stats``,
 ``inspect_tool_calls``, and ``inspect_tool_errors``. The others are the control
-loop that builds, changes, and lists capabilities. `Control what the model
-sees`_ explains how to expose the inspection tier.
+loop that builds, changes, and lists capabilities. :ref:`Control what the model
+sees <jit-control-what-the-model-sees>` explains how to expose the inspection tier.
 
 State-changing tools -- ``create_tool``, ``update_tool``, ``unload_tool``, and
 ``load_tool`` -- acknowledge only ``name`` and ``status``, for example
@@ -211,6 +211,8 @@ returns full dynamic source, and ``inspect_tool(name)`` returns schema,
 guidelines, and source. Measurements stay on their own methods:
 ``profile_stats(name)`` returns aggregates and ``profile(name)`` returns
 individual call records. Those methods do not apply the model response budget.
+
+.. _jit-control-what-the-model-sees:
 
 Control what the model sees
 ----------------------------------------

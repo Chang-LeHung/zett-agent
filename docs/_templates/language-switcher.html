@@ -1,0 +1,13 @@
+{%- if zett_languages | length > 1 %}
+<div class="zett-language dropdown">
+  <button class="btn dropdown-toggle zett-language-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Language">
+    <i class="fa-solid fa-language" aria-hidden="true"></i>
+    <span class="zett-language-label">{{ zett_language_label }}</span>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end zett-language-menu">
+    {%- for link in zett_languages %}
+    <li><a class="dropdown-item{% if link.current %} active{% endif %}" href="{{ link.url }}" lang="{{ link.html_lang }}" hreflang="{{ link.html_lang }}"{% if link.current %} aria-current="true"{% endif %}>{{ link.label }}</a></li>
+    {%- endfor %}
+  </ul>
+</div>
+{%- endif %}

@@ -12,13 +12,21 @@ Zett Agent
 
    .. container:: zett-hero-copy
 
-      .. raw:: html
+      .. container:: zett-hero-identity
 
-         <div class="zett-hero-identity">
-           <img class="dark-light" src="_static/logo.svg" width="52" height="52" alt=""/>
-           <a class="zett-hero-badge" href="learn/jit-harness.html">Meet the JIT harness →</a>
-         </div>
-         <p class="zett-hero-title">Agents that forge<br/><span>the tools they need.</span></p>
+         .. image:: _static/logo.svg
+            :class: dark-light
+            :width: 52
+            :height: 52
+            :alt: Zett Agent
+
+         .. rst-class:: zett-hero-badge
+
+         :doc:`Meet the JIT harness → <learn/jit-harness>`
+
+      .. rst-class:: zett-hero-title
+
+      Agents that forge **the tools they need.**
 
       Zett Agent is a small Python runtime for tool-calling agents. Its JIT
       harness lets a model write, reuse, and inspect its own tools in the
@@ -30,30 +38,22 @@ Zett Agent
 
       .. container:: zett-actions
 
-         .. button-ref:: learn/first-agent
-            :ref-type: doc
-            :color: primary
+         :doc:`Build your first agent → <learn/first-agent>`
 
-            Build your first agent →
+         :doc:`Meet the JIT harness <learn/jit-harness>`
 
-         .. button-ref:: learn/jit-harness
-            :ref-type: doc
+      .. rst-class:: zett-hero-meta
 
-            Meet the JIT harness
-
-      .. raw:: html
-
-         <div class="zett-hero-meta">
-           <span>Python 3.10+</span>
-           <a href="https://github.com/Chang-LeHung/zett-agent/blob/main/LICENSE">MIT licensed</a>
-           <a href="https://pypi.org/project/zett-agent/">Available on PyPI ↗</a>
-         </div>
+      * Python 3.10+
+      * `MIT licensed <https://github.com/Chang-LeHung/zett-agent/blob/main/LICENSE>`__
+      * `Available on PyPI ↗ <https://pypi.org/project/zett-agent/>`__
 
    .. container:: zett-hero-example
 
-      .. raw:: html
+      .. rst-class:: zett-code-caption
 
-         <div class="zett-code-caption"><span>YOUR APPLICATION</span><span>Python</span></div>
+      * Your application
+      * Python
 
       .. code-block:: python
 
@@ -71,9 +71,10 @@ Zett Agent
          )
          await client.run("Build a tool that doubles 21, then use it.")
 
-      .. raw:: html
+      .. rst-class:: zett-code-caption
 
-         <div class="zett-code-caption"><span>WRITTEN BY THE MODEL, MID-RUN</span><span>Python</span></div>
+      * Written by the model, mid-run
+      * Python
 
       .. code-block:: python
 
@@ -223,19 +224,13 @@ A simple loop, from question to answer
 The model can answer immediately or ask for tools. Zett Agent runs those
 tools, returns their results, and calls the model again until it answers.
 
-.. raw:: html
+.. rst-class:: zett-flow
 
-   <div class="zett-flow" role="img" aria-label="Your message goes to the model, which may call tools. Tool results return to the model, repeating until the model gives an answer.">
-     <span class="zett-flow-step">Your message</span>
-     <span class="zett-flow-arrow" aria-hidden="true">→</span>
-     <span class="zett-flow-step">Model</span>
-     <span class="zett-flow-arrow" aria-hidden="true">→</span>
-     <span class="zett-flow-step zett-flow-tool">Tools, if needed</span>
-     <span class="zett-flow-arrow" aria-hidden="true">↺</span>
-     <span class="zett-flow-step">Model</span>
-     <span class="zett-flow-arrow" aria-hidden="true">→</span>
-     <span class="zett-flow-step">Answer</span>
-   </div>
+* Your message
+* Model
+* Tools, if needed
+* Model
+* Answer
 
 History, approvals, and context management extend that same loop. You choose
 what to enable; your application keeps control of its UI and resources.

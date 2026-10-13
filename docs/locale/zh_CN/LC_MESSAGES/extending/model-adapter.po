@@ -1,0 +1,86 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/model-adapter.rst:2
+msgid "Implement a model adapter"
+msgstr "实现模型适配器"
+
+#: ../../extending/model-adapter.rst:4
+msgid "Use a custom adapter for a new protocol or a deterministic test double. For an OpenAI-compatible HTTP service, first consider OpenAIProvider with a custom base_url; a new adapter may be unnecessary."
+msgstr "遇到新协议，或者需要一个确定性的测试替身时，请使用自定义适配器。对于与 OpenAI 兼容的 HTTP 服务，先考虑用 OpenAIProvider 搭配自定义 base_url，可能并不需要新适配器。"
+
+#: ../../extending/model-adapter.rst:9
+msgid "The protocol"
+msgstr "协议"
+
+#: ../../extending/model-adapter.rst:11
+msgid ":class:`~zett_agent.model.AgentModel` accepts one fully assembled ModelRequest and returns an async iterator of ModelEvent. It has a model-owned RetryOptions policy. The protocol method is declared as a normal ``def`` returning AsyncIterator; an implementation may use ``async def`` with ``yield`` to satisfy that contract."
+msgstr ":class:`~zett_agent.model.AgentModel`\\ 接收一个完整组装好的 ModelRequest，返回 ModelEvent 的异步迭代器。它带有一个由模型持有的 RetryOptions 策略。协议方法的声明是普通的 ``def``\\ ，返回 AsyncIterator；实现可以用 ``async def``\\ 加 ``yield``\\ 来满足这个契约。"
+
+#: ../../extending/model-adapter.rst:37
+msgid "Required stream invariants"
+msgstr "必须满足的流式约定"
+
+#: ../../extending/model-adapter.rst:39
+msgid "Yield zero or more text, reasoning, or tool-call fragments."
+msgstr "产出零个或多个文本、推理或工具调用片段。"
+
+#: ../../extending/model-adapter.rst:40
+msgid "End a successful stream with exactly one completed ModelResponse."
+msgstr "成功的流式传输必须以恰好一个已完成的 ModelResponse 结束。"
+
+#: ../../extending/model-adapter.rst:41
+msgid "Include the complete answer and complete ToolCalls in that response, even when they were also streamed as deltas. The runtime does not reconstruct the final message from display text."
+msgstr "这个响应里要包含完整的回答和完整的 ToolCalls，即使它们已经作为增量流式传出。运行时不从展示文本重建最终消息。"
+
+#: ../../extending/model-adapter.rst:44
+msgid "Do not emit anything after the final response."
+msgstr "在最终响应之后不要再发出任何内容。"
+
+#: ../../extending/model-adapter.rst:45
+msgid "Raise on transport/protocol failure; do not disguise failure as a successful empty answer."
+msgstr "传输或协议失败时请抛出异常；不要把失败伪装成成功的空回答。"
+
+#: ../../extending/model-adapter.rst:47
+msgid "ModelRequest contains the complete context for this step. Support the applicable message roles and typed image parts explicitly. AgentMessage is internal input, not assistant output; built-in adapters map it to user input for vendor APIs. Declare :attr:`~zett_agent.model.ModelRequest.cache_key` to the endpoint when its protocol caches prompt prefixes; the OpenAI adapter sends it as ``prompt_cache_key`` on both of its protocols."
+msgstr "ModelRequest 包含这一步所需的完整上下文。请显式支持适用的消息角色和带类型的图像部分。AgentMessage 是内部输入，不是助手输出；内置适配器会把它映射成面向厂商 API 的用户输入。如果端点协议会缓存提示词前缀，请把\\ :attr:`~zett_agent.model.ModelRequest.cache_key`\\ 声明给它；OpenAI 适配器在它的两种协议上都会把它作为 ``prompt_cache_key``\\ 发送。"
+
+#: ../../extending/model-adapter.rst:55
+msgid "Tool calls and usage"
+msgstr "工具调用与用量"
+
+#: ../../extending/model-adapter.rst:57
+msgid "Use ToolCallDelta for partial ID/name/argument fragments and ToolCall for final parsed arguments. Correlate ToolMessage results by call ID, not list position. Report ModelUsage on the final response; input includes cache reads/writes and output includes reasoning when reported. Missing counters remain zero, but a protocol that reports no cache counters at all must pass ``cache_reported=False`` so callers can tell unknown cache usage from a measured miss."
+msgstr "用 ToolCallDelta 表示 ID、名称或参数的部分片段，用 ToolCall 表示最终解析出的参数。工具结果请按调用 ID 关联到对应的 ToolMessage，而不是按列表位置。用量在最终响应上通过 ModelUsage 报告；输入包含缓存读取和写入，输出在模型提供商报告时包含推理。缺失的计数器保持为零，但如果某个协议完全不报告任何缓存计数器，就必须传入 ``cache_reported=False``，这样调用方才能区分未知的缓存用量和实测的未命中。"
+
+#: ../../extending/model-adapter.rst:65
+msgid "Replay signed vendor blocks only for the same provider/model identity. Preserve them in AssistantMessage.replay_blocks instead of concatenating them into text."
+msgstr "只对同一个提供商/模型标识重放签名的厂商块。请把它们保存在 AssistantMessage.replay_blocks 里，而不是拼接到文本中去。"
+
+#: ../../extending/model-adapter.rst:69
+msgid "Retry policy belongs here"
+msgstr "重试策略由这里负责"
+
+#: ../../extending/model-adapter.rst:71
+msgid "Retry transient failures only before an event escapes to the caller. Restarting after partial text or tool deltas would duplicate visible output and could confuse tool-call assembly. Validation/authentication failures should not be blindly retried. Close SDK streams in finally/context managers when the consumer stops early."
+msgstr "只在一个事件逃逸给调用方之前重试瞬时失败。在部分文本或工具增量之后重启会重复可见输出，还可能干扰工具调用的组装。校验失败或认证失败不应盲目重试。当消费方提前停止时，请在 finally 或上下文管理器里关闭 SDK 流。"
+
+#: ../../extending/model-adapter.rst:76
+msgid "Run a test adapter: :doc:`../learn/first-agent`. Inspect built-in implementations under :doc:`../_generated/group-providers` for concrete vendor mappings."
+msgstr "运行一个测试适配器：:doc:`../learn/first-agent`\\ 。各厂商的具体映射，可以查看\\ :doc:`../_generated/group-providers`\\ 下的内置实现。"
+

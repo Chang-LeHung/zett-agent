@@ -1,0 +1,110 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/events.rst:2
+msgid "Emit events and accept user input"
+msgstr "发出事件并接收用户输入"
+
+#: ../../extending/events.rst:5
+msgid "Send progress to a UI"
+msgstr "向 UI 发送进度"
+
+#: ../../extending/events.rst:7
+msgid "Use ``context.emit`` from a lifecycle hook when work needs visible progress. Here the payload contains a model-step counter from the first-extension tutorial:"
+msgstr "当工作需要可见的进度时，请在生命周期钩子里使用 ``context.emit``\\ 。这里的负载包含第一个扩展教程中的模型步骤计数器："
+
+#: ../../extending/events.rst:14
+msgid "The application receives the exact event through ``on_custom_event``. Choose a stable namespaced name and document payload keys as an application protocol. Use JSON-compatible values if the UI forwards them over SSE or WebSocket."
+msgstr "应用程序通过 ``on_custom_event``\\ 收到这个确切的事件。请选择一个稳定的带命名空间的名称，并把负载键的说明当作应用协议来记录。如果 UI 会通过 SSE 或 WebSocket 转发这些值，请使用与 JSON 兼容的值。"
+
+#: ../../extending/events.rst:19
+msgid "Observe internal state without displaying it"
+msgstr "观察内部状态而不展示它"
+
+#: ../../extending/events.rst:25
+msgid "MessageAppendedEvent records message timing and model usage. The subscriber does not need to infer timing by watching text arrive in the UI. Do not double count cache reads as input tokens or reasoning as additional output tokens. Run :doc:`../examples/observability` to inspect the complete example."
+msgstr "MessageAppendedEvent 记录消息的时序和模型用量。订阅者不必通过观察文本在 UI 中到达来推断时序。不要把缓存读取重复计为输入 token，也不要把推理计为额外的输出 token。运行\\ :doc:`../examples/observability`\\ 查看完整示例。"
+
+#: ../../extending/events.rst:30
+msgid "To publish a custom internal notification, define a small ExtensionEvent subclass and ``await context.publish(event)``. Every extension's on_event receives it in priority order. Use a different event type when reacting, rather than recursively publishing the same event again. Internal events are not streamed automatically."
+msgstr "要发布自定义的内部通知，请定义一个小小的 ExtensionEvent 子类，然后调用 ``await context.publish(event)``\\ 。每个扩展的 on_event 都会按优先级顺序收到它。做出反应时请使用不同的事件类型，不要递归地再次发布同一个事件。内部事件不会自动流式传输。"
+
+#: ../../extending/events.rst:35
+msgid "Pass ``target=\"ExtensionName\"`` to deliver only to the extension with that registered name. A missing or ambiguous target raises ``ValueError``; omitting ``target`` preserves ordered broadcast behavior."
+msgstr "传入 ``target=\"ExtensionName\"``\\ 可以只把事件投递给注册名匹配的那个扩展。目标缺失或有歧义会抛出 ``ValueError``；省略 ``target``\\ 则保持按顺序广播的行为。"
+
+#: ../../extending/events.rst:40
+msgid "Pause a tool for external approval"
+msgstr "暂停工具以等待外部审批"
+
+#: ../../extending/events.rst:42
+msgid "Subclass ExternalEventExtension for this behavior. It owns the lock, pending Future, routing, duplicate rejection, loop-safe wake-up, and cleanup. Your subclass owns the tool schema, outbound event, and validation of the returned answer."
+msgstr "这种行为请继承 ExternalEventExtension。它负责锁、待处理的 Future、路由、重复拒绝、对事件循环安全的唤醒以及清理。你的子类负责工具模式、对外发出的事件，以及校验收到的应答。"
+
+#: ../../extending/events.rst:50
+msgid "The wait is registered **before** the event is emitted, so an immediate UI reply is safe. The async-with exit waits for the response; it does not block the event loop. Only after the reply is staged does the actual tool execute and consume it."
+msgstr "等待在事件发出\\ **之前**\\ 就已经注册好，所以 UI 立即回复也是安全的。async-with 退出时会等待响应，它不会阻塞事件循环。只有回复被暂存之后，真正的工具才会执行并消费它。"
+
+#: ../../extending/events.rst:55
+msgid "Return the answer through the Agent"
+msgstr "通过 Agent 返回应答"
+
+#: ../../extending/events.rst:57
+msgid "The application routes the reply using config, separately from business payload:"
+msgstr "应用程序用配置来路由这份回复，与业务负载分开："
+
+#: ../../extending/events.rst:63
+msgid "In this offline demonstration the answer is accepted automatically. In a real application, render the question and wait for an actual user choice before emitting the response. The tool does not execute the proposed action itself."
+msgstr "在这个离线演示里，应答会被自动接受。在真实应用中，请先展示问题，等用户真正做出选择之后，再发出响应。工具本身不会执行所提议的操作。"
+
+#: ../../extending/events.rst:68
+msgid "Acceptance and validation"
+msgstr "接受与校验"
+
+#: ../../extending/events.rst:70
+msgid "The return value of emit_external_event is a list of accepting extension names."
+msgstr "emit_external_event 的返回值是接受该事件的扩展名列表。"
+
+#: ../../extending/events.rst:71
+msgid "A duplicate, mismatched session, mismatched supplied request ID, stale route, or wrong response name is rejected by the base."
+msgstr "重复的应答、会话不匹配、提供的请求 ID 不匹配、路由已过期或响应名称不对，都会被基类拒绝。"
+
+#: ../../extending/events.rst:73
+msgid "Acceptance claims delivery; the tool still validates ``approved`` as a bool."
+msgstr "接受只表示投递成功；工具仍会把 ``approved``\\ 校验为 bool。"
+
+#: ../../extending/events.rst:74
+msgid "RunCancelledEvent cancels pending waits; on_error wakes them with the error."
+msgstr "RunCancelledEvent 会取消待处理的等待；on_error 会用该错误把它们唤醒。"
+
+#: ../../extending/events.rst:75
+msgid "Calling an accepted reply twice does not run the tool twice."
+msgstr "对一个已被接受的应答调用两次，不会让工具执行两次。"
+
+#: ../../extending/events.rst:77
+msgid "Use :doc:`../examples/approval` for run instructions and expected output. Protected subclass helper contracts are included on the :class:`~zett_agent.extensions.external.ExternalEventExtension` API page because extension authors need them, despite their underscore names."
+msgstr "运行说明和预期输出参见\\ :doc:`../examples/approval`\\ 。受保护的子类辅助方法契约会列在\\ :class:`~zett_agent.extensions.external.ExternalEventExtension`\\ 的 API 页面里，因为扩展作者需要它们，尽管它们的名字以下划线开头。"
+
+#: ../../extending/events.rst:83
+msgid "Internal continuation versus user steering"
+msgstr "internal continuation 与 user steering"
+
+#: ../../extending/events.rst:85
+msgid "Publish ``InternalMessageEvent(AgentMessage(content=...))`` when an extension needs a bounded follow-on model step. GoalExtension uses this to request more work after review. Do not mutate the loop queue directly. Urgent user steering is a separate built-in channel and has priority over internal input. Neither mechanism interrupts an HTTP request in the middle of receiving a model response."
+msgstr "当扩展需要一次有边界的后续模型步骤时，请发布 ``InternalMessageEvent(AgentMessage(content=...))``\\ 。GoalExtension 用它来在评审之后请求更多工作。不要直接修改循环队列。紧急的 user steering 是另一条内置通道，优先级高于内部输入。这两种机制都不会中断正在接收模型响应的 HTTP 请求。"
+

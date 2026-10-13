@@ -1,0 +1,166 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/sessions.rst:2
+msgid "Keep and restore conversations"
+msgstr "保存并恢复对话"
+
+#: ../../learn/sessions.rst:4
+msgid "Each request starts with fresh context. A history extension restores previous dialogue, so you decide how long a conversation lives and where it is stored. Default clients remember turns in memory; they do not persist them to disk."
+msgstr "每个请求都从全新的上下文开始。历史记录扩展会恢复之前的对话，因此你可以决定一个对话能存活多久、存放在哪里。默认客户端在内存中记住各个轮次，不会把它们持久化到磁盘。"
+
+#: ../../learn/sessions.rst:9
+msgid "Identity is not storage"
+msgstr "标识不等于存储"
+
+#: ../../learn/sessions.rst:11
+msgid ":class:`~zett_agent.agent.AgentRunConfig` names the conversation:"
+msgstr ":class:`~zett_agent.agent.AgentRunConfig` 为对话命名："
+
+#: ../../learn/sessions.rst:19
+msgid "The same ``session_id`` across requests is what lets a history extension find the right messages. ``request_id`` is only a correlation label for one request; it is not an idempotency key, and reusing it does not deduplicate anything."
+msgstr "跨请求复用同一个 ``session_id`` 才能让历史记录扩展找到正确的消息。\\ ``request_id`` 只是一次请求的关联标签，它不是幂等键，复用它不会对任何内容去重。"
+
+#: ../../learn/sessions.rst:24
+msgid "Pick a history extension"
+msgstr "选择历史记录扩展"
+
+#: ../../learn/sessions.rst:30
+msgid "Extension"
+msgstr "扩展"
+
+#: ../../learn/sessions.rst:31
+msgid "Lifetime"
+msgstr "生命周期"
+
+#: ../../learn/sessions.rst:32
+msgid ":class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator`"
+msgstr ":class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator`"
+
+#: ../../learn/sessions.rst:33
+msgid "One process; the default when you do not pass ``extensions``."
+msgstr "单个进程；不传 ``extensions`` 时的默认选项。"
+
+#: ../../learn/sessions.rst:34
+msgid ":class:`~zett_agent.extensions.sqlite.SQLiteSessionExtension`"
+msgstr ":class:`~zett_agent.extensions.sqlite.SQLiteSessionExtension`"
+
+#: ../../learn/sessions.rst:35
+msgid "Survives restarts; stores raw history and compaction checkpoints."
+msgstr "能跨重启存活；存储原始历史记录和压缩检查点。"
+
+#: ../../learn/sessions.rst:36
+msgid "Your own implementation"
+msgstr "你自己的实现"
+
+#: ../../learn/sessions.rst:37
+msgid "See :doc:`../extending/storage-adapter`."
+msgstr "参见 :doc:`../extending/storage-adapter`\\ 。"
+
+#: ../../learn/sessions.rst:40
+msgid "Keep history in a script"
+msgstr "在脚本中保留历史记录"
+
+#: ../../learn/sessions.rst:50
+msgid "With a real model, the answer wording varies. The important contract is that the second request receives the earlier user and assistant messages. Reuse the client or the same accumulator instance to retain that memory. Creating a new client with a new default accumulator starts fresh, even if you reuse the session ID. A different ID selects an independent history."
+msgstr "使用真实模型时，答案的措辞会有所变化。关键的约定是：第二次请求能收到更早的用户消息和助手消息。复用客户端或同一个累加器实例即可保留这份记忆。用新的默认累加器创建新客户端会从零开始，即使复用同一个会话 ID 也是如此。不同的 ID 会选择彼此独立的历史记录。"
+
+#: ../../learn/sessions.rst:57
+msgid "Configure a durable conversation"
+msgstr "配置持久对话"
+
+#: ../../learn/sessions.rst:77
+msgid "This creates or updates a real file relative to the process working directory. Choose an application-owned path and keep it stable across restarts. The extension also accepts ``\":memory:\"`` for an ephemeral SQLite database. Omitting the path uses its user-data default; use explicit paths in tests and multi-user applications."
+msgstr "这会在进程的工作目录下创建或更新一个真实文件。请选择应用自己拥有的路径，并在重启期间保持稳定。该扩展也接受 ``\":memory:\"`` 用于临时的 SQLite 数据库。省略路径会使用它的用户数据默认位置；在测试和多用户应用中请使用显式路径。"
+
+#: ../../learn/sessions.rst:83
+msgid "After reopening the same database, create a client with the same ``config`` and send the next user message. Current system instructions and tools come from the new client; persisted system prompts do not accumulate in model context. Close the provider separately when it is no longer needed."
+msgstr "重新打开同一个数据库之后，用相同的 ``config`` 创建客户端并发送下一条用户消息。当前的系统指令和工具来自新客户端；持久化的系统提示词不会在模型上下文中累积。不再需要模型提供商时，请单独关闭它。"
+
+#: ../../learn/sessions.rst:89
+msgid "Restore across processes"
+msgstr "跨进程恢复"
+
+#: ../../learn/sessions.rst:95
+msgid "This program writes to a temporary database, closes it, opens a new client, and restores the first turn — the pattern to copy for a real application. Close the extension when finished with ``await storage.close()``."
+msgstr "这个程序写入一个临时数据库，关闭它，再打开一个新客户端，并恢复第一个轮次——这就是真实应用可以照搬的模式。使用完毕后请用 ``await storage.close()`` 关闭扩展。"
+
+#: ../../learn/sessions.rst:101
+msgid "Use one history-restoring extension per agent. Combining SQLite and in-memory restore makes it unclear which messages the model sees."
+msgstr "每个智能体只使用一个可恢复历史记录的扩展。同时用 SQLite 和内存恢复，会让模型到底看到哪些消息变得不清楚。"
+
+#: ../../learn/sessions.rst:105
+msgid "Two views of the same conversation"
+msgstr "同一个对话的两种视图"
+
+#: ../../learn/sessions.rst:107
+msgid "You will usually want history for a UI and history for the model, and they are not identical once compaction runs."
+msgstr "通常你会同时需要给界面看的历史记录和给模型看的上下文，而一旦运行压缩，两者就不完全相同。"
+
+#: ../../learn/sessions.rst:110
+msgid "``await storage.list_raw_messages(session_id)`` returns the original records in order — what you show in a transcript."
+msgstr "``await storage.list_raw_messages(session_id)`` 按顺序返回原始记录，也就是你在对话记录中展示的内容。"
+
+#: ../../learn/sessions.rst:112
+msgid "``await storage.storage.load(session_id)`` returns the model context: the latest checkpoint plus the raw messages after it."
+msgstr "``await storage.storage.load(session_id)`` 返回模型上下文：最新的检查点，以及其后的原始消息。"
+
+#: ../../learn/sessions.rst:115
+msgid "Compaction adds a checkpoint; it never rewrites the raw log. Pagination and listing helpers on the storage extension cover the rest (``after_sequence`` is exclusive, ``through_sequence`` is inclusive)."
+msgstr "压缩会添加一个检查点，它从不改写原始日志。存储扩展上的分页和列表辅助方法可以覆盖其余需求（``after_sequence`` 为开区间，``through_sequence`` 为闭区间）。"
+
+#: ../../learn/sessions.rst:119
+msgid "The raw log includes system messages and tool-only assistant messages, not just visible chat bubbles. A UI should select the roles and fields it wants to render instead of displaying every record as user-facing text."
+msgstr "原始日志包含系统消息和只含工具调用的助手消息，而不只是可见的聊天内容。界面应该挑选自己要渲染的角色和字段，而不是把每条记录都当成面向用户的文本展示。"
+
+#: ../../learn/sessions.rst:131
+msgid "``storage.storage.load`` returns a ``SessionView`` with ``snapshot``, ``raw_tail``, and a ``messages`` projection. During restore, the persistence extension additionally omits incomplete assistant/tool batches left by an interrupted process, so an endpoint never receives an orphan tool result. The original records stay available in the raw log for diagnosis."
+msgstr "``storage.storage.load`` 返回一个 ``SessionView``，其中包含 ``snapshot``、``raw_tail`` 和一个 ``messages`` 投影。在恢复过程中，持久化扩展还会跳过被中断的进程留下的不完整的助手/工具批次，因此端点永远不会收到孤立的工具结果。原始记录仍然保留在原始日志中，可用于诊断。"
+
+#: ../../learn/sessions.rst:138
+msgid "List, label, and forget conversations"
+msgstr "列出、标记和删除对话"
+
+#: ../../learn/sessions.rst:146
+msgid "``create_session`` can create an empty session before the first run. ``parent_session_id`` links a delegated conversation to its parent; ``session_type`` is an application-defined integer classification, not a permission or runtime mode."
+msgstr "``create_session`` 可以在首次运行之前创建一个空会话。\\ ``parent_session_id`` 把一个被委派的对话链接到它的父对话；``session_type`` 是应用自定义的整数分类，不是权限或运行时模式。"
+
+#: ../../learn/sessions.rst:151
+msgid "To intentionally delete the stored session and its log/checkpoints, call ``await storage.delete_session(session_id)``. This is deletion, not archival; stop active requests first and apply your retention/backup policy. In-memory history has ``accumulator.clear(session_id)`` instead. Session IDs do not control access — authenticate the owner before any history operation."
+msgstr "要主动删除存储的会话及其日志和检查点，请调用 ``await storage.delete_session(session_id)``\\ 。这是删除而不是归档；请先停止活动请求，并遵循你的保留和备份策略。内存历史记录则使用 ``accumulator.clear(session_id)``\\ 。会话 ID 不控制访问权限——在任何历史记录操作之前，都要先认证所有者。"
+
+#: ../../learn/sessions.rst:158
+msgid "Interrupted runs are not transactions"
+msgstr "中断的运行不是事务"
+
+#: ../../learn/sessions.rst:160
+msgid "Persistence appends completed message records as the request proceeds. A later error or cancellation does not undo a user message, finished tool result, or external side effect. Partial text deltas are not final assistant records. After a restart, let the restore projection select valid context rather than reconstructing it from UI fragments. For retry and idempotency decisions, see :doc:`application`."
+msgstr "请求进行过程中，持久化会追加已完成的消息记录。之后出现的错误或取消不会撤销用户消息、已完成的工具结果或外部副作用。部分的文本增量不是最终的助手记录。重启之后，请让恢复投影选择有效的上下文，而不是用界面片段拼凑出来。关于重试和幂等性的决策，参见 :doc:`application`\\ 。"
+
+#: ../../learn/sessions.rst:168
+msgid "Running out of context"
+msgstr "上下文耗尽时"
+
+#: ../../learn/sessions.rst:170
+msgid "Add :class:`~zett_agent.extensions.compaction.CompactionExtension` to summarize older turns when the conversation approaches the model's limit. Recent turns are kept whole, including their tool calls and results, and a summary that would not be smaller is discarded. See :doc:`../examples/compaction`."
+msgstr "添加 :class:`~zett_agent.extensions.compaction.CompactionExtension` 可以在对话接近模型上限时摘要较早的轮次。最近的轮次会完整保留，包括它们的工具调用和工具结果，而不会让内容变小的摘要会被丢弃。参见 :doc:`../examples/compaction`\\ 。"
+
+#: ../../learn/sessions.rst:175
+msgid "Next: understand :doc:`../concepts/context`, or move to :doc:`../extending/index` to build your own behavior."
+msgstr "下一步：了解 :doc:`../concepts/context`，或者转到 :doc:`../extending/index`，构建你自己的行为。"
+

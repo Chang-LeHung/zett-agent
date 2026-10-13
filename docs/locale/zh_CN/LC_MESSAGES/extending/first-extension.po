@@ -1,0 +1,110 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/first-extension.rst:2
+msgid "Write your first extension"
+msgstr "编写你的第一个扩展"
+
+#: ../../extending/first-extension.rst:4
+msgid "**Goal:** implement ``/note extensions`` as a request-scoped capability. The model will receive a rewritten instruction, call a note tool, and emit progress events that a UI can display. **Prerequisites:** :doc:`../learn/tools` and :doc:`../concepts/lifecycle`. No model API credentials are required."
+msgstr "**目标：**\\ 把\\ ``/note extensions``\\ 实现为请求级能力。模型会收到重写后的指令，调用 note 工具，并发出可供 UI 显示的进度事件。\\ **前置条件：**\\ 阅读\\ :doc:`../learn/tools`\\ 和\\ :doc:`../concepts/lifecycle`\\ 。无需模型 API 凭据。"
+
+#: ../../extending/first-extension.rst:10
+msgid "When an extension is the right abstraction"
+msgstr "什么时候该用扩展"
+
+#: ../../extending/first-extension.rst:12
+msgid "Use one for dynamic tools, context preparation, custom input commands, approvals, or persistence hooks. Do not put a text-rendering callback here unless it must participate in lifecycle decisions; AgentEventDispatcher is simpler for display."
+msgstr "在需要动态工具、上下文准备、自定义输入命令、审批或持久化钩子时使用它。不要在这里放文本渲染回调，除非它必须参与生命周期决策；只是用于展示时，AgentEventDispatcher 更简单。"
+
+#: ../../extending/first-extension.rst:17
+msgid "Step 1: register a tool in on_tool"
+msgstr "第 1 步：在 on_tool 中注册工具"
+
+#: ../../extending/first-extension.rst:23
+msgid "``context.register_tool`` rejects duplicate names and copies mutable schema metadata for this request. Registering through context avoids leaking tools into other sessions. The registered handler can close over context when it needs request-local information; do not store that handler on a global singleton."
+msgstr "``context.register_tool`` 会拒绝重名，并为本次请求复制可变的模式元数据。通过 context 注册可以避免把工具泄漏到其他会话。注册的处理函数在需要请求本地信息时可以闭包捕获 context；不要把该处理函数保存到全局单例上。"
+
+#: ../../extending/first-extension.rst:28
+msgid "All on_tool hooks finish before any on_state hook, so prompt extensions can see the complete tool registry even when they were registered earlier in the list."
+msgstr "所有 on_tool 钩子都在任何 on_state 钩子之前结束，因此提示词扩展即使更早注册在列表中，也能看到完整的工具注册表。"
+
+#: ../../extending/first-extension.rst:32
+msgid "Step 2: inject instructions and transform only the new input"
+msgstr "第 2 步：注入指令，只转换新输入"
+
+#: ../../extending/first-extension.rst:42
+msgid "``on_state`` is where an extension restores history or adds system instructions. ``on_message`` sees ``context.input_message`` after restoration but before append. The example keeps the original input in attributes, replaces the command with an instruction the model understands, and creates a request-local counter."
+msgstr "``on_state`` 是扩展恢复历史记录或添加系统指令的地方。\\ ``on_message`` 在恢复之后、追加之前看到 ``context.input_message``\\ 。示例把原始输入保存在属性中，用模型能理解的指令替换命令，并创建一个请求本地计数器。"
+
+#: ../../extending/first-extension.rst:47
+msgid "Do **not** append the user message here. The runtime appends the final transformed input exactly once after every on_message hook finishes. This matters for both in-memory history and append-only persistence."
+msgstr "**不要**\\ 在这里追加用户消息。运行时会等所有 on_message 钩子结束后，把最终转换过的输入恰好追加一次。这一点对内存中的历史记录和只追加的持久化都很重要。"
+
+#: ../../extending/first-extension.rst:52
+msgid "Step 3: emit a UI progress event"
+msgstr "第 3 步：发出 UI 进度事件"
+
+#: ../../extending/first-extension.rst:58
+msgid "The hook is an ordinary async function. It runs before each model call, so a tool round trip produces two progress events. Use a namespaced custom name such as ``note.model_step`` and a small payload suitable for your UI transport. ``await context.emit(...)`` preserves hook ordering; CUSTOM does not change the Agent phase."
+msgstr "该钩子是一个普通的异步函数。它在每次模型调用之前运行，因此一次工具往返会产生两个进度事件。请使用带命名空间的自定义名称，例如 ``note.model_step``，以及适合你的 UI 传输方式的少量载荷。\\ ``await context.emit(...)`` 会保持钩子顺序；CUSTOM 不会改变 Agent 阶段。"
+
+#: ../../extending/first-extension.rst:65
+msgid "Step 4: clean up every terminal path"
+msgstr "第 4 步：清理每一条终止路径"
+
+#: ../../extending/first-extension.rst:71
+msgid "The full class below additionally handles ``on_error`` and ``RunCancelledEvent``. An on_success-only cleanup leaks state when a user stops generation. Contexts are request identities, so two sessions can safely coexist in the same dictionary. Read :doc:`state` for ownership and idempotent cleanup rules."
+msgstr "下面完整的类还额外处理 ``on_error`` 和 ``RunCancelledEvent``\\ 。只在 on_success 中清理，会在用户停止生成时泄漏状态。context 就是请求的身份标识，因此两个会话可以安全地共存于同一个字典中。关于归属和幂等清理规则，请阅读\\ :doc:`state`\\ 。"
+
+#: ../../extending/first-extension.rst:77
+msgid "Step 5: compose with history and prompt guidance"
+msgstr "第 5 步：与历史记录和提示词 guidelines 组合"
+
+#: ../../extending/first-extension.rst:83
+msgid "NoteExtension has priority 50, ahead of default-priority 100 extensions. Hooks still execute stage by stage, not extension by extension. Explicit extension lists replace defaults, which is why memory and tool guidance appear in this list."
+msgstr "NoteExtension 的优先级是 50，排在默认优先级 100 的扩展之前。钩子仍然按阶段执行，而不是按扩展逐个执行。显式给出的扩展列表会替换默认值，因此这个列表里出现了记忆和工具 guidelines。"
+
+#: ../../extending/first-extension.rst:88
+msgid "Run and inspect the result"
+msgstr "运行并检查结果"
+
+#: ../../extending/first-extension.rst:94
+msgid "Expected output::"
+msgstr "预期输出::"
+
+#: ../../extending/first-extension.rst:101
+msgid "The scripted NoteModel checks the transformed input, preserved attributes, and injected instructions before requesting the real registered tool. The final assertion verifies request-local state was removed. To use an LLM, replace only NoteModel with a provider adapter; the extension and UI callbacks stay the same."
+msgstr "预设脚本的 NoteModel 会先检查转换后的输入、保留下来的属性和注入的指令，然后再请求真正注册的工具。最后的断言验证请求本地状态已被清除。要使用 LLM，只需把 NoteModel 换成模型适配器；扩展和 UI 回调保持不变。"
+
+#: ../../extending/first-extension.rst:107
+msgid "Complete implementation"
+msgstr "完整实现"
+
+#: ../../extending/first-extension.rst:109
+msgid ":download:`Download custom_extension.py <../_examples/custom_extension.py>`."
+msgstr ":download:`下载 custom_extension.py <../_examples/custom_extension.py>`\\ 。"
+
+#: ../../extending/first-extension.rst:115
+msgid "Next: :doc:`hooks`, :doc:`events`, :doc:`state`."
+msgstr "下一步：\\ :doc:`hooks`、\\ :doc:`events`、\\ :doc:`state`\\ 。"
+
+#: ../../extending/first-extension.rst:117
+msgid "Related API: :class:`~zett_agent.extensions.base.AgentExtension`, :class:`~zett_agent.agent.AgentRunContext`, :meth:`~zett_agent.agent.AgentRunContext.register_tool`, :meth:`~zett_agent.agent.AgentRunContext.register_server_tool`, and :class:`~zett_agent.events.AgentEvent`."
+msgstr "相关 API：\\ :class:`~zett_agent.extensions.base.AgentExtension`、\\ :class:`~zett_agent.agent.AgentRunContext`、\\ :meth:`~zett_agent.agent.AgentRunContext.register_tool`、\\ :meth:`~zett_agent.agent.AgentRunContext.register_server_tool`\\ 和\\ :class:`~zett_agent.events.AgentEvent`\\ 。"
+

@@ -1,0 +1,307 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/providers.rst:2
+msgid "Connect a model provider"
+msgstr "连接模型提供商"
+
+#: ../../learn/providers.rst:5
+msgid "Choose an adapter"
+msgstr "选择适配器"
+
+#: ../../learn/providers.rst:7
+msgid "Every adapter implements the same protocol, so swapping one for another does not touch the rest of your code."
+msgstr "所有适配器都实现同一套协议，因此替换其中一个适配器不会影响代码的其他部分。"
+
+#: ../../learn/providers.rst:14
+msgid "Adapter"
+msgstr "适配器"
+
+#: ../../learn/providers.rst:15
+msgid "Talks to"
+msgstr "对接服务"
+
+#: ../../learn/providers.rst:16
+msgid "You supply"
+msgstr "你需要提供"
+
+#: ../../learn/providers.rst:17
+msgid ":class:`~zett_agent.providers.openai.OpenAIProvider`"
+msgstr ":class:`~zett_agent.providers.openai.OpenAIProvider`"
+
+#: ../../learn/providers.rst:18
+msgid "OpenAI Chat Completions or Responses"
+msgstr "OpenAI Chat Completions 或 Responses"
+
+#: ../../learn/providers.rst:19 ../../learn/providers.rst:22
+#: ../../learn/providers.rst:25 ../../learn/providers.rst:28
+msgid "Model name and API key"
+msgstr "模型名称和 API 密钥"
+
+#: ../../learn/providers.rst:20
+msgid ":class:`~zett_agent.providers.anthropic.AnthropicProvider`"
+msgstr ":class:`~zett_agent.providers.anthropic.AnthropicProvider`"
+
+#: ../../learn/providers.rst:21
+msgid "Anthropic messages API"
+msgstr "Anthropic messages API"
+
+#: ../../learn/providers.rst:23
+msgid ":class:`~zett_agent.providers.google.GoogleProvider`"
+msgstr ":class:`~zett_agent.providers.google.GoogleProvider`"
+
+#: ../../learn/providers.rst:24
+msgid "Google GenAI"
+msgstr "Google GenAI"
+
+#: ../../learn/providers.rst:26
+msgid ":class:`~zett_agent.providers.deepseek.DeepSeekProvider`"
+msgstr ":class:`~zett_agent.providers.deepseek.DeepSeekProvider`"
+
+#: ../../learn/providers.rst:27
+msgid "DeepSeek Chat Completions or Responses"
+msgstr "DeepSeek Chat Completions 或 Responses"
+
+#: ../../learn/providers.rst:29
+msgid ":class:`~zett_agent.providers.ollama.OllamaProvider`"
+msgstr ":class:`~zett_agent.providers.ollama.OllamaProvider`"
+
+#: ../../learn/providers.rst:30
+msgid "A running Ollama server"
+msgstr "一个正在运行的 Ollama 服务器"
+
+#: ../../learn/providers.rst:31
+msgid "Installed model (and server URL if not localhost)"
+msgstr "已安装的模型（非本地部署时还需提供服务器 URL）"
+
+#: ../../learn/providers.rst:33
+msgid "The adapter normalizes messages, tools, and events, not the capabilities of every model. Pick an endpoint and model that support your workflow. In particular, images, visible reasoning, hosted tools, and tool search are not available on every endpoint. This runtime does not expose a general ``response_format`` or structured-final-output setting; for validated data, use a typed tool or validate the final answer in your application."
+msgstr "适配器负责统一消息、工具和事件，但不统一每个模型的能力。请选择与你的工作流相匹配的端点和模型。尤其是，图像、可见推理、托管工具和工具搜索并非在所有端点上可用。本运行时不提供通用的 ``response_format`` 或结构化最终输出设置；如果需要经过校验的数据，请使用带类型的工具，或在应用中校验最终答案。"
+
+#: ../../learn/providers.rst:41
+msgid "Configure your chosen provider"
+msgstr "配置你选定的模型提供商"
+
+#: ../../learn/providers.rst:43
+msgid "Read credentials and model names from your environment. Every tab creates a ``model`` you can pass to ``create_agent``; close it with ``await model.aclose()`` when finished. These snippets configure real services and are not offline examples."
+msgstr "从环境变量中读取凭据和模型名称。每个标签页都会创建一个可传给 ``create_agent`` 的 ``model``；使用完毕后用 ``await model.aclose()`` 关闭它。这些代码片段配置的是真实服务，并非离线示例。"
+
+#: ../../learn/providers.rst
+msgid "OpenAI"
+msgstr "OpenAI"
+
+#: ../../learn/providers.rst:63
+msgid "``response=True`` selects the Responses API. Omit it for Chat Completions (the default). Choose a protocol supported by your endpoint; enabling this flag does not add Responses support to a gateway."
+msgstr "``response=True`` 会选择 Responses API。省略它则使用 Chat Completions（默认）。请选择端点支持的协议；启用这个标志并不会给网关增加 Responses 支持。"
+
+#: ../../learn/providers.rst
+msgid "Anthropic"
+msgstr "Anthropic"
+
+#: ../../learn/providers.rst:79
+msgid "Uses the Messages API. ``response=True`` is not supported."
+msgstr "使用 Messages API。不支持 ``response=True``\\ 。"
+
+#: ../../learn/providers.rst
+msgid "Google"
+msgstr "Google"
+
+#: ../../learn/providers.rst:93
+msgid "Uses Google GenAI with an API key. The built-in constructor does not expose Vertex AI project/location configuration."
+msgstr "使用 API 密钥访问 Google GenAI。内置构造函数不提供 Vertex AI 项目/位置配置。"
+
+#: ../../learn/providers.rst
+msgid "DeepSeek"
+msgstr "DeepSeek"
+
+#: ../../learn/providers.rst:108
+msgid "Uses Chat Completions by default. ``response=True`` selects a Responses-compatible endpoint when your service supports it."
+msgstr "默认使用 Chat Completions。当你的服务支持时，``response=True`` 会选择兼容 Responses 的端点。"
+
+#: ../../learn/providers.rst
+msgid "Ollama"
+msgstr "Ollama"
+
+#: ../../learn/providers.rst:123
+msgid "Start Ollama and install the selected model separately. Construction does not start a server or download a model. No API key is required for a local service; this adapter uses Ollama's chat protocol only."
+msgstr "请单独启动 Ollama 并安装所选模型。构造适配器不会启动服务器，也不会下载模型。本地服务无需 API 密钥；此适配器只使用 Ollama 的 chat 协议。"
+
+#: ../../learn/providers.rst:128
+msgid "A complete tool-calling request"
+msgstr "一次完整的工具调用请求"
+
+#: ../../learn/providers.rst:130
+msgid "This program makes a real network request and may incur charges. Export the variables in your shell rather than pasting keys into source or logs. The program registers an addition tool, streams the response, and closes the provider even if the request fails."
+msgstr "这个程序会发起真实的网络请求，可能产生费用。请在 shell 中导出环境变量，不要把密钥粘贴到源码或日志里。程序会注册一个加法工具、流式输出响应，并在请求失败时也关闭模型提供商。"
+
+#: ../../learn/providers.rst:139
+msgid ":download:`Download real_provider.py <../_examples/real_provider.py>`."
+msgstr ":download:`下载 real_provider.py <../_examples/real_provider.py>`\\ 。"
+
+#: ../../learn/providers.rst:147
+msgid "From an installed package, download the file and run ``python real_provider.py``. The exact wording and whether the model obeys the tool request depend on the selected model. To verify the same tool round trip deterministically, run :doc:`../examples/streaming-tools`."
+msgstr "如果使用已安装的包，请下载该文件并运行 ``python real_provider.py``\\ 。具体措辞以及模型是否遵循工具请求，取决于所选的模型。要确定性地验证相同的工具往返，请运行 :doc:`../examples/streaming-tools`\\ 。"
+
+#: ../../learn/providers.rst:153
+msgid "Connect a compatible gateway"
+msgstr "连接兼容的网关"
+
+#: ../../learn/providers.rst:155
+msgid "Use ``base_url`` for a service implementing an existing protocol instead of writing a new adapter:"
+msgstr "对于实现了现有协议的服务，请使用 ``base_url``，而不必编写新的适配器："
+
+#: ../../learn/providers.rst:167
+msgid "The URL is the API root, for example a service's ``.../v1``, not its ``.../chat/completions`` route. Match the protocol to the gateway. Some gateways reject optional fields such as ``prompt_cache_key`` or particular reasoning levels; configure only supported options and test your combination. The adapter does not auto-detect model capabilities from an endpoint URL."
+msgstr "URL 应指向 API 根路径，例如服务的 ``.../v1``，而不是它的 ``.../chat/completions`` 路由。请让协议与网关匹配。有些网关会拒绝可选字段，比如 ``prompt_cache_key`` 或某些推理级别；请只配置受支持的选项，并测试你的组合。适配器不会从端点 URL 自动探测模型能力。"
+
+#: ../../learn/providers.rst:174
+msgid "Reasoning effort"
+msgstr "推理强度"
+
+#: ../../learn/providers.rst:176
+msgid "Set a provider-neutral level on the run instead of vendor-specific options:"
+msgstr "在运行上设置与提供商无关的级别，而不是使用厂商专属选项："
+
+#: ../../learn/providers.rst:188
+msgid "Level"
+msgstr "级别"
+
+#: ../../learn/providers.rst:189
+msgid "Meaning"
+msgstr "含义"
+
+#: ../../learn/providers.rst:190
+msgid "``MINIMAL``"
+msgstr "``MINIMAL``"
+
+#: ../../learn/providers.rst:191
+msgid "Request a minimal reasoning budget when the model supports it."
+msgstr "在模型支持时请求最小的推理预算。"
+
+#: ../../learn/providers.rst:192
+msgid "``LOW`` / ``MEDIUM``"
+msgstr "``LOW`` / ``MEDIUM``"
+
+#: ../../learn/providers.rst:193
+msgid "Lower or moderate effort; ``MEDIUM`` is the runtime default."
+msgstr "较低的或中等的强度；``MEDIUM`` 是运行时默认值。"
+
+#: ../../learn/providers.rst:194
+msgid "``HIGH`` / ``XHIGH``"
+msgstr "``HIGH`` / ``XHIGH``"
+
+#: ../../learn/providers.rst:195
+msgid "Request more effort for difficult multi-step tasks."
+msgstr "对于困难的多步骤任务请求更高的强度。"
+
+#: ../../learn/providers.rst:196
+msgid "``MAX`` / ``ULTRA``"
+msgstr "``MAX`` / ``ULTRA``"
+
+#: ../../learn/providers.rst:197
+msgid "Highest requested levels; an adapter may map them to the same supported setting."
+msgstr "请求的最高级别；适配器可能将它们映射到同一个受支持的设置。"
+
+#: ../../learn/providers.rst:198
+msgid "``OFF``"
+msgstr "``OFF``"
+
+#: ../../learn/providers.rst:199
+msgid "Omit or disable explicit reasoning configuration according to the adapter."
+msgstr "根据适配器的不同，省略或禁用显式的推理配置。"
+
+#: ../../learn/providers.rst:201
+msgid "The current Responses adapter maps ``XHIGH``, ``MAX``, and ``ULTRA`` to ``high``. Budget-based adapters also group the highest levels. OpenAI Chat Completions forwards named levels, so a model that rejects one can still raise an endpoint error. The runtime does not negotiate supported levels."
+msgstr "当前的 Responses 适配器会把 ``XHIGH``、``MAX`` 和 ``ULTRA`` 映射为 ``high``\\ 。基于预算的适配器也会把最高几个级别归为一组。OpenAI Chat Completions 会原样转发具名级别，因此如果模型拒绝其中某个级别，仍可能抛出端点错误。运行时不会就支持的级别进行协商。"
+
+#: ../../learn/providers.rst:206
+msgid "``OFF`` is not a universal guarantee of zero reasoning: OpenAI adapters omit explicit effort configuration, while some other adapters disable thinking. The endpoint's default may still reason. Raising the level never guarantees visible reasoning text, a better answer, or a particular price. Set a default for the whole agent with ``create_agent(model, reasoning_effort=...)`` and override it per request."
+msgstr "``OFF`` 并不是零推理的通用保证：OpenAI 适配器会省略显式强度配置，而其他一些适配器则关闭思考。端点的默认设置仍可能进行推理。提高级别绝不保证出现可见的推理文本、更好的答案或特定的价格。可以用 ``create_agent(model, reasoning_effort=...)`` 为整个智能体设置默认值，并按请求覆盖它。"
+
+#: ../../learn/providers.rst:214
+msgid "Retries and proxies"
+msgstr "重试与代理"
+
+#: ../../learn/providers.rst:216
+msgid "``RetryOptions`` retries only *before* the first streamed event, so a failure halfway through an answer never replays visible text or tool fragments."
+msgstr "``RetryOptions`` 只在第一个流式事件\\ *之前*\\ 重试，因此答案进行到一半时发生的失败绝不会重放已经可见的文本或工具片段。"
+
+#: ../../learn/providers.rst:227
+msgid "Default transports honor ``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, and ``NO_PROXY``. Pass your own transport when you need custom routing."
+msgstr "默认传输会遵循 ``HTTP_PROXY``、``HTTPS_PROXY``、``ALL_PROXY`` 和 ``NO_PROXY``\\ 。当你需要自定义路由时，请传入自己的传输。"
+
+#: ../../learn/providers.rst:230
+msgid "``max_retries=3`` permits up to four transport attempts: the initial one plus three retries. Authentication and validation failures are not blindly retried. The policy belongs to the model adapter, not ``create_agent``. For a total request deadline, see :doc:`application`; retries do not bound elapsed time."
+msgstr "``max_retries=3`` 允许最多四次传输尝试：首次尝试加三次重试。认证和校验失败不会被盲目重试。该策略属于模型适配器，而不是 ``create_agent``\\ 。关于请求的总截止时间，请参见 :doc:`application`；重试不会限制已用时间。"
+
+#: ../../learn/providers.rst:236
+msgid "Streams that end early or carry broken tool calls"
+msgstr "提前结束或携带损坏工具调用的流"
+
+#: ../../learn/providers.rst:238
+msgid "Providers keep a request alive through three failures that used to end it."
+msgstr "过去有三种失败会让请求终止，现在模型提供商会让请求在这些失败中继续。"
+
+#: ../../learn/providers.rst:240
+msgid "**Malformed or truncated tool arguments.** If a tool call's JSON is invalid, for example because the response hit its output limit or a gateway cut the stream, the call is not run. It becomes a failed tool result that says what happened and how to retry, so the model can resend a smaller call. Slightly malformed but complete JSON is still repaired silently. A cut-off payload is never completed by guesswork, because that could write truncated content. ``AnthropicProvider(max_tokens=...)`` sets the per-response output budget (default 16384); raise it for large writes, or lower it for a model with a smaller limit."
+msgstr "**格式错误或被截断的工具参数。** 如果工具调用的 JSON 无效，例如响应达到了输出上限或网关截断了流，这次调用就不会执行。它会变成一条失败的工具结果，说明发生了什么以及如何重试，这样模型就可以重新发送一个更小的调用。轻微格式错误但完整的 JSON 仍会被静默修复。被截断的载荷绝不会靠猜测补全，因为那样可能写入被截断的内容。\\ ``AnthropicProvider(max_tokens=...)`` 设置每次响应的输出预算（默认 16384）；写入量大时可调高，模型上限较小时可调低。"
+
+#: ../../learn/providers.rst:249
+msgid "**Responses ``error`` events.** A mid-stream ``error`` event (rate limit, overload) is raised with its own code and message instead of surfacing as a missing terminal response."
+msgstr "**Responses 的 ``error`` 事件。** 流中途出现的 ``error`` 事件（限流、过载）会带着自己的代码和消息抛出，而不会表现为缺少终止响应。"
+
+#: ../../learn/providers.rst:252
+msgid "**Responses streams without a terminal event.** If a gateway drops ``response.completed`` after every output item finished, the finished items are used and ``finish_reason`` is ``\"incomplete\"``. If an item never finished, or nothing arrived, the stream raised ``ProviderResponseError``; an empty stream is retried because nothing had been shown yet."
+msgstr "**没有终止事件的 Responses 流。** 如果网关在每个输出项都完成之后丢弃了 ``response.completed``，那么已完成的项会被使用，``finish_reason`` 为 ``\"incomplete\"``\\ 。如果有某个项从未完成，或者什么都没到达，流就会抛出 ``ProviderResponseError``；空流会被重试，因为此时还没有展示任何内容。"
+
+#: ../../learn/providers.rst:259
+msgid "Prompt caching"
+msgstr "提示词缓存"
+
+#: ../../learn/providers.rst:261
+msgid "The runtime derives a prompt-cache key from the session, so every step of one conversation can use the same routing hint on endpoints that support it. Cache reuse and savings remain provider decisions, not runtime guarantees. Set ``cache_key`` on :class:`~zett_agent.agent.AgentRunConfig` to route several conversations onto one prefix, or construct a provider with ``send_prompt_cache_key=False`` when an endpoint rejects the field."
+msgstr "运行时从会话派生出提示词缓存键，因此在支持该功能的端点上，同一对话的每一步都可以使用相同的路由提示。缓存复用和节省仍由提供商决定，而不是运行时的保证。在 :class:`~zett_agent.agent.AgentRunConfig` 上设置 ``cache_key``，可以把多个对话路由到同一个前缀；当端点拒绝该字段时，可以用 ``send_prompt_cache_key=False`` 构造提供商。"
+
+#: ../../learn/providers.rst:268
+msgid "OpenAI sends the key by default. DeepSeek omits it by default because its first-party service caches automatically; enable it only for a gateway that expects it. Other adapters may not expose cache routing."
+msgstr "OpenAI 默认会发送该键。DeepSeek 默认省略它，因为其自有服务会自动缓存；只有网关需要时才应启用。其他适配器可能不提供缓存路由。"
+
+#: ../../learn/providers.rst:272
+msgid "When a provider reports cache hits, ``ModelUsage.cache_read_tokens`` and ``cache_hit_rate`` expose them. Requests through gateways that translate protocols often omit the breakdown; ``ModelUsage.cache_reported`` is then ``False``, which distinguishes \"unknown\" from a measured 0% miss."
+msgstr "当提供商报告缓存命中时，``ModelUsage.cache_read_tokens`` 和 ``cache_hit_rate`` 会将其暴露出来。经过协议转换网关的请求往往会省略明细；此时 ``ModelUsage.cache_reported`` 为 ``False``，从而区分“未知”和实测的 0% 未命中。"
+
+#: ../../learn/providers.rst:278
+msgid "Always release the adapter"
+msgstr "始终释放适配器"
+
+#: ../../learn/providers.rst:280
+msgid "The client does not own a provider you passed in. Close it when the application is done, even if several clients shared it:"
+msgstr "客户端并不拥有你传入的提供商。应用结束时请关闭它，即使多个客户端共享同一个提供商："
+
+#: ../../learn/providers.rst:288
+msgid "Changing models mid-conversation"
+msgstr "对话中途更换模型"
+
+#: ../../learn/providers.rst:290
+msgid "Pass ``model=other_model`` to ``run`` or ``stream`` to override the default for one request. Ordinary messages and local tools remain provider-neutral, but vision support and hosted tools must still match the new endpoint. Signed reasoning/replay blocks are retained only for the provider/model identity that can consume them; do not treat them as portable instructions."
+msgstr "把 ``model=other_model`` 传给 ``run`` 或 ``stream``，即可为单个请求覆盖默认值。普通消息和本地工具仍然与提供商无关，但视觉支持和托管工具必须与新端点匹配。带签名的推理/重放块只保留给能够消费它们的提供商/模型标识；不要把它们当作可移植的指令。"
+
+#: ../../learn/providers.rst:296
+msgid "Next: :doc:`streaming`, or write your own adapter in :doc:`../extending/model-adapter`."
+msgstr "下一步：:doc:`streaming`，或者按照 :doc:`../extending/model-adapter`\\ 编写你自己的适配器。"
+

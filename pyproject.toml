@@ -78,6 +78,7 @@ docs = [
     "sphinx-autobuild>=2024.10,<2026; python_version >= '3.11'",
     "sphinx-copybutton>=0.5,<1",
     "sphinx-design>=0.6,<1",
+    "sphinx-intl>=2.3,<3",
     "sphinxcontrib-mermaid>=2,<3",
 ]
 docs-test = [

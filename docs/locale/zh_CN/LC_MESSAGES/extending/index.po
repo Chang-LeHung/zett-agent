@@ -1,0 +1,130 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/index.rst:71
+msgid "First extension"
+msgstr "第一个扩展"
+
+#: ../../extending/index.rst:71
+msgid "Hooks"
+msgstr "钩子"
+
+#: ../../extending/index.rst:31 ../../extending/index.rst:71
+msgid "Middleware"
+msgstr "中间件"
+
+#: ../../extending/index.rst:71
+msgid "Start here"
+msgstr "入门"
+
+#: ../../extending/index.rst:79
+msgid "Events and input"
+msgstr "事件与输入"
+
+#: ../../extending/index.rst:43 ../../extending/index.rst:79
+msgid "State and cleanup"
+msgstr "状态与清理"
+
+#: ../../extending/index.rst:19 ../../extending/index.rst:79
+msgid "Built-in extensions"
+msgstr "内置扩展"
+
+#: ../../extending/index.rst:79
+msgid "Runtime behavior"
+msgstr "运行时行为"
+
+#: ../../extending/index.rst:49 ../../extending/index.rst:87
+msgid "Model adapters"
+msgstr "模型适配器"
+
+#: ../../extending/index.rst:87
+msgid "Hosted tools"
+msgstr "托管工具"
+
+#: ../../extending/index.rst:61 ../../extending/index.rst:87
+msgid "Storage adapters"
+msgstr "存储适配器"
+
+#: ../../extending/index.rst:87
+msgid "Integrations"
+msgstr "集成"
+
+#: ../../extending/index.rst:2
+msgid "Extend the runtime"
+msgstr "扩展运行时"
+
+#: ../../extending/index.rst:4
+msgid "Reach for an extension when behavior belongs **inside** the request lifecycle: restoring history, reshaping context, adding tools, asking the user, or emitting UI events. For display-only callbacks, use an :class:`~zett_agent.dispatcher.AgentEventDispatcher` instead. You never subclass :class:`~zett_agent.agent.Agent` or write a second model loop."
+msgstr "当某项行为属于请求生命周期\\ **内部**\\ 时，才应该使用扩展：恢复历史记录、重塑上下文、添加工具、向用户提问，或发出 UI 事件。如果只是用于展示的回调，请改用\\ :class:`~zett_agent.dispatcher.AgentEventDispatcher`\\ 。你永远不需要继承\\ :class:`~zett_agent.agent.Agent`，也不必再写一个模型循环。"
+
+#: ../../extending/index.rst:13
+msgid "Write your first extension"
+msgstr "编写第一个扩展"
+
+#: ../../extending/index.rst:17
+msgid "Register a tool, transform input, emit an event, and clean up."
+msgstr "注册工具、转换输入、发出事件并清理。"
+
+#: ../../extending/index.rst:23
+msgid "Sessions, compaction, subagents, approvals, skills, MCP, and more."
+msgstr "会话、压缩、子智能体、审批、技能、MCP 等。"
+
+#: ../../extending/index.rst:25
+msgid "Lifecycle hooks"
+msgstr "生命周期钩子"
+
+#: ../../extending/index.rst:29
+msgid "Every hook boundary and which one to override for a given job."
+msgstr "每个钩子边界，以及针对具体任务应该覆盖哪一个。"
+
+#: ../../extending/index.rst:35
+msgid "Wrap each provider request or tool call, in a documented order."
+msgstr "按文档说明的顺序包装每次模型提供商请求或工具调用。"
+
+#: ../../extending/index.rst:37
+msgid "Events and external input"
+msgstr "事件与外部输入"
+
+#: ../../extending/index.rst:41
+msgid "Publish notifications and route responses back into a running request."
+msgstr "发布通知，并把响应送回正在运行的请求。"
+
+#: ../../extending/index.rst:47
+msgid "Keep per-request data safe when one instance serves many sessions."
+msgstr "在一个实例服务多个会话时，保证各请求数据的安全。"
+
+#: ../../extending/index.rst:53
+msgid "Add a provider or normalize a protocol the built-ins do not cover."
+msgstr "添加模型提供商，或规范化内置实现未覆盖的协议。"
+
+#: ../../extending/index.rst:55
+msgid "Server-side tools"
+msgstr "服务端工具"
+
+#: ../../extending/index.rst:59
+msgid "Declare provider-hosted tools such as web search or code execution."
+msgstr "声明模型提供商托管的工具，例如网页搜索或代码执行。"
+
+#: ../../extending/index.rst:65
+msgid "Persist raw history and compaction checkpoints in your own store."
+msgstr "把原始历史记录和压缩检查点持久化到你自己的存储中。"
+
+#: ../../extending/index.rst:67
+msgid "Suggested path: build your first extension, learn the event channels, then add state and cancellation handling. Implement a new provider or storage adapter only when an existing one cannot satisfy your application boundary."
+msgstr "建议的路径：先编写第一个扩展，了解事件通道，然后加入状态与取消处理。只有当现有的模型提供商或存储适配器无法满足你的应用边界时，才去实现新的。"
+

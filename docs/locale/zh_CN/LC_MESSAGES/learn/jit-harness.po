@@ -1,0 +1,692 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:43+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/jit-harness.rst:2
+msgid "Build and reuse JIT capabilities"
+msgstr "构建并复用 JIT 能力"
+
+#: ../../learn/jit-harness.rst:4
+msgid "A conversation can need more than a fixed toolbox. ``JITHarnessExtension`` lets a trusted model write a reusable Python tool or Markdown workflow, compose existing tools, improve its capabilities, and unload ones it no longer needs. Your application can save that toolbox and start a new session from it."
+msgstr "一次对话可能需要超出固定工具集的工具。 ``JITHarnessExtension`` 让受信任的模型编写可复用的 Python 工具或 Markdown 工作流、组合已有的工具、增强自身能力，并卸载不再需要的工具。你的应用可以保存这个工具箱，并基于它启动新会话。"
+
+#: ../../learn/jit-harness.rst:9
+msgid "JIT means building the tool environment when a task needs it, not a Python just-in-time compiler. This feature uses ordinary function calling on both Responses and Chat Completions. It does not require native ``tool_search``, though a Responses endpoint can defer the inspection tools described in :ref:`Control what the model sees <jit-control-what-the-model-sees>`."
+msgstr "JIT 指的是在任务需要时才构建工具环境，而不是 Python 即时编译器。该功能在 Responses 和 Chat Completions 上都使用普通的函数调用。它不需要原生的 ``tool_search``，不过 Responses 端点可以延迟加载 :ref:`控制模型看到什么 <jit-control-what-the-model-sees>` 中描述的检查工具。"
+
+#: ../../learn/jit-harness.rst:17
+msgid "Generated Python runs with your application's privileges. Imports and module-level statements execute when source is activated, before any tool call. This is not a sandbox. Enable it only when trusted code execution is appropriate, and review snapshots before activating source from elsewhere."
+msgstr "生成的 Python 以你的应用的权限运行。源码一被激活，导入语句和模块级语句就会执行，而且发生在任何工具调用之前。这不是沙箱。只有在执行受信任代码是合适场景时才启用它，并在激活来自其他地方的源码之前先审查快照。"
+
+#: ../../learn/jit-harness.rst:23
+msgid "Enable a session-local toolbox"
+msgstr "启用会话本地的工具箱"
+
+#: ../../learn/jit-harness.rst:25
+msgid "Provide a model and the base tools your application owns:"
+msgstr "提供一个模型，以及你的应用自身拥有的基础工具："
+
+#: ../../learn/jit-harness.rst:43
+msgid "Run this inside an async function. ``model`` is a configured function-calling provider and ``add`` is your typed base tool. The extension supplies current tool guidance, so an additional ``ToolGuidelinesExtension`` is not necessary. An explicit extension list replaces optional defaults; include history as above or use :doc:`session persistence <sessions>`."
+msgstr "请在异步函数中运行这段代码。 ``model`` 是一个已配置好的、支持函数调用的模型提供商， ``add`` 则是你定义的类型化基础工具。该扩展会提供当前的工具 guidelines，因此不需要再添加 ``ToolGuidelinesExtension``\\ 。显式给出的扩展列表会替换掉可选默认项；请像上面那样包含历史记录，或使用 :doc:`会话持久化 <sessions>`\\ 。"
+
+#: ../../learn/jit-harness.rst:49
+msgid "The model decides whether to create a tool. Creation does not test the tool body: successful registration means the Python module loaded and the tool definition validated, not that the implementation solves the task."
+msgstr "由模型决定是否创建工具。创建过程不会测试工具的主体逻辑：注册成功只表示 Python 模块已加载、工具定义通过了校验，并不表示其实现能解决任务。"
+
+#: ../../learn/jit-harness.rst:54
+msgid "Learn from expensive workflows"
+msgstr "从高成本的工作流中学习"
+
+#: ../../learn/jit-harness.rst:56
+msgid "When a task involves many exploratory steps or substantial time and tokens, the harness guidance asks the model to consider retaining what worked. Choose Python when stable steps can be automated; choose text when the path still needs judgment, such as selecting relevant evidence or interpreting errors. Neither form should become a dump of the conversation. Keep the useful path, applicability, dependencies, known pitfalls, and outcome checks."
+msgstr "当一项任务涉及大量探索性步骤，或者耗费可观的时间和 token 时，harness 的 guidelines 会请模型考虑把行之有效的做法保留下来。如果步骤稳定、可以自动化，就选择 Python；如果这条路径仍需要判断，例如挑选相关证据或解读错误，就选择文本。两种形式都不应变成对话的堆砌。请保留其中有用的路径、适用条件、依赖、已知的坑以及结果检查方式。"
+
+#: ../../learn/jit-harness.rst:63
+msgid "A text tool is a reusable Markdown procedure, similar to a ``SKILL``:"
+msgstr "文本工具是一段可复用的 Markdown 流程，类似于 ``SKILL``："
+
+#: ../../learn/jit-harness.rst:87
+msgid "The model uses the same ``create_tool`` with ``kind=\"text\"``. ``name`` and a short ``description`` are required; ``entrypoint`` must be omitted. Python creation remains the default, so existing ``create_tool(source, entrypoint=...)`` calls keep working."
+msgstr "模型使用同一个 ``create_tool``，并传入 ``kind=\"text\"``\\ 。\\ ``name`` 和简短的 ``description`` 是必填项；``entrypoint`` 必须省略。默认仍然是创建 Python 工具，因此现有的 ``create_tool(source, entrypoint=...)`` 调用依然可用。"
+
+#: ../../learn/jit-harness.rst:92
+msgid "Loaded text tools expose a reader with ``offset=0`` and ``max_chars=2000``. The model calls it to read relevant steps, then follows them with available tools. Reading text does not execute Python or automatically run a workflow. The full body is not injected into each model request: only the tool's selection hint, reader schema, and guidance are offered. Long workflows use the same exact, budgeted pages as source reads."
+msgstr "已加载的文本工具会暴露一个读取器，默认参数为 ``offset=0`` 和 ``max_chars=2000``\\ 。模型调用它来读取相关步骤，然后配合可用的工具去执行。读取文本不会执行 Python，也不会自动运行工作流。完整正文不会注入每一次模型请求：只提供该工具的选择提示、读取器模式和 guidelines。较长的工作流与读取源码时一样，按同一套精确且受预算约束的分页读取。"
+
+#: ../../learn/jit-harness.rst:99
+msgid "``update_tool(name, markdown, description=...)`` replaces a text workflow without changing its kind or name; omitting ``description`` preserves its current hint. Use ``read_tool_source`` to inspect the full path before editing. Unloading hides the reader while retaining its content; loading restores it. Both Python and text tools are saved in the application's snapshot for reuse in later sessions. Learning remains in memory until the application saves it."
+msgstr "``update_tool(name, markdown, description=...)`` 会替换文本工作流，而不改变它的类型或名称；省略 ``description`` 会保留当前的提示。编辑之前，可以用 ``read_tool_source`` 查看完整路径。卸载会隐藏读取器，同时保留其内容；加载则恢复它。Python 工具和文本工具都会保存到应用的快照中，供后续会话复用。在应用保存之前，学习成果只保留在内存中。"
+
+#: ../../learn/jit-harness.rst:106
+msgid "Validate a proposed optimization against representative tasks and account for the cost of creating and testing it. Guidance encourages this behavior; it does not guarantee that a model will learn, or that a saved path is globally optimal."
+msgstr "请用有代表性的任务验证所提出的优化，并把创建和测试它的成本计算在内。guidelines 鼓励这种行为，但并不保证模型一定能学会，也不保证保存下来的路径全局最优。"
+
+#: ../../learn/jit-harness.rst:111
+msgid "Choose whether to manage base tools"
+msgstr "选择是否管理基础工具"
+
+#: ../../learn/jit-harness.rst:113
+msgid "``manage_base_tools=True`` (the default) lets the harness unload/reload and profile application-owned local tools, including tools supplied by extensions. Tools registered later during setup or replaced by a policy hook are adopted before model/tool dispatch. Synchronization does not restore tools removed by a policy."
+msgstr "``manage_base_tools=True``\\ （默认值）允许 harness 卸载/重新加载并分析应用自有的本地工具，也包括由扩展提供的工具。在初始化过程中稍后注册的工具，或被某个策略钩子替换的工具，都会在模型/工具分发之前被接管。同步操作不会恢复被策略移除的工具。"
+
+#: ../../learn/jit-harness.rst:118
+msgid "To protect the base toolbox and opt out of its profiling:"
+msgstr "如果想保护基础工具箱，并选择不对它做性能分析："
+
+#: ../../learn/jit-harness.rst:125
+msgid "In this mode base tools keep their normal request handlers. ``unload_tool`` and ``load_tool`` reject base names; no base-call measurements or recent base errors are collected. Dynamic Python tools can still compose currently registered base tools, with argument validation, middleware, and tool hooks intact. Dynamic and management calls retain their own profiling. A parent tool's elapsed time still includes time spent in base dependencies."
+msgstr "在这种模式下，基础工具保留它们正常的请求处理函数。 ``unload_tool`` 和 ``load_tool`` 会拒绝基础工具的名称；不会收集基础工具的调用测量数据或近期错误。动态 Python 工具仍然可以组合当前已注册的基础工具，参数校验、中间件和工具钩子都保持有效。动态调用和管理调用仍保留各自的性能分析。父工具记录的耗时仍然包含花在基础依赖上的时间。"
+
+#: ../../learn/jit-harness.rst:132
+msgid "Base implementations cannot be updated or serialized as Python source in either mode. A snapshot retains base names and unload state, and the application must provide implementations again in each request. This option is not persisted in snapshots: the receiving application chooses it. When loading a snapshot with base management disabled, existing base unload marks are retained in the snapshot but not enforced; dynamic unload marks are still enforced. Later loading that snapshot with management enabled reactivates the retained base unload marks."
+msgstr "两种模式下，基础实现都无法更新，也无法序列化为 Python 源码。快照会保留基础工具的名称和卸载状态，应用必须在每个请求中重新提供实现。该选项不会写入快照：由接收方应用自行选择。在基础工具管理被禁用的情况下加载快照时，快照中已有的基础工具卸载标记会被保留下来，但不会强制执行；动态工具的卸载标记仍会强制执行。之后在启用管理的情况下加载该快照时，被保留的基础工具卸载标记会重新生效。"
+
+#: ../../learn/jit-harness.rst:140
+msgid "Profiling observes calls routed through the Agent/harness. Calling an original application ``AgentTool`` directly bypasses the harness, so it cannot be counted or prevented by unloading a request registration."
+msgstr "性能分析只观察经由 Agent/harness 路由的调用。直接调用应用原有的 ``AgentTool`` 会绕过 harness，因此既无法被统计，也无法通过卸载请求中的注册来阻止。"
+
+#: ../../learn/jit-harness.rst:145
+msgid "The model's management tools"
+msgstr "模型的管理工具"
+
+#: ../../learn/jit-harness.rst:151
+msgid "Tool"
+msgstr "工具"
+
+#: ../../learn/jit-harness.rst:152 ../../learn/jit-harness.rst:229
+msgid "Behavior"
+msgstr "行为"
+
+#: ../../learn/jit-harness.rst:153
+msgid "``create_tool(source, ...)``"
+msgstr "``create_tool(source, ...)``"
+
+#: ../../learn/jit-harness.rst:154
+msgid "Create Python with ``entrypoint``, or text with ``kind=\"text\"``, ``name``, and ``description``. ``files`` adds package modules."
+msgstr "使用 ``entrypoint`` 创建 Python 工具，或使用 ``kind=\"text\"``、``name`` 和 ``description`` 创建文本工具。\\ ``files`` 用于添加工具包模块。"
+
+#: ../../learn/jit-harness.rst:155
+msgid "``update_tool(name, ...)``"
+msgstr "``update_tool(name, ...)``"
+
+#: ../../learn/jit-harness.rst:156
+msgid "Replace or add files, source, or entry point of a dynamic tool; ``remove`` deletes a file. Everything sent compiles as one version."
+msgstr "替换或添加动态工具的文件、源码或入口； ``remove`` 用于删除某个文件。一次发送的所有内容会编译成一个版本。"
+
+#: ../../learn/jit-harness.rst:157
+msgid "``unload_tool(name)``"
+msgstr "``unload_tool(name)``"
+
+#: ../../learn/jit-harness.rst:158
+msgid "Hide the callable registration while retaining source and its name."
+msgstr "隐藏可调用的注册，同时保留源码及其名称。"
+
+#: ../../learn/jit-harness.rst:159
+msgid "``load_tool(name)``"
+msgstr "``load_tool(name)``"
+
+#: ../../learn/jit-harness.rst:160
+msgid "Restore a retained tool without regenerating code."
+msgstr "恢复已保留的工具，而无需重新生成代码。"
+
+#: ../../learn/jit-harness.rst:161
+msgid "``list_tools(offset=0, limit=20)``"
+msgstr "``list_tools(offset=0, limit=20)``"
+
+#: ../../learn/jit-harness.rst:162
+msgid "Read a small catalog page: names, states, and description previews only."
+msgstr "读取一页很小的目录：只有名称、状态和描述预览。"
+
+#: ../../learn/jit-harness.rst:163
+msgid "``inspect_tool(name)``"
+msgstr "``inspect_tool(name)``"
+
+#: ../../learn/jit-harness.rst:164
+msgid "Read the definition, parameters, and package file sizes, without source, profiling, or history."
+msgstr "读取定义、参数和工具包文件大小，不包含源码、性能分析或历史记录。"
+
+#: ../../learn/jit-harness.rst:165
+msgid "``read_tool_source(name, path=None, offset=0, max_chars=2000)``"
+msgstr "``read_tool_source(name, path=None, offset=0, max_chars=2000)``"
+
+#: ../../learn/jit-harness.rst:166
+msgid "Read an exact fragment of one package file, defaulting to the entry point module."
+msgstr "读取某个工具包文件中一段精确的片段，默认为入口模块。"
+
+#: ../../learn/jit-harness.rst:167
+msgid "``read_tool_schema(name, offset=0, max_chars=2000)``"
+msgstr "``read_tool_schema(name, offset=0, max_chars=2000)``"
+
+#: ../../learn/jit-harness.rst:168
+msgid "Read JSON Schema fragments if the definition reports ``parameters_omitted``."
+msgstr "当定义中报告 ``parameters_omitted`` 时，读取 JSON Schema 片段。"
+
+#: ../../learn/jit-harness.rst:169
+msgid "``inspect_tool_stats(name)``"
+msgstr "``inspect_tool_stats(name)``"
+
+#: ../../learn/jit-harness.rst:170
+msgid "Read only that tool's lifetime aggregate measurements."
+msgstr "只读取该工具整个生命周期的聚合测量数据。"
+
+#: ../../learn/jit-harness.rst:171
+msgid "``inspect_tool_calls(name, offset=0, limit=5)``"
+msgstr "``inspect_tool_calls(name, offset=0, limit=5)``"
+
+#: ../../learn/jit-harness.rst:172
+msgid "Read compact single-call measurements without source or aggregates."
+msgstr "读取精简的单次调用测量数据，不含源码或聚合数据。"
+
+#: ../../learn/jit-harness.rst:173
+msgid "``inspect_tool_errors(name=None, offset=0, limit=3, max_chars=512)``"
+msgstr "``inspect_tool_errors(name=None, offset=0, limit=3, max_chars=512)``"
+
+#: ../../learn/jit-harness.rst:174
+msgid "Read recent message previews and occurrence counts, optionally filtered by tool."
+msgstr "读取近期错误消息的预览和出现次数，可按工具筛选。"
+
+#: ../../learn/jit-harness.rst:176
+msgid "Management names are reserved. The model cannot overwrite or unload these tools, and cannot replace application-provided base tools. All management operations use the runtime's serial scheduling mode. If a response includes ordinary parallel calls too, those finish before the serial management calls."
+msgstr "管理工具的名称是保留的。模型无法覆盖或卸载这些工具，也无法替换应用提供的基础工具。所有管理操作都使用运行时的串行调度模式。如果一次响应中还包含普通的并行调用，它们会在串行的管理调用之前完成。"
+
+#: ../../learn/jit-harness.rst:181
+msgid "The last five read retained details and are the *inspection* tier: ``read_tool_source``, ``read_tool_schema``, ``inspect_tool_stats``, ``inspect_tool_calls``, and ``inspect_tool_errors``. The others are the control loop that builds, changes, and lists capabilities. :ref:`Control what the model sees <jit-control-what-the-model-sees>` explains how to expose the inspection tier."
+msgstr "最后五个工具用于读取保留的细节，属于 *inspection* tier：``read_tool_source``、``read_tool_schema``、``inspect_tool_stats``、``inspect_tool_calls`` 和 ``inspect_tool_errors``\\ 。其余工具是负责构建、修改和列出能力的控制循环。\\ :ref:`控制模型看到什么 <jit-control-what-the-model-sees>` 说明了如何暴露 inspection tier。"
+
+#: ../../learn/jit-harness.rst:187
+#, python-brace-format
+msgid "State-changing tools -- ``create_tool``, ``update_tool``, ``unload_tool``, and ``load_tool`` -- acknowledge only ``name`` and ``status``, for example ``{\"name\": \"twice\", \"status\": \"loaded\"}``. They do not return profiling, metadata, source, or call history. Profiling is still recorded normally and can be queried when useful through ``inspect_tool_stats``, ``inspect_tool_calls``, or the Python ``profile()`` API."
+msgstr "会改变状态的工具 —— ``create_tool``、``update_tool``、``unload_tool`` 和 ``load_tool`` —— 只返回 ``name`` 和 ``status``，例如 ``{\"name\": \"twice\", \"status\": \"loaded\"}``\\ 。它们不返回性能分析、元数据、源码或调用历史。性能分析仍会照常记录，需要时可以通过 ``inspect_tool_stats``、``inspect_tool_calls`` 或 Python 的 ``profile()`` API 查询。"
+
+#: ../../learn/jit-harness.rst:194
+msgid "Each query has one purpose. Discovery does not fetch profiling; parameter inspection does not fetch source or history. Model-facing query responses stay within an 8,000-character serialized JSON budget, including escaping and punctuation. ``limit`` is 1–100 and ``max_chars`` is 1–4,000. Both are maxima: the budget can shorten a page, so always follow its ``next_offset``."
+msgstr "每个查询只有一个用途。发现类查询不会获取性能分析；参数检查不会获取源码或历史记录。面向模型的查询响应限制在 8,000 个字符的序列化 JSON 预算之内，其中计入转义和标点。 ``limit`` 为 1–100， ``max_chars`` 为 1–4,000。两者都是上限：预算可能截短某一页，因此始终要按 ``next_offset`` 继续读取。"
+
+#: ../../learn/jit-harness.rst:200
+msgid "Catalog descriptions preview up to 200 characters; definition descriptions preview up to 500. Source and schema fragments are exact, not summaries: concatenate them in order and compare ``content_id`` between pages if the tool changes during reading. An oversized schema is explicitly omitted from ``inspect_tool``, with ``parameters_omitted`` and ``parameters_chars``; use ``read_tool_schema`` to recover complete valid JSON. Base tools have no retained Python source, so ``read_tool_source`` rejects them."
+msgstr "目录中的描述最多预览 200 个字符；定义中的描述最多预览 500 个。源码和模式片段是精确内容，而不是摘要：请按顺序拼接，并在读取期间工具发生变化时，比对各页之间的 ``content_id``\\ 。过大的模式会明确从 ``inspect_tool`` 中省略，同时给出 ``parameters_omitted`` 和 ``parameters_chars``；可以用 ``read_tool_schema`` 恢复完整且合法的 JSON。基础工具没有保留的 Python 源码，因此 ``read_tool_source`` 会拒绝它们。"
+
+#: ../../learn/jit-harness.rst:208
+msgid "Application methods remain complete: ``harness.list_tools()`` returns the full catalog, ``definition(name)`` returns full metadata and schema, ``source(name)`` returns full dynamic source, and ``inspect_tool(name)`` returns schema, guidelines, and source. Measurements stay on their own methods: ``profile_stats(name)`` returns aggregates and ``profile(name)`` returns individual call records. Those methods do not apply the model response budget."
+msgstr "应用侧的方法仍然保持完整：``harness.list_tools()`` 返回完整目录，``definition(name)`` 返回完整的元数据和模式，``source(name)`` 返回完整的动态源码，``inspect_tool(name)`` 返回模式、guidelines 和源码。测量数据仍由各自的方法提供：``profile_stats(name)`` 返回聚合数据，``profile(name)`` 返回单次调用的记录。这些方法不受模型响应预算的限制。"
+
+#: ../../learn/jit-harness.rst:218
+msgid "Control what the model sees"
+msgstr "控制模型看到什么"
+
+#: ../../learn/jit-harness.rst:220
+msgid "Every definition and instruction is sent on every request. The inspection tier is the part most sessions never need, so ``JITHarnessExtension(inspection_tools=...)`` decides how it reaches the model:"
+msgstr "每一次请求都会发送全部定义和指令。inspection tier 是大多数会话根本用不到的部分，因此由 ``JITHarnessExtension(inspection_tools=...)`` 决定它如何到达模型："
+
+#: ../../learn/jit-harness.rst:228
+msgid "Mode"
+msgstr "模式"
+
+#: ../../learn/jit-harness.rst:230
+msgid "``InspectionToolExposure.DEFERRED`` (default)"
+msgstr "``InspectionToolExposure.DEFERRED``\\ （默认）"
+
+#: ../../learn/jit-harness.rst:231
+msgid "Mark the inspection definitions as deferred. A provider that supports deferred loading (OpenAI Responses) fetches one on demand through its hosted ``tool_search`` endpoint. Protocols that ignore the flag — Chat Completions, Anthropic, Google, and Ollama — still receive every definition, so no capability is lost there: the model can always read source, schemas, measurements, and error history."
+msgstr "把检查相关的定义标记为延迟加载。支持延迟加载的模型提供商（OpenAI Responses）会通过其托管的 ``tool_search`` 端点按需获取某一个定义。忽略该标志的协议 —— Chat Completions、Anthropic、Google 和 Ollama —— 仍会收到全部定义，因此在这些协议上不会丢失任何能力：模型始终可以读取源码、模式、测量数据和错误历史。"
+
+#: ../../learn/jit-harness.rst:237
+msgid "``InspectionToolExposure.ALWAYS``"
+msgstr "``InspectionToolExposure.ALWAYS``"
+
+#: ../../learn/jit-harness.rst:238
+msgid "Send every management definition with the first request, exactly as if the tier did not exist."
+msgstr "在第一次请求时就发送全部管理定义，效果等同于该层级并不存在。"
+
+#: ../../learn/jit-harness.rst:240
+msgid "``InspectionToolExposure.HIDDEN``"
+msgstr "``InspectionToolExposure.HIDDEN``"
+
+#: ../../learn/jit-harness.rst:241
+msgid "Never expose the inspection tools. The application keeps ``profile``, ``profile_stats``, ``tool_errors``, ``source``, and ``inspect_tool``, but the model cannot inspect code or measurements by itself."
+msgstr "完全不暴露检查工具。应用仍然保留 ``profile``、``profile_stats``、``tool_errors``、``source`` 和 ``inspect_tool``，但模型无法自行检查代码或测量数据。"
+
+#: ../../learn/jit-harness.rst:245
+msgid "The choice also shapes the prompt: hidden inspection tools are never named, and an endpoint that may defer them is told that a search may be needed. Nothing else changes; the tools keep their names, serial scheduling, and output budgets, and the management names stay reserved in every mode."
+msgstr "这一选择也会影响提示词：被隐藏的检查工具不会被提及名称，而可能延迟加载它们的端点会被告知可能需要搜索。其他行为都不变；工具的名称、串行调度和输出预算都保持原样，管理工具的名称在任何模式下都保持保留状态。"
+
+#: ../../learn/jit-harness.rst:250
+msgid "Measured on the default toolbox with ``cl100k_base`` tokenization, one request costs roughly:"
+msgstr "在默认工具箱上按 ``cl100k_base`` 分词统计，一次请求的开销大致为："
+
+#: ../../learn/jit-harness.rst:257
+msgid "Configuration"
+msgstr "配置"
+
+#: ../../learn/jit-harness.rst:258
+msgid "Responses"
+msgstr "Responses"
+
+#: ../../learn/jit-harness.rst:259
+msgid "Chat Completions"
+msgstr "Chat Completions"
+
+#: ../../learn/jit-harness.rst:260
+msgid "``ALWAYS``"
+msgstr "``ALWAYS``"
+
+#: ../../learn/jit-harness.rst:261 ../../learn/jit-harness.rst:262
+msgid "3,230 tokens"
+msgstr "3,230 tokens"
+
+#: ../../learn/jit-harness.rst:263
+msgid "``DEFERRED`` (default)"
+msgstr "``DEFERRED``\\ （默认）"
+
+#: ../../learn/jit-harness.rst:264
+msgid "2,370 tokens"
+msgstr "2,370 tokens"
+
+#: ../../learn/jit-harness.rst:265
+msgid "3,250 tokens"
+msgstr "3,250 tokens"
+
+#: ../../learn/jit-harness.rst:266
+msgid "``HIDDEN``"
+msgstr "``HIDDEN``"
+
+#: ../../learn/jit-harness.rst:267 ../../learn/jit-harness.rst:268
+msgid "2,080 tokens"
+msgstr "2,080 tokens"
+
+#: ../../learn/jit-harness.rst:270
+msgid "Each figure covers the control-tool definitions plus the instruction block, before tool guidance and your own tools. Deferring saves the inspection definitions (about 880 tokens); hiding removes those definitions and their instructions (about 290 tokens more). Keep the default when the model should be able to diagnose its own tools, and hide when it should not. Hiding is also the lever that matters on Chat Completions, where deferral has no effect because the protocol always receives every definition."
+msgstr "每个数字都涵盖控制类工具的定义加上指令块，不含工具 guidelines 和你自己的工具。延迟加载可以省下检查相关的定义（约 880 tokens）；隐藏则会移除这些定义及其指令（再多约 290 tokens）。当模型需要能自行诊断自己的工具时，保持默认值；不需要时则隐藏。在 Chat Completions 上，真正起作用的手段也是隐藏，因为延迟加载在那里没有效果 —— 该协议总是接收全部定义。"
+
+#: ../../learn/jit-harness.rst:278
+msgid "Deferral depends on a provider feature, so it never changes Chat Completions behaviour. Hiding is a pure application decision, and the harness API stays complete in every mode."
+msgstr "延迟加载依赖模型提供商的一项能力，因此它永远不会改变 Chat Completions 的行为。隐藏则纯粹是应用侧的决策，而在任何模式下 harness API 都保持完整。"
+
+#: ../../learn/jit-harness.rst:282
+msgid "These control definitions are larger than they were before package files and programmatic guidance existed. Most of that size is the JSON Schema rendering itself: every optional argument is written as an ``anyOf`` union and every property carries a generated ``title``, which together account for roughly 280 tokens of the figures above across the eleven tools."
+msgstr "这些控制类定义比引入工具包文件和程序化 guidelines 之前更大。其中大部分体积来自 JSON Schema 本身的呈现：每个可选参数都写成 ``anyOf`` 联合类型，每个属性都带有一个生成出来的 ``title``，这十一项工具加起来约占上面数字中的 280 tokens。"
+
+#: ../../learn/jit-harness.rst:289
+msgid "Write and compose tools"
+msgstr "编写并组合工具"
+
+#: ../../learn/jit-harness.rst:291
+msgid "Python modules receive ``tool``, ``ToolExecutionMode``, and ``harness``. Source can contain imports, helper functions, and classes. Pass the variable name of one decorated entry point, for example ``entrypoint=\"twice\"``:"
+msgstr "Python 模块会收到 ``tool``、``ToolExecutionMode`` 和 ``harness``\\ 。源码中可以包含导入语句、辅助函数和类。请传入某个被装饰的入口的变量名，例如 ``entrypoint=\"twice\"``："
+
+#: ../../learn/jit-harness.rst:300
+msgid "The tool contract is the same as :doc:`tools`: annotated arguments, a description, and non-empty guidelines. JIT tools are ordinary functions, not deferred or client-side search tools."
+msgstr "工具契约与 :doc:`tools` 相同：带类型注解的参数、一段描述，以及非空的 guidelines。JIT 工具是普通函数，不是延迟加载的工具，也不是客户端搜索工具。"
+
+#: ../../learn/jit-harness.rst:304
+msgid "Use ``await harness.call_tool(name, **arguments)`` in async tools. For ordinary ``def`` functions, use the blocking composition entry point:"
+msgstr "在异步工具中使用 ``await harness.call_tool(name, **arguments)``\\ 。对于普通的 ``def`` 函数，请使用阻塞式的组合入口："
+
+#: ../../learn/jit-harness.rst:314
+msgid "Both paths check the current registration and execute parameter validation, middleware, and necessary tool hooks. Dependencies return Python values, not JSON strings, unless a result hook deliberately transforms them. Exceptions propagate to the outer tool unless your Python catches them. Only the outer call's result is recorded in the model conversation; no nested execution trace is emitted. A dependency that requests user input or approval still performs that interaction."
+msgstr "两条路径都会检查当前的注册，并执行参数校验、中间件和必要的工具钩子。依赖返回的是 Python 值，而不是 JSON 字符串，除非某个结果钩子有意对它做了转换。除非你的 Python 代码捕获了异常，否则异常会向上传播到外层工具。只有外层调用的结果会记录到模型对话中；不会产生嵌套的执行轨迹。请求用户输入或审批的依赖仍然会执行那次交互。"
+
+#: ../../learn/jit-harness.rst:322
+msgid "Synchronous code runs off the event loop. Do not call ``call_tool_sync`` from async code, or use it outside a running synchronous tool. Composition depth is bounded by ``max_call_depth`` (32 by default). Cancellation cannot forcibly stop arbitrary synchronous Python or undo side effects; give blocking I/O its own timeouts and avoid detached background work."
+msgstr "同步代码会在事件循环之外运行。不要在异步代码中调用 ``call_tool_sync``，也不要在没有正在运行的同步工具时调用它。组合深度受 ``max_call_depth`` 限制（默认 32）。取消无法强制停止任意的同步 Python 代码，也无法撤销副作用；请为阻塞式 I/O 单独设置超时，并避免游离在外的后台任务。"
+
+#: ../../learn/jit-harness.rst:329
+msgid "Programmatic tool calling"
+msgstr "程序化工具调用（PTC）"
+
+#: ../../learn/jit-harness.rst:331
+msgid "Composition inside a tool is programmatic tool calling: the model writes code that calls tools, instead of asking for one tool call per model turn. A single outer call can then replace dozens of turns."
+msgstr "工具内部的组合就是程序化工具调用（PTC）：模型编写会调用工具的代码，而不是每个模型轮次只请求一次工具调用。这样一次外层调用就可以代替几十个轮次。"
+
+#: ../../learn/jit-harness.rst:344
+msgid "with ``batch.py`` holding the loop:"
+msgstr "其中循环体存放在 ``batch.py`` 里："
+
+#: ../../learn/jit-harness.rst:355
+msgid "What it buys:"
+msgstr "这样做的收益："
+
+#: ../../learn/jit-harness.rst:357
+msgid "**Fewer model turns.** The loop, the branching, and the retries happen in Python, so the conversation grows once instead of once per tool call."
+msgstr "**更少的模型轮次。** 循环、分支和重试都在 Python 中进行，因此对话只增长一次，而不是每次工具调用都增长一次。"
+
+#: ../../learn/jit-harness.rst:359
+msgid "**Smaller context.** Nested results stay in Python. Only the outer tool's return value becomes a ``ToolMessage``; intermediate payloads are never sent back to the model, and no execution trace is appended."
+msgstr "**更小的上下文。** 嵌套结果留在 Python 中。只有外层工具的返回值会成为 ``ToolMessage``；中间载荷永远不会发回模型，也不会追加执行轨迹。"
+
+#: ../../learn/jit-harness.rst:362
+msgid "**Observability is unchanged.** Every nested call is measured by profiling and emits ``jit_tool_started`` / ``jit_tool_completed`` with its origin, so the application still sees what ran."
+msgstr "**可观测性保持不变。** 每次嵌套调用都会由性能分析记录测量数据，并连同它的来源一起发出 ``jit_tool_started`` / ``jit_tool_completed``，因此应用仍然能看到实际运行了什么。"
+
+#: ../../learn/jit-harness.rst:366
+msgid "Limits to design around:"
+msgstr "设计时需要留意的限制："
+
+#: ../../learn/jit-harness.rst:368
+msgid "Dependencies must be loaded, and depth is bounded by ``max_call_depth``."
+msgstr "依赖必须处于已加载状态，深度受 ``max_call_depth`` 限制。"
+
+#: ../../learn/jit-harness.rst:369
+msgid "Tool hooks and middleware still run for nested calls, so a dependency that requests user input or approval still interrupts."
+msgstr "嵌套调用仍会执行工具钩子和中间件，因此请求用户输入或审批的依赖仍然会中断。"
+
+#: ../../learn/jit-harness.rst:371
+msgid "Argument validation applies to nested calls, and exceptions propagate unless your Python catches them."
+msgstr "参数校验会作用于嵌套调用，并且除非你的 Python 代码捕获了异常，否则异常会向外传播。"
+
+#: ../../learn/jit-harness.rst:373
+msgid "Keep the returned value JSON-friendly: it is what the model reads."
+msgstr "让返回值便于 JSON 处理：它就是模型读到的内容。"
+
+#: ../../learn/jit-harness.rst:376
+msgid "Split a tool across modules"
+msgstr "把工具拆分到多个模块"
+
+#: ../../learn/jit-harness.rst:378
+msgid "A large tool can be a small package instead of one long module. The entry point takes the role of the package root, and additional files are reached with relative imports:"
+msgstr "大型工具可以做成一个小型工具包，而不是一个冗长的模块。入口充当工具包根目录的角色，其他文件通过相对导入访问："
+
+#: ../../learn/jit-harness.rst:393
+msgid "Nested directories become subpackages, so ``from .parsers import parse`` and ``from .parsers.lines import split`` both work. Path segments must be importable Python names, ``__init__.py`` at the root is the entry point itself, and a package holds at most 32 files of 200,000 characters each."
+msgstr "嵌套目录会变成子包，因此 ``from .parsers import parse`` 和 ``from .parsers.lines import split`` 都能正常工作。路径各段必须是可导入的 Python 名称，根目录下的 ``__init__.py`` 就是入口本身，而一个工具包最多包含 32 个文件，每个文件最多 200,000 个字符。"
+
+#: ../../learn/jit-harness.rst:398
+msgid "Reading and editing stay per file:"
+msgstr "读取和编辑都保持按文件进行："
+
+#: ../../learn/jit-harness.rst:400
+msgid "``inspect_tool(name)`` lists the package files with their character counts, entry point included as ``__init__.py``."
+msgstr "``inspect_tool(name)`` 会列出工具包中的文件及其字符数，入口以 ``__init__.py`` 列出。"
+
+#: ../../learn/jit-harness.rst:402
+msgid "``read_tool_source(name, path=\"batch.py\")`` pages one file; the default is the entry point."
+msgstr "``read_tool_source(name, path=\"batch.py\")`` 按页读取单个文件；默认是入口。"
+
+#: ../../learn/jit-harness.rst:404
+#, python-brace-format
+msgid "``update_tool(name, files={...}, remove=[...])`` adds or replaces the files you send and deletes the ones you name. Files you leave out keep their content, so a small edit costs a small update."
+msgstr "``update_tool(name, files={...}, remove=[...])`` 会添加或替换你发送的文件，并删除你指定的文件。未包含在内的文件会保留原有内容，因此小改动只带来一次小更新。"
+
+#: ../../learn/jit-harness.rst:407
+msgid "Everything in one call is validated and compiled as a single new version. A cross-file refactor therefore applies at once, and a failure such as a broken import leaves the previous version installed."
+msgstr "一次调用中的所有内容都会作为一个新版本统一校验并编译。因此跨文件重构会一次生效，而导入损坏之类的失败则会保留上一个版本。"
+
+#: ../../learn/jit-harness.rst:411
+msgid "Two consequences matter. First, imports and module bodies run when the tool is registered, exactly as a normal import would, so a ``SyntaxError`` or ``ImportError`` in a helper surfaces at creation or update time. Second, the package is not retained in ``sys.modules`` afterwards, so import what a tool needs at module level rather than lazily inside a function."
+msgstr "有两点后果值得注意。第一，工具注册时就会执行导入语句和模块主体，就像一次普通的导入那样，因此辅助函数中的 ``SyntaxError`` 或 ``ImportError`` 会在创建或更新时暴露出来。第二，之后该工具包不会保留在 ``sys.modules`` 中，所以应在模块层级导入工具所需的内容，而不是在函数内部延迟导入。"
+
+#: ../../learn/jit-harness.rst:417
+msgid "Packages survive ``unload_tool`` and snapshots. A snapshot that contains at least one multi-file tool writes ``format_version: 2``; single-module tools keep writing version 1, so existing files stay unchanged and remain readable."
+msgstr "工具包在 ``unload_tool`` 和快照中都能保留下来。只要快照中包含至少一个多文件工具，就会写入 ``format_version: 2``；单模块工具则继续写入版本 1，因此现有文件保持不变，仍可正常读取。"
+
+#: ../../learn/jit-harness.rst:422
+msgid "Unload without losing source"
+msgstr "卸载而不丢失源码"
+
+#: ../../learn/jit-harness.rst:424
+msgid "``unload_tool`` removes a tool from the current callable definitions immediately and from later requests in the same session. It does not erase earlier conversation messages, revoke Python privileges, or terminate an already started invocation. Dependent tools remain registered; calling an unloaded dependency raises an explicit error. Loading restores the definition."
+msgstr "``unload_tool`` 会立即把某个工具从当前可调用定义中移除，也从同一会话后续的请求中移除。它不会抹去更早的对话消息，不会收回 Python 权限，也不会终止已经开始的调用。依赖它的工具仍保持注册；调用已卸载的依赖会抛出明确的错误。加载会恢复该定义。"
+
+#: ../../learn/jit-harness.rst:430
+msgid "``unload_tool`` returns ``status=\"unloaded\"``; ``load_tool`` returns ``status=\"loaded\"``. Snapshots store hidden tool names in ``unloaded_tools``."
+msgstr "``unload_tool`` 返回 ``status=\"unloaded\"``； ``load_tool`` 返回 ``status=\"loaded\"``\\ 。快照把被隐藏的工具名存放在 ``unloaded_tools`` 中。"
+
+#: ../../learn/jit-harness.rst:433
+msgid "Updating an unloaded tool preserves its unloaded state. An update cannot rename a tool. Existing invocations finish with the implementation they started; subsequent calls use the validated replacement. Failed source loads leave the old registration intact, but cannot roll back module-level side effects such as file writes."
+msgstr "更新已卸载的工具会保留它的卸载状态。更新不能重命名工具。已在进行的调用会以它们启动时的实现完成；后续调用则使用通过校验的替换版本。源码加载失败会让旧的注册保持原样，但无法回滚文件写入之类的模块级副作用。"
+
+#: ../../learn/jit-harness.rst:440
+msgid "Use profiling to build useful tools"
+msgstr "借助性能分析构建有用的工具"
+
+#: ../../learn/jit-harness.rst:442
+msgid "Every harness records session-local measurements for base, dynamic, and management tools. The model reads aggregate counters through ``inspect_tool_stats`` and single-call measurements through ``inspect_tool_calls``. Guidance asks it to complete the user's task with minimal total token usage and end-to-end time, while preserving correctness, completeness, safety, and answer quality. It encourages JIT optimization when useful, including the costs of inspection, tool creation, and validation in the trade-off. Existing tools or a direct solution remain preferable when they already serve the task efficiently. Relevant measurements help the model decide what to improve and verify the result."
+msgstr "每个 harness 都会为基础工具、动态工具和管理工具记录会话本地的测量数据。模型通过 ``inspect_tool_stats`` 读取聚合计数器，通过 ``inspect_tool_calls`` 读取单次调用的测量数据。guidelines 要求它在保证正确性、完整性、安全性和回答质量的前提下，以尽可能少的总 token 用量和端到端时间完成任务。它鼓励在有帮助时进行 JIT 优化，并把检查、工具创建和校验的成本一并纳入权衡。当现有工具或直接方案已经能高效完成任务时，仍然优先选择它们。相关的测量数据能帮助模型决定改进什么，并验证结果。"
+
+#: ../../learn/jit-harness.rst:452
+msgid "Look for repeated caller/dependency relationships that a focused tool could compose, large outputs that can be reduced before they reach the model, and slow or failure-prone implementations. Profiling is evidence about execution, not a quality score: a rarely called tool may still be essential, and fewer characters alone do not mean a better answer."
+msgstr "要留意那些可以由一个专注的工具来组合的、反复出现的调用方/依赖关系，那些在到达模型之前就能缩减的大体积输出，以及那些缓慢或容易失败的实现。性能分析反映的是关于执行的证据，而不是质量评分：很少被调用的工具可能依然不可或缺，字符更少本身也不代表回答更好。"
+
+#: ../../learn/jit-harness.rst:458
+msgid "Application code can inspect the same data:"
+msgstr "应用代码可以检查同一份数据："
+
+#: ../../learn/jit-harness.rst:470
+msgid "Aggregate statistics count finished calls per outcome plus mean duration and mean input and output characters. Each finished record carries its invocation id, tool name, origin, outcome, elapsed time, measured sizes, the composing caller when the call was nested, and an error type when it failed. Lifetime totals are not reset on update or unload."
+msgstr "聚合统计按结果统计已完成的调用次数，并给出平均耗时以及平均输入和输出字符数。每条已完成的记录都带有它的调用 ID、工具名、来源、结果、耗时、测量到的长度，以及嵌套调用时的组合方调用者，失败时还带有错误类型。生命周期累计值不会因更新或卸载而重置。"
+
+#: ../../learn/jit-harness.rst:476
+msgid "Every record also carries a :class:`~zett_agent.jit_harness.enums.ToolOrigin` naming which registry served the call:"
+msgstr "每条记录还带有一个 :class:`~zett_agent.jit_harness.enums.ToolOrigin`，用来指明是哪个注册表处理了这次调用："
+
+#: ../../learn/jit-harness.rst:479
+msgid "``base`` — an application-owned tool from ``tools=[...]`` or a tool-providing extension. It can be unloaded/reloaded and profiled when base management is enabled. Its implementation has no retained source and cannot be updated or serialized; snapshots retain its name and unload state only."
+msgstr "``base`` —— 来自 ``tools=[...]`` 的应用自有工具，或由某个提供工具的扩展提供。在启用基础工具管理时，它可以被卸载/重新加载并接受性能分析。它的实现没有保留源码，既不能更新也不能序列化；快照只保留它的名称和卸载状态。"
+
+#: ../../learn/jit-harness.rst:483
+msgid "``python`` — a dynamic tool the model created with ``create_tool`` or replaced with ``update_tool``. An unloaded dynamic tool keeps ``python``; its call status becomes ``rejected``."
+msgstr "``python`` —— 模型用 ``create_tool`` 创建、或用 ``update_tool`` 替换的动态工具。已卸载的动态工具仍然保持 ``python``；它的调用状态会变成 ``rejected``\\ 。"
+
+#: ../../learn/jit-harness.rst:486
+msgid "``text`` — a saved Markdown workflow. Calls measure reading a workflow page, not executing its steps or the task's eventual quality."
+msgstr "``text`` —— 已保存的 Markdown 工作流。调用测量的是读取工作流某一页，而不是执行它的步骤，也不衡量任务最终的质量。"
+
+#: ../../learn/jit-harness.rst:488
+msgid "``management`` — one of the reserved control functions such as ``create_tool`` or ``inspect_tool``."
+msgstr "``management`` —— 保留的控制函数之一，例如 ``create_tool`` 或 ``inspect_tool``\\ 。"
+
+#: ../../learn/jit-harness.rst:490
+msgid "``unknown`` — a defensive fallback for a name that was in no registry when the attempt was recorded. Normal dispatch does not produce it."
+msgstr "``unknown`` —— 一种防御性兜底值，用于记录该次尝试时不在任何注册表中的名称。正常分发不会产生它。"
+
+#: ../../learn/jit-harness.rst:493
+msgid "``list_tools`` and ``inspect_tool`` use the same value for each tool's catalog ``origin``; there only ``base`` and ``python`` occur. Enum members compare equal to their string values, so ``origin == \"python\"`` still works and JSON exports contain the plain ``\"base\"``, ``\"python\"``, ``\"management\"``, and ``\"unknown\"`` strings shown above."
+msgstr "``list_tools`` 和 ``inspect_tool`` 对每个工具的目录 ``origin`` 使用相同的取值；在那里只会出现 ``base`` 和 ``python``\\ 。枚举成员与它们的字符串值比较时相等，因此 ``origin == \"python\"`` 依然可用，JSON 导出中会包含上面所示的纯字符串 ``\"base\"``、``\"python\"``、``\"management\"`` 和 ``\"unknown\"``\\ 。"
+
+#: ../../learn/jit-harness.rst:499
+msgid "The ``status`` field is a :class:`~zett_agent.jit_harness.enums.ToolCallStatus` describing how the attempt ended:"
+msgstr "``status`` 字段是一个 :class:`~zett_agent.jit_harness.enums.ToolCallStatus`，描述该次尝试是如何结束的："
+
+#: ../../learn/jit-harness.rst:502
+msgid "``completed`` — the handler returned. A later serialization or lifecycle-hook failure does not change the record, so ``completed`` means the tool itself ran."
+msgstr "``completed`` —— 处理函数正常返回。之后出现的序列化或生命周期钩子失败不会改变该记录，因此 ``completed`` 表示工具本身已经运行过。"
+
+#: ../../learn/jit-harness.rst:504
+msgid "``failed`` — the tool started and raised: argument validation, handler code, or an uncaught nested dependency error."
+msgstr "``failed`` —— 工具已启动并抛出异常：可能是参数校验、处理函数代码，或未捕获的嵌套依赖错误。"
+
+#: ../../learn/jit-harness.rst:506
+msgid "``cancelled`` — the awaiting caller was cancelled. A synchronous worker may still be running, because Python cannot forcibly stop it."
+msgstr "``cancelled`` —— 等待的调用方被取消。同步工作线程可能仍在运行，因为 Python 无法强制停止它。"
+
+#: ../../learn/jit-harness.rst:508
+msgid "``rejected`` — the harness refused the call before any handler body ran: the tool is unloaded, missing its base binding, no longer registered in the current request, or the nested call exceeded ``max_call_depth``."
+msgstr "``rejected`` —— harness 在任何处理函数主体运行之前就拒绝了该调用：工具已卸载、缺少它的基础工具绑定、在当前请求中已不再注册，或者嵌套调用超过了 ``max_call_depth``\\ 。"
+
+#: ../../learn/jit-harness.rst:512
+msgid "Recent-error records reuse the same enum but only ever hold ``failed`` or ``rejected``; constructing one with a success or cancellation status is rejected."
+msgstr "近期错误记录复用同一个枚举，但只会保存 ``failed`` 或 ``rejected``；用成功或取消状态来构造这类记录会被拒绝。"
+
+#: ../../learn/jit-harness.rst:515
+msgid "Use these measurement rules when interpreting results:"
+msgstr "解读结果时请遵循这些测量规则："
+
+#: ../../learn/jit-harness.rst:517
+msgid "Input length is compact Unicode JSON, including property names and punctuation. Text output uses plain string length; structured output uses compact JSON. Multimodal output counts text blocks only, excluding image bytes and URLs. These are characters, not bytes, tokens, or exact provider payload sizes."
+msgstr "输入长度按紧凑的 Unicode JSON 计算，包含属性名和标点。文本输出使用普通字符串长度；结构化输出使用紧凑 JSON。多模态输出只统计文本块，不含图像字节和 URL。这些数字是字符数，而不是字节数、token 数，也不是模型提供商载荷的精确大小。"
+
+#: ../../learn/jit-harness.rst:521
+msgid "A missing measurement is ``None``, not zero. Character averages use measured samples only. Error output counts the error-message length; cancellation has no output measurement."
+msgstr "缺失的测量值是 ``None``，而不是零。字符平均值只使用有测量数据的样本。错误输出统计的是错误消息的长度；取消没有输出测量值。"
+
+#: ../../learn/jit-harness.rst:524
+msgid "Measurements stop at 8,000 characters, the same budget as a model-facing response, so a reported 8,000 means \"at least this many\". Beyond that point, measuring exactly would cost dispatch time without changing a decision."
+msgstr "测量在 8,000 个字符处停止，这与面向模型的响应使用同一预算，因此报告为 8,000 意味着“至少这么多”。超过这个上限后，精确测量只会增加分发耗时，却不会改变任何决策。"
+
+#: ../../learn/jit-harness.rst:527
+msgid "Duration is elapsed dispatch time, including validation, synchronous worker dispatch, and nested calls. Surrounding middleware, lifecycle hooks, user approval waits, and input/output measurement are outside the boundary. A parent includes its children, so summing both double-counts nested work. Cancelled synchronous dispatch stops timing when its await is cancelled; Python cannot forcibly stop the worker, which may finish later."
+msgstr "耗时是分发过程的实际用时，其中包括校验、同步工作线程分发和嵌套调用。外层的中间件、生命周期钩子、用户审批等待以及输入/输出测量都不在这个边界之内。父调用包含它的子调用，因此把两者相加会重复计算嵌套工作。被取消的同步分发会在其 await 被取消时停止计时；Python 无法强制停止工作线程，它可能会稍后才结束。"
+
+#: ../../learn/jit-harness.rst:533
+msgid "A middleware short-circuit is not counted, because the tool never executed. Unknown names, stale request references, and rejected module-loading calls also create no record."
+msgstr "中间件的短路不会被计入，因为工具从未执行。未知名称、失效的请求引用，以及被拒绝的模块加载调用也不会产生记录。"
+
+#: ../../learn/jit-harness.rst:537
+msgid "The profile retains a bounded window of finished attempts in memory, not their input/output contents or exception messages: the newest ``call_capacity`` records (2,000 by default) survive, oldest dispatch first, while lifetime aggregates keep counting every attempt. Pass another ``call_capacity`` to ``JITHarness`` or ``JITHarnessExtension`` when a long session needs a smaller window. This does not change normal conversation history or add nested execution-trace events. Separate session profiles remain isolated. They survive later requests in the same in-memory harness but are not included in executable snapshots: activating a snapshot starts fresh measurements. In-flight calls are not published; their record appears when the attempt ends."
+msgstr "性能分析在内存中只保留一个有界的已完成尝试窗口，而不保留它们的输入/输出内容或异常消息：最新的 ``call_capacity`` 条记录（默认 2,000）会保留下来，最先被分发的先淘汰，同时生命周期聚合数据会继续统计每一次尝试。当长时间会话需要更小的窗口时，可以给 ``JITHarness`` 或 ``JITHarnessExtension`` 传入另一个 ``call_capacity``\\ 。这不会改变正常的对话历史，也不会额外添加嵌套执行轨迹事件。各个会话的性能分析彼此隔离。它们能在同一个内存中的 harness 里跨后续请求保留，但不会包含在可执行快照中：激活快照会重新开始测量。正在进行的调用不会被发布；它们的记录会在该次尝试结束时出现。"
+
+#: ../../learn/jit-harness.rst:548
+msgid "The model's ``inspect_tool_calls`` returns ``calls``, ``total_calls``, and ``next_offset``. Its default is five records, with the tool name, null fields, and request metadata omitted. Caller relationships and error types appear only when applicable. It does not return source, schemas, or aggregate statistics."
+msgstr "模型的 ``inspect_tool_calls`` 返回 ``calls``、``total_calls`` 和 ``next_offset``\\ 。它默认返回五条记录，并省略工具名、空字段和请求元数据。调用方关系和错误类型只在适用时出现。它不返回源码、模式或聚合统计。"
+
+#: ../../learn/jit-harness.rst:553
+msgid "The application's ``harness.profile`` uses ``offset``, ``limit`` (default 100), and ``next_offset``; call records are paginated here rather than through ``inspect_tool``. Aggregates always cover the full observed lifetime, not only the current page. Export after a request if you need stable pagination while reading all records:"
+msgstr "应用侧的 ``harness.profile`` 使用 ``offset``、``limit``\\ （默认 100）和 ``next_offset``；调用记录在这里分页，而不是通过 ``inspect_tool``\\ 。聚合数据始终覆盖已观测到的完整生命周期，而不仅是当前这一页。如果你在读取全部记录时需要稳定的分页，请在请求之后导出："
+
+#: ../../learn/jit-harness.rst:567
+msgid "For long sessions, record retention consumes memory in proportion to the number of calls. Export what you need and release idle harnesses with ``forget_session``. Profile export does not activate code or seed a new harness's measurements."
+msgstr "对于长时间会话，记录保留占用的内存与调用次数成正比。请导出你需要的内容，并用 ``forget_session`` 释放空闲的 harness。性能分析导出不会激活代码，也不会为新 harness 的测量数据提供初始值。"
+
+#: ../../learn/jit-harness.rst:572
+msgid "Diagnose recent errors"
+msgstr "诊断近期错误"
+
+#: ../../learn/jit-harness.rst:574
+msgid "``inspect_tool_errors`` gives the model recent error messages to decide what to do next: retry with corrected arguments, load a dependency, repair dynamic Python source, or explain an application failure. It is a read-only tool; querying errors does not retry a call, update source, or save a snapshot."
+msgstr "``inspect_tool_errors`` 把近期的错误消息交给模型，用来决定下一步该怎么做：用修正后的参数重试、加载某个依赖、修复动态 Python 源码，或者解释某个应用侧的失败。它是一个只读工具；查询错误不会重试调用、不会更新源码，也不会保存快照。"
+
+#: ../../learn/jit-harness.rst:579
+msgid "Each session has a separate LRU cache of distinct errors. The defaults retain 100 entries and at most 4,000 characters of each message:"
+msgstr "每个会话都有一个独立的、用于存放不同错误的 LRU 缓存。默认保留 100 条条目，每条消息最多 4,000 个字符："
+
+#: ../../learn/jit-harness.rst:591
+msgid "Both configuration values must be positive integers. Capacity is global to one harness, not a separate allowance for every tool. Errors deduplicate by tool name, exception type, and complete error message. A repeated error increments ``occurrences`` and moves that entry to the most recent position; when the cache is full, the least recently occurring entry is evicted. Reads do not refresh recency, and successful calls do not clear old evidence."
+msgstr "这两个配置值都必须是正整数。容量对整个 harness 生效，而不是为每个工具单独分配。错误按工具名、异常类型和完整的错误消息去重。重复出现的错误会增加 ``occurrences``，并把该条目移到最近的位置；缓存满时，最近最少出现的条目会被淘汰。读取不会刷新新旧顺序，成功的调用也不会清除旧的证据。"
+
+#: ../../learn/jit-harness.rst:598
+msgid "Records include the error type, bounded message, last occurrence time, count, and the latest invocation's caller and call ID. ``message_truncated`` indicates whether only a prefix was retained. Different messages with the same truncated prefix remain distinct. If an exception cannot be formatted, its type and context are retained with ``message=None``."
+msgstr "记录中包含错误类型、被限长的消息、最后出现时间、出现次数，以及最近一次调用的调用方和调用 ID。 ``message_truncated`` 表示是否只保留了前缀。截断后前缀相同的不同消息仍然分别保留。如果某个异常无法格式化，则保留它的类型和上下文，并设置 ``message=None``\\ 。"
+
+#: ../../learn/jit-harness.rst:604
+msgid "``occurrences`` covers the entry's current cache residence; an evicted error starts at one if it reappears. Lifetime failed/rejected counts remain available through profiling and never reset on eviction. An empty error report is not proof that a tool never failed. Cancellations are recorded in profiling rather than the error cache. Failed management calls, including source registration or update errors, are retained too. The cache follows the dispatch profiling boundary: surrounding middleware or lifecycle-hook failures are not captured, and stale request references cannot add diagnostics to a later request."
+msgstr "``occurrences`` 只统计该条目当前在缓存中的停留期间；被淘汰的错误如果再次出现，会从 1 重新开始计数。生命周期内的失败/拒绝次数仍可通过性能分析获得，并且不会因淘汰而重置。空的错误报告并不能证明某个工具从未失败。取消记录在性能分析中，而不是错误缓存中。失败的管理调用也会保留，包括源码注册或更新错误。该缓存遵循分发的性能分析边界：外层的中间件或生命周期钩子失败不会被捕获，失效的请求引用也无法给后续请求添加诊断信息。"
+
+#: ../../learn/jit-harness.rst:614
+msgid "The model receives three entries with message previews of at most 512 characters by default. Raise ``max_chars`` only when the preview is insufficient, or lower ``limit`` for longer messages. ``message_truncated`` remains true when the cache or the response preview clipped a message. The response carries ``errors``, ``total_matches``, and ``next_offset``; each error carries its tool, exception type, message preview, occurrence count, and latest call ID. Cache configuration and duplicated request metadata are omitted."
+msgstr "模型默认收到三条条目，消息预览最多 512 个字符。只有在预览不够用时才调高 ``max_chars``，或者为更长的消息调低 ``limit``\\ 。当缓存或响应预览截断了消息时，``message_truncated`` 仍为 true。响应中带有 ``errors``、``total_matches`` 和 ``next_offset``；每条错误都带有它的工具、异常类型、消息预览、出现次数和最近的调用 ID。缓存配置和重复的请求元数据会被省略。"
+
+#: ../../learn/jit-harness.rst:622
+msgid "The application's ``harness.tool_errors`` returns the complete retained messages, newest occurrence first. Follow ``next_offset`` to retrieve more retained entries; ``limit`` is 1–1000, defaulting to 5. Its full report includes capacity, global ``retained_errors``, and filtered ``total_matches``. Error details survive later requests, updates, and unload in this in-memory session, but are not part of executable snapshots. They can be separately exported with ``report.model_dump_json()`` and read with ``ToolErrorReport.model_validate_json(...)``."
+msgstr "应用侧的 ``harness.tool_errors`` 返回完整的保留消息，最新出现的排在前面。按 ``next_offset`` 继续获取更多被保留的条目； ``limit`` 为 1–1000，默认为 5。它的完整报告包含容量、全局的 ``retained_errors``，以及过滤后的 ``total_matches``\\ 。在这个内存会话中，错误详情能跨后续请求、更新和卸载保留下来，但不属于可执行快照的一部分。它们可以用 ``report.model_dump_json()`` 单独导出，并用 ``ToolErrorReport.model_validate_json(...)`` 读回。"
+
+#: ../../learn/jit-harness.rst:633
+msgid "Exception messages may include sensitive application data. Arguments, tracebacks, and exception objects are not stored, but the error text itself is retained. Use applications and tools that redact secrets in their error messages. Diagnostics can also contain untrusted text; model guidance treats them as data, not instructions to execute."
+msgstr "异常消息可能包含应用中的敏感数据。参数、回溯信息和异常对象不会被存储，但错误文本本身会被保留。请使用会在错误消息中抹去机密的应用程序和工具。诊断信息也可能包含不受信任的文本；模型的 guidelines 会把它们当作数据，而不是要执行的指令。"
+
+#: ../../learn/jit-harness.rst:640
+msgid "Observe management and dynamic tool calls"
+msgstr "观察管理工具和动态工具的调用"
+
+#: ../../learn/jit-harness.rst:642
+msgid "``JITHarnessExtension`` publishes two CUSTOM events so a UI or log can follow the harness as it works, including calls that never surface as ``TOOL_STARTED``:"
+msgstr "``JITHarnessExtension`` 会发布两个 CUSTOM 事件，让 UI 或日志可以跟进 harness 的工作过程，其中包括那些从未以 ``TOOL_STARTED`` 形式出现过的调用："
+
+#: ../../learn/jit-harness.rst:649
+msgid "Event name"
+msgstr "事件名称"
+
+#: ../../learn/jit-harness.rst:650
+msgid "Emitted when"
+msgstr "触发时机"
+
+#: ../../learn/jit-harness.rst:651
+msgid "``jit_tool_started``"
+msgstr "``jit_tool_started``"
+
+#: ../../learn/jit-harness.rst:652
+msgid "A management or dynamic tool call is about to run."
+msgstr "一次管理工具或动态工具调用即将运行时。"
+
+#: ../../learn/jit-harness.rst:653
+msgid "``jit_tool_completed``"
+msgstr "``jit_tool_completed``"
+
+#: ../../learn/jit-harness.rst:654
+msgid "That call returned or raised, adding ``success`` and ``error_type``."
+msgstr "该调用返回或抛出异常时，会附带 ``success`` 和 ``error_type``\\ 。"
+
+#: ../../learn/jit-harness.rst:656
+msgid "Both events cover all management tools, dynamic Python tools, and text workflow readers the model created. They fire for calls the model requested and for calls one dynamic tool composes through ``harness.call_tool``, so a composed dependency is visible even though its result never reaches the conversation. Application base tools are skipped: the runtime already publishes ``TOOL_STARTED`` and ``TOOL_COMPLETED`` when the model requests them."
+msgstr "这两个事件覆盖所有管理工具、动态 Python 工具，以及模型创建的文本工作流读取器。无论是模型请求的调用，还是某个动态工具通过 ``harness.call_tool`` 组合出的调用，都会触发它们，因此即使组合出的依赖结果从未进入对话，它也是可见的。应用的基础工具会跳过：当模型请求它们时，运行时已经会发布 ``TOOL_STARTED`` 和 ``TOOL_COMPLETED``\\ 。"
+
+#: ../../learn/jit-harness.rst:673
+msgid "Each payload carries ``session_id``, ``tool_call_id``, ``tool_name``, and ``origin``; the completed event adds ``success`` and ``error_type``. ``origin`` uses the same values as profiling: ``management`` identifies control calls, ``python`` executable tools, and ``text`` workflow reads."
+msgstr "每个载荷都带有 ``session_id``、``tool_call_id``、``tool_name`` 和 ``origin``；完成事件会额外加上 ``success`` 和 ``error_type``\\ 。 ``origin`` 使用与性能分析相同的取值：``management`` 表示控制调用，``python`` 表示可执行工具，``text`` 表示工作流读取。"
+
+#: ../../learn/jit-harness.rst:678
+msgid "The event stays small on purpose: arguments, results, and error messages are not copied into it. ``tool_call_id`` is the join key, matching both the conversation's ``ToolCall`` and the ``call_id`` of the record in :meth:`~zett_agent.jit_harness.runtime.JITHarness.profile`. Use that to read duration, input/output sizes, and the composing caller."
+msgstr "事件刻意保持很小：参数、结果和错误消息都不会复制进去。 ``tool_call_id`` 是关联键，既对应对话中的 ``ToolCall``，也对应 :meth:`~zett_agent.jit_harness.runtime.JITHarness.profile` 中记录的 ``call_id``\\ 。用它就能读取耗时、输入/输出大小以及组合方调用者。"
+
+#: ../../learn/jit-harness.rst:684
+msgid "Events pair up for calls that reach dispatch. A call the harness rejects before running any handler — an unloaded dependency, a missing base binding, or a depth-limit breach — emits no pair of its own; read ``profile()`` for its ``rejected`` record and ``tool_errors()`` for the message. Names this harness has never seen are ignored rather than reported as JIT calls, and a lifecycle hook in another extension that raises before the handler can leave a started event without its completion."
+msgstr "对于真正进入分发的调用，事件会成对出现。harness 在任何处理函数运行之前就拒绝的调用 —— 比如已卸载的依赖、缺失的基础工具绑定，或超出深度限制 —— 不会自己发出一对事件；请读取 ``profile()`` 获取它的 ``rejected`` 记录，读取 ``tool_errors()`` 获取相应消息。这个 harness 从未见过的名称会被忽略，而不会作为 JIT 调用上报；另一个扩展中的生命周期钩子若在处理函数之前抛出异常，就可能留下一个只有开始、没有完成的事件。"
+
+#: ../../learn/jit-harness.rst:693
+msgid "Save and use in a new session"
+msgstr "保存并在新会话中使用"
+
+#: ../../learn/jit-harness.rst:695
+msgid "Saving is application-controlled and never automatic:"
+msgstr "保存由应用控制，绝不会自动发生："
+
+#: ../../learn/jit-harness.rst:712
+msgid "Each session receives an independent copy of the template. Later requests in the same session retain its evolution; modifying one session does not change another or overwrite the file. The save destination's parent directory must exist. Replacement is atomic, so an interrupted write does not expose a partially written JSON file."
+msgstr "每个会话都会收到该模板的一份独立副本。同一会话中后续的请求会保留它的演进；修改一个会话不会影响另一个会话，也不会覆盖该文件。保存目标的父目录必须存在。替换是原子操作，因此写入中断不会暴露出写了一半的 JSON 文件。"
+
+#: ../../learn/jit-harness.rst:718
+msgid "Snapshots contain format-versioned Python source, entry points, tool metadata, Markdown workflows, base-tool names, and unload state. They do not contain conversation history, callables, credentials, connections, or mutable Python globals. Reloading recreates module globals from source. Python dependencies must be installed in the destination application's environment. Python records remain in ``tools``; Markdown records use ``text_tools``. Older Python-only format-1 snapshots load with an empty ``text_tools`` collection."
+msgstr "快照包含带格式版本的 Python 源码、入口、工具元数据、Markdown 工作流、基础工具名称和卸载状态。它们不包含对话历史、可调用对象、凭据、连接或可变的 Python 全局变量。重新加载会依据源码重建模块全局变量。Python 依赖必须安装在目标应用的环境中。Python 记录保存在 ``tools`` 中；Markdown 记录使用 ``text_tools``\\ 。较旧的、仅含 Python 的格式 1 快照加载时，``text_tools`` 集合为空。"
+
+#: ../../learn/jit-harness.rst:726
+msgid "``JITHarnessSnapshot.load`` and ``from_json`` only validate data; they do not execute source. ``JITHarness(snapshot, tools=[...])`` activates code directly, or the extension activates it on the new session's first request. Unloaded tools' modules are activated too; unload controls invocation, not loading side effects. Missing base tools do not prevent activation, but calling one fails explicitly. Bind base tools through ``tools=[...]`` or a tool-providing extension. Request-scoped bindings are released after each request, so calls outside that request cannot reuse closed application resources."
+msgstr "``JITHarnessSnapshot.load`` 和 ``from_json`` 只校验数据，不会执行源码。 ``JITHarness(snapshot, tools=[...])`` 会直接激活代码，或者由扩展在新会话的第一次请求时激活。已卸载工具的模块也会被激活；卸载控制的是能否调用，而不是加载产生的副作用。缺失的基础工具不会阻止激活，但调用其中之一会明确失败。请通过 ``tools=[...]`` 或提供工具的扩展来绑定基础工具。请求作用域的绑定会在每次请求后释放，因此该请求之外的调用无法复用已关闭的应用资源。"
+
+#: ../../learn/jit-harness.rst:735
+msgid "``JITHarnessExtension`` drives that binding through the harness's own lifecycle API: ``attach(context, management_tools)`` binds one request and mounts its tools, ``detach(context)`` releases it, and the ``active`` property reports whether a request is currently bound. The extension calls them in matching pairs; an application normally reads ``active`` at most. Attaching twice raises, while detaching an older request is ignored so late cleanup cannot dismantle the request that is running now."
+msgstr "``JITHarnessExtension`` 通过 harness 自身的生命周期 API 来驱动这种绑定：``attach(context, management_tools)`` 绑定一个请求并挂载它的工具，``detach(context)`` 释放它，而 ``active`` 属性报告当前是否有请求处于绑定状态。扩展会成对调用它们；应用通常最多只读取 ``active``\\ 。重复附加会抛出异常，而分离一个更早的请求会被忽略，这样较晚的清理就不会拆掉当前正在运行的请求。"
+
+#: ../../learn/jit-harness.rst:743
+msgid "Use ``snapshot.to_json()`` and ``JITHarnessSnapshot.from_json(...)`` for your own storage. For long-lived servers, ``jit.forget_session(session_id)`` releases an idle in-memory toolbox without deleting snapshots or conversation history."
+msgstr "请用 ``snapshot.to_json()`` 和 ``JITHarnessSnapshot.from_json(...)`` 接入你自己的存储。对于长时间运行的服务器， ``jit.forget_session(session_id)`` 会释放空闲的内存工具箱，而不会删除快照或对话历史。"
+
+#: ../../learn/jit-harness.rst:748
+msgid "Try the complete offline example"
+msgstr "试用完整的离线示例"
+
+#: ../../learn/jit-harness.rst:750
+msgid "The scripted model creates ``twice``, invokes it, and reuses its saved source in an independent session. The program also checks a synchronous → asynchronous → base-tool pipeline, empty inputs, failed updates, dependency unload, and snapshot isolation. It uses a temporary directory and makes no network requests. It also saves, unloads, restores, and reads a reusable text workflow. The scripted model also inspects profiling after a tool call, and the program checks aggregate and nested-call measurements:"
+msgstr "这个预设脚本的模型会创建 ``twice``、调用它，并在一个独立会话中复用它保存下来的源码。程序还会检查同步 → 异步 → 基础工具的流水线、空输入、失败的更新、依赖卸载以及快照隔离。它使用临时目录，不发起任何网络请求。它还会保存、卸载、恢复并读取一个可复用的文本工作流。该预设脚本的模型还会在一次工具调用之后检查性能分析，程序则校验聚合数据和嵌套调用的测量数据："
+
+#: ../../learn/jit-harness.rst:766
+msgid "Expected output:"
+msgstr "预期输出："
+
+#: ../../learn/jit-harness.rst:775
+msgid "Download :download:`the complete program <../_examples/jit_harness.py>`. For exact contracts, see :class:`~zett_agent.jit_harness.runtime.JITHarness`, :class:`~zett_agent.jit_harness.snapshot.JITHarnessSnapshot`, and :class:`~zett_agent.jit_harness.extension.JITHarnessExtension`."
+msgstr "下载 :download:`完整程序 <../_examples/jit_harness.py>`\\ 。若需精确的契约，请参阅 :class:`~zett_agent.jit_harness.runtime.JITHarness`、:class:`~zett_agent.jit_harness.snapshot.JITHarnessSnapshot` 和 :class:`~zett_agent.jit_harness.extension.JITHarnessExtension`\\ 。"
+

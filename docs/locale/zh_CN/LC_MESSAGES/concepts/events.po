@@ -1,0 +1,122 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../concepts/events.rst:2
+msgid "Three kinds of events"
+msgstr "三类事件"
+
+#: ../../concepts/events.rst:4
+msgid "Zett Agent uses the word \"event\" for three different things. Choosing the right one is the difference between a UI that updates and one that silently does nothing."
+msgstr "Zett Agent 把“事件”这个词用在三种不同的东西上。选对哪一种，决定了你的 UI 是能实时更新，还是悄无声息地什么都不做。"
+
+#: ../../concepts/events.rst:12
+msgid "Kind"
+msgstr "类型"
+
+#: ../../concepts/events.rst:13
+msgid "Sent with"
+msgstr "发送方式"
+
+#: ../../concepts/events.rst:14
+msgid "Received by"
+msgstr "接收方"
+
+#: ../../concepts/events.rst:15
+msgid "Typical use"
+msgstr "典型用途"
+
+#: ../../concepts/events.rst:16
+msgid ":class:`~zett_agent.events.AgentEvent`"
+msgstr ":class:`~zett_agent.events.AgentEvent`"
+
+#: ../../concepts/events.rst:17
+msgid "``await context.emit(...)``"
+msgstr "``await context.emit(...)``"
+
+#: ../../concepts/events.rst:18
+msgid "``Agent.stream`` and your dispatcher"
+msgstr "``Agent.stream`` 和你的分发器"
+
+#: ../../concepts/events.rst:19
+msgid "Anything the user should see"
+msgstr "任何用户应该看到的内容"
+
+#: ../../concepts/events.rst:20
+msgid ":class:`~zett_agent.extensions.events.ExtensionEvent`"
+msgstr ":class:`~zett_agent.extensions.events.ExtensionEvent`"
+
+#: ../../concepts/events.rst:21
+msgid "``await context.publish(...)``"
+msgstr "``await context.publish(...)``"
+
+#: ../../concepts/events.rst:22
+msgid "Other extensions' ``on_event``"
+msgstr "其他扩展的 ``on_event``"
+
+#: ../../concepts/events.rst:23 ../../concepts/events.rst:50
+msgid "Coordination between extensions"
+msgstr "扩展之间的协调"
+
+#: ../../concepts/events.rst:24
+msgid ":class:`~zett_agent.extensions.external.ExternalEvent`"
+msgstr ":class:`~zett_agent.extensions.external.ExternalEvent`"
+
+#: ../../concepts/events.rst:25
+msgid "``agent.emit_external_event(...)``"
+msgstr "``agent.emit_external_event(...)``"
+
+#: ../../concepts/events.rst:26
+msgid "An extension's ``accept``"
+msgstr "某个扩展的 ``accept``"
+
+#: ../../concepts/events.rst:27
+msgid "A reply from your UI back into a waiting request"
+msgstr "你的 UI 回传给等待中请求的应答"
+
+#: ../../concepts/events.rst:30
+msgid "UI output"
+msgstr "UI 输出"
+
+#: ../../concepts/events.rst:32
+msgid "Emit an ``AgentEvent`` for anything a person should see. A custom event carries a ``name`` and a ``payload`` you define, and the dispatcher calls ``on_custom_event``; the name is data, not a Python method."
+msgstr "只要是人应该看到的内容，就发出一个 ``AgentEvent``\\ 。自定义事件会带上你自己定义的 ``name`` 和 ``payload``，分发器会调用 ``on_custom_event``；这个名称是数据，不是 Python 方法。"
+
+#: ../../concepts/events.rst:36
+msgid "Streamed output arrives in a predictable order, so a UI can open and close loading states:"
+msgstr "流式输出的到达顺序是可预期的，因此 UI 可以据此开启和结束加载状态："
+
+#: ../../concepts/events.rst:46
+msgid "An empty delta does not open a segment, and a failure or cancellation leaves the open segment without a completion — close your indicator in a ``finally`` block."
+msgstr "空的增量不会开启一个片段；失败或取消会让已开启的片段没有结束事件——请在 ``finally`` 块里关闭你的指示器。"
+
+#: ../../concepts/events.rst:52
+msgid "``context.publish`` notifies extensions, not the UI. Use it for things like \"history was compacted\" (:class:`~zett_agent.extensions.events.CompactionEvent`) or \"a message was appended\". Pass ``target=\"Name\"`` to reach one extension, or omit it to broadcast. An internal notification is never shown to the user automatically."
+msgstr "``context.publish`` 通知的是扩展，不是 UI。它适合用来表示“历史记录已被压缩”（:class:`~zett_agent.extensions.events.CompactionEvent`）或“追加了一条消息”这类事情。传入 ``target=\"Name\"`` 可以只通知某一个扩展，省略它则广播。内部通知绝不会自动展示给用户。"
+
+#: ../../concepts/events.rst:59
+msgid "Input from your UI"
+msgstr "来自 UI 的输入"
+
+#: ../../concepts/events.rst:61
+msgid "When the model asks a question or requests approval, the request pauses and your application replies with ``emit_external_event``. The reply must match the request's session ID and the expected event name and payload. If no extension accepts it, nothing happens and the request keeps waiting."
+msgstr "当模型提出问题或请求审批时，请求会暂停，由你的应用用 ``emit_external_event`` 回复。这个应答必须与请求的会话 ID、预期的事件名称和负载相匹配。如果没有扩展接受它，什么都不会发生，请求会继续等待。"
+
+#: ../../concepts/events.rst:66
+msgid "See :doc:`../extending/events` to implement all three, or run the :doc:`approval round trip <../examples/approval>`."
+msgstr "要自己实现这三类事件，参见\\ :doc:`../extending/events`；想跑一遍完整的审批流程，参见\\ :doc:`审批往返 <../examples/approval>`\\ 。"
+

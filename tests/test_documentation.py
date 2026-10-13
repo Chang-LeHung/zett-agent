@@ -141,6 +141,8 @@ def test_local_html_links_resolve(documentation):
             url = urlsplit(link["href"])
             if url.scheme or url.netloc:
                 continue
+            if link.find_parent(class_="zett-language-menu"):
+                continue  # translations are separate sites, built and checked on their own
             target = (page.parent / unquote(url.path)).resolve() if url.path else page.resolve()
             assert target.exists(), (page, link["href"])
             if url.fragment and target in pages:
@@ -246,7 +248,7 @@ def test_landing_page_exposes_installation_and_learning_paths(documentation):
     assert len(soup.select(".zett-path")) == 4
     assert "pip install zett-agent" in soup.get_text()
     assert "uv add zett-agent" in soup.get_text()
-    assert soup.select_one(".zett-flow[aria-label]") is not None
+    assert len(soup.select("ul.zett-flow > li")) == 5
     assert soup.select_one(".zett-footer") is not None
     for block in soup.select("div.highlight-python pre"):
         ast.parse(block.get_text())
@@ -365,6 +367,19 @@ def test_sidebar_groups_each_section_under_its_toctree_captions(documentation):
     assert soup.select_one("nav.zett-navigation li.toctree-l2.current > a").get_text(strip=True) == "JIT harness"
 
 
+def test_the_language_switcher_links_each_page_to_its_translation(documentation):
+    _, output = documentation
+    for page, expected in {
+        "index.html": {"en": "index.html", "zh-CN": "zh/index.html"},
+        "learn/jit-harness.html": {"en": "../learn/jit-harness.html", "zh-CN": "../zh/learn/jit-harness.html"},
+    }.items():
+        soup = BeautifulSoup((output / page).read_text(), "html.parser")
+        assert soup.html["lang"] == "en"
+        links = {link["hreflang"]: link["href"] for link in soup.select(".zett-language-menu a")}
+        assert links == expected
+        assert soup.select_one(".zett-language-menu a.active")["hreflang"] == "en"
+
+
 def test_protected_extension_interfaces_have_anchors(documentation):
     _, output = documentation
     soup = BeautifulSoup((output / "_generated/ExternalEventExtension.html").read_text(), "html.parser")
@@ -404,7 +419,7 @@ def test_desktop_mobile_navigation_and_search(documentation):
             page.locator('.theme-change-button[data-mode="dark"]').filter(visible=True).click()
             page.wait_for_function("document.documentElement.dataset.theme === 'dark'")
             assert page.locator(".navbar-brand .logo__image.only-dark").is_visible()
-            primary = page.locator(".zett-actions .sd-btn-primary")
+            primary = page.locator(".zett-actions p:first-child a")
             playwright.expect(primary).to_have_css("background-color", "rgb(251, 191, 36)")
             playwright.expect(primary).to_have_css("color", "rgb(26, 18, 3)")
             hero_icon = page.locator(".zett-hero-identity img")

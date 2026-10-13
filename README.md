@@ -11,7 +11,8 @@
 <p align="center">
   <a href="https://chang-lehung.github.io/zett-agent/">Documentation</a> ·
   <a href="https://chang-lehung.github.io/zett-agent/learn/first-agent.html">Quickstart</a> ·
-  <a href="https://chang-lehung.github.io/zett-agent/examples/">Examples</a>
+  <a href="https://chang-lehung.github.io/zett-agent/examples/">Examples</a> ·
+  <a href="https://chang-lehung.github.io/zett-agent/zh/">中文文档</a>
 </p>
 
 [![PyPI](https://img.shields.io/pypi/v/zett-agent?color=d97706)](https://pypi.org/project/zett-agent/)

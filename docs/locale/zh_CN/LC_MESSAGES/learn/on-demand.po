@@ -1,0 +1,134 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/on-demand.rst:2
+msgid "Load tools and skills on demand"
+msgstr "按需加载工具和技能"
+
+#: ../../learn/on-demand.rst:4
+msgid "An agent does not need every capability in every conversation. Keep ordinary tools available from the start, describe skills briefly, and load their full instructions when a task needs them. For a large toolbox, supported Responses endpoints can also discover deferred tool definitions through search."
+msgstr "智能体不需要在每次对话中都具备所有能力。让普通工具从一开始就可用的，只简要描述技能，并在任务需要时再加载它们的完整指令。对于规模较大的工具集，受支持的 Responses 端点还可以通过搜索发现延迟加载的工具定义。"
+
+#: ../../learn/on-demand.rst:9
+msgid "These are two separate choices: a **skill** supplies instructions, while a **tool** executes a function. Loading instructions does not grant the model additional permissions."
+msgstr "这是两个相互独立的选择：**技能**\\ 提供指令，而\\ **工具**\\ 负责执行函数。加载指令不会给模型带来额外的权限。"
+
+#: ../../learn/on-demand.rst:14
+msgid "Create a skill in plain text"
+msgstr "用纯文本创建技能"
+
+#: ../../learn/on-demand.rst:16
+msgid "Store each skill in a directory with a ``SKILL.md`` file:"
+msgstr "每个技能都存放在包含 ``SKILL.md`` 文件的目录中："
+
+#: ../../learn/on-demand.rst:24
+msgid "The file needs a name, a short description, and a Markdown body:"
+msgstr "这个文件需要名称、简短描述和 Markdown 正文："
+
+#: ../../learn/on-demand.rst:26
+msgid "skills/code-review/SKILL.md"
+msgstr "skills/code-review/SKILL.md"
+
+#: ../../learn/on-demand.rst:30
+msgid "Use lowercase letters, numbers, and single hyphens in the name. The description helps the model decide when to read the skill; the body explains how to carry out the task. Invalid files are skipped, so check ``extension.skills`` if a skill does not appear."
+msgstr "名称中请使用小写字母、数字和单个连字符。描述帮助模型判断何时读取该技能；正文说明如何完成任务。无效文件会被跳过，因此如果某个技能没有出现，请检查\\ ``extension.skills``\\ 。"
+
+#: ../../learn/on-demand.rst:36
+msgid "Choose the directories to load"
+msgstr "选择要加载的目录"
+
+#: ../../learn/on-demand.rst:38
+msgid "Pass explicit roots so your application controls where instructions come from:"
+msgstr "请显式传入根目录，让你的应用控制指令的来源："
+
+#: ../../learn/on-demand.rst:60
+msgid "The model receives a catalog of names and descriptions and can call ``read_skill(name=\"code-review\")`` to read the complete file. It does not receive every skill body up front. With a real model, whether it chooses to read a particular skill depends on your prompt and its capabilities."
+msgstr "模型会收到一个由名称和描述组成的目录，并可以调用\\ ``read_skill(name=\"code-review\")``\\ 读取完整文件。它不会预先收到每个技能的正文。使用真实模型时，它是否选择读取某个技能，取决于你的提示词和它的能力。"
+
+#: ../../learn/on-demand.rst:65
+msgid "Skill discovery happens when you construct the extension. Recreate it after adding files or changing catalog metadata. Editing an existing skill body affects future reads, but does not rewrite instructions already in the conversation. Earlier roots take precedence when names collide."
+msgstr "技能发现发生在构造扩展的时候。添加文件或修改目录元数据之后，需要重新创建扩展。修改已有技能的正文会影响后续读取，但不会重写已经在对话中的指令。当名称冲突时，靠前的根目录优先。"
+
+#: ../../learn/on-demand.rst:70
+msgid "With no roots, discovery uses the user-level ``~/.zett/skills``, ``~/.agent/skills``, ``~/.claude/skills``, and ``~/.cursor/skills`` directories. Project-local skills are not included automatically. Passing an explicit list replaces those defaults; use ``SkillExtension([])`` to discover none."
+msgstr "如果不传入根目录，发现过程会使用用户级别的\\ ``~/.zett/skills``、``~/.agent/skills``、``~/.claude/skills``\\ 和\\ ``~/.cursor/skills``\\ 目录。项目本地的技能不会自动包含进来。传入显式列表会替换这些默认值；如果不想发现任何技能，可以使用\\ ``SkillExtension([])``\\ 。"
+
+#: ../../learn/on-demand.rst:75
+msgid "A skill name is limited to 64 characters and its description to 1,024. The parser accepts simple YAML-style metadata; it is not a general YAML configuration loader. Keep names, descriptions, and bodies simple and test discovery with the same roots your application uses. The loader supplies the ``SKILL.md`` content, not every referenced asset. Add appropriately scoped file-reading tools if your skill needs accompanying files."
+msgstr "技能名称限制为 64 个字符，描述限制为 1,024 个字符。解析器接受简单的 YAML 风格元数据；它不是通用的 YAML 配置加载器。请保持名称、描述和正文简单，并使用与应用相同的根目录来测试技能发现。加载器只提供\\ ``SKILL.md``\\ 的内容，而不会提供每个被引用的资源文件。如果你的技能需要配套文件，请添加作用域合适的文件读取工具。"
+
+#: ../../learn/on-demand.rst:84
+msgid "An explicit ``extensions=[...]`` list replaces the optional defaults. The example includes history and tool guidance to keep both behaviors."
+msgstr "显式的\\ ``extensions=[...]``\\ 列表会替换这些可选的默认扩展。示例中包含了历史记录和工具 guidelines，以同时保留这两种行为。"
+
+#: ../../learn/on-demand.rst:88
+msgid "Try a complete offline example"
+msgstr "运行一个完整的离线示例"
+
+#: ../../learn/on-demand.rst:90
+msgid "This example uses a scripted model to ask for the review skill, then returns a final answer. It runs the real tool round trip without a network request."
+msgstr "这个示例使用预设脚本的模型请求加载代码审查技能，然后返回最终回答。它无需网络请求，就能运行真实的工具往返过程。"
+
+#: ../../learn/on-demand.rst:97
+msgid "From a checkout:"
+msgstr "在源码检出目录中运行："
+
+#: ../../learn/on-demand.rst:103
+msgid "Expected output:"
+msgstr "预期输出："
+
+#: ../../learn/on-demand.rst:110
+msgid "The :download:`complete program <../_examples/on_demand.py>` uses :download:`this SKILL.md file <../_examples/skills/code-review/SKILL.md>`. Keep the skill at ``skills/code-review/SKILL.md`` beside the downloaded script."
+msgstr ":download:`完整程序 <../_examples/on_demand.py>`\\ 使用了\\ :download:`这个 SKILL.md 文件 <../_examples/skills/code-review/SKILL.md>`\\ 。请把技能放在已下载的脚本旁边的\\ ``skills/code-review/SKILL.md``\\ 处。"
+
+#: ../../learn/on-demand.rst:115
+msgid "Defer a large toolbox"
+msgstr "延迟加载大型工具集"
+
+#: ../../learn/on-demand.rst:117
+msgid "With a compatible Responses endpoint, mark rarely used tools as deferred and add :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`:"
+msgstr "使用兼容的 Responses 端点时，可以把很少使用的工具标记为延迟加载，并添加\\ :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`："
+
+#: ../../learn/on-demand.rst:140
+msgid "Here ``responses_model`` is a compatible adapter configured with ``response=True``; ``inventory_service`` is your application's inventory client. The model searches for relevant capabilities and receives matching definitions before calling them. Tools without ``deferred=True`` remain visible as ordinary tools."
+msgstr "这里的\\ ``responses_model``\\ 是通过\\ ``response=True``\\ 配置的兼容适配器；``inventory_service``\\ 则是你应用的库存客户端。模型会搜索相关能力，并在调用它们之前收到匹配的定义。没有设置\\ ``deferred=True``\\ 的工具仍然作为普通工具可见。"
+
+#: ../../learn/on-demand.rst:148
+msgid "Client-side tool search requires the Responses tool-search protocol. Chat Completions, Anthropic, Google, and Ollama do not support this extension. Skill loading uses an ordinary local tool and does not have that restriction."
+msgstr "客户端工具搜索需要 Responses 工具搜索协议。Chat Completions、Anthropic、Google 和 Ollama 都不支持该扩展。技能加载使用的是普通本地工具，没有这个限制。"
+
+#: ../../learn/on-demand.rst:153
+msgid "What this does not do"
+msgstr "本功能不会做什么"
+
+#: ../../learn/on-demand.rst:155
+msgid "Skills are editable instructions, not an automatic learning system. Neither extension generates tools, learns from a conversation, edits skill files on its own, or unloads running code. Tools execute with the permissions of your process. Treat skill files and search results as input, not authorization to perform privileged actions."
+msgstr "技能是可编辑的指令，而不是自动学习系统。这两个扩展都不会生成工具、不会从对话中学习、不会自行修改技能文件，也不会卸载正在运行的代码。工具以你的进程权限执行。请把技能文件和搜索结果当作输入，而不是执行特权操作的授权。"
+
+#: ../../learn/on-demand.rst:161
+msgid "To create and evolve Python tools during a session, opt in to :doc:`jit-harness`. It is a separate trusted-code feature, not an implicit behavior of skill loading or deferred tool search."
+msgstr "如果想在会话过程中创建和改进 Python 工具，需要主动启用\\ :doc:`jit-harness`\\ 。它是一个独立的受信任代码功能，而不是技能加载或延迟工具搜索的隐含行为。"
+
+#: ../../learn/on-demand.rst:165
+msgid "Next: :doc:`sessions` to keep conversations, or :doc:`../extending/built-ins` to choose other capabilities."
+msgstr "下一步：:doc:`sessions`\\ 用于保存对话，或者用\\ :doc:`../extending/built-ins`\\ 选择其他能力。"
+
+#: ../../learn/on-demand.rst:168
+msgid "Related API: :class:`~zett_agent.extensions.skill.SkillExtension`, :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`."
+msgstr "相关 API：:class:`~zett_agent.extensions.skill.SkillExtension`、:class:`~zett_agent.extensions.tool_search.ToolSearchExtension`\\ 。"
+

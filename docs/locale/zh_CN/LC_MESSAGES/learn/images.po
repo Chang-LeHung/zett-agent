@@ -1,0 +1,130 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/images.rst:2
+msgid "Send images to a model"
+msgstr "向模型发送图像"
+
+#: ../../learn/images.rst:4
+msgid "Pass a :class:`~zett_agent.messages.UserMessage` when a prompt includes images. Use an ordered list of ``TextContent`` and ``ImageContent`` parts instead of vendor-specific dictionaries. A plain string remains the shorthand for a text-only request."
+msgstr "提示词中包含图像时，请传入\\ :class:`~zett_agent.messages.UserMessage`\\ 。请使用由 ``TextContent`` 和 ``ImageContent`` 组成的有序列表，而不要使用特定厂商的字典。纯字符串仍然是纯文本请求的简写形式。"
+
+#: ../../learn/images.rst:9
+msgid "Choose a vision-capable model before using this guide. The runtime represents images, but it does not add vision support to a text-only endpoint."
+msgstr "使用本指南之前，请先选择一个支持视觉的模型。运行时可以表示图像，但不会给纯文本端点增加视觉支持。"
+
+#: ../../learn/images.rst:13
+msgid "Use image bytes"
+msgstr "使用图像字节"
+
+#: ../../learn/images.rst:42
+msgid "Run this inside an async function with a client from :doc:`providers` and an existing image. ``data`` is an encoded image file's bytes, **not** decoded pixels or a base64 string. The MIME type must describe the file, such as ``image/png`` or ``image/jpeg``. The runtime checks that bytes are nonempty and the MIME type starts with ``image/``; it does not decode or validate the image."
+msgstr "请在异步函数中运行这段代码，并使用来自\\ :doc:`providers`\\ 的客户端和一个已有的图像文件。\\ ``data``\\ 是编码后的图像文件字节，\\ **而不是**\\ 解码后的像素或 base64 字符串。MIME 类型必须描述该文件，例如\\ ``image/png``\\ 或\\ ``image/jpeg``\\ 。运行时会检查字节非空，并且 MIME 类型以\\ ``image/``\\ 开头；它不会解码或校验图像。"
+
+#: ../../learn/images.rst:48
+msgid "For large uploads in an async service, read files outside the request loop or use a worker thread. Validate upload sizes and allowed formats in your application before constructing the message."
+msgstr "在异步服务中处理大文件上传时，请在请求循环之外读取文件，或者使用工作线程。在构造消息之前，请在应用中校验上传大小和允许的格式。"
+
+#: ../../learn/images.rst:53
+msgid "Use a URL"
+msgstr "使用 URL"
+
+#: ../../learn/images.rst:66
+msgid "Replace the URL with an image your provider can access. The runtime does not download it for you or attach your application's authentication headers. ``ImageUrlSource`` accepts HTTP, HTTPS, and image data URLs; it does not accept a local file path. Use bytes for local files or private images."
+msgstr "请把 URL 替换成你的模型提供商可以访问的图像。运行时不会替你下载它，也不会附加你应用的身份验证请求头。\\ ``ImageUrlSource``\\ 接受 HTTP、HTTPS 和图像 data URL；不接受本地文件路径。本地文件或私有图像请使用字节。"
+
+#: ../../learn/images.rst:72
+msgid "Provider differences"
+msgstr "模型提供商差异"
+
+#: ../../learn/images.rst:74
+msgid "Image representation supported by the adapters"
+msgstr "各适配器支持的图像表示形式"
+
+#: ../../learn/images.rst:78
+msgid "Adapter"
+msgstr "适配器"
+
+#: ../../learn/images.rst:79
+msgid "What to consider"
+msgstr "注意事项"
+
+#: ../../learn/images.rst:80
+msgid "OpenAI / DeepSeek"
+msgstr "OpenAI / DeepSeek"
+
+#: ../../learn/images.rst:81
+msgid "Accept typed bytes or URLs and render them for the selected protocol. Vision depends on the endpoint and model."
+msgstr "接受带类型的字节或 URL，并按所选协议渲染。视觉能力取决于端点和模型。"
+
+#: ../../learn/images.rst:82
+msgid "Anthropic"
+msgstr "Anthropic"
+
+#: ../../learn/images.rst:83
+msgid "Bytes become base64 image blocks; HTTP(S) URLs and image data URLs are represented separately."
+msgstr "字节会变成 base64 图像块；HTTP(S) URL 和图像 data URL 会分开表示。"
+
+#: ../../learn/images.rst:84
+msgid "Google"
+msgstr "Google"
+
+#: ../../learn/images.rst:85
+msgid "Bytes become inline image parts; URLs become URI parts. The chosen service must support the URI."
+msgstr "字节会变成内联图像部分；URL 会变成 URI 部分。所选服务必须支持该 URI。"
+
+#: ../../learn/images.rst:86
+msgid "Ollama"
+msgstr "Ollama"
+
+#: ../../learn/images.rst:87
+msgid "Use bytes or base64 image data URLs. Remote HTTP(S) image URLs are rejected by the adapter."
+msgstr "请使用字节或 base64 图像 data URL。远程的 HTTP(S) 图像 URL 会被适配器拒绝。"
+
+#: ../../learn/images.rst:89
+msgid "``ImageDetail.AUTO`` is the default. ``LOW`` and ``HIGH`` are fidelity hints, not universal resolution guarantees; only protocols that expose such a setting can use them. ``alt_text`` stores an optional description on the image object, but do not rely on it as model-visible text: add a ``TextContent`` part for instructions or accessibility descriptions the model needs."
+msgstr "``ImageDetail.AUTO``\\ 是默认值。\\ ``LOW``\\ 和\\ ``HIGH``\\ 是保真度提示，而不是通用的分辨率保证；只有暴露该设置的协议才能使用它们。\\ ``alt_text``\\ 在图像对象上保存一个可选描述，但不要把它当作模型可见的文本来依赖：如果模型需要指令或无障碍描述，请添加一个\\ ``TextContent``\\ 部分。"
+
+#: ../../learn/images.rst:96
+msgid "Inspect and store multimodal messages"
+msgstr "检查并存储多模态消息"
+
+#: ../../learn/images.rst:98
+msgid "``message.parts`` preserves the content parts in order. ``message.text`` joins only the text parts, which is useful for display labels but is not a complete transcript. Built-in SQLite storage preserves typed image content. Images can therefore appear in later requests when history is restored; plan for storage size, retention, and provider costs accordingly."
+msgstr "``message.parts``\\ 会按顺序保留各个内容部分。\\ ``message.text``\\ 只拼接文本部分，这对显示标签很有用，但并不是完整的记录。内置的 SQLite 存储会保留带类型的图像内容。因此，当历史记录被恢复时，图像可能会出现在后续请求中；请相应地规划存储大小、保留策略和模型提供商成本。"
+
+#: ../../learn/images.rst:104
+msgid "Local tools can also return ``ImageContent`` or a list of typed text/image parts. See :doc:`tools` for result types. MCP content follows its own result mapping; do not assume every MCP image block becomes a vision input."
+msgstr "本地工具也可以返回\\ ``ImageContent``\\ 或一个由带类型的文本/图像部分组成的列表。关于结果类型，请参见\\ :doc:`tools`\\ 。MCP 内容遵循它自己的结果映射；不要假定每个 MCP 图像块都会变成视觉输入。"
+
+#: ../../learn/images.rst:109
+msgid "Verify the message offline"
+msgstr "离线验证该消息"
+
+#: ../../learn/images.rst:115
+msgid "Run ``uv run python docs/_examples/images.py`` from a checkout. Expected output:"
+msgstr "在源码检出目录中运行\\ ``uv run python docs/_examples/images.py``\\ 。预期输出："
+
+#: ../../learn/images.rst:121
+msgid "The :download:`complete example <../_examples/images.py>` embeds a tiny image and verifies the typed request with a deterministic model. It tests message handling, not an LLM's ability to interpret the image."
+msgstr ":download:`完整示例 <../_examples/images.py>`\\ 嵌入了一张很小的图像，并用一个确定性的模型验证带类型的请求。它测试的是消息处理，而不是 LLM 解读图像的能力。"
+
+#: ../../learn/images.rst:125
+msgid "Next: :doc:`streaming` to display the response, or :doc:`sessions` to decide what to retain."
+msgstr "下一步：:doc:`streaming`\\ 用于显示响应，或者用\\ :doc:`sessions`\\ 决定要保留什么。"
+

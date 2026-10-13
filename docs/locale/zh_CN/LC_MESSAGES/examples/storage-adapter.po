@@ -1,0 +1,66 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/storage-adapter.rst:2
+msgid "Connect a storage adapter"
+msgstr "接入存储适配器"
+
+#: ../../examples/storage-adapter.rst:4
+msgid "Wrap an existing storage backend to record persistence operations, while letting the persistence extension manage conversation history."
+msgstr "包装一个已有的存储后端，以记录持久化操作，同时让持久化扩展管理对话历史记录。"
+
+#: ../../examples/storage-adapter.rst:8
+msgid "Run it"
+msgstr "运行"
+
+#: ../../examples/storage-adapter.rst:10
+msgid "From the repository root:"
+msgstr "在仓库根目录下执行："
+
+#: ../../examples/storage-adapter.rst:16
+msgid "The output includes:"
+msgstr "输出包含："
+
+#: ../../examples/storage-adapter.rst:22
+msgid "This program uses deterministic offline models and temporary storage where needed. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序在需要时使用确定性的离线模型和临时存储。它不需要 API 密钥，并由文档测试套件执行。"
+
+#: ../../examples/storage-adapter.rst:26
+msgid "Adapt the store, not the agent loop"
+msgstr "适配存储，而不是智能体循环"
+
+#: ../../examples/storage-adapter.rst:28
+msgid "``AuditedStorage`` delegates reads and writes to SQLite while recording their order. The extension only needs to construct that adapter:"
+msgstr "``AuditedStorage`` 把读写委托给 SQLite，同时记录它们的顺序。扩展只需要构造这个适配器："
+
+#: ../../examples/storage-adapter.rst:35
+msgid "The complete source implements the storage methods for loading history, appending messages, and saving a compaction checkpoint. If you replace SQLite with another database, preserve sequence ordering, transactions, and version checks; those guarantees matter when restoring a conversation safely."
+msgstr "完整源码实现了加载历史记录、追加消息和保存压缩检查点所需的存储方法。如果你用其他数据库替换 SQLite，请保留顺序、事务和版本校验；这些保证在安全恢复对话时很重要。"
+
+#: ../../examples/storage-adapter.rst:41
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/storage-adapter.rst:43
+msgid ":download:`Download storage_adapter.py <../_examples/storage_adapter.py>`."
+msgstr ":download:`下载 storage_adapter.py <../_examples/storage_adapter.py>`\\ 。"
+
+#: ../../examples/storage-adapter.rst:49
+msgid "Next: :doc:`../extending/storage-adapter` for the contract, or :doc:`../learn/sessions` if SQLite already meets your needs."
+msgstr "下一步：存储适配器的约定见\\ :doc:`../extending/storage-adapter`；如果 SQLite 已经满足需求，请看\\ :doc:`../learn/sessions`\\ 。"
+

@@ -1,0 +1,98 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/project-instructions.rst:2
+msgid "Load project instructions"
+msgstr "加载项目指令"
+
+#: ../../learn/project-instructions.rst:4
+msgid "Use :class:`~zett_agent.extensions.agents_md.AgentsMdExtension` when a project has conventions the agent should follow in every request: test commands, coding standards, or review expectations. Put those conventions in ``AGENTS.md`` rather than repeating them in every user prompt."
+msgstr "如果项目有一些约定需要智能体在每个请求中都遵循（例如测试命令、编码规范或审查要求），可以使用\\ :class:`~zett_agent.extensions.agents_md.AgentsMdExtension`\\ 。请把这些约定写进\\ ``AGENTS.md``，而不是在每个用户提示词里重复。"
+
+#: ../../learn/project-instructions.rst:10
+msgid "Create a project file"
+msgstr "创建项目文件"
+
+#: ../../learn/project-instructions.rst:12
+msgid "workspace/AGENTS.md"
+msgstr "workspace/AGENTS.md"
+
+#: ../../learn/project-instructions.rst:22
+msgid "Load that directory explicitly:"
+msgstr "显式加载该目录："
+
+#: ../../learn/project-instructions.rst:42
+msgid "Here ``model`` is a configured adapter from :doc:`providers`. This extension adds instructions; it does not add filesystem, editing, or shell tools. Keeping default history and tool guidance requires including them in your explicit extension list; see :doc:`configuration`."
+msgstr "这里的\\ ``model``\\ 是来自\\ :doc:`providers`\\ 的已配置适配器。该扩展只添加指令，不会添加文件系统、编辑或 shell 工具。如果要保留默认的历史记录和工具 guidelines，就需要把它们也写进显式的扩展列表；参见\\ :doc:`configuration`\\ 。"
+
+#: ../../learn/project-instructions.rst:48
+msgid "Choose the discovery scope"
+msgstr "选择发现范围"
+
+#: ../../learn/project-instructions.rst:50
+msgid "With ``include_parents=True`` (the default), discovery checks the configured directory and each ancestor up to the filesystem root. Files are included outermost first, innermost last:"
+msgstr "当\\ ``include_parents=True``\\ （默认值）时，发现过程会检查配置的目录以及直到文件系统根目录的每一级父目录。文件按最外层在前、最内层在后的顺序包含："
+
+#: ../../learn/project-instructions.rst:60
+msgid "Set ``directory=\"workspace/services/api\"`` to include all three, or ``include_parents=False`` to load only that directory's file. The extension does not recursively scan descendants or automatically load different files for each path a tool opens. If you omit ``directory``, it resolves the process's current working directory at the start of each request. A directory argument selects guidance only; it does not change where filesystem tools run."
+msgstr "设置\\ ``directory=\"workspace/services/api\"``\\ 可以包含这三个文件，或者用\\ ``include_parents=False``\\ 只加载该目录下的文件。扩展不会递归扫描子目录，也不会针对工具打开的每个路径自动加载不同的文件。如果省略\\ ``directory``，它会在每个请求开始时解析进程的当前工作目录。目录参数只用于选择指令；它不会改变文件系统工具的运行位置。"
+
+#: ../../learn/project-instructions.rst:69
+msgid "Parent discovery may include files outside your repository. For an application serving untrusted workspaces, use an explicit directory and ``include_parents=False`` rather than relying on process-wide ``chdir``."
+msgstr "父目录发现可能会包含仓库之外的文件。对于要处理非受信任工作区的应用，请使用显式目录和\\ ``include_parents=False``，而不是依赖进程全局的\\ ``chdir``\\ 。"
+
+#: ../../learn/project-instructions.rst:74
+msgid "Inspect and update guidance"
+msgstr "检查并更新指令"
+
+#: ../../learn/project-instructions.rst:81
+msgid "Avoid logging rendered instructions when they contain sensitive information. The extension rereads files before each request, so edits apply on the next turn without recreating the client. Missing, empty, unreadable, or non-UTF-8 files are skipped. Each file is limited to ``max_chars=32_000`` by default; longer files are included with a truncation marker. Increase the limit only after considering the model's context budget."
+msgstr "当渲染后的指令包含敏感信息时，请避免记录日志。扩展会在每个请求之前重新读取文件，因此修改会在下一个轮次生效，无需重新创建客户端。缺失、为空、无法读取或不是 UTF-8 的文件会被跳过。每个文件默认限制为\\ ``max_chars=32_000``；更长的文件会被包含，但带有截断标记。只有在考虑模型的上下文预算之后，才应该提高这个限制。"
+
+#: ../../learn/project-instructions.rst:88
+msgid "Use ``file_name=\"PROJECT.md\"`` if your application follows another convention. Paths returned by ``sources()`` do not guarantee readable, nonempty content; ``instructions()`` shows what can actually be included."
+msgstr "如果你的应用遵循其他约定，可以使用\\ ``file_name=\"PROJECT.md\"``\\ 。\\ ``sources()``\\ 返回的路径并不保证内容可读且非空；``instructions()``\\ 展示的是实际可以被包含的内容。"
+
+#: ../../learn/project-instructions.rst:93
+msgid "Try an offline request"
+msgstr "试运行一个离线请求"
+
+#: ../../learn/project-instructions.rst:95
+msgid "The following example creates an isolated project, checks what the model receives, edits its guidance, and verifies that the next request sees the edit. All files are temporary."
+msgstr "下面的示例会创建一个隔离的项目、检查模型收到的内容、修改它的指令，并验证下一个请求能看到这次修改。所有文件都是临时的。"
+
+#: ../../learn/project-instructions.rst:103
+msgid "Run from a checkout:"
+msgstr "在源码检出目录中运行："
+
+#: ../../learn/project-instructions.rst:109
+msgid "Expected output:"
+msgstr "预期输出："
+
+#: ../../learn/project-instructions.rst:116
+msgid ":download:`Download the complete example <../_examples/project_instructions.py>`."
+msgstr ":download:`下载完整示例 <../_examples/project_instructions.py>`\\ 。"
+
+#: ../../learn/project-instructions.rst:119
+msgid "Instructions, skills, and permissions"
+msgstr "指令、技能与权限"
+
+#: ../../learn/project-instructions.rst:121
+msgid "``AGENTS.md`` is always-loaded guidance for the chosen directory. :doc:`Skills <on-demand>` are optional task instructions loaded through ``read_skill``. Your application system prompt establishes overall behavior. None of these is a security boundary: untrusted instructions cannot authorize a tool or override your application's access policy. Enforce permissions in the tool handler, middleware, or process isolation."
+msgstr "``AGENTS.md``\\ 是所选目录中始终加载的指令。\\ :doc:`技能 <on-demand>`\\ 是通过\\ ``read_skill``\\ 加载的可选任务指令。你的应用系统提示词决定整体行为。这些都不是安全边界：非受信任的指令不能授权某个工具，也不能覆盖你应用的访问策略。请在工具处理函数、中间件或进程隔离中实施权限控制。"
+

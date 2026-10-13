@@ -249,6 +249,44 @@ html[data-theme="dark"] {
   }
 }
 
+.zett-language-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  color: var(--pst-color-text-muted);
+  font-size: 0.85rem;
+}
+.zett-language-button:hover,
+.zett-language-button.show {
+  background: var(--pst-color-surface);
+  color: var(--pst-color-text-base);
+}
+.zett-language-menu {
+  min-width: 9rem;
+  padding: 0.35rem;
+  border: 1px solid var(--zett-surface-border);
+  border-radius: var(--zett-radius-small);
+  background: var(--pst-color-background);
+  box-shadow: var(--zett-shadow);
+  font-size: 0.86rem;
+}
+.zett-language-menu .dropdown-item {
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.35rem;
+  color: var(--pst-color-text-muted);
+}
+.zett-language-menu .dropdown-item:hover {
+  background: var(--pst-color-surface);
+  color: var(--pst-color-text-base);
+}
+.zett-language-menu .dropdown-item.active {
+  background: var(--zett-glow);
+  color: var(--pst-color-text-base);
+  font-weight: 600;
+}
+
 /* ---- Sidebar navigation ------------------------------------------------ */
 
 .zett-navigation {
@@ -604,6 +642,9 @@ dl.field-list > dt {
   mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 70%);
   pointer-events: none;
 }
+.zett-hero-identity p {
+  margin: 0;
+}
 .zett-hero-identity {
   display: flex;
   align-items: center;
@@ -629,6 +670,11 @@ dl.field-list > dt {
   font-weight: 600;
   text-decoration: none;
 }
+.zett-hero-identity .zett-hero-badge a,
+.zett-hero-badge a {
+  color: inherit;
+  text-decoration: none;
+}
 .zett-hero-badge::before {
   content: "";
   width: 0.5rem;
@@ -649,7 +695,9 @@ dl.field-list > dt {
   letter-spacing: -0.04em;
   line-height: 1.06;
 }
-.zett-hero-title span {
+.zett-hero-title strong {
+  display: block;
+  font-weight: inherit;
   background: var(--zett-gradient);
   -webkit-background-clip: text;
   background-clip: text;
@@ -671,32 +719,41 @@ dl.field-list > dt {
 .zett-actions p {
   margin: 0;
 }
-.zett-actions .sd-btn {
+/* Plain links drawn as buttons: the first is the primary action. */
+.zett-actions a {
+  display: inline-block;
   padding: 0.7rem 1.1rem;
+  border: 1px solid var(--zett-surface-border);
   border-radius: var(--zett-radius-small);
+  background: var(--pst-color-background);
+  color: var(--pst-color-text-base);
   font-size: 0.88rem;
   font-weight: 650;
   text-decoration: none;
-  box-shadow: none;
   transition:
     transform 0.15s ease,
     border-color 0.15s ease;
 }
-.zett-actions .sd-btn:hover {
+.zett-actions a:hover {
+  border-color: var(--zett-ember);
   transform: translateY(-1px);
 }
-.zett-actions .sd-btn:not(.sd-btn-primary) {
-  border: 1px solid var(--zett-surface-border);
-  color: var(--pst-color-text-base);
-  background: var(--pst-color-background);
+.zett-actions p:first-child a {
+  border-color: var(--pst-color-primary);
+  background: var(--pst-color-primary);
+  color: var(--pst-color-primary-text);
 }
-.zett-actions .sd-btn:not(.sd-btn-primary):hover {
-  border-color: var(--zett-ember);
+.zett-actions p:first-child a:hover {
+  border-color: var(--pst-color-primary-highlight);
+  background: var(--pst-color-primary-highlight);
 }
 .zett-hero-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   color: var(--pst-color-text-muted);
   font-size: 0.78rem;
 }
@@ -714,6 +771,9 @@ dl.field-list > dt {
   box-shadow: var(--zett-shadow);
 }
 .zett-code-caption {
+  margin: 0;
+  list-style: none;
+  text-transform: uppercase;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -725,7 +785,11 @@ dl.field-list > dt {
   font-weight: 700;
   letter-spacing: 0.08em;
 }
-.zett-code-caption span:last-child {
+.zett-code-caption li {
+  margin: 0;
+}
+.zett-code-caption li:last-child {
+  text-transform: none;
   font-family: var(--pst-font-family-monospace);
   font-weight: 400;
   letter-spacing: 0;
@@ -923,13 +987,16 @@ html[data-theme="dark"] .zett-step::before {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.65rem;
+  list-style: none;
   padding: 1.5rem;
   border: 1px solid var(--zett-surface-border);
   border-radius: var(--zett-radius);
   margin: 1.25rem 0;
   background: var(--zett-surface);
 }
-.zett-flow-step {
+.zett-flow > li {
+  position: relative;
+  margin: 0 1.5rem 0 0;
   padding: 0.45rem 0.8rem;
   border: 1px solid var(--zett-surface-border);
   border-radius: var(--zett-radius-small);
@@ -938,10 +1005,22 @@ html[data-theme="dark"] .zett-step::before {
   font-size: 0.83rem;
   font-weight: 550;
 }
-.zett-flow-arrow {
-  color: var(--zett-ember);
+.zett-flow > li:last-child {
+  margin-right: 0;
 }
-.zett-flow-step.zett-flow-tool {
+.zett-flow > li:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  top: 50%;
+  right: -1.35rem;
+  transform: translateY(-50%);
+  color: var(--zett-ember);
+  font-weight: 400;
+}
+.zett-flow > li:nth-child(3)::after {
+  content: "↺";
+}
+.zett-flow > li:nth-child(3) {
   border-color: var(--zett-ember);
   background: var(--zett-glow);
 }
@@ -1083,4 +1162,43 @@ input:focus-visible,
     animation-delay: 0s !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---- Chinese typography ------------------------------------------------ */
+
+/* Negative tracking tuned for Latin letters crowds ideographs, and the hero
+ * emphasis reads as one sentence in Chinese instead of a second line. */
+html[lang|="zh"] {
+  --pst-font-family-base:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --pst-font-family-heading: var(--pst-font-family-base);
+}
+html[lang|="zh"] h1,
+html[lang|="zh"] h2,
+html[lang|="zh"] h3,
+html[lang|="zh"] h4,
+html[lang|="zh"] .zett-hero-title,
+html[lang|="zh"] .sd-card-title,
+html[lang|="zh"] .navbar-brand p.logo__title {
+  letter-spacing: 0;
+}
+html[lang|="zh"] .bd-article p.zett-hero-title {
+  font-size: clamp(2rem, 3.2vw, 2.9rem);
+  line-height: 1.3;
+}
+html[lang|="zh"] .zett-hero-title strong {
+  display: inline;
+}
+html[lang|="zh"] .zett-group-heading {
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+html[lang|="zh"] .zett-navigation > div > ul > li > a,
+html[lang|="zh"] .bd-article {
+  letter-spacing: 0;
+}
+html[lang|="zh"] .bd-article p,
+html[lang|="zh"] .bd-article li {
+  line-height: 1.85;
 }

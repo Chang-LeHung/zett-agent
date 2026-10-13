@@ -1,0 +1,138 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../concepts/lifecycle.rst:2
+msgid "The request lifecycle"
+msgstr "请求生命周期"
+
+#: ../../concepts/lifecycle.rst:4
+msgid "Knowing the order of hooks is how you pick the right one. Each stage finishes for every extension before the next stage starts, and extensions run in ascending ``priority`` (lower numbers first)."
+msgstr "了解钩子的顺序，才能选对钩子。每个阶段都会对所有扩展执行完毕，才进入下一阶段；扩展按 ``priority`` 升序运行（数值小的先执行）。"
+
+#: ../../concepts/lifecycle.rst:26
+msgid "Because ``on_tool`` always completes before ``on_state``, a guidance extension can describe every tool no matter which extension registered it. Priority only changes the order *within* a stage."
+msgstr "由于 ``on_tool`` 总是在 ``on_state`` 之前完成，提供 guidelines 的扩展可以描述每一个工具，无论它是哪个扩展注册的。优先级只改变同一阶段\\ *内部*\\ 的顺序。"
+
+#: ../../concepts/lifecycle.rst:31
+msgid "One turn"
+msgstr "一个轮次"
+
+#: ../../concepts/lifecycle.rst:51
+msgid "Emit UI progress from any hook with ``await context.emit(AgentEvent(...))``. The event becomes visible to whoever is consuming ``Agent.stream()``."
+msgstr "在任何钩子里都可以用 ``await context.emit(AgentEvent(...))`` 发出 UI 进度，正在消费 ``Agent.stream()`` 的一方就能看到这个事件。"
+
+#: ../../concepts/lifecycle.rst:55
+msgid "Which hook should I use?"
+msgstr "该用哪个钩子？"
+
+#: ../../concepts/lifecycle.rst:61
+msgid "Hook"
+msgstr "钩子"
+
+#: ../../concepts/lifecycle.rst:62
+msgid "Use it for"
+msgstr "用途"
+
+#: ../../concepts/lifecycle.rst:63
+msgid "``on_tool``"
+msgstr "``on_tool``"
+
+#: ../../concepts/lifecycle.rst:64
+msgid "Registering request-scoped tools."
+msgstr "注册请求级工具。"
+
+#: ../../concepts/lifecycle.rst:65
+msgid "``on_state``"
+msgstr "``on_state``"
+
+#: ../../concepts/lifecycle.rst:66
+msgid "Restoring history and adding system instructions."
+msgstr "恢复历史记录，并添加系统指令。"
+
+#: ../../concepts/lifecycle.rst:67
+msgid "``on_message``"
+msgstr "``on_message``"
+
+#: ../../concepts/lifecycle.rst:68
+msgid "Rewriting the user's input before it is sent."
+msgstr "在用户输入发送出去之前改写它。"
+
+#: ../../concepts/lifecycle.rst:69
+msgid "``before_model``"
+msgstr "``before_model``"
+
+#: ../../concepts/lifecycle.rst:70
+msgid "Anything that must change immediately before a model call, including compaction."
+msgstr "必须在模型调用前一刻改变的内容，包括压缩。"
+
+#: ../../concepts/lifecycle.rst:71
+msgid "``after_model``"
+msgstr "``after_model``"
+
+#: ../../concepts/lifecycle.rst:72
+msgid "Reading the response, usage, or recording a checkpoint."
+msgstr "读取响应、用量，或记录检查点。"
+
+#: ../../concepts/lifecycle.rst:73
+msgid "``before_tool`` / ``after_tool``"
+msgstr "``before_tool`` / ``after_tool``"
+
+#: ../../concepts/lifecycle.rst:74
+msgid "Approving, rewriting, or observing one tool call."
+msgstr "审批、改写或观察一次工具调用。"
+
+#: ../../concepts/lifecycle.rst:75
+msgid "``after_run`` / ``on_success``"
+msgstr "``after_run`` / ``on_success``"
+
+#: ../../concepts/lifecycle.rst:76
+msgid "Persisting results and releasing per-request state."
+msgstr "持久化结果并释放请求级状态。"
+
+#: ../../concepts/lifecycle.rst:77
+msgid "``on_error`` / ``RunCancelledEvent``"
+msgstr "``on_error`` / ``RunCancelledEvent``"
+
+#: ../../concepts/lifecycle.rst:78
+msgid "Cleaning up after a failure or cancellation."
+msgstr "在失败或取消之后做清理。"
+
+#: ../../concepts/lifecycle.rst:81
+msgid "Success, failure, cancellation"
+msgstr "成功、失败与取消"
+
+#: ../../concepts/lifecycle.rst:83
+msgid "Cleanup needs all three paths:"
+msgstr "清理需要覆盖这三条路径："
+
+#: ../../concepts/lifecycle.rst:85
+msgid "A model or hook error calls ``on_error`` and propagates the original exception."
+msgstr "模型或钩子出错时会调用 ``on_error``，并向上抛出原始异常。"
+
+#: ../../concepts/lifecycle.rst:86
+msgid "Cancelling the request publishes ``RunCancelledEvent``; ``on_error`` and ``on_success`` do not run."
+msgstr "取消请求会发布 ``RunCancelledEvent``；``on_error`` 和 ``on_success`` 都不会运行。"
+
+#: ../../concepts/lifecycle.rst:88
+msgid "A tool failure is different: it becomes an unsuccessful tool result so the model can react, rather than failing the whole request."
+msgstr "工具失败则不同：它会变成一条失败的工具结果，让模型能据此应对，而不是让整个请求失败。"
+
+#: ../../concepts/lifecycle.rst:91
+msgid "See :doc:`../extending/hooks` for every hook and :doc:`../extending/state` for a cleanup pattern that handles all three."
+msgstr "所有钩子见\\ :doc:`../extending/hooks`；能覆盖这三种情况的清理模式见\\ :doc:`../extending/state`\\ 。"
+

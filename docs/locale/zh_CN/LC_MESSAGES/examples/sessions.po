@@ -1,0 +1,66 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/sessions.rst:2
+msgid "Restore SQLite history"
+msgstr "恢复 SQLite 历史记录"
+
+#: ../../examples/sessions.rst:4
+msgid "Reopen a real temporary database, restore history, paginate messages, update the title, and delete the session."
+msgstr "重新打开一个真实的临时数据库，恢复历史记录，对消息分页，更新标题，然后删除会话。"
+
+#: ../../examples/sessions.rst:7
+msgid "Run it"
+msgstr "运行示例"
+
+#: ../../examples/sessions.rst:9
+msgid "From the repository root:"
+msgstr "在仓库根目录下："
+
+#: ../../examples/sessions.rst:15
+msgid "The output includes:"
+msgstr "输出包含："
+
+#: ../../examples/sessions.rst:21
+msgid "This program uses deterministic offline models and temporary storage where needed. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序使用确定性的离线模型，并在需要时使用临时存储。它不需要 API 密钥，由文档测试套件执行。"
+
+#: ../../examples/sessions.rst:25
+msgid "What to take into your application"
+msgstr "可以带入你应用的做法"
+
+#: ../../examples/sessions.rst:27
+msgid "Keep one stable ``session_id`` for a conversation and open a persistence extension over the same database when the process restarts. The example closes the first connection before creating a second client, so the restored history comes from SQLite, not an in-memory cache."
+msgstr "为一个对话保留一个稳定的 ``session_id``，并在进程重启时针对同一个数据库打开持久化扩展。示例在创建第二个客户端之前先关闭了第一个连接，因此恢复的历史记录来自 SQLite，而不是内存缓存。"
+
+#: ../../examples/sessions.rst:36
+msgid "The example also paginates messages, renames the conversation, and deletes it. It only deletes a session in a temporary database. In your application, session deletion removes history; put it behind an explicit user action."
+msgstr "示例还会对消息分页、重命名对话并删除它。它只删除临时数据库中的会话。在你的应用中，删除会话会移除历史记录；应把它置于明确的用户操作之后。"
+
+#: ../../examples/sessions.rst:41
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/sessions.rst:43
+msgid ":download:`Download sessions.py <../_examples/sessions.py>`."
+msgstr ":download:`下载 sessions.py <../_examples/sessions.py>`\\ 。"
+
+#: ../../examples/sessions.rst:49
+msgid "Next: :doc:`../learn/sessions` for storage choices and resource ownership, or :doc:`compaction` for long conversations."
+msgstr "下一步：阅读\\ :doc:`../learn/sessions`\\ 了解存储选择和资源归属，或阅读\\ :doc:`compaction`\\ 了解长对话。"
+

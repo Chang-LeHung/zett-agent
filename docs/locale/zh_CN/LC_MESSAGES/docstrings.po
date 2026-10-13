@@ -1,0 +1,106 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../docstrings.rst:2
+msgid "Writing API documentation"
+msgstr "编写 API 文档"
+
+#: ../../docstrings.rst:5
+msgid "Source of truth"
+msgstr "唯一事实来源"
+
+#: ../../docstrings.rst:7
+msgid "Public objects are discovered from the modules that define them: the reference generator walks the runtime package, keeps every public name a module defines itself, creates one page per name, and groups pages by responsibility. Do not edit ``docs/_generated``: rebuilds regenerate these files. Maintain API descriptions in source docstrings and tutorials in hand-written RST pages."
+msgstr "公开对象是从定义它们的模块中发现的：参考文档生成器会遍历运行时包，保留每个模块自己定义的公开名称，为每个名称生成一个页面，并按职责对页面分组。不要修改 ``docs/_generated``，重新构建会重新生成这些文件。API 说明写在源码的文档字符串里，教程写在手写的 RST 页面中。"
+
+#: ../../docstrings.rst:14
+msgid "Sphinx, reStructuredText, and docstring style"
+msgstr "Sphinx、reStructuredText 与文档字符串风格"
+
+#: ../../docstrings.rst:16
+msgid "These are different layers. Sphinx builds and cross-links the website. reStructuredText (RST) is the markup used by the handwritten ``.rst`` pages. Google style structures the Python docstrings; the Napoleon extension converts those sections into Sphinx markup. The PyData theme controls presentation."
+msgstr "这是几个不同的层次。Sphinx 负责构建网站并生成交叉链接。reStructuredText（RST）是手写 ``.rst`` 页面使用的标记语言。Google 风格规定 Python 文档字符串的结构，Napoleon 扩展把这些小节转换成 Sphinx 标记。PyData 主题控制呈现效果。"
+
+#: ../../docstrings.rst:21
+msgid "NumPy-style docstrings are another input convention, not a prerequisite for a NumPy-like website. This project consistently uses Google-style sections rather than mixing conventions within a class."
+msgstr "NumPy 风格的文档字符串是另一种输入约定，并不是做出类 NumPy 网站的前提。本项目始终使用 Google 风格的小节，而不在同一个类里混用不同约定。"
+
+#: ../../docstrings.rst:25
+msgid "Useful RST constructs::"
+msgstr "常用的 RST 结构::"
+
+#: ../../docstrings.rst:42
+msgid "Keep a blank line before directive contents and indent their options and body. Use literalinclude for tested examples so the website and downloadable program cannot silently diverge. Cross-reference roles resolve symbols and generate links; plain backticks alone do not create an API reference."
+msgstr "指令内容之前要留一个空行，并缩进它们的选项和正文。经过测试的示例请用 literalinclude，这样网站上的代码和可下载的程序不会悄悄产生分歧。交叉引用角色会解析符号并生成链接；单用反引号并不会创建 API 参考条目。"
+
+#: ../../docstrings.rst:48
+msgid "Diagrams"
+msgstr "图"
+
+#: ../../docstrings.rst:50
+msgid "Use Mermaid for process, state, and sequence diagrams that benefit from real nodes and connecting lines. Hand-written documentation can use the directive directly, and Sphinx renders it as a sharp SVG at different viewport sizes::"
+msgstr "当流程、状态和时序图需要真正的节点和连线时，请使用 Mermaid。手写文档可以直接使用该指令，Sphinx 会在不同视口尺寸下把它渲染成清晰的 SVG::"
+
+#: ../../docstrings.rst:63
+msgid "Public API docstrings use ``.. zett-diagram:: name`` followed by an ASCII version. The source therefore remains useful in an editor, ``help()``, and a terminal; the local ``diagrams`` Sphinx extension replaces that block with the registered Mermaid diagram only while building the website. Update both representations when their behavior changes."
+msgstr "公开 API 的文档字符串使用 ``.. zett-diagram:: name``，后面跟一份 ASCII 版本。这样源码在编辑器、``help()`` 和终端里依然有用；本地的 ``diagrams`` Sphinx 扩展只会在构建网站时把该块替换成已注册的 Mermaid 图。行为发生变化时，两种表示都要更新。"
+
+#: ../../docstrings.rst:69
+msgid "Keep ``.. code-block:: text`` for output whose exact characters are the subject of the documentation, such as a terminal transcript, wire format, or ASCII table. Larger architectural diagrams belong in a hand-written guide."
+msgstr "当输出的具体字符本身就是文档的主题时——比如终端记录、线格式或 ASCII 表格——请保留 ``.. code-block:: text``\\ 。更大的架构图应该放进手写的指南里。"
+
+#: ../../docstrings.rst:74
+msgid "Google-style docstrings"
+msgstr "Google 风格的文档字符串"
+
+#: ../../docstrings.rst:76
+msgid "Use a short imperative summary, optional behavioral details, then relevant sections. Type hints supply types; docstrings explain meaning, units, defaults, ownership, and failure conditions."
+msgstr "先写一句简短的祈使式摘要，再写可选的行为细节，然后是相关小节。类型由类型注解提供；文档字符串说明含义、单位、默认值、归属关系和失败条件。"
+
+#: ../../docstrings.rst:101
+msgid "Use ``Yields`` for async generators, ``Attributes`` for model fields, and ``Note`` or ``Warning`` only where they clarify a real constraint. Omit irrelevant sections. A code-only example uses an indented literal block after ``::``; plain Python under an Examples heading alone may be parsed as prose."
+msgstr "异步生成器用 ``Yields``，数据模型字段用 ``Attributes``，只有在能说明真实约束时才用 ``Note`` 或 ``Warning``\\ 。无关的小节请省略。只包含代码的示例在 ``::`` 之后使用缩进的文字块；只有普通 Python 代码而位于 Examples 标题下时，可能会被当作正文解析。"
+
+#: ../../docstrings.rst:107
+msgid "Field comments"
+msgstr "字段注释"
+
+#: ../../docstrings.rst:118
+msgid "``#:`` makes a source-adjacent field description available to autodoc. Avoid duplicating a description in both Attributes and a field comment. Document time units, UTC versus monotonic clocks, nullable values, and subset relationships."
+msgstr "``#:``\\ 能让紧邻源码的字段说明被 autodoc 读取。不要在 Attributes 小节和字段注释里重复同一段说明。请写明时间单位、UTC 与单调时钟的区别、可为空的值以及子集关系。"
+
+#: ../../docstrings.rst:123
+msgid "Tools have an additional contract"
+msgstr "工具还有一层约定"
+
+#: ../../docstrings.rst:125
+msgid "``Snippet`` and ``Guidelines`` are consumed by the tool decorator and included in model guidance. They are not merely website formatting. Preserve their parser syntax and validate tool-schema tests after editing them. Examples intended for developers belong under Examples rather than in model-facing guidance."
+msgstr "``Snippet`` 和 ``Guidelines`` 由工具装饰器读取，并纳入模型看到的 guidelines。它们不只是网站排版。修改它们之后，请保持解析器语法的完整，并运行工具模式的测试加以校验。面向开发者的示例应放在 Examples 小节，而不是写给模型看的准则里。"
+
+#: ../../docstrings.rst:131
+msgid "Build and validate"
+msgstr "构建与校验"
+
+#: ../../docstrings.rst:133
+msgid "From the repository root::"
+msgstr "在仓库根目录下执行::"
+
+#: ../../docstrings.rst:138
+msgid "The build treats documentation warnings as failures. The docs tests check that every public export has a generated page and that links, example blocks, and parameter descriptions appear in the built output. Normal builds import the package but do not instantiate providers, execute examples, or touch session data."
+msgstr "构建会把文档警告当作错误。文档测试会检查每个公开导出是否都有生成的页面，并检查链接、示例块和参数说明是否出现在构建产物中。普通构建会导入这个包，但不会实例化模型提供商、执行示例，也不会触碰会话数据。"
+

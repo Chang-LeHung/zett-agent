@@ -1,0 +1,70 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/middleware.rst:2
+msgid "Middleware"
+msgstr "中间件"
+
+#: ../../extending/middleware.rst:4
+msgid "Every :class:`~zett_agent.extensions.base.AgentExtension` inherits :class:`~zett_agent.extensions.base.MiddlewareHook`. Override these methods when the extension must wrap the operation that crosses into a provider or local tool handler. There is no separate middleware registry or constructor argument."
+msgstr "每个\\ :class:`~zett_agent.extensions.base.AgentExtension`\\ 都继承\\ :class:`~zett_agent.extensions.base.MiddlewareHook`\\ 。当扩展需要包装跨越模型提供商或本地工具处理函数边界的操作时，就覆盖这些方法。中间件没有单独的注册表，也没有单独的构造函数参数。"
+
+#: ../../extending/middleware.rst:10
+msgid "Two boundaries"
+msgstr "两个边界"
+
+#: ../../extending/middleware.rst:12
+msgid "``on_model_request(context, request, call_next)``"
+msgstr "``on_model_request(context, request, call_next)``"
+
+#: ../../extending/middleware.rst:13
+msgid "Wraps every primary provider invocation. It is an async generator because model output is streamed. Pass the original request or a dataclass replacement into ``call_next(request)`` and close the returned stream when leaving early."
+msgstr "包装每一次主要的模型提供商调用。由于模型输出是流式的，它本身是一个异步生成器。把原始请求或替换后的数据类传给 ``call_next(request)``，并在提前退出时关闭返回的流。"
+
+#: ../../extending/middleware.rst:17
+msgid "``on_tool_call(context, call, call_next)``"
+msgstr "``on_tool_call(context, call, call_next)``"
+
+#: ../../extending/middleware.rst:18
+msgid "Wraps the actual handler for one local tool invocation. It may edit ``call.arguments`` before awaiting ``call_next()``, transform the raw :data:`~zett_agent.tools.base.ToolResult`, or return directly to short-circuit the handler. An exception follows ordinary tool error handling and is recorded as a failed ``ToolMessage``."
+msgstr "包装一次本地工具调用真正使用的处理函数。它可以在 await ``call_next()`` 之前修改 ``call.arguments``，转换原始的\\ :data:`~zett_agent.tools.base.ToolResult`，或者直接返回以短路该处理函数。异常会走普通的工具错误处理流程，并被记录为一条失败的 ``ToolMessage``\\ 。"
+
+#: ../../extending/middleware.rst:24
+msgid "Provider-hosted server tools do not pass through ``on_tool_call`` because the provider executes them inside ``on_model_request``."
+msgstr "模型提供商托管的服务端工具不会经过 ``on_tool_call``，因为提供商是在 ``on_model_request`` 内部执行它们的。"
+
+#: ../../extending/middleware.rst:28
+msgid "Ordering"
+msgstr "顺序"
+
+#: ../../extending/middleware.rst:30
+msgid "Middleware uses the extension's existing priority order as an onion. Given ``extensions=[outer, inner]``, the order is ``outer before -> inner before -> operation -> inner after -> outer after``. Lower priorities are outer layers; equal priorities retain registration order."
+msgstr "中间件把扩展已有的优先级顺序当作洋葱模型。给定 ``extensions=[outer, inner]``\\ 时，顺序为 ``outer before -> inner before -> operation -> inner after -> outer after``\\ 。优先级越低越靠外层；优先级相同时保持注册顺序。"
+
+#: ../../extending/middleware.rst:68
+msgid "Concurrency and cancellation"
+msgstr "并发与取消"
+
+#: ../../extending/middleware.rst:70
+msgid "One extension instance can be entered simultaneously by different sessions. Parallel local tools also execute a separate complete middleware chain in each task. Keep invocation state in method-local variables or use synchronization for shared mutable state. ``current_tool_call_id()`` remains task-local throughout tool middleware and the handler."
+msgstr "同一个扩展实例可能被不同会话同时进入。并行的本地工具也会在每个任务中执行一条独立的完整中间件链。请把调用状态保存在方法内的局部变量中，或对共享的可变状态加同步。\\ ``current_tool_call_id()`` 在整个工具中间件和处理函数期间都保持在任务本地。"
+
+#: ../../extending/middleware.rst:76
+msgid "Use ``try/finally`` around ``call_next`` for cleanup. Model middleware should consume the inner stream under ``contextlib.aclosing`` so client cancellation or an early consumer exit reaches the provider and all inner middleware promptly."
+msgstr "用 ``try/finally`` 包住 ``call_next`` 来做清理。模型中间件应在 ``contextlib.aclosing`` 下消费内层流，这样客户端取消或消费方提前退出才能及时传到模型提供商和所有内层中间件。"
+

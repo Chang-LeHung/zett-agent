@@ -1,0 +1,115 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/mcp.rst:2
+msgid "Connect MCP tools"
+msgstr "连接 MCP 工具"
+
+#: ../../learn/mcp.rst:4
+msgid "Use :class:`~zett_agent.extensions.mcp.McpExtension` to connect tools supplied by Model Context Protocol servers. The model sees ordinary tool definitions; when it requests one, the extension calls the server and returns its result. Choose this for an existing MCP integration instead of rewriting its tools as local Python functions."
+msgstr "使用\\ :class:`~zett_agent.extensions.mcp.McpExtension`\\ 连接由 Model Context Protocol 服务器提供的工具。模型看到的是普通的工具定义；当模型请求某个工具时，扩展会调用该服务器并返回结果。如果你已经有一套 MCP 集成，可以选择它，而不必把这些工具改写成本地 Python 函数。"
+
+#: ../../learn/mcp.rst:11
+msgid "Connect a Streamable HTTP server"
+msgstr "连接 Streamable HTTP 服务器"
+
+#: ../../learn/mcp.rst:37
+msgid "This is an opt-in network example: configure ``model`` using :doc:`providers`, and set the URL and token for a trusted server. Omit ``headers`` if the server does not require them. Headers are sent for the transport lifecycle and are excluded from the server object's ``repr``, but your application must still keep credentials out of logs and source control."
+msgstr "这是一个需要主动启用的网络示例：用\\ :doc:`providers`\\ 配置 ``model``，并为受信任的服务器设置 URL 和令牌。如果服务器不要求 ``headers``，可以省略它。请求头会在传输的整个生命周期中发送，但不会出现在服务器对象的\\ ``repr``\\ 中；你的应用仍然必须避免凭据出现在日志和版本控制里。"
+
+#: ../../learn/mcp.rst:44
+msgid "Launch a local stdio server"
+msgstr "启动本地 stdio 服务器"
+
+#: ../../learn/mcp.rst:64
+msgid "Replace the path and arguments with a server you have installed. Commands and arguments are passed separately, not interpolated into a shell string. The process still runs with your application's permissions. Launch only trusted servers and restrict their filesystem, environment, and network access at the process or container boundary."
+msgstr "请把路径和参数替换成你已经安装的服务器。命令和参数是分开传递的，不会被拼接进 shell 字符串。进程仍然以你应用的权限运行。只启动受信任的服务器，并在进程或容器边界上限制它们的文件系统、环境和网络访问。"
+
+#: ../../learn/mcp.rst:71
+msgid "Use a configuration file"
+msgstr "使用配置文件"
+
+#: ../../learn/mcp.rst:73
+msgid "mcp.json"
+msgstr "mcp.json"
+
+#: ../../learn/mcp.rst:89
+#, python-brace-format
+msgid "Load it with ``McpExtension(config_path=\"mcp.json\")``. Both ``servers`` and ``mcpServers`` are accepted root keys, but a file must use only one. HTTP entries can include ``headers``; stdio entries can include ``env`` and ``cwd``. Paths and commands in the file are your responsibility; do not assume they resolve relative to the configuration file. There is no automatic ``${VAR}`` interpolation for secrets; construct server definitions in Python when values come from environment variables."
+msgstr "可以用\\ ``McpExtension(config_path=\"mcp.json\")``\\ 加载它。\\ ``servers``\\ 和\\ ``mcpServers``\\ 都是可接受的根键，但一个文件只能使用其中一个。HTTP 条目可以包含\\ ``headers``；stdio 条目可以包含\\ ``env``\\ 和\\ ``cwd``\\ 。文件中的路径和命令由你负责；不要假定它们相对于配置文件解析。密钥不会有自动的\\ ``${VAR}``\\ 替换；当取值来自环境变量时，请在 Python 中构造服务器定义。"
+
+#: ../../learn/mcp.rst:97
+msgid "``McpExtension()`` looks for ``~/.zett/mcp.json``. Supplying an explicit ``servers`` list avoids that implicit lookup. A custom ``config_path`` and a server list can be combined; duplicate server names are rejected. A missing configuration file loads no servers, while malformed configuration raises an error when the extension is constructed."
+msgstr "``McpExtension()``\\ 会查找\\ ``~/.zett/mcp.json``\\ 。传入显式的\\ ``servers``\\ 列表可以避免这种隐式查找。自定义的\\ ``config_path``\\ 可以和服务器列表一起使用；重复的服务器名称会被拒绝。配置文件不存在时不会加载任何服务器，而配置格式错误时会在构造扩展时抛出错误。"
+
+#: ../../learn/mcp.rst:103
+msgid "By default (``strict_config=True``) one invalid server entry makes the whole file invalid, so a typo is never silently ignored. Pass ``McpExtension(strict_config=False)``, or ``McpConfiguration.from_file(path, strict=False)``, to skip invalid entries instead: each is logged and listed in ``McpConfiguration.skipped``, and the valid servers still load. A file that is not valid JSON or has no server mapping still raises."
+msgstr "默认情况下（``strict_config=True``），只要有一个无效的服务器条目，整个文件就会失效，因此拼写错误绝不会被静默忽略。如果希望改为跳过无效条目，可以传入\\ ``McpExtension(strict_config=False)``\\ 或\\ ``McpConfiguration.from_file(path, strict=False)``：每个被跳过的条目都会写入日志并列入\\ ``McpConfiguration.skipped``，有效的服务器仍然会加载。如果文件不是有效的 JSON 或者没有服务器映射，仍然会抛出错误。"
+
+#: ../../learn/mcp.rst:110
+msgid "The file is checked at the start of every request and re-read only when its modification time or size changed, so edits apply to the next request without restarting the application. A file that becomes invalid while the application is running is logged and the last valid server list stays in use."
+msgstr "每个请求开始时都会检查该文件，只有在修改时间或大小发生变化时才会重新读取，因此修改会在下一个请求中生效，无需重启应用。如果文件在应用运行期间变得无效，会写入日志，并继续使用最后一次有效的服务器列表。"
+
+#: ../../learn/mcp.rst:116
+msgid "Tool names and results"
+msgstr "工具名称和结果"
+
+#: ../../learn/mcp.rst:118
+msgid "A server named ``catalog`` with a tool named ``search`` exposes ``catalog__search`` by default. Namespacing avoids collisions with local tools and other servers. ``namespace_tools=False`` keeps the original names, but you must then ensure every registered name is unique."
+msgstr "名为\\ ``catalog``\\ 的服务器中有一个名为\\ ``search``\\ 的工具，默认会以\\ ``catalog__search``\\ 的形式暴露。使用命名空间可以避免与本地工具以及其他服务器冲突。\\ ``namespace_tools=False``\\ 会保留原始名称，但此时你必须确保每个已注册的名称都唯一。"
+
+#: ../../learn/mcp.rst:123
+msgid "Server-provided input schemas describe the tools. Remote validation and your application policy remain important; MCP tools do not pass through the ``@tool`` function validator. If a result has ``structured_content``, it is returned as that structured value; otherwise content blocks are serialized as JSON data. Image blocks are not automatically promoted into typed vision messages. A remote ``is_error`` result becomes an ordinary tool failure the model can see."
+msgstr "服务器提供的输入模式描述了这些工具。远程校验和你应用的策略仍然很重要；MCP 工具不会经过\\ ``@tool``\\ 函数校验器。如果结果带有\\ ``structured_content``，就会以该结构化值返回；否则内容块会被序列化成 JSON 数据。图像块不会被自动转成带类型的视觉消息。远程的\\ ``is_error``\\ 结果会变成模型可以看到的普通工具失败。"
+
+#: ../../learn/mcp.rst:132
+msgid "Connections and failure"
+msgstr "连接与失败"
+
+#: ../../learn/mcp.rst:134
+msgid "At the start of each request every server's tool list is discovered **concurrently**, so total latency is that of the slowest server instead of the sum. Tool lists are cached per server configuration for ``tools_cache_ttl`` seconds (default 300; ``0`` disables the cache). While the cache is warm a request starts no process and opens no socket: a server connects lazily the first time the model calls one of its tools, and only that server connects. Success, failure, cancellation, and :meth:`~zett_agent.agent.Agent.compact` passes close every connection the request opened."
+msgstr "每个请求开始时，都会\\ **并发**\\ 发现所有服务器的工具列表，因此总延迟取决于最慢的服务器，而不是各服务器之和。工具列表会按服务器配置缓存\\ ``tools_cache_ttl``\\ 秒（默认 300；设为\\ ``0``\\ 表示禁用缓存）。缓存仍然有效时，请求不会启动任何进程，也不会打开任何套接字：服务器只有在模型第一次调用它的工具时才延迟连接，而且只有那个服务器会连接。请求无论是成功、失败、取消，还是执行\\ :meth:`~zett_agent.agent.Agent.compact`，都会关闭该请求打开的所有连接。"
+
+#: ../../learn/mcp.rst:143
+msgid "A server that cannot connect or list its tools within ``connect_timeout`` seconds (default 30) is skipped. The model is told which server was unavailable, and the other servers keep working. A tool call that exceeds ``call_timeout`` seconds (default 300) fails with a ``TimeoutError`` the model can see; set either timeout to ``None`` to disable it. An ordinary failure during a tool call produces ``TOOL_FAILED`` and permits the model to continue. Choose which remote error text can be shown. The extension does not grant remote servers additional authorization."
+msgstr "如果某个服务器无法在\\ ``connect_timeout``\\ 秒（默认 30）内连接或列出工具，它就会被跳过。模型会被告知哪个服务器不可用，其他服务器则继续正常工作。超过\\ ``call_timeout``\\ 秒（默认 300）的工具调用会失败，并抛出模型可以看到的\\ ``TimeoutError``；把任一超时设为\\ ``None``\\ 即可禁用它。工具调用过程中的普通失败会产生\\ ``TOOL_FAILED``，并允许模型继续。你可以选择哪些远程错误文本可以被显示。该扩展不会给远程服务器授予额外权限。"
+
+#: ../../learn/mcp.rst:152
+msgid "Tool schemas are sent without ``title`` and ``$schema`` annotations, which server generators attach to every property and which only repeat the property name. Per-tool usage guidelines are omitted too: the system message already states that ``<server>__<tool>`` names belong to their server, so repeating it for every tool only costs prompt tokens. Property names, types, descriptions, and constraints are untouched."
+msgstr "发送工具模式时不会包含\\ ``title``\\ 和\\ ``$schema``\\ 注解；服务器生成器会给每个属性都附上这些注解，而它们只是重复属性名。每个工具的 guidelines 也会被省略：系统消息已经说明\\ ``<server>__<tool>``\\ 形式的名称属于对应的服务器，因此为每个工具都重复一遍只会消耗提示词 token。属性的名称、类型、描述和约束都保持不变。"
+
+#: ../../learn/mcp.rst:159
+msgid "Exposed tool names are limited to letters, digits, ``_`` and ``-`` and at most 64 characters, the intersection of what model providers accept; longer names are shortened with a stable hash. A tool whose exposed name is already registered is skipped with a warning instead of failing the request. Servers that repeat a pagination cursor or return more than 100 pages are treated as unavailable."
+msgstr "暴露的工具名称只能包含字母、数字、``_``\\ 和\\ ``-``，并且最多 64 个字符，这是各模型提供商接受范围的交集；更长的名称会用稳定哈希缩短。如果某个工具的暴露名称已经被注册，它会被跳过并给出警告，而不会让请求失败。如果服务器重复返回同一个分页游标，或者返回超过 100 页，就会被视为不可用。"
+
+#: ../../learn/mcp.rst:167
+msgid "Verify the integration offline"
+msgstr "离线验证集成"
+
+#: ../../learn/mcp.rst:173
+msgid "Run ``uv run python docs/_examples/mcp_tools.py`` from a checkout:"
+msgstr "在源码检出目录中运行\\ ``uv run python docs/_examples/mcp_tools.py``："
+
+#: ../../learn/mcp.rst:180
+msgid "The :download:`complete example <../_examples/mcp_tools.py>` supplies an in-memory MCP client through ``client_factory``. It verifies registration, dispatch, structured results, and transport cleanup without starting a server."
+msgstr ":download:`完整示例 <../_examples/mcp_tools.py>`\\ 通过\\ ``client_factory``\\ 提供了一个内存中的 MCP 客户端。它无需启动服务器，就能验证注册、分发、结构化结果和传输清理。"
+
+#: ../../learn/mcp.rst:184
+msgid "Next: :doc:`tools` for local tool behavior, or :doc:`../extending/server-tools` for tools executed by a model provider rather than an MCP server."
+msgstr "下一步：:doc:`tools`\\ 介绍本地工具的行为，或者看\\ :doc:`../extending/server-tools`，了解由模型提供商而非 MCP 服务器执行的工具。"
+

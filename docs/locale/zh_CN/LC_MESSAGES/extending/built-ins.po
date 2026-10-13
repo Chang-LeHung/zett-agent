@@ -1,0 +1,270 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/built-ins.rst:2
+msgid "Compose built-in extensions"
+msgstr "组合内置扩展"
+
+#: ../../extending/built-ins.rst:4
+msgid "Start with the capability you need. Passing an extension list replaces optional defaults, so explicitly include history and tool guidance if you want them. Do not add ``InternalMessageExtension`` or ``SteeringExtension`` yourself; the runtime already provides them."
+msgstr "先确定你需要的能力。传入扩展列表会替换可选默认值，所以如果需要历史记录和工具 guidelines，请显式加入。不要自己添加 ``InternalMessageExtension`` 或 ``SteeringExtension``；运行时已经提供了它们。"
+
+#: ../../extending/built-ins.rst:9
+msgid "Capability map"
+msgstr "能力对照表"
+
+#: ../../extending/built-ins.rst:13
+msgid "Extension"
+msgstr "扩展"
+
+#: ../../extending/built-ins.rst:14
+msgid "Use when"
+msgstr "适用场景"
+
+#: ../../extending/built-ins.rst:15
+msgid "Important constraint"
+msgstr "重要限制"
+
+#: ../../extending/built-ins.rst:16
+msgid "InMemoryMessageAccumulator"
+msgstr "InMemoryMessageAccumulator"
+
+#: ../../extending/built-ins.rst:17
+msgid "Retain conversation history inside one process."
+msgstr "在单个进程内保留对话历史记录。"
+
+#: ../../extending/built-ins.rst:18
+msgid "Share the instance to share its memory; not durable."
+msgstr "共享实例即可共享它的记忆；不具备持久性。"
+
+#: ../../extending/built-ins.rst:19
+msgid "SQLiteSessionExtension"
+msgstr "SQLiteSessionExtension"
+
+#: ../../extending/built-ins.rst:20
+msgid "Restore raw history and compaction checkpoints across restarts."
+msgstr "在重启后恢复原始历史记录和压缩检查点。"
+
+#: ../../extending/built-ins.rst:21
+msgid "Close the owned pool; use one history restorer."
+msgstr "关闭自己持有的连接池；只使用一个历史记录恢复器。"
+
+#: ../../extending/built-ins.rst:22
+msgid "JSONLExtension"
+msgstr "JSONLExtension"
+
+#: ../../extending/built-ins.rst:23
+msgid "Append one self-contained audit record for each Agent turn."
+msgstr "为每个 Agent 轮次追加一条自包含的审计记录。"
+
+#: ../../extending/built-ins.rst:24
+msgid "One session owns one file; earlier turns are not repeated."
+msgstr "一个会话对应一个文件；更早的轮次不会被重复写入。"
+
+#: ../../extending/built-ins.rst:25
+msgid "ToolGuidelinesExtension"
+msgstr "ToolGuidelinesExtension"
+
+#: ../../extending/built-ins.rst:26
+msgid "Include tool snippets and guidelines in model instructions."
+msgstr "把 tool snippets 和 guidelines 加入模型指令。"
+
+#: ../../extending/built-ins.rst:27
+msgid "Include explicitly when supplying a custom extension list."
+msgstr "提供自定义扩展列表时需显式加入。"
+
+#: ../../extending/built-ins.rst:28
+msgid "AgentsMdExtension"
+msgstr "AgentsMdExtension"
+
+#: ../../extending/built-ins.rst:29
+msgid "Load working-directory AGENTS.md files into model instructions."
+msgstr "把工作目录中的 AGENTS.md 文件加载进模型指令。"
+
+#: ../../extending/built-ins.rst:30
+msgid "Reads parent directories too; treat files as external input, not authorization."
+msgstr "也会读取父目录；请把这些文件当作外部输入，而不是授权。"
+
+#: ../../extending/built-ins.rst:31
+msgid "FileSystemExtension"
+msgstr "FileSystemExtension"
+
+#: ../../extending/built-ins.rst:32
+msgid "Read/search or edit files through relative or absolute paths."
+msgstr "通过相对或绝对路径读取、搜索或编辑文件。"
+
+#: ../../extending/built-ins.rst:33
+msgid "Injects the current directory; read_only limits tools, not OS permissions."
+msgstr "注入当前目录；read_only 限制的是工具，而不是操作系统的权限。"
+
+#: ../../extending/built-ins.rst:34
+msgid "CodingExtension"
+msgstr "CodingExtension"
+
+#: ../../extending/built-ins.rst:35
+msgid "Add writable filesystem tools and shell execution."
+msgstr "添加可写的文件系统工具和 shell 执行能力。"
+
+#: ../../extending/built-ins.rst:36
+msgid "Injects the directory used by relative paths and shell execution."
+msgstr "注入相对路径和 shell 执行所使用的目录。"
+
+#: ../../extending/built-ins.rst:37
+msgid "AskUserExtension"
+msgstr "AskUserExtension"
+
+#: ../../extending/built-ins.rst:38
+msgid "Let the model ask the UI a question and wait."
+msgstr "让模型向 UI 提问并等待回答。"
+
+#: ../../extending/built-ins.rst:39
+msgid "Route replies with session ID and tool-call ID."
+msgstr "用会话 ID 和工具调用 ID 路由回复。"
+
+#: ../../extending/built-ins.rst:40
+msgid "PlanModeExtension"
+msgstr "PlanModeExtension"
+
+#: ../../extending/built-ins.rst:41
+msgid "Model-selected planning entry/exit with user approval events."
+msgstr "由模型选择进入或退出规划模式，并发出用户审批事件。"
+
+#: ../../extending/built-ins.rst:42
+msgid "UI must implement its external-response protocol."
+msgstr "UI 必须实现它的外部响应协议。"
+
+#: ../../extending/built-ins.rst:43
+msgid "TodoWriteExtension"
+msgstr "TodoWriteExtension"
+
+#: ../../extending/built-ins.rst:44
+msgid "Track ordered tasks within the current request."
+msgstr "在当前请求内跟踪有序任务。"
+
+#: ../../extending/built-ins.rst:45
+msgid "Only one in_progress item; lists are cleared at request end."
+msgstr "只允许一个 in_progress 条目；列表在请求结束时清空。"
+
+#: ../../extending/built-ins.rst:46
+msgid "CompactionExtension"
+msgstr "CompactionExtension"
+
+#: ../../extending/built-ins.rst:47
+msgid "Summarize older complete turns before a model step."
+msgstr "在一次模型步骤之前，对更早的完整轮次做摘要。"
+
+#: ../../extending/built-ins.rst:48
+msgid "Token estimates and model context limits must be configured appropriately."
+msgstr "token 估算和模型上下文限制必须配置得当。"
+
+#: ../../extending/built-ins.rst:49
+msgid "GoalExtension"
+msgstr "GoalExtension"
+
+#: ../../extending/built-ins.rst:50
+msgid "Continue externally selected Goal Mode work after private evaluation."
+msgstr "在内部评估之后继续执行外部选定的目标模式工作。"
+
+#: ../../extending/built-ins.rst:51
+msgid "UI arms one exact session/request before starting it; selection is one-shot."
+msgstr "UI 必须在开始之前为某一个确切的会话/请求做好准备；这种选择只有一次机会。"
+
+#: ../../extending/built-ins.rst:52
+msgid "SubAgentExtension"
+msgstr "SubAgentExtension"
+
+#: ../../extending/built-ins.rst:53
+msgid "Delegate to configured child profiles."
+msgstr "委托给已配置的子智能体配置。"
+
+#: ../../extending/built-ins.rst:54
+msgid "Models, tools, and persistence live in each definition."
+msgstr "模型、工具和持久化都包含在各自的定义中。"
+
+#: ../../extending/built-ins.rst:55
+msgid "SkillExtension"
+msgstr "SkillExtension"
+
+#: ../../extending/built-ins.rst:56
+msgid "Discover skill descriptions and lazily load complete instructions."
+msgstr "发现技能描述，并按需懒加载完整指令。"
+
+#: ../../extending/built-ins.rst:57
+msgid "Treat skill files as external input, not authorization."
+msgstr "把技能文件当作外部输入，而不是授权。"
+
+#: ../../extending/built-ins.rst:58
+msgid "ToolSearchExtension"
+msgstr "ToolSearchExtension"
+
+#: ../../extending/built-ins.rst:59
+msgid "Search for optional tools instead of sending every definition up front."
+msgstr "搜索可选工具，而不是一开始就发送所有定义。"
+
+#: ../../extending/built-ins.rst:60
+msgid "Requires a compatible Responses tool-search endpoint; see :doc:`../learn/on-demand`."
+msgstr "需要兼容的 Responses 工具搜索端点；参见\\ :doc:`../learn/on-demand`\\ 。"
+
+#: ../../extending/built-ins.rst:61
+msgid "JITHarnessExtension"
+msgstr "JITHarnessExtension"
+
+#: ../../extending/built-ins.rst:62
+msgid "Let a model create, compose, update, unload, and reload Python tools."
+msgstr "让模型创建、组合、更新、卸载和重新加载 Python 工具。"
+
+#: ../../extending/built-ins.rst:63
+msgid "Trusted code, not a sandbox; deferred inspection tools keep context small; see :doc:`../learn/jit-harness`."
+msgstr "属于受信任的代码，而不是沙箱；延迟加载的检查工具能让上下文保持较小；参见\\ :doc:`../learn/jit-harness`\\ 。"
+
+#: ../../extending/built-ins.rst:64
+msgid "McpExtension"
+msgstr "McpExtension"
+
+#: ../../extending/built-ins.rst:65
+msgid "Register remote or subprocess MCP tools."
+msgstr "注册远程或子进程 MCP 工具。"
+
+#: ../../extending/built-ins.rst:66
+msgid "Trust and resource ownership remain application responsibilities."
+msgstr "信任与资源归属仍然由应用负责。"
+
+#: ../../extending/built-ins.rst:67
+msgid "Provider ServerToolExtension variants"
+msgstr "各模型提供商的 ServerToolExtension 变体"
+
+#: ../../extending/built-ins.rst:68
+msgid "Enable a capability executed by the selected model provider."
+msgstr "启用由所选模型提供商执行的能力。"
+
+#: ../../extending/built-ins.rst:69
+msgid "The tool type and endpoint protocol must be compatible; no local executor runs."
+msgstr "工具类型和端点协议必须兼容；不会运行任何本地执行器。"
+
+#: ../../extending/built-ins.rst:72
+msgid "Try the examples rather than enabling everything"
+msgstr "试用示例，而不是启用全部扩展"
+
+#: ../../extending/built-ins.rst:74
+msgid "Start with :doc:`../examples/streaming-tools` for tools, :doc:`../examples/sessions` for durability, :doc:`../examples/approval` for user interaction, and :doc:`../examples/compaction` for context management. The :doc:`subagent <../examples/subagent>` and :doc:`goal <../examples/goal>` examples show two distinct delegation patterns."
+msgstr "工具方面可以从\\ :doc:`../examples/streaming-tools`\\ 开始，持久性看\\ :doc:`../examples/sessions`，用户交互看\\ :doc:`../examples/approval`，上下文管理看\\ :doc:`../examples/compaction`\\ 。\\ :doc:`子智能体 <../examples/subagent>`\\ 和\\ :doc:`目标 <../examples/goal>`\\ 两个示例展示了两种不同的委派方式。"
+
+#: ../../extending/built-ins.rst:80
+msgid "For complete setup guides, see :doc:`../learn/project-instructions` for AGENTS.md, :doc:`../learn/on-demand` for skills and deferred tools, and :doc:`../learn/mcp` for remote tool servers. Browse :doc:`../_generated/group-extensions` for exact configuration options and event payloads."
+msgstr "完整的配置指南：AGENTS.md 参见\\ :doc:`../learn/project-instructions`，技能和延迟加载的工具参见\\ :doc:`../learn/on-demand`，远程工具服务器参见\\ :doc:`../learn/mcp`\\ 。想了解确切的配置选项和事件载荷，请浏览\\ :doc:`../_generated/group-extensions`\\ 。"
+

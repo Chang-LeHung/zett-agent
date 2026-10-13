@@ -20,11 +20,16 @@ extensions = [
     "sphinxcontrib.mermaid",
     "diagrams",
     "pagetoc",
+    "languages",
 ]
 html_theme = "pydata_sphinx_theme"
 html_title = "Zett Agent"
 html_logo = "_static/logo.svg"
 html_favicon = "_static/favicon.svg"
+language = "en"
+locale_dirs = ["locale/"]
+gettext_compact = False
+gettext_uuid = False
 html_baseurl = "https://chang-lehung.github.io/zett-agent/"
 html_theme_options = {
     "logo": {
@@ -41,6 +46,7 @@ html_theme_options = {
     "header_links_before_dropdown": 5,
     "secondary_sidebar_items": ["page-toc"],
     "navbar_persistent": ["search-button-field"],
+    "navbar_end": ["language-switcher", "theme-switcher", "navbar-icon-links"],
     "footer_start": ["zett-footer"],
     "footer_end": [],
     "primary_sidebar_end": [],
@@ -60,7 +66,6 @@ html_sidebars = {"**": ["global-navigation.html"]}
 html_context = {
     "default_mode": "light",
     "social_card": f"{html_baseurl}_static/social-card.png",
-    "site_description": "Agents that forge the tools they need: a small Python runtime for tool-calling agents.",
 }
 html_show_sourcelink = False
 copybutton_exclude = ".linenos, .gp, .go"

@@ -1,0 +1,210 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/configuration.rst:2
+msgid "Configure your agent"
+msgstr "配置你的智能体"
+
+#: ../../learn/configuration.rst:4
+msgid "Start with ``create_agent(model)``. Configure the behavior shared by a conversation when you create the client; override only what changes for one request when you call ``run`` or ``stream``."
+msgstr "从 ``create_agent(model)`` 开始。在创建客户端时配置整个对话共享的行为；在调用 ``run`` 或 ``stream`` 时，只覆盖单个请求需要变化的部分。"
+
+#: ../../learn/configuration.rst:8
+msgid "This guide assumes a configured ``model`` from :doc:`providers`. The examples below belong inside an async function."
+msgstr "本页假设你已经按 :doc:`providers` 配置好 ``model``\\ 。下面的示例都应该写在异步函数内部。"
+
+#: ../../learn/configuration.rst:12
+msgid "Choose defaults once"
+msgstr "一次性选定默认值"
+
+#: ../../learn/configuration.rst:31
+msgid "``create_agent`` returns an initialized :class:`~zett_agent.client.AgentClient`. Use ``client.agent`` for advanced runtime operations such as external input. The client and direct :class:`~zett_agent.agent.Agent` API use the same loop; the client additionally dispatches events to your bound callbacks."
+msgstr "``create_agent`` 返回一个初始化好的 :class:`~zett_agent.client.AgentClient`\\ 。需要外部输入之类的高级运行时操作时，请使用 ``client.agent``\\ 。客户端和直接使用 :class:`~zett_agent.agent.Agent` 的 API 共用同一个循环；客户端还会额外把事件分发给已绑定的回调。"
+
+#: ../../learn/configuration.rst:36
+msgid "Settings and their scope"
+msgstr "设置项及其作用范围"
+
+#: ../../learn/configuration.rst:40
+msgid "Setting"
+msgstr "设置项"
+
+#: ../../learn/configuration.rst:41
+msgid "Default"
+msgstr "默认值"
+
+#: ../../learn/configuration.rst:42
+msgid "Effect"
+msgstr "作用"
+
+#: ../../learn/configuration.rst:43
+msgid "``system_prompt``"
+msgstr "``system_prompt``"
+
+#: ../../learn/configuration.rst:44
+msgid "Helpful assistant"
+msgstr "有帮助的助手"
+
+#: ../../learn/configuration.rst:45
+msgid "Application instructions rebuilt for every request."
+msgstr "每个请求都会重建的应用指令。"
+
+#: ../../learn/configuration.rst:46
+msgid "``tools``"
+msgstr "``tools``"
+
+#: ../../learn/configuration.rst:47
+msgid "Empty"
+msgstr "空"
+
+#: ../../learn/configuration.rst:48
+msgid "Named operations the model may request. See :doc:`tools`."
+msgstr "模型可以请求的具名操作。参见 :doc:`tools`\\ 。"
+
+#: ../../learn/configuration.rst:49
+msgid "``extensions``"
+msgstr "``extensions``"
+
+#: ../../learn/configuration.rst:50 ../../learn/configuration.rst:65
+msgid "``None``"
+msgstr "``None``"
+
+#: ../../learn/configuration.rst:51
+msgid "Keep default history and tool guidance, or replace them with an explicit list."
+msgstr "保留默认的历史记录和工具 guidelines，或者用一个显式列表替换它们。"
+
+#: ../../learn/configuration.rst:52
+msgid "``reasoning_effort``"
+msgstr "``reasoning_effort``"
+
+#: ../../learn/configuration.rst:53
+msgid "``MEDIUM``"
+msgstr "``MEDIUM``"
+
+#: ../../learn/configuration.rst:54
+msgid "A provider-neutral preference; support depends on the endpoint and model."
+msgstr "一个与模型提供商无关的偏好；是否支持取决于端点和模型。"
+
+#: ../../learn/configuration.rst:55
+msgid "``parallel_tool_call``"
+msgstr "``parallel_tool_call``"
+
+#: ../../learn/configuration.rst:56
+msgid "``True``"
+msgstr "``True``"
+
+#: ../../learn/configuration.rst:57
+msgid "Permit concurrent local calls to parallel tools and request provider support where available."
+msgstr "允许对本地并行工具发起并发调用，并在提供商支持时请求该支持。"
+
+#: ../../learn/configuration.rst:58
+msgid "``max_iterations``"
+msgstr "``max_iterations``"
+
+#: ../../learn/configuration.rst:59
+msgid "``36``"
+msgstr "``36``"
+
+#: ../../learn/configuration.rst:60
+msgid "Maximum model calls per user or internal input, including calls after tool results."
+msgstr "每次用户输入或内部输入允许的最大模型调用次数，包括工具结果之后的调用。"
+
+#: ../../learn/configuration.rst:61
+msgid "``max_internal_messages``"
+msgstr "``max_internal_messages``"
+
+#: ../../learn/configuration.rst:62
+msgid "``8``"
+msgstr "``8``"
+
+#: ../../learn/configuration.rst:63
+msgid "Bound internal continuations queued during a request."
+msgstr "限制一次请求期间排队的 internal continuation。"
+
+#: ../../learn/configuration.rst:64
+msgid "``event_dispatcher``"
+msgstr "``event_dispatcher``"
+
+#: ../../learn/configuration.rst:66
+msgid "Optional callbacks awaited as the client consumes events."
+msgstr "可选的回调，在客户端消费事件时被等待执行。"
+
+#: ../../learn/configuration.rst:68
+msgid "Use a positive ``max_iterations`` and a nonnegative integer for ``max_internal_messages`` (``0`` disallows internal continuations). Exhaustion raises :class:`~zett_agent.exceptions.AgentIterationLimitError`; it does not return a successful partial answer. Neither limit caps money, tokens, wall-clock time, or the number of tools in one response. Add an application timeout and tool limits separately; see :doc:`application`."
+msgstr "请为 ``max_iterations`` 使用正整数，为 ``max_internal_messages`` 使用非负整数（``0`` 表示禁止 internal continuation）。超出上限会抛出 :class:`~zett_agent.exceptions.AgentIterationLimitError`，而不会返回一份成功的部分答案。这两个上限都不限制费用、token 数、墙钟时间或单个响应中的工具数量。请另外设置应用超时和工具限额；参见 :doc:`application`\\ 。"
+
+#: ../../learn/configuration.rst:76
+msgid "Override one request"
+msgstr "覆盖单个请求"
+
+#: ../../learn/configuration.rst:88
+msgid "These values apply only to this invocation. You can also pass ``model=other_model`` to use another adapter for one request, or create the client with ``model=None`` and supply a model on every call. Your application still owns both adapters. Changing a model does not make provider-specific reasoning state portable; see :doc:`providers`."
+msgstr "这些值只对本次调用生效。你也可以传入 ``model=other_model``，为单个请求换用另一个模型适配器；或者用 ``model=None`` 创建客户端，在每次调用时提供模型。这两个适配器仍然由你的应用负责。更换模型并不会让特定于提供商的推理状态变得可移植；参见 :doc:`providers`\\ 。"
+
+#: ../../learn/configuration.rst:94
+msgid "The same options are accepted by ``stream``. ``compact`` accepts identity, model, metadata, and tags, but does not start a normal user request."
+msgstr "``stream`` 接受同样的选项。\\ ``compact`` 接受 identity、model、metadata 和 tags，但不会启动普通的用户请求。"
+
+#: ../../learn/configuration.rst:98
+msgid "Identity is separate from behavior"
+msgstr "标识与行为相互独立"
+
+#: ../../learn/configuration.rst:107
+msgid "Reuse ``session_id`` to address the same conversation. Omit ``config`` to use the session chosen at client creation; if you never supplied one, the runtime generated a UUIDv7 ID, available as ``event.session_id`` in the event stream. For an application that needs to store and reopen the ID, choose it explicitly."
+msgstr "复用 ``session_id`` 即可指向同一个对话。省略 ``config`` 会使用创建客户端时选定的会话；如果你从未指定过，运行时会生成一个 UUIDv7 ID，可以在事件流中通过 ``event.session_id`` 读取。如果应用需要存储并重新打开这个 ID，请显式选定它。"
+
+#: ../../learn/configuration.rst:112
+msgid "``request_id`` is an application correlation ID, **not an idempotency key**. Sending the same ID twice does not deduplicate work or tool side effects. ``parent_session_id`` identifies a delegated conversation, while ``cache_key`` is a provider cache-routing hint, not history storage or tenant isolation. See :doc:`sessions` for durable conversations."
+msgstr "``request_id`` 是应用层的关联 ID，**而不是幂等键**\\ 。同一个 ID 发送两次不会对工作或工具副作用去重。\\ ``parent_session_id`` 标识被委派的对话，而 ``cache_key`` 只是提供商缓存路由的提示，既不是历史记录存储，也不是租户隔离。关于持久对话，参见 :doc:`sessions`\\ 。"
+
+#: ../../learn/configuration.rst:119
+msgid "Metadata is not a prompt"
+msgstr "metadata 并不是提示词"
+
+#: ../../learn/configuration.rst:121
+msgid "Request ``metadata`` and ``tags`` must contain JSON-compatible data. They reach extensions through ``context.metadata`` and ``context.tags`` and are recorded beside persisted messages. Built-in providers do not send them to the model."
+msgstr "请求的 ``metadata`` 和 ``tags`` 必须包含与 JSON 兼容的数据。它们通过 ``context.metadata`` 和 ``context.tags`` 传到扩展，并记录在持久化消息旁边。内置的模型提供商不会把它们发送给模型。"
+
+#: ../../learn/configuration.rst:125
+msgid "For model-visible information, write it into the user message or add explicit instructions through an extension. Do not assume that placing an account, language, or permission in metadata changes the model's behavior. Enforcement belongs in your application or tool middleware."
+msgstr "要让模型看到某些信息，请把它写进用户消息，或者通过扩展添加明确的指令。不要以为把账号、语言或权限放进 metadata 就能改变模型的行为。真正的约束应该放在你的应用或工具中间件里。"
+
+#: ../../learn/configuration.rst:131
+msgid "Compose extensions deliberately"
+msgstr "谨慎组合扩展"
+
+#: ../../learn/configuration.rst:133
+msgid "``extensions=None`` enables :class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator` and :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`. Any explicit sequence replaces both defaults, including ``extensions=[]``."
+msgstr "``extensions=None`` 会启用 :class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator` 和 :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`\\ 。任何显式序列都会替换这两个默认项，包括 ``extensions=[]``\\ 。"
+
+#: ../../learn/configuration.rst
+msgid "Process-local history"
+msgstr "进程内历史记录"
+
+#: ../../learn/configuration.rst
+msgid "Durable history"
+msgstr "持久化历史记录"
+
+#: ../../learn/configuration.rst:174
+msgid "Use one history-restoring extension, not both memory and SQLite. Extension instances may contain state: reusing one instance intentionally shares that state, while constructing a new in-memory accumulator does not restore an old conversation. Built-ins run by priority, lowest first, with list order breaking ties. You usually do not need to tune priorities; custom extensions can consult :doc:`../extending/hooks`."
+msgstr "请只使用一个可恢复历史记录的扩展，不要同时使用内存和 SQLite。扩展实例可能持有状态：复用同一个实例会有意共享该状态，而新建一个内存累加器不会恢复旧的对话。内置扩展按优先级运行，数值小的先运行，优先级相同时按列表顺序。通常你不需要调整优先级；自定义扩展可以参考 :doc:`../extending/hooks`\\ 。"
+
+#: ../../learn/configuration.rst:181
+msgid "Next: :doc:`application` for integrating this configuration into a service, or :doc:`project-instructions` for project-specific guidance."
+msgstr "下一步：要把这套配置集成到服务中，请看 :doc:`application`；需要针对项目的指引，请看 :doc:`project-instructions`\\ 。"
+

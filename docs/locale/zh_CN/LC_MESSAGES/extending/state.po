@@ -1,0 +1,162 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/state.rst:2
+msgid "State, concurrency, and cleanup"
+msgstr "状态、并发与清理"
+
+#: ../../extending/state.rst:5
+msgid "State has an owner and a lifetime"
+msgstr "状态有归属者，也有生命周期"
+
+#: ../../extending/state.rst:7
+msgid "Choose storage by lifetime"
+msgstr "按生命周期选择存放位置"
+
+#: ../../extending/state.rst:11
+msgid "Lifetime"
+msgstr "生命周期"
+
+#: ../../extending/state.rst:12
+msgid "Suitable location"
+msgstr "合适的位置"
+
+#: ../../extending/state.rst:13
+msgid "Example"
+msgstr "示例"
+
+#: ../../extending/state.rst:14
+msgid "One callback"
+msgstr "单次回调"
+
+#: ../../extending/state.rst:15
+msgid "Local variable"
+msgstr "局部变量"
+
+#: ../../extending/state.rst:16
+msgid "A computed payload"
+msgstr "计算得到的载荷"
+
+#: ../../extending/state.rst:17
+msgid "One request"
+msgstr "单次请求"
+
+#: ../../extending/state.rst:18
+msgid "Dictionary keyed by AgentRunContext"
+msgstr "以 AgentRunContext 为键的字典"
+
+#: ../../extending/state.rst:19
+msgid "Tool approval or model-step counter"
+msgstr "工具审批或模型步数计数器"
+
+#: ../../extending/state.rst:20
+msgid "One conversation"
+msgstr "单个对话"
+
+#: ../../extending/state.rst:21
+msgid "Map keyed by session ID or persistent storage"
+msgstr "以会话 ID 为键的映射，或持久化存储"
+
+#: ../../extending/state.rst:22
+msgid "Accumulated message history"
+msgstr "累积的消息历史记录"
+
+#: ../../extending/state.rst:23
+msgid "Application process"
+msgstr "应用进程"
+
+#: ../../extending/state.rst:24
+msgid "Immutable shared configuration or bounded sink"
+msgstr "不可变的共享配置，或有界的汇点"
+
+#: ../../extending/state.rst:25
+msgid "Model client pool or metrics exporter"
+msgstr "模型客户端连接池或指标导出器"
+
+#: ../../extending/state.rst:27
+msgid "One Agent can run different sessions concurrently. Same-session overlap is rejected. The ``agent.state`` convenience attribute points to the most recently prepared state, so it is not a safe way for a shared extension to select its request. Always use ``context.state`` passed to that hook."
+msgstr "同一个 Agent 可以并发运行不同的会话。同一会话的重叠运行会被拒绝。\\ ``agent.state``\\ 这个便捷属性指向最近一次准备好的状态，因此共享的扩展不能靠它来选中自己的请求。请始终使用钩子传入的 ``context.state``\\ 。"
+
+#: ../../extending/state.rst:32
+msgid "AgentRunContext uses identity semantics, making it suitable as a request-local map key. A normal dictionary retains it strongly; remove entries on every terminal path. Do not rely on garbage collection as your cleanup protocol."
+msgstr "AgentRunContext 使用身份语义，因此适合作为请求局部的映射键。普通字典会强引用它；请在每条终止路径上移除对应条目。不要依赖垃圾回收来作为你的清理机制。"
+
+#: ../../extending/state.rst:37
+msgid "Complete cleanup pattern"
+msgstr "完整的清理模式"
+
+#: ../../extending/state.rst:43
+msgid "``discard``/``pop(..., None)`` make cleanup tolerant of partially initialized or already-released state. Cancellation is not an Exception subclass handled by on_error; it is delivered internally as RunCancelledEvent. Subclasses of the external-response base must preserve its cleanup by calling super()."
+msgstr "``discard``/``pop(..., None)``\\ 让清理过程能容忍尚未完全初始化或已经释放的状态。取消并不是由 on_error 处理的 Exception 子类；它在内部以 RunCancelledEvent 的形式投递。外部响应基类的子类必须调用 super() 来保留它的清理逻辑。"
+
+#: ../../extending/state.rst:49
+msgid "Check early stream closure"
+msgstr "检查流被提前关闭"
+
+#: ../../extending/state.rst:55
+msgid "After the context manager closes the stream, the phase is CANCELLED and the extension's active set is empty. A later request succeeds on the same Agent with a fresh state. Persisted prior messages are not automatically deleted or edited."
+msgstr "上下文管理器关闭流之后，阶段为 CANCELLED，扩展的活动集合为空。之后的请求可以在同一个 Agent 上用全新的状态成功运行。已经持久化的过往消息不会被自动删除或修改。"
+
+#: ../../extending/state.rst:60
+msgid "Testing an extension before shipping"
+msgstr "发布前测试扩展"
+
+#: ../../extending/state.rst:62
+msgid "At minimum, exercise:"
+msgstr "至少要覆盖以下情况："
+
+#: ../../extending/state.rst:64
+msgid "Success and normal tool error."
+msgstr "成功，以及正常的工具错误。"
+
+#: ../../extending/state.rst:65
+msgid "Failure before your state is fully initialized."
+msgstr "状态尚未完全初始化时就发生失败。"
+
+#: ../../extending/state.rst:66
+msgid "Cancellation during model streaming and while waiting for external input."
+msgstr "模型流式输出期间以及等待外部输入期间的取消。"
+
+#: ../../extending/state.rst:67
+msgid "Two sessions using the same extension instance."
+msgstr "两个会话共用同一个扩展实例。"
+
+#: ../../extending/state.rst:68
+msgid "Duplicate and late external replies."
+msgstr "重复和迟到的外部回复。"
+
+#: ../../extending/state.rst:69
+msgid "A second request after success, failure, and cancellation."
+msgstr "成功、失败和取消之后的第二次请求。"
+
+#: ../../extending/state.rst:70
+msgid "Registration name/tool-name collisions and equal-priority ordering."
+msgstr "注册名称/工具名称冲突，以及相同优先级之间的顺序。"
+
+#: ../../extending/state.rst:72
+msgid "The documentation tests run these tutorial classes, not a separate copy. The core runtime suite additionally exercises state-machine and external-event races."
+msgstr "文档测试运行的就是这些教程中的类，而不是另一份副本。核心运行时测试套件还额外覆盖状态机与外部事件的竞态。"
+
+#: ../../extending/state.rst:76
+msgid "Avoid blocking async hooks"
+msgstr "避免阻塞异步钩子"
+
+#: ../../extending/state.rst:78
+msgid "Do not call synchronous terminal input or slow filesystem/network operations on the event-loop thread. Use an async library or asyncio.to_thread where appropriate. Do not add your own thread lock around an await. ExternalEventExtension already handles cross-thread response delivery safely."
+msgstr "不要在事件循环线程上调用同步的终端输入，或执行缓慢的文件系统/网络操作。请按情况使用异步库或 asyncio.to_thread。不要在 await 周围加自己的线程锁。ExternalEventExtension 已经安全地处理了跨线程的响应投递。"
+

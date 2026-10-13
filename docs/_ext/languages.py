@@ -35,7 +35,7 @@ UI_STRINGS = {
         "jit_harness": "JIT harness",
         "api_reference": "API 参考",
         "license": "MIT 许可证",
-        "description": "能自己锻造所需工具的智能体:一个用于工具调用智能体的小型 Python 运行时。",
+        "description": "能自己锻造所需工具的智能体：一个用于工具调用智能体的小型 Python 运行时。",
     },
 }
 

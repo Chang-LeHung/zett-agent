@@ -25,11 +25,15 @@ A paragraph is translated as a unit, but its markup is data:
   and URLs exactly. Only the visible title of ``:doc:`title <path>` `` is translated.
 - reStructuredText recognises inline markup only after whitespace or punctuation.
   In Chinese, put a backslash and a space where markup touches a character
-  that breaks it: ``使用\ ``@tool``\ 装饰器``. The checker's `--fix` flag inserts
-  these for you: `uv run python tests/translation_check.py --fix <file>.po`.
+  that breaks it: 使用\ ``@tool``\ 装饰器. `--fix` inserts the separators, and the
+  full-width punctuation below, for you:
+  `uv run python tests/translation_check.py --fix <file>.po`.
 - Link to a section with a label and `:ref:`, not `` `Section title`_ ``, because
   the title itself is translated.
 - A message ending in `::` introduces a code block and must keep the `::`.
+- Chinese text uses full-width punctuation (`，：；！？`). The checker flags
+  half-width punctuation next to a Chinese character and `--fix` converts it;
+  ASCII punctuation stays inside code, roles, URLs and a `::` marker.
 - Write each message on one logical line; a line break between two Chinese
   characters renders as a space.
 

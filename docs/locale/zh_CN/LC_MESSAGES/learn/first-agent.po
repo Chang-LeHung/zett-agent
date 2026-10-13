@@ -1,0 +1,110 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/first-agent.rst:2
+msgid "Your first agent"
+msgstr "第一个智能体"
+
+#: ../../learn/first-agent.rst:4
+msgid "**You will learn:** how to create a client, run more than one turn, and what keeps the conversation between them. **Prerequisites:** :doc:`installation`. No API credentials are needed."
+msgstr "**你将学到：**\\ 如何创建客户端、运行多个轮次，以及是什么让对话在轮次之间保持下来。\\ **前置条件：**\\ :doc:`installation`\\ 。不需要 API 凭据。"
+
+#: ../../learn/first-agent.rst:8
+msgid "This tutorial uses a scripted model so you can check the result on any machine. It is not a language model and does not learn; it lets you experience the runtime before choosing a provider. If you already have credentials, jump to the :doc:`complete tool-calling request <providers>`."
+msgstr "本教程使用预设脚本的模型，因此你可以在任何机器上检查结果。它不是语言模型，也不会学习；它让你在选择模型提供商之前先体验运行时。如果你已经有凭据，可以直接看\\ :doc:`完整的工具调用请求 <providers>`\\ 。"
+
+#: ../../learn/first-agent.rst:14
+msgid "1. Give the loop a model"
+msgstr "1. 为循环提供一个模型"
+
+#: ../../learn/first-agent.rst:16
+msgid "An agent does not know how to reach a specific vendor's HTTP API. It expects a model adapter: an object that accepts a :class:`~zett_agent.model.ModelRequest` and streams :class:`~zett_agent.model.ModelEvent` objects back."
+msgstr "智能体并不知道如何访问某个特定厂商的 HTTP API。它期望一个模型适配器：一个接受\\ :class:`~zett_agent.model.ModelRequest`\\ 并流式返回\\ :class:`~zett_agent.model.ModelEvent`\\ 对象的对象。"
+
+#: ../../learn/first-agent.rst:20
+msgid "For the first example, the adapter counts user turns and echoes the latest one. It is not an LLM, but it plugs into exactly the same loop a real provider does."
+msgstr "在第一个示例中，适配器会统计用户轮次并回显最近的一次。它不是 LLM，但它接入的循环与真实模型提供商完全相同。"
+
+#: ../../learn/first-agent.rst:27
+msgid "Every model step ends with one complete :class:`~zett_agent.model.ModelResponse`. The text deltas before it exist for display; the final response is what the runtime uses."
+msgstr "每个模型步骤都以一个完整的\\ :class:`~zett_agent.model.ModelResponse`\\ 结束。它之前的文本增量只用于显示；运行时真正使用的是最终响应。"
+
+#: ../../learn/first-agent.rst:32
+msgid "2. Create one client, run many turns"
+msgstr "2. 创建一个客户端，运行多个轮次"
+
+#: ../../learn/first-agent.rst:38
+msgid ":func:`~zett_agent.client.create_agent` builds the runtime and returns an :class:`~zett_agent.client.AgentClient`. Because no session is supplied, it generates one for you."
+msgstr ":func:`~zett_agent.client.create_agent`\\ 会构建运行时并返回一个\\ :class:`~zett_agent.client.AgentClient`\\ 。由于没有提供会话，它会为你生成一个。"
+
+#: ../../learn/first-agent.rst:42
+msgid "The second request remembers the first because the default extensions keep in-memory history for the session. ``run()`` returns the complete :class:`~zett_agent.messages.AssistantMessage`."
+msgstr "第二个请求能记住第一个请求，因为默认扩展会为会话保留内存中的历史记录。\\ ``run()``\\ 会返回完整的\\ :class:`~zett_agent.messages.AssistantMessage`\\ 。"
+
+#: ../../learn/first-agent.rst:47
+msgid "3. Run the whole program"
+msgstr "3. 运行整个程序"
+
+#: ../../learn/first-agent.rst:49
+msgid ":download:`Download first_agent.py <../_examples/first_agent.py>`."
+msgstr ":download:`下载 first_agent.py <../_examples/first_agent.py>`\\ 。"
+
+#: ../../learn/first-agent.rst:51
+msgid "A complete offline program"
+msgstr "一个完整的离线程序"
+
+#: ../../learn/first-agent.rst:56
+msgid "After saving the download as ``first_agent.py`` in an environment where you installed Zett Agent::"
+msgstr "把下载的文件在已安装 Zett Agent 的环境中保存为\\ ``first_agent.py``\\ 后，运行如下::"
+
+#: ../../learn/first-agent.rst:61
+msgid "Or, from a checkout::"
+msgstr "或者在源码检出目录中运行::"
+
+#: ../../learn/first-agent.rst:65
+msgid "Expected output::"
+msgstr "预期输出::"
+
+#: ../../learn/first-agent.rst:71
+msgid "What happened?"
+msgstr "发生了什么？"
+
+#: ../../learn/first-agent.rst:73
+msgid "``create_agent`` initialized a conversation with default history. Each ``run`` appended a user message, called the adapter, and returned its final assistant message. On the second call, the adapter counted two user messages because the previous turn was restored. You did not need to pass history manually or write a conversation loop."
+msgstr "``create_agent``\\ 用默认历史记录初始化了一个对话。每次\\ ``run``\\ 都会追加一条用户消息、调用适配器，并返回最终助手消息。第二次调用时，适配器统计到两条用户消息，因为上一轮已被恢复。你不需要手动传入历史记录，也不需要自己编写对话循环。"
+
+#: ../../learn/first-agent.rst:79
+msgid "Real providers can request tools before answering. The runtime executes those tools and calls the model again with their results; a single ``run`` can therefore involve several model steps. Try :doc:`the deterministic tool round trip <../examples/streaming-tools>` to see that behavior before making a paid request."
+msgstr "真实的模型提供商可能会在回答之前请求工具。运行时会执行这些工具，并把结果再次传给模型；因此一次\\ ``run``\\ 就可能涉及多个模型步骤。在发出付费请求之前，可以先试试\\ :doc:`确定性的工具往返 <../examples/streaming-tools>`，了解这种行为。"
+
+#: ../../learn/first-agent.rst:86
+msgid "Next: switch the scripted model for a real provider"
+msgstr "下一步：把预设脚本的模型换成真实模型提供商"
+
+#: ../../learn/first-agent.rst:88
+msgid "Only the adapter construction changes. The same client, messages, extensions, tools, and event callbacks work with every built-in provider. Continue with :doc:`providers`, then :doc:`streaming`."
+msgstr "只有适配器的构造方式会变。同一个客户端、消息、扩展、工具和事件回调，在所有内置提供商上都能工作。接下来请阅读\\ :doc:`providers`，然后是\\ :doc:`streaming`\\ 。"
+
+#: ../../learn/first-agent.rst:94
+msgid "Passing ``extensions=[]`` removes the optional defaults, including in-memory history. Each request starts with fresh context; add :class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator` or a persistence extension when you want the conversation to carry over."
+msgstr "传入\\ ``extensions=[]``\\ 会移除这些可选的默认扩展，包括内存中的历史记录。每个请求都会从全新的上下文开始；如果希望对话延续下去，请添加\\ :class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator`\\ 或一个持久化扩展。"
+
+#: ../../learn/first-agent.rst:99
+msgid "Related API: :class:`~zett_agent.agent.Agent`, :class:`~zett_agent.agent.AgentRunConfig`, :class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator`."
+msgstr "相关 API：:class:`~zett_agent.agent.Agent`、:class:`~zett_agent.agent.AgentRunConfig`、:class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator`\\ 。"
+

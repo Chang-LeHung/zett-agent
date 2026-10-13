@@ -1,0 +1,150 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../concepts/architecture.rst:2
+msgid "How the pieces fit"
+msgstr "各部分如何配合"
+
+#: ../../concepts/architecture.rst:5
+msgid "One loop, several useful boundaries"
+msgstr "一个循环，几条有用的边界"
+
+#: ../../concepts/architecture.rst:7
+msgid "An agent alternates model calls and tool execution until it has a final answer. Providers, tools, and extensions supply the capabilities around that loop. Your application can adopt them separately without adopting a web server, UI, or another application's data model."
+msgstr "智能体在模型调用和工具执行之间交替，直到得出最终答案。模型提供商、工具和扩展为这个循环提供各种能力。你的应用可以单独采用它们，而不必同时采用一套 Web 服务器、UI 或另一个应用的数据模型。"
+
+#: ../../concepts/architecture.rst:26
+msgid "Who owns what"
+msgstr "谁拥有什么"
+
+#: ../../concepts/architecture.rst:32
+msgid "Object"
+msgstr "对象"
+
+#: ../../concepts/architecture.rst:33
+msgid "Responsibility"
+msgstr "职责"
+
+#: ../../concepts/architecture.rst:34
+msgid ":class:`~zett_agent.agent.Agent`"
+msgstr ":class:`~zett_agent.agent.Agent`"
+
+#: ../../concepts/architecture.rst:35
+msgid "Admits requests, runs the model/tool loop, cleans up."
+msgstr "接收请求，运行模型/工具循环，并负责清理。"
+
+#: ../../concepts/architecture.rst:36
+msgid ":class:`~zett_agent.client.AgentClient`"
+msgstr ":class:`~zett_agent.client.AgentClient`"
+
+#: ../../concepts/architecture.rst:37
+msgid "Convenient creation and event handling; exposes the runtime as ``client.agent``."
+msgstr "提供便捷的创建方式和事件处理；把运行时暴露为 ``client.agent``\\ 。"
+
+#: ../../concepts/architecture.rst:38
+msgid ":class:`~zett_agent.model.AgentModel`"
+msgstr ":class:`~zett_agent.model.AgentModel`"
+
+#: ../../concepts/architecture.rst:39
+msgid "Talks to one provider and normalizes its stream."
+msgstr "与某一个模型提供商通信，并把它的流式输出规范化。"
+
+#: ../../concepts/architecture.rst:40
+msgid ":class:`~zett_agent.agent.AgentRunContext`"
+msgstr ":class:`~zett_agent.agent.AgentRunContext`"
+
+#: ../../concepts/architecture.rst:41
+msgid "Per-request state shared with extensions; use it instead of global state."
+msgstr "与扩展共享的请求级状态；请使用它，而不是全局状态。"
+
+#: ../../concepts/architecture.rst:42
+msgid ":class:`~zett_agent.extensions.base.AgentExtension`"
+msgstr ":class:`~zett_agent.extensions.base.AgentExtension`"
+
+#: ../../concepts/architecture.rst:43
+msgid "Optional behavior at documented hooks; defaults do nothing."
+msgstr "在文档列出的钩子上提供可选行为；默认什么都不做。"
+
+#: ../../concepts/architecture.rst:44
+msgid ":class:`~zett_agent.dispatcher.AgentEventDispatcher`"
+msgstr ":class:`~zett_agent.dispatcher.AgentEventDispatcher`"
+
+#: ../../concepts/architecture.rst:45
+msgid "Your callbacks for a stream; it never injects context or runs tools."
+msgstr "你在某条流上的回调；它从不注入上下文，也不运行工具。"
+
+#: ../../concepts/architecture.rst:48
+msgid "Composition, not a second runtime"
+msgstr "是组合，不是第二个运行时"
+
+#: ../../concepts/architecture.rst:50
+msgid "``create_agent`` wraps an Agent; it does not create a different loop. You can use :class:`~zett_agent.agent.Agent` directly with ``async for``, wrap an existing Agent in a client, and add behavior through extensions without subclassing the Agent."
+msgstr "``create_agent`` 只是包装了一个 Agent，并不会创建另一套循环。你可以直接对\\ :class:`~zett_agent.agent.Agent`\\ 使用 ``async for``，把已有的 Agent 包装进客户端，并通过扩展添加行为，而无需继承 Agent。"
+
+#: ../../concepts/architecture.rst:55
+msgid "Your application owns the resources it passes in. The runtime closes the streams it opens, but it never closes a provider or database you supplied — release those yourself when the application shuts down."
+msgstr "你的应用拥有自己传入的资源。运行时只关闭自己打开的流，但绝不会关闭你提供的模型提供商或数据库——这些资源要在应用关闭时由你自己释放。"
+
+#: ../../concepts/architecture.rst:60
+msgid "Which boundary should I use?"
+msgstr "该用哪条边界？"
+
+#: ../../concepts/architecture.rst:62
+msgid "Use a provider adapter to connect an endpoint, not to manage conversation history."
+msgstr "用模型适配器连接端点，而不是用它管理对话历史。"
+
+#: ../../concepts/architecture.rst:63
+msgid "Use a tool for an operation the model may request, not a second model loop."
+msgstr "对模型可能请求的操作要用工具，而不是再套一层模型循环。"
+
+#: ../../concepts/architecture.rst:64
+msgid "Use an extension for context, permissions, persistence, or behavior during a request."
+msgstr "用扩展处理上下文、权限、持久化，或请求过程中的行为。"
+
+#: ../../concepts/architecture.rst:65
+msgid "Use a dispatcher for presentation and telemetry that only observe UI events."
+msgstr "用分发器处理只观察 UI 事件的呈现和遥测。"
+
+#: ../../concepts/architecture.rst:67
+msgid "For example, a review assistant can compose a provider, read-only tools, project guidance, and session storage. Its UI displays the resulting events without needing to know how those capabilities are implemented. See :doc:`../learn/configuration` for composition and :doc:`../extending/first-extension` when the built-ins do not cover your workflow."
+msgstr "例如，一个代码评审助手可以组合模型提供商、只读工具、项目指令和会话存储。它的 UI 只需展示产生的事件，不必知道这些能力是如何实现的。组合方式见\\ :doc:`../learn/configuration`；内置扩展不覆盖你的工作流时，请见\\ :doc:`../extending/first-extension`\\ 。"
+
+#: ../../concepts/architecture.rst:74
+msgid "Limits and safety"
+msgstr "限制与安全"
+
+#: ../../concepts/architecture.rst:76
+msgid "``max_iterations`` caps model calls per user or internal input. Tool round trips consume that budget."
+msgstr "``max_iterations`` 限制每条用户输入或内部输入能触发的模型调用次数。工具往返会消耗这个额度。"
+
+#: ../../concepts/architecture.rst:78
+msgid "``max_internal_messages`` caps queued internal continuations in one request."
+msgstr "``max_internal_messages`` 限制一次请求中排队的内部续接数量。"
+
+#: ../../concepts/architecture.rst:79
+msgid "Neither limit is a spending cap or a permission boundary."
+msgstr "这两个限制都不是花费上限，也不是权限边界。"
+
+#: ../../concepts/architecture.rst:81
+msgid "Filesystem, shell, and MCP tools run with the permissions of your process or server. Tool guidance is documentation, not enforcement. Guard untrusted input with explicit allow-lists, approval rules, resource limits, and process isolation."
+msgstr "文件系统、shell 和 MCP 工具以你的进程或服务器的权限运行。工具使用准则只是说明，不是强制约束。请用显式的允许列表、审批规则、资源限制和进程隔离来防护不可信的输入。"
+
+#: ../../concepts/architecture.rst:86
+msgid "Next: :doc:`lifecycle` for the exact order of hooks inside one request."
+msgstr "下一步：看\\ :doc:`lifecycle`，了解一次请求内部钩子的确切顺序。"
+

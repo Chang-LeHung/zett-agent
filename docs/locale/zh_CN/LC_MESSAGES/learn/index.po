@@ -1,0 +1,250 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/index.rst:130
+msgid "Installation"
+msgstr "安装"
+
+#: ../../learn/index.rst:130
+msgid "First agent"
+msgstr "第一个智能体"
+
+#: ../../learn/index.rst:130
+msgid "Model providers"
+msgstr "模型提供商"
+
+#: ../../learn/index.rst:130
+msgid "Tools"
+msgstr "工具"
+
+#: ../../learn/index.rst:130
+msgid "Basics"
+msgstr "基础"
+
+#: ../../learn/index.rst:139
+msgid "Streaming"
+msgstr "流式输出"
+
+#: ../../learn/index.rst:139
+msgid "Sessions"
+msgstr "会话"
+
+#: ../../learn/index.rst:139
+msgid "Images"
+msgstr "图像"
+
+#: ../../learn/index.rst:62 ../../learn/index.rst:139
+msgid "Project instructions"
+msgstr "项目指令"
+
+#: ../../learn/index.rst:139
+msgid "Conversations"
+msgstr "对话"
+
+#: ../../learn/index.rst:148
+msgid "On-demand loading"
+msgstr "按需加载"
+
+#: ../../learn/index.rst:148
+msgid "JIT harness"
+msgstr "JIT harness"
+
+#: ../../learn/index.rst:148
+msgid "MCP"
+msgstr "MCP"
+
+#: ../../learn/index.rst:148
+msgid "Capabilities"
+msgstr "能力"
+
+#: ../../learn/index.rst:156
+msgid "Configuration"
+msgstr "配置"
+
+#: ../../learn/index.rst:156
+msgid "Synchronous use"
+msgstr "同步调用"
+
+#: ../../learn/index.rst:156
+msgid "Applications"
+msgstr "集成到应用"
+
+#: ../../learn/index.rst:156
+msgid "Testing"
+msgstr "测试"
+
+#: ../../learn/index.rst:156
+msgid "Troubleshooting"
+msgstr "故障排查"
+
+#: ../../learn/index.rst:156
+msgid "Production"
+msgstr "生产环境"
+
+#: ../../learn/index.rst:2
+msgid "Get started"
+msgstr "快速开始"
+
+#: ../../learn/index.rst:4
+msgid "Zett Agent runs one loop: send messages to a model, run the tools it asks for, and repeat until it answers. These pages take you from a zero-key example to a real provider with streaming, tools, and persistent sessions."
+msgstr "Zett Agent 只运行一个循环：向模型发送消息，执行它请求的工具，如此重复，直到模型给出答案。这些页面会带你从一个无需密钥的示例，走到接入真实模型提供商、并使用流式输出、工具和持久会话的完整用法。"
+
+#: ../../learn/index.rst:9
+msgid "Build your first conversation"
+msgstr "构建你的第一个对话"
+
+#: ../../learn/index.rst:11
+msgid "**Suggested path:** :doc:`installation` → :doc:`first-agent` → :doc:`providers` → :doc:`tools` → :doc:`streaming` → :doc:`sessions`."
+msgstr "**建议路径：** :doc:`installation` → :doc:`first-agent` → :doc:`providers` → :doc:`tools` → :doc:`streaming` → :doc:`sessions`\\ 。"
+
+#: ../../learn/index.rst:17
+msgid "Install"
+msgstr "安装"
+
+#: ../../learn/index.rst:21
+msgid "Install from PyPI, or run every example from a checkout."
+msgstr "从 PyPI 安装，也可以直接在源码检出目录里运行所有示例。"
+
+#: ../../learn/index.rst:23
+msgid "Your first agent"
+msgstr "你的第一个智能体"
+
+#: ../../learn/index.rst:27
+msgid "Run two turns without an API key and see what keeps the history."
+msgstr "无需 API 密钥即可运行两个轮次，并看清是什么在保留历史记录。"
+
+#: ../../learn/index.rst:29
+msgid "Connect a provider"
+msgstr "连接模型提供商"
+
+#: ../../learn/index.rst:33
+msgid "Point the loop at OpenAI, Anthropic, Google, DeepSeek, or Ollama."
+msgstr "让循环对接 OpenAI、Anthropic、Google、DeepSeek 或 Ollama。"
+
+#: ../../learn/index.rst:35
+msgid "Define tools"
+msgstr "定义工具"
+
+#: ../../learn/index.rst:39
+msgid "Turn a typed Python function into a model-callable tool."
+msgstr "把带类型注解的 Python 函数变成模型可调用的工具。"
+
+#: ../../learn/index.rst:41
+msgid "Stream to a UI"
+msgstr "流式输出到界面"
+
+#: ../../learn/index.rst:45
+msgid "Show partial text, reasoning, tool calls, and results as they happen."
+msgstr "实时展示部分文本、推理、工具调用和工具结果。"
+
+#: ../../learn/index.rst:47
+msgid "Keep conversations"
+msgstr "保存对话"
+
+#: ../../learn/index.rst:51
+msgid "Restore history across requests, processes, and restarts."
+msgstr "跨请求、跨进程、跨重启恢复历史记录。"
+
+#: ../../learn/index.rst:54
+msgid "Add the capabilities you need"
+msgstr "按需添加所需能力"
+
+#: ../../learn/index.rst:56
+msgid "These features are optional. Choose them for your task rather than enabling every extension from the start."
+msgstr "这些功能都是可选的。请根据任务来选择，而不是一开始就启用所有扩展。"
+
+#: ../../learn/index.rst:66
+msgid "Load AGENTS.md guidance with an explicit workspace scope."
+msgstr "以明确的工作区范围加载 AGENTS.md 指引。"
+
+#: ../../learn/index.rst:68
+msgid "Image inputs"
+msgstr "图像输入"
+
+#: ../../learn/index.rst:72
+msgid "Send text and images to a vision-capable model with typed content parts."
+msgstr "用带类型的内容部分，把文本和图像发送给支持视觉的模型。"
+
+#: ../../learn/index.rst:74
+msgid "MCP tools"
+msgstr "MCP 工具"
+
+#: ../../learn/index.rst:78
+msgid "Connect trusted HTTP or stdio servers and manage their tool lifecycle."
+msgstr "连接受信任的 HTTP 或 stdio 服务器，并管理其工具生命周期。"
+
+#: ../../learn/index.rst:80
+msgid "Capabilities on demand"
+msgstr "按需加载能力"
+
+#: ../../learn/index.rst:84
+msgid "Load skill instructions as needed and search deferred tools on supported endpoints."
+msgstr "按需加载技能指令，并在支持的端点上搜索延迟加载的工具。"
+
+#: ../../learn/index.rst:86
+msgid "JIT Python tools"
+msgstr "JIT Python 工具"
+
+#: ../../learn/index.rst:90
+msgid "Let a trusted model compose, evolve, and save a toolbox for reuse."
+msgstr "让受信任的模型编写、演进并保存一个可复用的工具箱。"
+
+#: ../../learn/index.rst:93
+msgid "Build an application"
+msgstr "构建应用"
+
+#: ../../learn/index.rst:95
+msgid "For a service, follow :doc:`configuration` → :doc:`application` → :doc:`testing`. Blocking scripts can start with :doc:`synchronous`."
+msgstr "如果要做服务，请按 :doc:`configuration` → :doc:`application` → :doc:`testing` 的顺序阅读；阻塞式脚本可以从 :doc:`synchronous` 开始。"
+
+#: ../../learn/index.rst:101
+msgid "Configure your agent"
+msgstr "配置你的智能体"
+
+#: ../../learn/index.rst:105
+msgid "Choose defaults, override one request, and compose extensions safely."
+msgstr "选定默认值，覆盖单个请求，并安全地组合扩展。"
+
+#: ../../learn/index.rst:107
+msgid "Synchronous calls"
+msgstr "同步调用"
+
+#: ../../learn/index.rst:111
+msgid "Use the same runtime from ordinary blocking code and scripts."
+msgstr "在普通的阻塞式代码和脚本中使用同一个运行时。"
+
+#: ../../learn/index.rst:113
+msgid "Integrate an application"
+msgstr "集成到应用"
+
+#: ../../learn/index.rst:117
+msgid "Handle deadlines, concurrent sessions, disconnects, and shutdown."
+msgstr "处理期限、并发会话、连接断开和关闭流程。"
+
+#: ../../learn/index.rst:119
+msgid "Test your agent"
+msgstr "测试你的智能体"
+
+#: ../../learn/index.rst:123
+msgid "Check tools and real provider adapters without network access."
+msgstr "在没有网络访问的情况下检查工具和真实的模型提供商适配器。"
+
+#: ../../learn/index.rst:125
+msgid "Something unexpected? :doc:`troubleshooting` covers missing history, tool registration, endpoint compatibility, project guidance, and stuck approvals. If you need behavior the built-ins do not provide, follow :doc:`the extension tutorial <../extending/first-extension>`."
+msgstr "遇到意外情况？:doc:`troubleshooting` 覆盖了历史记录缺失、工具注册、端点兼容性、项目指引和审批卡住等问题。如果需要内置功能没有提供的行为，请阅读 :doc:`扩展教程 <../extending/first-extension>`\\ 。"
+

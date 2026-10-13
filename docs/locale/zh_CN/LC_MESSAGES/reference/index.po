@@ -1,0 +1,78 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../reference/index.rst:11
+msgid "Writing API docs"
+msgstr "编写 API 文档"
+
+#: ../../reference/index.rst:2
+msgid "API reference"
+msgstr "API 参考"
+
+#: ../../reference/index.rst:4
+msgid "Everything the package exposes, grouped by what you are trying to do. Each page documents the signature, the meaning of every field, and the behavior you can rely on. Source links are included when you want to see the implementation."
+msgstr "这个包公开的一切，按你想完成的任务分组。每个页面都说明签名、每个字段的含义，以及你可以依赖的行为。想查看实现时，页面里也附有源码链接。"
+
+#: ../../reference/index.rst:8
+msgid "If you are new here, start with :doc:`../learn/index` or :doc:`../examples/index`; come back when you need an exact name or default."
+msgstr "如果你是第一次来这里，可以先看\\ :doc:`../learn/index`\\ 或\\ :doc:`../examples/index`；需要确切的名称或默认值时再回来查。"
+
+#: ../../reference/index.rst:28
+msgid "Common entry points"
+msgstr "常见入口"
+
+#: ../../reference/index.rst:33
+msgid "Create a client"
+msgstr "创建客户端"
+
+#: ../../reference/index.rst:37
+msgid ":func:`~zett_agent.client.create_agent` builds an :class:`~zett_agent.client.AgentClient` over the runtime."
+msgstr ":func:`~zett_agent.client.create_agent`\\ 会在运行时之上构建一个\\ :class:`~zett_agent.client.AgentClient`\\ 。"
+
+#: ../../reference/index.rst:40
+msgid "Run or stream"
+msgstr "运行或流式输出"
+
+#: ../../reference/index.rst:44
+msgid ":class:`~zett_agent.client.AgentClient` for applications, :class:`~zett_agent.agent.Agent` for the loop itself."
+msgstr "面向应用用\\ :class:`~zett_agent.client.AgentClient`，循环本身用\\ :class:`~zett_agent.agent.Agent`\\ 。"
+
+#: ../../reference/index.rst:47
+msgid "Write an extension"
+msgstr "编写扩展"
+
+#: ../../reference/index.rst:51
+msgid ":class:`~zett_agent.extensions.base.AgentExtension` and :class:`~zett_agent.agent.AgentRunContext`."
+msgstr ":class:`~zett_agent.extensions.base.AgentExtension`\\ 与\\ :class:`~zett_agent.agent.AgentRunContext`\\ 。"
+
+#: ../../reference/index.rst:54
+msgid "Implement a model"
+msgstr "实现模型"
+
+#: ../../reference/index.rst:58
+msgid ":class:`~zett_agent.model.AgentModel` is the protocol every adapter follows."
+msgstr ":class:`~zett_agent.model.AgentModel`\\ 是每个适配器都要遵循的协议。"
+
+#: ../../reference/index.rst:62
+msgid "Packages re-export nothing. Import each name from the module that defines it::"
+msgstr "包不做任何再导出。每个名称都要从定义它的模块导入::"
+
+#: ../../reference/index.rst:69
+msgid "The reference documents every public object the runtime defines, plus the protected subclass helpers extension authors need. It intentionally omits unrelated inherited methods from Python enums and third-party validation frameworks."
+msgstr "参考文档覆盖运行时定义的每个公开对象，以及扩展作者会用到的受保护子类辅助方法。它有意省略了 Python 枚举和第三方校验框架中无关的继承方法。"
+

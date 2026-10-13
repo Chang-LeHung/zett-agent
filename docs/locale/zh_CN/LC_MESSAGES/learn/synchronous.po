@@ -1,0 +1,82 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/synchronous.rst:2
+msgid "Use it from synchronous code"
+msgstr "在同步代码中使用"
+
+#: ../../learn/synchronous.rst:4
+msgid "Not every program is async. ``create_agent_sync`` runs the same runtime on one background event loop, so scripts, CLIs, and notebooks can call it from ordinary ``def`` code. Model behavior, tools, extensions, session history, retries, and event types are identical to the async API."
+msgstr "并非每个程序都是异步的。\\ ``create_agent_sync``\\ 在同一个后台事件循环上运行相同的运行时，因此脚本、CLI 和 notebook 都可以从普通的\\ ``def``\\ 代码中调用它。模型行为、工具、扩展、会话历史、重试和事件类型都与异步 API 完全一致。"
+
+#: ../../learn/synchronous.rst:10
+msgid "Run and stream"
+msgstr "运行与流式输出"
+
+#: ../../learn/synchronous.rst:24
+msgid "Use the stream as a context manager if you might stop early; closing it cancels the unfinished request and waits for cleanup. Later requests on the same session run normally."
+msgstr "如果你可能会提前停止，请把流当作上下文管理器使用；关闭它会取消未完成的请求并等待清理完成。同一会话上的后续请求可以正常运行。"
+
+#: ../../learn/synchronous.rst:29
+msgid "Blocking views of async objects"
+msgstr "异步对象的阻塞视图"
+
+#: ../../learn/synchronous.rst:31
+msgid "Agents, clients, providers, tools, storage, and dispatchers expose ``.sync()``, which mirrors their async methods with blocking calls:"
+msgstr "智能体、客户端、模型提供商、工具、存储和分发器都提供\\ ``.sync()``，它用阻塞调用映射它们各自的异步方法："
+
+#: ../../learn/synchronous.rst:46
+msgid "For anything else — free functions, third-party clients — use :class:`~zett_agent.sync_runtime.SyncRuntime` directly:"
+msgstr "对于其他情况——自由函数、第三方客户端——请直接使用\\ :class:`~zett_agent.sync_runtime.SyncRuntime`："
+
+#: ../../learn/synchronous.rst:58
+msgid "Share one runtime for resources that belong together, and close what you own before leaving it. A runtime you pass in explicitly stays open when a view exits."
+msgstr "对于应该配套使用的资源，请共享同一个运行时，并在离开之前关闭你自己拥有的部分。你显式传入的运行时在视图退出时仍保持打开。"
+
+#: ../../learn/synchronous.rst:62
+msgid "Callbacks and custom models"
+msgstr "回调与自定义模型"
+
+#: ../../learn/synchronous.rst:64
+msgid "Extension hooks and dispatcher callbacks stay ``async def``; they run on the background loop with the real request context. GUI applications should schedule visual updates through their own UI thread rather than touching widgets from a callback."
+msgstr "扩展钩子和分发器回调仍然是\\ ``async def``；它们在后台循环上运行，并带有真实的请求上下文。GUI 应用应该通过自己的 UI 线程安排界面更新，而不是在回调里直接操作控件。"
+
+#: ../../learn/synchronous.rst:69
+msgid "If your model is a blocking ``def stream(request)`` generator, wrap it with :class:`~zett_agent.sync.SyncModelAdapter`. Existing ``@tool`` functions already support both styles."
+msgstr "如果你的模型是一个阻塞式的\\ ``def stream(request)``\\ 生成器，请用\\ :class:`~zett_agent.sync.SyncModelAdapter`\\ 包装它。现有的\\ ``@tool``\\ 函数已经同时支持这两种风格。"
+
+#: ../../learn/synchronous.rst:74
+msgid "Sending input into a running request"
+msgstr "向运行中的请求发送输入"
+
+#: ../../learn/synchronous.rst:76
+msgid "While a synchronous stream is paused at an :doc:`Ask User <../extending/events>` or Plan Mode event, another thread can deliver the reply with ``agent.emit_external_event(event, config=config)``. Different sessions can run concurrently; overlapping requests for one session are rejected."
+msgstr "当同步流暂停在\\ :doc:`Ask User <../extending/events>`\\ 或 Plan Mode 事件上时，另一个线程可以用\\ ``agent.emit_external_event(event, config=config)``\\ 传递回复。不同会话可以并发运行；同一会话的重叠请求会被拒绝。"
+
+#: ../../learn/synchronous.rst:82
+msgid "Complete offline example"
+msgstr "完整的离线示例"
+
+#: ../../learn/synchronous.rst:87
+msgid ":download:`Download the example <../_examples/synchronous.py>`."
+msgstr ":download:`下载示例 <../_examples/synchronous.py>`\\ 。"
+
+#: ../../learn/synchronous.rst:90
+msgid ":doc:`streaming` for event handling, :doc:`sessions` for persistence, and :doc:`../extending/hooks` for the full hook list."
+msgstr ":doc:`streaming`\\ 介绍事件处理，:doc:`sessions`\\ 介绍持久化，:doc:`../extending/hooks`\\ 列出全部钩子。"
+

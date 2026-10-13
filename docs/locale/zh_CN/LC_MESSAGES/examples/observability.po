@@ -1,0 +1,67 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/observability.rst:2
+msgid "Observe usage and timing"
+msgstr "观察用量与耗时"
+
+#: ../../examples/observability.rst:4
+msgid "Record token usage, prompt-cache hits, and reasoning/content timing without changing how your application runs an agent. The model's counts are fixtures; the example does not measure provider prices."
+msgstr "记录 token 用量、提示词缓存命中和推理/内容的耗时，同时不必改变应用运行智能体的方式。模型给出的计数是固定值；该示例并不度量模型提供商的价格。"
+
+#: ../../examples/observability.rst:9
+msgid "Run it"
+msgstr "运行"
+
+#: ../../examples/observability.rst:11
+msgid "From the repository root:"
+msgstr "在仓库根目录下执行："
+
+#: ../../examples/observability.rst:17
+msgid "The output includes:"
+msgstr "输出包含："
+
+#: ../../examples/observability.rst:23
+msgid "This program uses deterministic offline models and temporary storage where needed. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序在需要时使用确定性的离线模型和临时存储。它不需要 API 密钥，并由文档测试套件执行。"
+
+#: ../../examples/observability.rst:27
+msgid "Record the completed message"
+msgstr "记录完成后的消息"
+
+#: ../../examples/observability.rst:29
+msgid "Use an extension when you want the finalized message, usage, and timing together, rather than each display delta:"
+msgstr "如果你想同时拿到最终确定的消息、用量和耗时，而不是一个个显示增量，就使用扩展："
+
+#: ../../examples/observability.rst:36
+#, python-format
+msgid "The example retains records in a list and checks a 60% cache-hit rate. For a long-running service, send records to a bounded queue or telemetry sink instead of keeping an unbounded list in memory. Reported cache usage depends on the provider; missing usage is not a measured zero."
+msgstr "该示例把记录保存在列表中，并检查 60% 的缓存命中率。对于长期运行的服务，应把记录发送到有界队列或遥测接收端，而不是在内存中保留一个无界列表。上报的缓存用量取决于模型提供商；缺少用量并不等于实测的零。"
+
+#: ../../examples/observability.rst:42
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/observability.rst:44
+msgid ":download:`Download observability.py <../_examples/observability.py>`."
+msgstr ":download:`下载 observability.py <../_examples/observability.py>`\\ 。"
+
+#: ../../examples/observability.rst:50
+msgid "Next: :doc:`../learn/providers` for prompt caching, or :doc:`../concepts/events` for choosing between display and lifecycle events."
+msgstr "下一步：提示词缓存见\\ :doc:`../learn/providers`，在显示事件和生命周期事件之间做选择见\\ :doc:`../concepts/events`\\ 。"
+

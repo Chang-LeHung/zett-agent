@@ -1,0 +1,134 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/index.rst:15 ../../examples/index.rst:78
+msgid "Streaming tools"
+msgstr "流式工具调用"
+
+#: ../../examples/index.rst:21 ../../examples/index.rst:78
+msgid "Sessions"
+msgstr "会话"
+
+#: ../../examples/index.rst:33 ../../examples/index.rst:78
+msgid "Compaction"
+msgstr "压缩"
+
+#: ../../examples/index.rst:78
+msgid "Conversations"
+msgstr "对话"
+
+#: ../../examples/index.rst:39 ../../examples/index.rst:86
+msgid "Approval"
+msgstr "审批"
+
+#: ../../examples/index.rst:57 ../../examples/index.rst:86
+msgid "Cancellation"
+msgstr "取消"
+
+#: ../../examples/index.rst:86
+msgid "Goals"
+msgstr "目标"
+
+#: ../../examples/index.rst:86
+msgid "Control"
+msgstr "控制"
+
+#: ../../examples/index.rst:45 ../../examples/index.rst:94
+msgid "Observability"
+msgstr "可观测性"
+
+#: ../../examples/index.rst:94
+msgid "Subagents"
+msgstr "子智能体"
+
+#: ../../examples/index.rst:69 ../../examples/index.rst:94
+msgid "Storage adapter"
+msgstr "存储适配器"
+
+#: ../../examples/index.rst:94
+msgid "Systems"
+msgstr "系统"
+
+#: ../../examples/index.rst:2
+msgid "Examples"
+msgstr "示例"
+
+#: ../../examples/index.rst:4
+msgid "Small, complete programs you can run, read, and copy. Each one uses the real runtime with a deterministic adapter, so it produces the same output without credentials — and teaches framework behavior rather than model quality."
+msgstr "小巧、完整、可运行、可阅读、可复制的程序。每个示例都使用真实的运行时和确定性的适配器，因此无需凭据也能产生相同的输出，并且展示的是框架行为，而不是模型质量。"
+
+#: ../../examples/index.rst:8
+msgid "Start with :doc:`../learn/first-agent`, then build your own extension in :doc:`../extending/first-extension`. For a real provider, follow :doc:`../learn/providers`."
+msgstr "先从\\ :doc:`../learn/first-agent`\\ 开始，然后在\\ :doc:`../extending/first-extension`\\ 中构建你自己的扩展。要接入真实的模型提供商，请参阅\\ :doc:`../learn/providers`\\ 。"
+
+#: ../../examples/index.rst:19
+msgid "Watch a tool call, its result, and the final answer in one stream."
+msgstr "在同一条流中观察工具调用、工具结果和最终回答。"
+
+#: ../../examples/index.rst:25
+msgid "Restore a conversation from SQLite in a new process."
+msgstr "在新进程中从 SQLite 恢复对话。"
+
+#: ../../examples/index.rst:27
+msgid "On-demand skills"
+msgstr "按需技能"
+
+#: ../../examples/index.rst:31
+msgid "Read one skill's instructions through a real tool round trip."
+msgstr "通过一次真实的工具往返读取某个技能的指令。"
+
+#: ../../examples/index.rst:37
+msgid "Replace older turns with a checkpoint when context grows."
+msgstr "当上下文增长时，用检查点替换较早的轮次。"
+
+#: ../../examples/index.rst:43
+msgid "Pause a privileged tool until the UI answers."
+msgstr "暂停高权限工具，直到 UI 作出响应。"
+
+#: ../../examples/index.rst:49
+msgid "Record model usage, cache counts, and message timing for diagnostics."
+msgstr "记录模型用量、缓存计数和消息耗时，用于诊断。"
+
+#: ../../examples/index.rst:51
+msgid "Subagent"
+msgstr "子智能体"
+
+#: ../../examples/index.rst:55
+msgid "Delegate one task to a child profile with its own tools."
+msgstr "把一项任务委派给拥有独立工具的子智能体。"
+
+#: ../../examples/index.rst:61
+msgid "Stop mid-stream and keep the runtime reusable."
+msgstr "在流式输出中途停止，并让运行时保持可复用。"
+
+#: ../../examples/index.rst:63
+msgid "Goal mode"
+msgstr "目标模式"
+
+#: ../../examples/index.rst:67
+msgid "Keep working until an evaluator agrees the goal is met."
+msgstr "持续工作，直到评估者认可目标已达成。"
+
+#: ../../examples/index.rst:73
+msgid "Back sessions with your own storage implementation."
+msgstr "用你自己的存储实现为会话提供后端。"
+
+#: ../../examples/index.rst:75
+msgid "Run every offline example with ``make docs-examples``. Tests disable network connections and use a temporary working directory for each program."
+msgstr "用 ``make docs-examples`` 运行所有离线示例。测试会禁用网络连接，并为每个程序使用临时工作目录。"
+

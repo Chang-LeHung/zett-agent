@@ -1,0 +1,170 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/streaming.rst:2
+msgid "Stream to a terminal or UI"
+msgstr "把流式输出接入终端或界面"
+
+#: ../../learn/streaming.rst:4
+msgid "You can watch a request happen in two ways: register a dispatcher for the events you care about, or consume the stream yourself when you need to cancel or forward it."
+msgstr "想观察一个请求的运行过程，有两种方式：为你关心的事件注册分发器，或者在需要取消或转发时自己消费这个流。"
+
+#: ../../learn/streaming.rst:9
+msgid "Use callbacks for display"
+msgstr "用回调做展示"
+
+#: ../../learn/streaming.rst:11
+msgid "Subclass :class:`~zett_agent.dispatcher.AgentEventDispatcher` and override only the events you want to render. Bind it through ``create_agent(..., event_dispatcher=...)``; ``client.run()`` still returns the final answer."
+msgstr "继承 :class:`~zett_agent.dispatcher.AgentEventDispatcher`，只覆写你想渲染的事件。通过 ``create_agent(..., event_dispatcher=...)`` 绑定它；``client.run()`` 仍然返回最终答案。"
+
+#: ../../learn/streaming.rst:20
+msgid "Two rules keep the display correct:"
+msgstr "有两条规则能让展示保持正确："
+
+#: ../../learn/streaming.rst:22
+msgid "``delta`` is incremental, while ``message`` on a completion event is complete. Appending both to the same buffer duplicates the answer."
+msgstr "``delta`` 是增量，而完成事件上的 ``message`` 是完整内容。把两者追加到同一个缓冲区会重复答案。"
+
+#: ../../learn/streaming.rst:24
+msgid "Tool arguments can arrive as incomplete fragments. Only complete tool calls are executed, and the runtime does that — your UI never runs them."
+msgstr "工具参数可能以不完整的片段到达。只有完整的工具调用才会被执行，而且由运行时来执行，界面从不运行它们。"
+
+#: ../../learn/streaming.rst:27
+msgid "``TOOL_STARTED`` can describe a batch: iterate ``event.tool_calls`` instead of assuming there is one call. Completion and failure events identify the finished call; correlate them by ID, since parallel calls can finish out of order."
+msgstr "``TOOL_STARTED`` 可能描述一批调用：请遍历 ``event.tool_calls``，而不是假设只有一个调用。完成和失败事件标识那个已经结束的调用；由于并行调用可能乱序完成，请按 ID 关联它们。"
+
+#: ../../learn/streaming.rst:32
+msgid "Consume the stream yourself for control"
+msgstr "自己消费流以获得控制力"
+
+#: ../../learn/streaming.rst:42
+msgid "For a simple terminal, match only the fields associated with each event:"
+msgstr "对于一个简单的终端，只匹配每种事件相关的字段："
+
+#: ../../learn/streaming.rst:58
+msgid "``client`` must already have a model and any tools it needs. The final message is the authoritative answer; deltas are for presentation. A provider may emit an answer only in its final response, so a UI should reconcile the final content instead of assuming text deltas always exist. If a dispatcher is bound, it has already handled each event before you receive it here."
+msgstr "``client`` 必须已经配好模型和它需要的所有工具。最终消息才是权威答案，增量只用于展示。模型提供商可能只在最终响应中给出答案，因此界面应该以最终内容为准，而不是假设文本增量一定存在。如果绑定了分发器，那么在你收到每个事件之前，它已经处理过该事件。"
+
+#: ../../learn/streaming.rst:64
+msgid "Use ``aclosing`` even when you break out of the loop early: it stops the request and waits for cleanup. Callbacks are awaited in order, so slow callbacks apply backpressure; hand work to a bounded application queue instead of spawning unlimited tasks."
+msgstr "即使提前跳出循环，也要用 ``aclosing``：它会停止请求并等待清理。回调按顺序等待执行，因此慢回调会产生背压；请把工作交给有界的应用队列，而不是无限制地创建任务。"
+
+#: ../../learn/streaming.rst:70
+msgid "What you will see"
+msgstr "你会看到什么"
+
+#: ../../learn/streaming.rst:76
+msgid "Event"
+msgstr "事件"
+
+#: ../../learn/streaming.rst:77
+msgid "Meaning"
+msgstr "含义"
+
+#: ../../learn/streaming.rst:78
+msgid "``TEXT_DELTA``"
+msgstr "``TEXT_DELTA``"
+
+#: ../../learn/streaming.rst:79
+msgid "A fragment of the answer text."
+msgstr "答案文本的一个片段。"
+
+#: ../../learn/streaming.rst:80
+msgid "``REASONING_DELTA``"
+msgstr "``REASONING_DELTA``"
+
+#: ../../learn/streaming.rst:81
+msgid "A fragment of the model's reasoning, when the model exposes it."
+msgstr "模型推理内容的一个片段，前提是模型会公开这部分内容。"
+
+#: ../../learn/streaming.rst:82
+msgid "``TOOL_STARTED`` / ``TOOL_COMPLETED`` / ``TOOL_FAILED``"
+msgstr "``TOOL_STARTED`` / ``TOOL_COMPLETED`` / ``TOOL_FAILED``"
+
+#: ../../learn/streaming.rst:83
+msgid "A requested tool call and how it finished."
+msgstr "一次被请求的工具调用以及它的结束方式。"
+
+#: ../../learn/streaming.rst:84
+msgid "``TOOL_CALL_DELTA``"
+msgstr "``TOOL_CALL_DELTA``"
+
+#: ../../learn/streaming.rst:85
+msgid "Partial tool arguments, for progress display only."
+msgstr "部分工具参数，仅用于展示进度。"
+
+#: ../../learn/streaming.rst:86
+msgid "``COMPACTION_*``"
+msgstr "``COMPACTION_*``"
+
+#: ../../learn/streaming.rst:87
+msgid "Older context is being summarized before the next model step."
+msgstr "在下一步模型处理之前，较旧的上下文正在被摘要。"
+
+#: ../../learn/streaming.rst:88
+msgid "``MODEL_COMPLETED``"
+msgstr "``MODEL_COMPLETED``"
+
+#: ../../learn/streaming.rst:89
+msgid "One complete model response, including usage."
+msgstr "一次完整的模型响应，包括用量。"
+
+#: ../../learn/streaming.rst:90
+msgid "``RUN_COMPLETED``"
+msgstr "``RUN_COMPLETED``"
+
+#: ../../learn/streaming.rst:91
+msgid "The request finished successfully."
+msgstr "请求成功结束。"
+
+#: ../../learn/streaming.rst:92
+msgid "``CUSTOM``"
+msgstr "``CUSTOM``"
+
+#: ../../learn/streaming.rst:93
+msgid "An event your own extension emitted."
+msgstr "你自己的扩展发出的事件。"
+
+#: ../../learn/streaming.rst:95
+msgid "Provider-hosted tools add ``SERVER_TOOL_*`` events; steering and internal continuations add their own pairs. The full list is on :class:`~zett_agent.events.AgentEventType`."
+msgstr "提供商托管的工具会添加 ``SERVER_TOOL_*`` 事件；引导和内部续写会添加各自的事件对。完整列表见 :class:`~zett_agent.events.AgentEventType`\\ 。"
+
+#: ../../learn/streaming.rst:100
+msgid "Track model usage"
+msgstr "跟踪模型用量"
+
+#: ../../learn/streaming.rst:102
+msgid "Read usage from ``event.response.usage`` on ``MODEL_COMPLETED``. It describes one model step, not the whole user request. A tool round trip often produces two or more such events, so sum their counters to measure the primary loop:"
+msgstr "在 ``MODEL_COMPLETED`` 上从 ``event.response.usage`` 读取用量。它描述的是一次模型处理，而不是整个用户请求。一次工具往返通常会产生两个或更多这类事件，因此要把它们的计数相加来衡量主循环："
+
+#: ../../learn/streaming.rst:114
+msgid "``total_tokens`` is input plus output; reasoning and cache counters are already included and must not be added again. Missing usage is not proof of zero cost. Separate compaction or delegated models can incur additional usage outside these primary model events. See :doc:`../examples/observability` for recorded timings and :doc:`providers` for cache reporting."
+msgstr "``total_tokens`` 是输入加输出；推理和缓存计数已经包含在内，不能再加一次。缺少用量并不能证明成本为零。独立的压缩过程或被委派的模型可能在这些主模型事件之外产生额外用量。记录的时间信息见 :doc:`../examples/observability`，缓存上报见 :doc:`providers`\\ 。"
+
+#: ../../learn/streaming.rst:121
+msgid "Failures are exceptions"
+msgstr "失败就是异常"
+
+#: ../../learn/streaming.rst:123
+msgid "``RUN_COMPLETED`` means success. Provider errors, extension errors, and cancellation propagate as exceptions — they are never converted into a synthetic completion event. Wrap the stream when the UI needs to show a failure, and see :doc:`../examples/cancellation` for cleanup and reuse."
+msgstr "``RUN_COMPLETED`` 表示成功。提供商错误、扩展错误和取消都会以异常形式传播，绝不会被转换成合成的完成事件。界面需要展示失败时，请把流包起来；清理和复用见 :doc:`../examples/cancellation`\\ 。"
+
+#: ../../learn/streaming.rst:128
+msgid "Next: keep the conversation in :doc:`sessions`, or read :doc:`../concepts/events` for the difference between UI events, internal notifications, and external input."
+msgstr "下一步：把对话保存在 :doc:`sessions` 中，或者阅读 :doc:`../concepts/events`，了解界面事件、内部通知和外部输入之间的区别。"
+

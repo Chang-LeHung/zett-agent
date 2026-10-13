@@ -1,0 +1,134 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/server-tools.rst:2
+msgid "Register provider-hosted tools"
+msgstr "注册服务商托管的工具"
+
+#: ../../extending/server-tools.rst:4
+msgid "A server tool runs inside a model provider, unlike an ordinary ``AgentTool`` executed by the Agent loop. Install one provider-specific extension for each hosted capability you want to expose::"
+msgstr "服务端工具运行在模型提供商内部，不像普通的 ``AgentTool``\\ 那样由 Agent 循环执行。想开放哪一项托管能力，就安装对应的提供商专属扩展::"
+
+#: ../../extending/server-tools.rst:22
+msgid "Every extension calls :meth:`~zett_agent.agent.AgentRunContext.register_server_tool` during ``on_tool``. The resulting definitions are request-scoped and reach every subsequent before-model hook and the final ``ModelRequest``. They never enter the Agent's local tool executor."
+msgstr "每个扩展都会在 ``on_tool`` 期间调用 :meth:`~zett_agent.agent.AgentRunContext.register_server_tool`\\ 。由此得到的定义作用域限于本次请求，并会传递到其后每一个 before-model 钩子以及最终的 ``ModelRequest``\\ 。它们永远不会进入 Agent 的本地工具执行器。"
+
+#: ../../extending/server-tools.rst:28
+msgid "Choose the extension that matches the endpoint"
+msgstr "选择与端点匹配的扩展"
+
+#: ../../extending/server-tools.rst:30
+msgid "Built-in declarations"
+msgstr "内置声明"
+
+#: ../../extending/server-tools.rst:34
+msgid "Extension"
+msgstr "扩展"
+
+#: ../../extending/server-tools.rst:35
+msgid "Default type"
+msgstr "默认类型"
+
+#: ../../extending/server-tools.rst:36
+msgid "Transport requirement"
+msgstr "传输要求"
+
+#: ../../extending/server-tools.rst:37
+msgid ":class:`~zett_agent.extensions.server_tools.google.GoogleServerToolExtension`"
+msgstr ":class:`~zett_agent.extensions.server_tools.google.GoogleServerToolExtension`"
+
+#: ../../extending/server-tools.rst:38
+msgid "``google_search`` + ``url_context``"
+msgstr "``google_search`` + ``url_context``"
+
+#: ../../extending/server-tools.rst:39
+msgid "Gemini GenerateContent; supported by GoogleProvider."
+msgstr "Gemini GenerateContent；由 GoogleProvider 支持。"
+
+#: ../../extending/server-tools.rst:40
+msgid ":class:`~zett_agent.extensions.server_tools.anthropic.AnthropicServerToolExtension`"
+msgstr ":class:`~zett_agent.extensions.server_tools.anthropic.AnthropicServerToolExtension`"
+
+#: ../../extending/server-tools.rst:41
+msgid "``web_search_20260318`` + ``web_fetch_20260318``"
+msgstr "``web_search_20260318`` + ``web_fetch_20260318``"
+
+#: ../../extending/server-tools.rst:42
+msgid "Anthropic Messages; supported by AnthropicProvider."
+msgstr "Anthropic Messages；由 AnthropicProvider 支持。"
+
+#: ../../extending/server-tools.rst:43
+msgid ":class:`~zett_agent.extensions.server_tools.openrouter.OpenRouterServerToolExtension`"
+msgstr ":class:`~zett_agent.extensions.server_tools.openrouter.OpenRouterServerToolExtension`"
+
+#: ../../extending/server-tools.rst:44
+msgid "``openrouter:web_search`` + ``openrouter:web_fetch``"
+msgstr "``openrouter:web_search`` + ``openrouter:web_fetch``"
+
+#: ../../extending/server-tools.rst:45
+msgid "OpenRouter-compatible Chat Completions endpoint."
+msgstr "兼容 OpenRouter 的 Chat Completions 端点。"
+
+#: ../../extending/server-tools.rst:46
+msgid ":class:`~zett_agent.extensions.server_tools.openai.OpenAIServerToolExtension`"
+msgstr ":class:`~zett_agent.extensions.server_tools.openai.OpenAIServerToolExtension`"
+
+#: ../../extending/server-tools.rst:47 ../../extending/server-tools.rst:50
+msgid "``web_search``"
+msgstr "``web_search``"
+
+#: ../../extending/server-tools.rst:48
+msgid "OpenAI Responses API; not OpenAI Chat Completions."
+msgstr "OpenAI Responses API；而非 OpenAI Chat Completions。"
+
+#: ../../extending/server-tools.rst:49
+msgid ":class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekServerToolExtension`"
+msgstr ":class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekServerToolExtension`"
+
+#: ../../extending/server-tools.rst:51
+msgid "DeepSeek Responses API; not legacy Chat Completions."
+msgstr "DeepSeek Responses API；而非旧版的 Chat Completions。"
+
+#: ../../extending/server-tools.rst:53
+msgid "OpenAIProvider and DeepSeekProvider use Chat Completions by default. Construct either adapter with ``response=True`` to use its Responses endpoint and enable its hosted tools explicitly::"
+msgstr "OpenAIProvider 和 DeepSeekProvider 默认使用 Chat Completions。用 ``response=True``\\ 构造任一适配器，即可改用它的 Responses 端点，并显式启用其托管工具::"
+
+#: ../../extending/server-tools.rst:63
+msgid "The Responses adapter sends complete history on every request. It preserves provider output items for later function-result turns and maps hosted-tool start/completion records into the common server-tool event lifecycle. Available tool types still depend on the selected provider endpoint and model."
+msgstr "Responses 适配器在每次请求时都会发送完整的历史记录。它会保留模型提供商的输出项，供之后的函数结果轮次使用，并把托管工具的启动/完成记录映射到通用的服务端工具事件生命周期中。可用的工具类型仍取决于所选的提供商端点与模型。"
+
+#: ../../extending/server-tools.rst:68
+msgid "OpenAI and DeepSeek publish no separate ``web_fetch`` type. Their hosted web-search workflow retrieves relevant pages itself. The defaults intentionally use documented types instead of sending an invented fetch discriminator."
+msgstr "OpenAI 和 DeepSeek 没有单独发布 ``web_fetch``\\ 类型。它们托管的网页搜索工作流会自行抓取相关页面。默认值有意使用官方文档中的类型，而不是发送一个自造的 fetch 区分标识。"
+
+#: ../../extending/server-tools.rst:73
+msgid "Allow protocol evolution"
+msgstr "允许协议演进"
+
+#: ../../extending/server-tools.rst:75
+msgid "Tool types are open strings and configurations are opaque mappings. New provider versions therefore do not require a zett-agent enum update::"
+msgstr "工具类型是开放的字符串，配置则是不透明的映射。因此新的提供商版本不需要更新 zett-agent 的枚举::"
+
+#: ../../extending/server-tools.rst:92
+msgid "The provider remains responsible for model compatibility and field validation. Duplicate types in one request are rejected before network I/O because their ordering would otherwise make the active configuration ambiguous."
+msgstr "模型兼容性和字段校验仍由提供商负责。同一次请求中出现重复的类型时，会在网络 I/O 之前就被拒绝，否则它们的顺序会让当前生效的配置变得有歧义。"
+
+#: ../../extending/server-tools.rst:96
+msgid "When none of the tools needs configuration, pass their type strings directly::"
+msgstr "当所有工具都不需要配置时，直接传入它们的类型字符串::"
+

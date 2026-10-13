@@ -1,0 +1,154 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/troubleshooting.rst:2
+msgid "Troubleshooting"
+msgstr "故障排查"
+
+#: ../../learn/troubleshooting.rst:4
+msgid "Start with the exception and the last event you received. A tool error can be recoverable; a provider or lifecycle error ends the request. Use :doc:`application` for failure boundaries and :doc:`testing` to reproduce the behavior without a live model. Never include credentials or full private prompts in a public error report."
+msgstr "先看异常和你收到的最后一个事件。工具错误可能是可恢复的，而模型提供商或生命周期错误会终止请求。失败边界参见\\ :doc:`application`，想在没有真实模型的情况下复现行为请参见\\ :doc:`testing`\\ 。绝不要在公开的错误报告里写入凭据或完整的私有提示词。"
+
+#: ../../learn/troubleshooting.rst:11
+msgid "A decorated tool fails at import time"
+msgstr "装饰后的工具在导入时报错"
+
+#: ../../learn/troubleshooting.rst:13
+msgid "``A tool needs at least one non-empty guideline`` means the function has a description but no usage guidance. Add ``@tool(guidelines=\"When to use it.\")`` or a nonempty ``Guidelines:`` docstring section. Every argument also needs a type annotation. ``Args`` entries must match real parameter names; unknown entries and unnamed variadic parameters are rejected. See :doc:`tools`."
+msgstr "``A tool needs at least one non-empty guideline`` 表示函数有描述，但缺少使用指引。请添加\\ ``@tool(guidelines=\"When to use it.\")``，或者补上一个非空的 ``Guidelines:``\\ 文档字符串小节。每个参数还需要类型注解。\\ ``Args``\\ 条目必须与真实参数名一致；未知条目和未命名的可变参数都会被拒绝。参见\\ :doc:`tools`\\ 。"
+
+#: ../../learn/troubleshooting.rst:20
+msgid "The endpoint rejects reasoning or tool search"
+msgstr "端点会拒绝推理或工具搜索"
+
+#: ../../learn/troubleshooting.rst:22
+msgid "The adapter does not negotiate model capabilities. Verify the endpoint supports the selected protocol and reasoning level. On Responses, the current adapter maps the highest levels to ``high``; on Chat Completions an unsupported named level may be rejected. ``OFF`` can omit the setting rather than disabling provider-default reasoning."
+msgstr "模型适配器不会协商模型能力。请确认这个端点支持你选择的协议和推理级别。在 Responses 上，当前适配器会把最高几级映射为 ``high``；在 Chat Completions 上，不受支持的具名级别可能会被拒绝。\\ ``OFF`` 可能只是省略该设置，而不是关闭模型提供商默认的推理。"
+
+#: ../../learn/troubleshooting.rst:28
+msgid "``ToolSearchExtension`` needs a compatible Responses tool-search endpoint, not just ordinary tool calling. Use ``response=True`` and a model supporting that protocol, or omit tool search and expose tools normally. Skill loading does not require Responses. See :doc:`providers` and :doc:`on-demand`."
+msgstr "``ToolSearchExtension``\\ 需要兼容的 Responses 工具搜索端点，而不只是普通的工具调用。请使用 ``response=True``\\ 和支持该协议的模型，或者省略工具搜索、按常规方式暴露工具。技能加载不要求 Responses。参见\\ :doc:`providers`\\ 和\\ :doc:`on-demand`\\ 。"
+
+#: ../../learn/troubleshooting.rst:34
+msgid "The second turn forgot the first"
+msgstr "第二个轮次不记得第一个轮次"
+
+#: ../../learn/troubleshooting.rst:36
+msgid "History comes from an extension. Passing ``extensions=[...]`` replaces the defaults, so add :class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator` or a persistence extension, and keep using the same ``session_id``. Two clients with different accumulator instances do not share memory just because the IDs match."
+msgstr "历史记录来自扩展。传入 ``extensions=[...]`` 会替换默认值，因此请加入\\ :class:`~zett_agent.extensions.memory.InMemoryMessageAccumulator`\\ 或某个持久化扩展，并一直使用同一个 ``session_id``\\ 。两个客户端即使 ID 相同，只要累加器实例不同，就不会共享记忆。"
+
+#: ../../learn/troubleshooting.rst:43
+msgid "The model never sees a message you added"
+msgstr "模型看不到你添加的消息"
+
+#: ../../learn/troubleshooting.rst:45
+msgid "Add context in a lifecycle hook, not by editing shared state:"
+msgstr "请在生命周期钩子里添加上下文，不要通过修改共享状态来做："
+
+#: ../../learn/troubleshooting.rst:47
+msgid "``on_state`` — restore history and inject system instructions."
+msgstr "``on_state`` — 恢复历史记录，并注入系统指令。"
+
+#: ../../learn/troubleshooting.rst:48
+msgid "``on_message`` — replace the pending user input before it is sent."
+msgstr "``on_message`` — 在待发送的用户输入发出去之前改写它。"
+
+#: ../../learn/troubleshooting.rst:49
+msgid "``before_model`` — adjust context before each model step."
+msgstr "``before_model`` — 在每次模型步骤之前调整上下文。"
+
+#: ../../learn/troubleshooting.rst:51
+msgid "Use the ``context`` passed to the hook. See :doc:`../concepts/lifecycle` for exactly when each hook runs."
+msgstr "请使用传给钩子的 ``context``\\ 。各个钩子确切在何时运行，参见\\ :doc:`../concepts/lifecycle`\\ 。"
+
+#: ../../learn/troubleshooting.rst:55
+msgid "Your custom event never reaches the UI"
+msgstr "你的自定义事件到不了 UI"
+
+#: ../../learn/troubleshooting.rst:57
+msgid "Internal notifications and UI events are different channels. ``context.publish`` delivers an :class:`~zett_agent.extensions.events.ExtensionEvent` to extensions; ``await context.emit(AgentEvent(...))`` queues something for ``Agent.stream``. Use the second one for anything the user should see. See :doc:`../extending/events`."
+msgstr "内部通知和 UI 事件是两条不同的通道。\\ ``context.publish``\\ 把\\ :class:`~zett_agent.extensions.events.ExtensionEvent`\\ 投递给其他扩展；``await context.emit(AgentEvent(...))``\\ 则为 ``Agent.stream``\\ 排队。凡是用户应该看到的内容，都用第二种方式。参见\\ :doc:`../extending/events`\\ 。"
+
+#: ../../learn/troubleshooting.rst:64
+msgid "An approval stays pending"
+msgstr "审批一直处于待处理状态"
+
+#: ../../learn/troubleshooting.rst:66
+msgid "The response must match the request's session ID, external event name, and payload shape. If no registered extension accepts it, the request keeps waiting. Do not block the loop with ``input()`` — use an async UI or ``asyncio.to_thread`` for terminal input. A cancelled request invalidates its pending routes, so a late reply is ignored."
+msgstr "响应必须与请求的会话 ID、外部事件名称和负载结构匹配。如果没有已注册的扩展接受它，请求就会一直等待。不要用\\ ``input()``\\ 阻塞循环——终端输入请改用异步 UI 或 ``asyncio.to_thread``\\ 。请求被取消后，它待处理的路由会失效，因此迟到的回复会被忽略。"
+
+#: ../../learn/troubleshooting.rst:73
+msgid "Reasoning or cache numbers are missing"
+msgstr "缺少推理或缓存数据"
+
+#: ../../learn/troubleshooting.rst:75
+msgid "Reasoning text appears only when the model returns it; the effort level is a request preference, not a promise. Usage is reported on ``MODEL_COMPLETED``, not on every text fragment. ``cache_hit_rate`` is ``None`` both when the provider reported nothing and when there were no input tokens; ``ModelUsage.cache_reported`` tells the two apart. Gateways that translate protocols often drop the cache breakdown, so prefer a Responses adapter when cache visibility matters."
+msgstr "推理文本只在模型返回它时才出现；推理级别是请求偏好，而不是承诺。用量会在 ``MODEL_COMPLETED``\\ 上报告，而不是在每个文本片段上报告。\\ ``cache_hit_rate``\\ 为 ``None``\\ 有两种情况：模型提供商什么也没报告，或者输入 token 数为零；``ModelUsage.cache_reported``\\ 可以区分这两者。转发协议的网关经常会丢掉缓存明细，所以在意缓存可见性时请优先使用 Responses 适配器。"
+
+#: ../../learn/troubleshooting.rst:84
+msgid "Retries duplicated text"
+msgstr "重试导致文本重复"
+
+#: ../../learn/troubleshooting.rst:86
+msgid "Built-in retries stop after the first streamed event, so a retry should never replay visible output. Check application-level retries and make sure you are not appending both the final message text and every ``TEXT_DELTA`` fragment to the same buffer."
+msgstr "内置重试在第一个流式事件之后就会停止，因此重试绝不应该重放已经可见的输出。请检查应用层的重试，并确认你没有把最终消息文本和每一个 ``TEXT_DELTA``\\ 片段都追加到同一个缓冲区。"
+
+#: ../../learn/troubleshooting.rst:92
+msgid "Project instructions or a skill did not appear"
+msgstr "项目指令或技能没有出现"
+
+#: ../../learn/troubleshooting.rst:94
+msgid "``AgentsMdExtension`` loads the chosen directory and its ancestors, not every nested file in the workspace. Check ``sources()`` and ``instructions()``, and verify the extension is in your explicit list. Empty or unreadable files are skipped. ``directory`` does not change tool paths. See :doc:`project-instructions`."
+msgstr "``AgentsMdExtension``\\ 加载的是你选定的目录及其各级祖先目录，而不是工作区里所有嵌套的文件。请检查 ``sources()``\\ 和 ``instructions()``，并确认这个扩展在你的显式列表中。空文件或无法读取的文件会被跳过。\\ ``directory``\\ 不会改变工具的路径。参见\\ :doc:`project-instructions`\\ 。"
+
+#: ../../learn/troubleshooting.rst:99
+msgid "For skills, check ``extension.skills``. Discovery occurs at construction time; new files or catalog metadata need a new extension. Existing skill bodies are read on demand, but editing a file does not replace instructions already in history. Pass explicit project roots rather than assuming defaults include the working directory. See :doc:`on-demand`."
+msgstr "技能方面请检查 ``extension.skills``\\ 。发现过程发生在构造时；新增文件或目录元数据需要新建一个扩展。已有技能正文是按需读取的，但编辑文件不会替换已经进入历史记录的指令。请显式传入项目根目录，不要假定默认值包含工作目录。参见\\ :doc:`on-demand`\\ 。"
+
+#: ../../learn/troubleshooting.rst:106
+msgid "An MCP server has no tools or fails before generation"
+msgstr "MCP 服务器没有工具，或在生成之前就失败"
+
+#: ../../learn/troubleshooting.rst:108
+msgid "Check ``extension.servers`` and ``extension.config_path``. A missing config loads no servers, whereas a bad config raises. Discovery connects on every request; a server that cannot be reached fails setup rather than silently disappearing. By default a remote ``search`` tool on ``catalog`` is named ``catalog__search``. See :doc:`mcp` for transports and namespaces."
+msgstr "请检查 ``extension.servers``\\ 和 ``extension.config_path``\\ 。缺少配置文件时不会加载任何服务器，而配置有误则会抛出异常。每次请求都会连接并做发现；连不上的服务器会让初始化失败，而不是悄无声息地消失。默认情况下，``catalog``\\ 上的远程 ``search``\\ 工具名为 ``catalog__search``\\ 。传输方式和命名空间参见\\ :doc:`mcp`\\ 。"
+
+#: ../../learn/troubleshooting.rst:115
+msgid "The runtime rejects a second request"
+msgstr "运行时拒绝第二个请求"
+
+#: ../../learn/troubleshooting.rst:117
+msgid "Two requests for the same session cannot overlap. Queue them or finish/close the first stream, including cleanup. Breaking out of a bare async iterator without ``aclosing`` can leave unfinished work. Different session IDs may run concurrently, but separate runtimes and workers do not share an admission lock. See :doc:`application`."
+msgstr "同一个会话的两个请求不能重叠。请把它们排队，或者结束、关闭第一个流，包括其中的清理工作。从一个裸异步迭代器里直接跳出而不使用 ``aclosing``，可能留下未完成的工作。不同的会话 ID 可以并发运行，但不同的运行时和 worker 不共享准入锁。参见\\ :doc:`application`\\ 。"
+
+#: ../../learn/troubleshooting.rst:124
+msgid "Compaction did not run"
+msgstr "压缩没有执行"
+
+#: ../../learn/troubleshooting.rst:126
+msgid "It needs a crossed size threshold *and* an older completed turn it can replace. The current turn is kept whole, so a single oversized turn is left alone. When the generated summary would not be smaller than the messages it replaces, ``COMPACTION_COMPLETED`` reports ``applied=False``. See :doc:`../examples/compaction` for a reproducible test."
+msgstr "它需要同时越过大小阈值，*并且*\\ 有一个更早的已完成轮次可供替换。当前轮次会完整保留，所以单个过大的轮次会被放过。如果生成的摘要并不比它替换的消息更小，``COMPACTION_COMPLETED``\\ 会报告 ``applied=False``\\ 。可复现的测试见\\ :doc:`../examples/compaction`\\ 。"
+
+#: ../../learn/troubleshooting.rst:133
+msgid "The page has no navigation"
+msgstr "页面没有导航栏"
+
+#: ../../learn/troubleshooting.rst:135
+msgid "If you are reading this locally, rebuild with ``make docs-serve`` and open the printed URL. The left sidebar is global; on a narrow screen, open it with the navigation toggle."
+msgstr "如果你是在本地阅读，请用 ``make docs-serve``\\ 重新构建，然后打开它输出的 URL。左侧边栏是全局的；在窄屏幕上，用导航开关把它打开。"
+

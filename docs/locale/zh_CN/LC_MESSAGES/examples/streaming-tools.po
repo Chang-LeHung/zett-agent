@@ -1,0 +1,74 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/streaming-tools.rst:2
+msgid "Stream a tool round trip"
+msgstr "流式展示一次工具往返"
+
+#: ../../examples/streaming-tools.rst:4
+msgid "Turn a Python function into a tool and show its progress in your application. The model asks for ``add``, receives ``42``, and produces a final answer."
+msgstr "把一个 Python 函数变成工具，并在你的应用中显示它的进度。模型请求 ``add``，收到 ``42``，然后给出最终回答。"
+
+#: ../../examples/streaming-tools.rst:8
+msgid "Run it"
+msgstr "运行示例"
+
+#: ../../examples/streaming-tools.rst:10
+msgid "From the repository root:"
+msgstr "在仓库根目录下："
+
+#: ../../examples/streaming-tools.rst:16
+msgid "The output includes:"
+msgstr "输出包含："
+
+#: ../../examples/streaming-tools.rst:22
+msgid "This program uses deterministic offline models and temporary storage where needed. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序使用确定性的离线模型，并在需要时使用临时存储。它不需要 API 密钥，由文档测试套件执行。"
+
+#: ../../examples/streaming-tools.rst:26
+msgid "The three pieces to reuse"
+msgstr "可复用的三个部分"
+
+#: ../../examples/streaming-tools.rst:28
+msgid "**Define the capability.** Type annotations describe the arguments, and the docstring tells the model when to call it:"
+msgstr "**定义能力。**\\ 类型注解描述参数，文档字符串告诉模型何时调用它："
+
+#: ../../examples/streaming-tools.rst:35
+msgid "**Display progress.** Event callbacks receive reasoning, the tool call, its result, and incremental answer text:"
+msgstr "**显示进度。**\\ 事件回调会收到推理、工具调用、工具结果以及增量的回答文本："
+
+#: ../../examples/streaming-tools.rst:42
+msgid "**Connect them to a client.** Replace ``MathModel()`` with your provider when you are ready to make real requests:"
+msgstr "**连接到客户端。**\\ 当你准备好发出真实请求时，把 ``MathModel()`` 替换成你的模型提供商："
+
+#: ../../examples/streaming-tools.rst:49
+msgid "The scripted model always calls the tool. A real model chooses whether to call it, and may not return visible reasoning even when it reasons internally."
+msgstr "预设脚本的模型总是调用工具。真实的模型会自行决定是否调用，而且即使内部进行了推理，也可能不会返回可见的推理内容。"
+
+#: ../../examples/streaming-tools.rst:53
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/streaming-tools.rst:55
+msgid ":download:`Download streaming_tools.py <../_examples/streaming_tools.py>`."
+msgstr ":download:`下载 streaming_tools.py <../_examples/streaming_tools.py>`\\ 。"
+
+#: ../../examples/streaming-tools.rst:61
+msgid "Next: :doc:`../learn/streaming` for event handling and cancellation, or :doc:`../learn/tools` for schemas, errors, and safe execution."
+msgstr "下一步：阅读\\ :doc:`../learn/streaming`\\ 了解事件处理和取消，或阅读\\ :doc:`../learn/tools`\\ 了解模式、错误和安全执行。"
+

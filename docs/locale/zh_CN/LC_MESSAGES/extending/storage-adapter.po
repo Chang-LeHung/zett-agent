@@ -1,0 +1,158 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/storage-adapter.rst:2
+msgid "Implement a storage adapter"
+msgstr "实现存储适配器"
+
+#: ../../extending/storage-adapter.rst:5
+msgid "Keep lifecycle integration in the base extension"
+msgstr "把生命周期集成留在基类扩展中"
+
+#: ../../extending/storage-adapter.rst:7
+msgid "Do not duplicate context restoration, Raw Log events, or compaction bookkeeping inside a new database extension. Implement the SessionStorage contract and pass it to BaseSessionPersistenceExtension. The base already knows when to load, append, snapshot, and clean up request bookkeeping."
+msgstr "不要在新的数据库扩展里重复实现上下文恢复、Raw Log 事件或压缩的记账逻辑。请实现 SessionStorage 契约，并把它传给 BaseSessionPersistenceExtension。基类已经知道何时加载、追加、生成快照，以及清理请求级的记账数据。"
+
+#: ../../extending/storage-adapter.rst:13
+msgid "The three runtime storage operations"
+msgstr "运行时的三个存储操作"
+
+#: ../../extending/storage-adapter.rst:15
+msgid "SessionStorage boundary"
+msgstr "SessionStorage 的边界"
+
+#: ../../extending/storage-adapter.rst:19
+msgid "Method"
+msgstr "方法"
+
+#: ../../extending/storage-adapter.rst:20
+msgid "Returns"
+msgstr "返回值"
+
+#: ../../extending/storage-adapter.rst:21
+msgid "Invariants"
+msgstr "不变量"
+
+#: ../../extending/storage-adapter.rst:22
+msgid "load"
+msgstr "load"
+
+#: ../../extending/storage-adapter.rst:23
+msgid "SessionView: optional checkpoint and ordered raw tail"
+msgstr "SessionView：可选的检查点，以及有序的原始消息尾部"
+
+#: ../../extending/storage-adapter.rst:24
+msgid "A consistent view; unknown sessions are empty."
+msgstr "一致的视图；未知会话为空。"
+
+#: ../../extending/storage-adapter.rst:25
+msgid "append"
+msgstr "append"
+
+#: ../../extending/storage-adapter.rst:26
+msgid "Assigned per-session sequence number"
+msgstr "分配的每会话序列号"
+
+#: ../../extending/storage-adapter.rst:27
+msgid "Original messages are immutable; appends advance sequence atomically."
+msgstr "原始消息不可变；追加会原子地推进序列号。"
+
+#: ../../extending/storage-adapter.rst:28
+msgid "snapshot"
+msgstr "snapshot"
+
+#: ../../extending/storage-adapter.rst:29
+msgid "ContextSnapshot with a new version"
+msgstr "带新版本的 ContextSnapshot"
+
+#: ../../extending/storage-adapter.rst:30
+msgid "Check expected_version and advancing Raw Log boundary; never rewrite raw messages."
+msgstr "检查 expected_version 以及不断推进的 Raw Log 边界；绝不改写原始消息。"
+
+#: ../../extending/storage-adapter.rst:32
+msgid "CRUD for session titles and paginated UI history is provided by concrete storage implementations such as SQLiteSessionStorage. It is separate from the three operations required by the runtime persistence extension."
+msgstr "会话标题的 CRUD 以及分页的界面历史记录由具体的存储实现提供，例如 SQLiteSessionStorage。它与运行时持久化扩展要求的三个操作相互独立。"
+
+#: ../../extending/storage-adapter.rst:37
+msgid "A complete adapter example"
+msgstr "完整的适配器示例"
+
+#: ../../extending/storage-adapter.rst:39
+msgid "This adapter wraps SQLite with an audit trail. It intentionally delegates actual transactions to the tested SQLite implementation; it is not a claim to implement a different database. A PostgreSQL or remote adapter would replace these bodies while preserving the same ordering/version guarantees."
+msgstr "这个适配器在 SQLite 之上加了审计追踪。它有意把实际事务交给经过测试的 SQLite 实现去处理；这并不表示它实现了一个不同的数据库。PostgreSQL 或远程适配器会替换这些实现体，同时保持相同的顺序/版本保证。"
+
+#: ../../extending/storage-adapter.rst:48
+msgid "The extension itself stays small:"
+msgstr "扩展本身保持精简："
+
+#: ../../extending/storage-adapter.rst:54
+msgid "Run the :doc:`complete program <../examples/storage-adapter>` to verify that one request causes ``load, append:system, append:user, append:assistant`` and no unnecessary snapshot."
+msgstr "运行 :doc:`完整程序 <../examples/storage-adapter>`\\ 来验证一次请求会产生 ``load, append:system, append:user, append:assistant``，并且不会做不必要的快照。"
+
+#: ../../extending/storage-adapter.rst:59
+msgid "Snapshot consistency checklist"
+msgstr "快照一致性检查清单"
+
+#: ../../extending/storage-adapter.rst:61
+msgid "Read the checkpoint and its tail consistently; do not combine different database versions."
+msgstr "要一致地读取检查点及其尾部消息；不要混合不同的数据库版本。"
+
+#: ../../extending/storage-adapter.rst:62
+msgid "Treat compacted_through_sequence as an inclusive represented boundary."
+msgstr "把 compacted_through_sequence 视为包含端点的已表示边界。"
+
+#: ../../extending/storage-adapter.rst:63
+msgid "Start the replay tail strictly after that boundary."
+msgstr "重放的尾部消息严格从该边界之后开始。"
+
+#: ../../extending/storage-adapter.rst:64
+msgid "Reject stale expected_version rather than silently overwriting a checkpoint."
+msgstr "过期的 expected_version 应当被拒绝，而不是静默覆盖检查点。"
+
+#: ../../extending/storage-adapter.rst:65
+msgid "Do not store a checkpoint after every successful response."
+msgstr "不要每成功得到一次响应就存一个检查点。"
+
+#: ../../extending/storage-adapter.rst:66
+msgid "Preserve message roles, attributes, replay blocks, timing, metadata, tags, and usage."
+msgstr "要保留消息角色、属性、重放块、时间信息、元数据、标签和用量。"
+
+#: ../../extending/storage-adapter.rst:67
+msgid "Do not treat request_id as an automatic idempotency key."
+msgstr "不要把 request_id 当作自动的幂等键。"
+
+#: ../../extending/storage-adapter.rst:69
+msgid "Use independent tests for empty sessions, two-message turns, tool round trips, compaction plus a later tail, conflicts, unknown sessions, and database reopening. Use temporary databases and release all connection pools."
+msgstr "为空会话、两消息轮次、工具往返、压缩之后又有新尾部、冲突、未知会话以及数据库重新打开等情况分别编写独立的测试。使用临时数据库，并释放所有连接池。"
+
+#: ../../extending/storage-adapter.rst:74
+msgid "Supporting checkpoint type"
+msgstr "配套的检查点类型"
+
+#: ../../extending/storage-adapter.rst:76
+msgid "The snapshot contract uses this class from its defining module:"
+msgstr "快照契约使用来自其定义模块的这个类："
+
+#: ../../extending/storage-adapter.rst:84
+msgid "CompactedMessage is a specialized system message marking a context checkpoint. Its ``content`` contains the summary; inherited ``attributes`` holds optional message annotations. It is not exported from the package root. Store this checkpoint separately from the original Raw Log, together with the inclusive sequence boundary described above."
+msgstr "CompactedMessage 是一种特殊的系统消息，用来标记上下文检查点。它的 ``content``\\ 保存摘要；继承来的 ``attributes``\\ 保存可选的消息注解。它不会从包的根模块导出。请把这个检查点与原始 Raw Log 分开存储，并连同上面描述的、包含端点的序列边界一起保存。"
+
+#: ../../extending/storage-adapter.rst:90
+msgid "Related API: :class:`~zett_agent.extensions.persistence.SessionStorage`, :class:`~zett_agent.extensions.persistence.BaseSessionPersistenceExtension`, :class:`~zett_agent.storage.SQLiteSessionStorage`, :class:`~zett_agent.extensions.persistence.SessionView`."
+msgstr "相关 API：:class:`~zett_agent.extensions.persistence.SessionStorage`、:class:`~zett_agent.extensions.persistence.BaseSessionPersistenceExtension`、:class:`~zett_agent.storage.SQLiteSessionStorage`、:class:`~zett_agent.extensions.persistence.SessionView`\\ 。"
+

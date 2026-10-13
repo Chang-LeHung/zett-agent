@@ -1,0 +1,66 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/installation.rst:2
+msgid "Install Zett Agent"
+msgstr "安装 Zett Agent"
+
+#: ../../learn/installation.rst
+msgid "pip"
+msgstr "pip"
+
+#: ../../learn/installation.rst
+msgid "uv"
+msgstr "uv"
+
+#: ../../learn/installation.rst:18
+msgid "Zett Agent requires Python 3.10 or newer; continuous integration covers 3.10 through 3.14. The library needs no Node.js and no external service to run. Every built-in provider is a package dependency, so there are no extras to install."
+msgstr "Zett Agent 需要 Python 3.10 或更高版本,持续集成覆盖 3.10 到 3.14。运行这个库不需要 Node.js,也不依赖任何外部服务。所有内置的模型提供商都是包依赖,因此无需额外安装可选依赖。"
+
+#: ../../learn/installation.rst:23
+msgid "Verify the install"
+msgstr "验证安装"
+
+#: ../../learn/installation.rst:30
+msgid "Run something immediately"
+msgstr "立即运行一个示例"
+
+#: ../../learn/installation.rst:32
+msgid ":doc:`first-agent` is a complete program with a deterministic model, so it needs no API key and makes no network request. It runs the real loop — messages, streaming and session history — with a scripted model in place of a provider. Try :doc:`../examples/streaming-tools` next for a complete tool round trip."
+msgstr ":doc:`first-agent`\\ 是一个完整的程序,使用确定性的模型,因此不需要 API 密钥,也不会发出任何网络请求。它用一个预设脚本的模型代替模型提供商,运行真实的循环:消息、流式输出和会话历史。接下来可以试试\\ :doc:`../examples/streaming-tools`,体验一次完整的工具往返。"
+
+#: ../../learn/installation.rst:38
+msgid "Work from a checkout"
+msgstr "从源码检出目录开始"
+
+#: ../../learn/installation.rst:40
+msgid "To read and modify the source, clone the repository and let ``uv`` create the environment:"
+msgstr "想阅读和修改源码,可以克隆仓库,让 ``uv`` 创建环境:"
+
+#: ../../learn/installation.rst:50
+msgid "Use ``uv run python your_script.py`` to run code against the checkout instead of an installed release."
+msgstr "用 ``uv run python your_script.py`` 对检出的源码运行代码,而不是使用已安装的发布版本。"
+
+#: ../../learn/installation.rst:55
+msgid "Providers and storage you create are yours to close. Call ``await model.aclose()`` and ``await storage.close()`` when finished."
+msgstr "你自己创建的模型提供商和存储需要由你自己关闭。使用完毕后请调用 ``await model.aclose()`` 和 ``await storage.close()``\\ 。"
+
+#: ../../learn/installation.rst:58
+msgid "Next: :doc:`first-agent`."
+msgstr "下一步:\\ :doc:`first-agent`\\ 。"
+

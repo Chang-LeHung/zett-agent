@@ -1,0 +1,66 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/cancellation.rst:2
+msgid "Cancel and reuse an agent"
+msgstr "取消并复用智能体"
+
+#: ../../examples/cancellation.rst:4
+msgid "Close an interrupted stream, clean up extension state, and complete a new request."
+msgstr "关闭被中断的流，清理扩展状态，并完成一次新的请求。"
+
+#: ../../examples/cancellation.rst:7
+msgid "Run it"
+msgstr "运行"
+
+#: ../../examples/cancellation.rst:9
+msgid "From the repository root:"
+msgstr "在仓库根目录下执行："
+
+#: ../../examples/cancellation.rst:15
+msgid "The output includes:"
+msgstr "输出包含："
+
+#: ../../examples/cancellation.rst:21
+msgid "This program uses deterministic offline models and temporary storage where needed. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序在需要时使用确定性的离线模型和临时存储。它不需要 API 密钥，并由文档测试套件执行。"
+
+#: ../../examples/cancellation.rst:25
+msgid "Close the stream when you leave it"
+msgstr "离开时关闭流"
+
+#: ../../examples/cancellation.rst:27
+msgid "Use ``aclosing`` around a stream you might stop early. The example breaks on the first text delta, exits the context manager, and then reuses the client for a complete request:"
+msgstr "对于可能提前停止的流，请用\\ ``aclosing``\\ 包起来。该示例在第一个文本增量处跳出，退出上下文管理器，然后复用客户端完成一次完整的请求："
+
+#: ../../examples/cancellation.rst:35
+msgid "If an extension retains request-local state, clean it on cancellation as well as success and error. ``WorkTracker`` demonstrates all three paths. Closing a stream does not roll back a tool action that already completed; design side-effecting tools with that distinction in mind."
+msgstr "如果扩展保留了请求级状态，那么在取消时也要像成功和出错时一样清理它。\\ ``WorkTracker`` 演示了这三种路径。关闭流不会回滚已经完成的工具操作；设计有副作用的工具时请留意这一区别。"
+
+#: ../../examples/cancellation.rst:41
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/cancellation.rst:43
+msgid ":download:`Download cancellation.py <../_examples/cancellation.py>`."
+msgstr ":download:`下载 cancellation.py <../_examples/cancellation.py>`\\ 。"
+
+#: ../../examples/cancellation.rst:49
+msgid "Next: :doc:`../learn/streaming` for consumer patterns, or :doc:`../extending/state` for extension cleanup."
+msgstr "下一步：消费端的处理模式见\\ :doc:`../learn/streaming`，扩展的清理见\\ :doc:`../extending/state`\\ 。"
+

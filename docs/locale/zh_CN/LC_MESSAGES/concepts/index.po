@@ -1,0 +1,74 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../concepts/index.rst:39
+msgid "Architecture"
+msgstr "架构"
+
+#: ../../concepts/index.rst:18 ../../concepts/index.rst:39
+msgid "Request lifecycle"
+msgstr "请求生命周期"
+
+#: ../../concepts/index.rst:39
+msgid "Model context"
+msgstr "模型上下文"
+
+#: ../../concepts/index.rst:39
+msgid "Events"
+msgstr "事件"
+
+#: ../../concepts/index.rst:2
+msgid "How it works"
+msgstr "工作原理"
+
+#: ../../concepts/index.rst:4
+msgid "You can build a lot with the guides alone. These pages explain the few contracts that are worth understanding before you push the runtime further — what one request owns, when context changes, and which channel carries which message to your UI."
+msgstr "只看指南也能做不少事情。这几页解释几个值得在进一步使用运行时之前弄清楚的约定：一次请求拥有什么、上下文何时变化，以及哪条通道把哪条消息送到你的 UI。"
+
+#: ../../concepts/index.rst:12
+msgid "Architecture and ownership"
+msgstr "架构与归属"
+
+#: ../../concepts/index.rst:16
+msgid "What each object owns, and where your application's responsibility starts."
+msgstr "每个对象各自拥有什么，以及你的应用从何处开始负责。"
+
+#: ../../concepts/index.rst:22
+msgid "The exact order of hooks, phases, and cleanup inside one request."
+msgstr "一次请求内部钩子、阶段和清理的确切顺序。"
+
+#: ../../concepts/index.rst:24
+msgid "Context and memory"
+msgstr "上下文与记忆"
+
+#: ../../concepts/index.rst:28
+msgid "Which messages the model sees, and how compaction changes them."
+msgstr "模型会看到哪些消息，以及压缩如何改变它们。"
+
+#: ../../concepts/index.rst:30
+msgid "Events and channels"
+msgstr "事件与通道"
+
+#: ../../concepts/index.rst:34
+msgid "UI events, internal notifications, and external input are different things."
+msgstr "UI 事件、内部通知和外部输入是三件不同的事。"
+
+#: ../../concepts/index.rst:36
+msgid "If you only read one page before writing a stateful extension, read :doc:`lifecycle`; if you are wiring a UI, read :doc:`events`."
+msgstr "如果写有状态的扩展前只能看一页，那就看\\ :doc:`lifecycle`；如果正在接入 UI，那就看\\ :doc:`events`\\ 。"
+

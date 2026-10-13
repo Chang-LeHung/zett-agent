@@ -1,0 +1,106 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/compaction.rst:2
+msgid "Compact without losing history"
+msgstr "压缩而不丢失历史记录"
+
+#: ../../examples/compaction.rst:4
+msgid "Summarize older turns while keeping the original stored messages. Recent turns remain available in full, so a long conversation can continue within your configured context budget."
+msgstr "在保留原始已存储消息的同时总结较早的轮次。最近的轮次仍完整可用，因此长对话可以在你配置的上下文预算内继续进行。"
+
+#: ../../examples/compaction.rst:9
+msgid "Run it"
+msgstr "运行示例"
+
+#: ../../examples/compaction.rst:11
+msgid "From the repository root:"
+msgstr "在仓库根目录下："
+
+#: ../../examples/compaction.rst:17
+msgid "The output includes:"
+msgstr "输出包含："
+
+#: ../../examples/compaction.rst:23
+msgid "This program uses deterministic offline models and temporary storage where needed. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序使用确定性的离线模型，并在需要时使用临时存储。它不需要 API 密钥，由文档测试套件执行。"
+
+#: ../../examples/compaction.rst:27
+msgid "Add compaction to an application"
+msgstr "在应用中添加压缩"
+
+#: ../../examples/compaction.rst:50
+msgid "``model`` is your primary adapter; ``summarizing_model`` is an adapter capable of summarizing context as plain text without tool calls. They can be the same instance. If you omit the model passed to ``CompactionExtension``, it uses the request's model. Close the storage and any providers you own at application shutdown; see :doc:`../learn/application`."
+msgstr "``model`` 是你的主适配器；``summarizing_model`` 是一个能够把上下文总结为纯文本、且不进行工具调用的适配器。它们可以是同一个实例。如果省略传给 ``CompactionExtension`` 的模型，它会使用请求所用的模型。在应用关闭时关闭存储以及你自己拥有的模型提供商；参见\\ :doc:`../learn/application`\\ 。"
+
+#: ../../examples/compaction.rst:56
+msgid "The numbers above are illustrative, **not** a detected model limit. Set them for the model and expected tool outputs you actually use. Automatic compaction runs before a model step when its estimated context crosses ``max_tokens``; the estimate includes system instructions and tool definitions. Reported input usage from a previous model step can improve that estimate."
+msgstr "上面的数字只是示例，**不是**\\ 检测到的模型上限。请根据你实际使用的模型和预期工具输出来设置它们。当估计的上下文超过 ``max_tokens`` 时，自动压缩会在模型步骤之前运行；该估计包含系统指令和工具定义。之前某个模型步骤报告的输入用量可以改进这个估计。"
+
+#: ../../examples/compaction.rst:62
+msgid "``keep_recent_tokens`` is a minimum, not a hard upper bound. The containing user turn is kept whole with its assistant/tool messages. One oversized current turn cannot be solved by splitting it; reduce its input/tool results or choose a larger context window. The built-in text tokenizer is an estimate, especially for images, and does not discover your endpoint's actual context capacity."
+msgstr "``keep_recent_tokens`` 是一个下限，而不是硬性上限。包含它的用户轮次会连同其助手/工具消息一起完整保留。单个过大的当前轮次无法通过拆分它来解决；请减少它的输入/工具结果，或选择更大的上下文窗口。内置的文本分词器只是一个估计，对图像尤其如此，它也无法探知你端点实际的上下文容量。"
+
+#: ../../examples/compaction.rst:69
+msgid "What to configure"
+msgstr "需要配置的内容"
+
+#: ../../examples/compaction.rst:71
+msgid "Choose a summarizing model, a threshold for compaction, and a budget for recent messages. The example sets deliberately small limits so two requests trigger a summary:"
+msgstr "选择一个用于总结的模型、压缩的阈值，以及最近消息的预算。示例故意设置了很小的限制，好让两次请求就触发一次摘要："
+
+#: ../../examples/compaction.rst:79
+msgid "The original six messages remain in SQLite; the next request can restore the summary plus the three messages after its boundary. A summary is lossy: verify that it preserves the facts your workflow needs."
+msgstr "原始的六条消息仍保留在 SQLite 中；下一次请求可以恢复摘要及其边界之后的三条消息。摘要是有损的：请确认它保留了你工作流需要的事实。"
+
+#: ../../examples/compaction.rst:85
+msgid "The word-based token counter is only a deterministic test fixture. Use a token estimate appropriate to your model, leave room for the response and tool results, and set limits below the provider's context window."
+msgstr "基于字词的 token 计数器只是一个确定性的测试夹具。请使用适合你模型的 token 估算，为响应和工具结果留出余地，并把限制设置在模型提供商的上下文窗口以下。"
+
+#: ../../examples/compaction.rst:90
+msgid "Ask for compaction"
+msgstr "主动请求压缩"
+
+#: ../../examples/compaction.rst:92
+msgid "``CompactionExtension`` also runs on demand: ``AgentClient.compact`` restores the session, asks every extension to compact through ``on_compact``, and returns the checkpoint it stored. No input message is appended and no primary model call is made, so a UI can summarize a conversation the moment a reader asks for it::"
+msgstr "``CompactionExtension`` 也支持按需运行：``AgentClient.compact`` 会恢复会话，通过 ``on_compact`` 请每个扩展执行压缩，并返回它存储的检查点。不会追加任何输入消息，也不会发起主模型调用，因此 UI 可以在读者提出要求的瞬间对对话进行总结::"
+
+#: ../../examples/compaction.rst:100
+msgid "The events of the pass reach the client's ``event_dispatcher`` exactly as a streamed run does, which is how the ``Compaction started`` lines above are produced."
+msgstr "这一轮的事件会像流式运行那样到达客户端的 ``event_dispatcher``，上面那些 ``Compaction started`` 行就是这样产生的。"
+
+#: ../../examples/compaction.rst:104
+msgid "An explicit ``compact()`` pass does not wait for the automatic threshold. It still needs older complete dialogue to summarize, and skips a replacement that is not smaller. ``None`` can mean there is no eligible window or no useful reduction; it does not mean the request failed. ``COMPACTION_COMPLETED`` with ``applied=False`` reports a generated summary that was discarded."
+msgstr "显式的 ``compact()`` 过程不会等待自动阈值。它仍然需要较早的完整对话来总结，并且会跳过没有变小的替换结果。\\ ``None`` 可能表示没有符合条件的窗口，或者没有有用的压缩；它并不意味着请求失败。带有 ``applied=False`` 的 ``COMPACTION_COMPLETED`` 表示生成了一个摘要但被丢弃了。"
+
+#: ../../examples/compaction.rst:110
+msgid "Compaction is a model request and can incur charges or fail. A missing, empty, or tool-calling summary is a protocol error, not a successful checkpoint. Summaries are lossy: use tests and review their content for workflows where exact historical wording is important. Keep the raw log for a full transcript."
+msgstr "压缩是一次模型请求，可能产生费用，也可能失败。缺失的、空的或进行工具调用的摘要都是协议错误，而不是成功的检查点。摘要是有损的：对于历史措辞必须精确的工作流，请编写测试并审查摘要内容。保留原始日志以得到完整记录。"
+
+#: ../../examples/compaction.rst:116
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/compaction.rst:118
+msgid ":download:`Download compaction.py <../_examples/compaction.py>`."
+msgstr ":download:`下载 compaction.py <../_examples/compaction.py>`\\ 。"
+
+#: ../../examples/compaction.rst:124
+msgid "Next: :doc:`../learn/sessions` for durable history, or :doc:`../concepts/context` for choosing context limits."
+msgstr "下一步：阅读\\ :doc:`../learn/sessions`\\ 了解持久化的历史记录，或阅读\\ :doc:`../concepts/context`\\ 了解如何选择上下文限制。"
+

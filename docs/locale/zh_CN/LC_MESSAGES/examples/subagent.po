@@ -1,0 +1,66 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/subagent.rst:2
+msgid "Run an isolated child agent"
+msgstr "运行一个隔离的子智能体"
+
+#: ../../examples/subagent.rst:4
+msgid "Run a child with read-only tools and explicitly shared temporary storage. Tool restrictions are not an operating-system sandbox."
+msgstr "运行子智能体时使用只读工具，并显式共享临时存储。工具限制并不等同于操作系统沙箱。"
+
+#: ../../examples/subagent.rst:7
+msgid "Run it"
+msgstr "运行"
+
+#: ../../examples/subagent.rst:9
+msgid "From the repository root:"
+msgstr "在仓库根目录下执行："
+
+#: ../../examples/subagent.rst:15
+msgid "The output includes:"
+msgstr "输出包含："
+
+#: ../../examples/subagent.rst:21
+msgid "This program uses deterministic offline models and temporary storage where needed. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序在需要时使用确定性的离线模型和临时存储。它不需要 API 密钥，并由文档测试套件执行。"
+
+#: ../../examples/subagent.rst:25
+msgid "Choose the child's capabilities explicitly"
+msgstr "显式选择子智能体的能力"
+
+#: ../../examples/subagent.rst:27
+msgid "Give a child profile its own instructions, model, and tools. The parent can delegate work to the profile without giving it every capability the parent has:"
+msgstr "给子智能体配置自己的指令、模型和工具。父智能体可以把工作委派给该配置，而不必把父智能体拥有的全部能力都交给它："
+
+#: ../../examples/subagent.rst:35
+msgid "The example stores the parent and child as separate sessions in the same temporary database. A parent-session link lets your application show how they relate. Read-only filesystem tools restrict the exposed operations; they do not isolate the process or prevent arbitrary code from writing."
+msgstr "该示例把父智能体和子智能体作为两个独立会话存入同一个临时数据库。父会话链接可以让应用展示它们之间的关系。只读文件系统工具限制的是对外暴露的操作；它们并不会隔离进程，也无法阻止任意代码写入。"
+
+#: ../../examples/subagent.rst:41
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/subagent.rst:43
+msgid ":download:`Download subagent.py <../_examples/subagent.py>`."
+msgstr ":download:`下载 subagent.py <../_examples/subagent.py>`\\ 。"
+
+#: ../../examples/subagent.rst:49
+msgid "Next: :doc:`../extending/built-ins` for the subagent profile options, or :doc:`goal` for evaluation-driven continuation."
+msgstr "下一步：子智能体配置有哪些选项，请看\\ :doc:`../extending/built-ins`；由评估驱动的继续执行，请看\\ :doc:`goal`\\ 。"
+

@@ -1,0 +1,146 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../concepts/context.rst:2
+msgid "What the model sees"
+msgstr "模型看到什么"
+
+#: ../../concepts/context.rst:4
+msgid "\"Context\" is the list of messages sent with a request. Understanding it explains most surprising behavior: why a turn was forgotten, why compaction changed the prompt, and why a UI transcript can be longer than what the model received."
+msgstr "“上下文”就是随一次请求发送出去的消息列表。理解它就能解释大多数令人意外的行为：为什么某个轮次被遗忘了、压缩为什么改变了提示词，以及为什么 UI 里的记录会比模型收到的内容更长。"
+
+#: ../../concepts/context.rst:9
+msgid "Message roles"
+msgstr "消息角色"
+
+#: ../../concepts/context.rst:15
+msgid "Role"
+msgstr "角色"
+
+#: ../../concepts/context.rst:16
+msgid "Meaning"
+msgstr "含义"
+
+#: ../../concepts/context.rst:17
+msgid "system"
+msgstr "system"
+
+#: ../../concepts/context.rst:18
+msgid "Application instructions, rebuilt for every request."
+msgstr "应用指令，每次请求都会重新构建。"
+
+#: ../../concepts/context.rst:19
+msgid "user"
+msgstr "user"
+
+#: ../../concepts/context.rst:20
+msgid "User text, or ordered text and images."
+msgstr "用户文本，或按顺序排列的文本和图像。"
+
+#: ../../concepts/context.rst:21
+msgid "assistant"
+msgstr "assistant"
+
+#: ../../concepts/context.rst:22
+msgid "The model's answer, its reasoning, and any tool calls it requested."
+msgstr "模型的回答、它的推理，以及它请求的所有工具调用。"
+
+#: ../../concepts/context.rst:23
+msgid "tool"
+msgstr "tool"
+
+#: ../../concepts/context.rst:24
+msgid "A result linked to the assistant call by ``tool_call_id``."
+msgstr "通过 ``tool_call_id`` 与 assistant 调用相关联的结果。"
+
+#: ../../concepts/context.rst:25
+msgid "agent"
+msgstr "agent"
+
+#: ../../concepts/context.rst:26
+msgid "An internal continuation; providers see it as user input."
+msgstr "内部续接消息；模型提供商会把它当作用户输入。"
+
+#: ../../concepts/context.rst:29
+msgid "System instructions are rebuilt each time"
+msgstr "系统指令每次都会重建"
+
+#: ../../concepts/context.rst:31
+msgid "History extensions restore dialogue, not prompts. Instructions are added again for every request, so changing your system prompt or tools takes effect on the next turn without stale instructions piling up."
+msgstr "历史记录扩展恢复的是对话，不是提示词。指令会在每次请求时重新添加，因此修改系统提示词或工具会在下一个轮次生效，不会让过期指令越堆越多。"
+
+#: ../../concepts/context.rst:35
+msgid "That is also why ``extensions=[]`` loses the conversation: no extension restores the messages. See :doc:`../learn/sessions`."
+msgstr "这也是 ``extensions=[]`` 会丢掉对话的原因：没有扩展恢复消息。参见\\ :doc:`../learn/sessions`\\ 。"
+
+#: ../../concepts/context.rst:39
+msgid "Transcript versus model input"
+msgstr "记录与模型输入"
+
+#: ../../concepts/context.rst:41
+msgid "After compaction the two diverge, and both are useful:"
+msgstr "压缩之后两者会分岔，而两者都有用："
+
+#: ../../concepts/context.rst:49
+msgid "Show the raw log in a UI: ``await storage.list_raw_messages(session_id)``."
+msgstr "在 UI 中展示原始日志：``await storage.list_raw_messages(session_id)``\\ 。"
+
+#: ../../concepts/context.rst:50
+msgid "Send the model input: the latest checkpoint plus the raw messages after it."
+msgstr "发送给模型的内容：最新的检查点，加上它之后的原始消息。"
+
+#: ../../concepts/context.rst:52
+msgid "A checkpoint records the last original message it covers, so restoring starts after that point and summarized messages are never sent twice."
+msgstr "检查点会记录它覆盖到的最后一条原始消息，因此恢复从该位置之后开始，已摘要的消息不会被重复发送。"
+
+#: ../../concepts/context.rst:56
+msgid "Keep model context and display history separate"
+msgstr "把模型上下文和展示用的历史记录分开"
+
+#: ../../concepts/context.rst:58
+msgid "Choose what you persist and what you send back to the model independently. ``Message.persist=False`` asks persistence subscribers not to store a message; it does not hide it from the current request. ``include_in_messages=False`` keeps a message out of future restored context, not necessarily out of the raw transcript. Use message attributes for application data instead of putting private routing information in prompt text."
+msgstr "你可以独立决定持久化哪些内容、回传给模型哪些内容。\\ ``Message.persist=False`` 请求持久化订阅者不要存储某条消息，但不会把这条消息从当前请求中隐藏。\\ ``include_in_messages=False`` 让某条消息不进入之后恢复的上下文，但不一定把它排除在原始记录之外。应用数据请放在消息属性里，不要把私有的路由信息写进提示词文本。"
+
+#: ../../concepts/context.rst:65
+msgid "Do not rebuild provider context by concatenating visible chat bubbles. Tool calls and matching results are part of the conversation even when a UI hides them. A restored context must preserve their IDs and structure; a persistence extension handles that projection for you. See :doc:`../learn/sessions`."
+msgstr "不要用拼接可见聊天气泡的方式重建模型提供商的上下文。即使 UI 把它们隐藏起来，工具调用和对应的工具结果依然是对话的一部分。恢复出来的上下文必须保留它们的 ID 和结构；持久化扩展会替你处理这种投影。参见\\ :doc:`../learn/sessions`\\ 。"
+
+#: ../../concepts/context.rst:71
+msgid "When context runs out"
+msgstr "上下文不够用时"
+
+#: ../../concepts/context.rst:73
+msgid ":class:`~zett_agent.extensions.compaction.CompactionExtension` watches the size of the request and, when it crosses a threshold, replaces older turns with one summary."
+msgstr ":class:`~zett_agent.extensions.compaction.CompactionExtension` 会监视请求的大小，一旦超过阈值，就把较早的轮次替换成一条摘要。"
+
+#: ../../concepts/context.rst:77
+msgid "Recent turns are kept whole, including their tool calls and results."
+msgstr "最近的轮次会完整保留，包括其中的工具调用和工具结果。"
+
+#: ../../concepts/context.rst:78
+msgid "The current turn is never split, so one oversized turn is left alone."
+msgstr "当前轮次绝不会被拆开，所以单个过大的轮次会原样保留。"
+
+#: ../../concepts/context.rst:79
+msgid "If the summary would not be smaller than what it replaces, nothing changes."
+msgstr "如果摘要并不比它替换掉的内容更小，那就什么都不改。"
+
+#: ../../concepts/context.rst:81
+msgid "Configure it with ``max_tokens`` and ``keep_recent_tokens`` and watch the ``COMPACTION_*`` events. See :doc:`../examples/compaction`."
+msgstr "用 ``max_tokens`` 和 ``keep_recent_tokens`` 配置它，并观察 ``COMPACTION_*`` 事件。参见\\ :doc:`../examples/compaction`\\ 。"
+

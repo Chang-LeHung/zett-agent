@@ -1,0 +1,281 @@
+# Simplified Chinese translation of the Zett Agent documentation.
+# This file is distributed under the same license as the Zett Agent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"PO-Revision-Date: 2026-10-13 00:00+0800\n"
+"Last-Translator: Zett Agent contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese (Simplified)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../extending/hooks.rst:2
+msgid "Lifecycle hook reference"
+msgstr "生命周期钩子参考"
+
+#: ../../extending/hooks.rst:4
+msgid "All hooks receive :class:`~zett_agent.agent.AgentRunContext` unless noted. Lifecycle hooks are ordinary async functions returning None. ``accept`` is synchronous and returns bool. Lifecycle defaults are no-ops; middleware defaults transparently call the next layer. Override only what your extension needs."
+msgstr "除非另有说明，所有钩子都会收到\\ :class:`~zett_agent.agent.AgentRunContext`\\ 。生命周期钩子是返回 None 的普通异步函数。\\ ``accept`` 是同步的，返回 bool。生命周期钩子的默认实现是空操作；中间件的默认实现会透明地调用下一层。只覆盖你的扩展需要的部分。"
+
+#: ../../extending/hooks.rst:10
+msgid "Setup hooks"
+msgstr "设置钩子"
+
+#: ../../extending/hooks.rst:12
+msgid "Runs once per request, not once per Agent instance"
+msgstr "每个请求运行一次，而不是每个 Agent 实例一次"
+
+#: ../../extending/hooks.rst:16 ../../extending/hooks.rst:35
+#: ../../extending/hooks.rst:52 ../../extending/hooks.rst:65
+#: ../../extending/hooks.rst:82 ../../extending/hooks.rst:120
+msgid "Hook"
+msgstr "钩子"
+
+#: ../../extending/hooks.rst:17
+msgid "State at entry"
+msgstr "进入时的状态"
+
+#: ../../extending/hooks.rst:18
+msgid "Intended operation"
+msgstr "预期操作"
+
+#: ../../extending/hooks.rst:19
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.on_tool`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.on_tool`"
+
+#: ../../extending/hooks.rst:20
+msgid "Fresh local registry already contains constructor tools; server registry is empty."
+msgstr "新的本地注册表已包含构造函数中的工具；服务端注册表为空。"
+
+#: ../../extending/hooks.rst:21
+msgid "Register dynamic tools through context.register_tool or context.register_server_tool."
+msgstr "通过 context.register_tool 或 context.register_server_tool 注册动态工具。"
+
+#: ../../extending/hooks.rst:22
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.on_state`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.on_state`"
+
+#: ../../extending/hooks.rst:23
+msgid "All dynamic tools registered; new input not appended."
+msgstr "所有动态工具都已注册；新输入尚未追加。"
+
+#: ../../extending/hooks.rst:24
+msgid "Restore history and insert system instructions."
+msgstr "恢复历史记录并插入系统指令。"
+
+#: ../../extending/hooks.rst:25
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.on_message`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.on_message`"
+
+#: ../../extending/hooks.rst:26
+msgid "History ready; input in context.input_message."
+msgstr "历史记录已就绪；输入位于 context.input_message。"
+
+#: ../../extending/hooks.rst:27
+msgid "Replace or validate current input; do not append it yourself."
+msgstr "替换或校验当前输入；不要自行追加。"
+
+#: ../../extending/hooks.rst:30
+msgid "Request hooks"
+msgstr "请求钩子"
+
+#: ../../extending/hooks.rst:32
+msgid "Success and failure are separate paths"
+msgstr "成功和失败是两条不同的路径"
+
+#: ../../extending/hooks.rst:36 ../../extending/hooks.rst:53
+#: ../../extending/hooks.rst:66 ../../extending/hooks.rst:83
+msgid "Boundary and constraints"
+msgstr "边界与约束"
+
+#: ../../extending/hooks.rst:37
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.before_run`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.before_run`"
+
+#: ../../extending/hooks.rst:38
+msgid "Transformed input has been appended and published; initialize per-request work."
+msgstr "转换后的输入已追加并发布；在这里初始化每个请求的工作。"
+
+#: ../../extending/hooks.rst:39
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.after_run`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.after_run`"
+
+#: ../../extending/hooks.rst:40
+msgid "A final answer is ready with no remaining queued input."
+msgstr "最终答案已就绪，且没有排队等待的输入。"
+
+#: ../../extending/hooks.rst:41
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.on_success`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.on_success`"
+
+#: ../../extending/hooks.rst:42
+msgid "All after_run hooks succeeded; precedes RUN_COMPLETED. Release success state."
+msgstr "所有 after_run 钩子都已成功；该钩子先于 RUN_COMPLETED。释放成功路径上的状态。"
+
+#: ../../extending/hooks.rst:43
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.on_error`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.on_error`"
+
+#: ../../extending/hooks.rst:44
+msgid "A non-cancellation request error is being propagated. Release failure state."
+msgstr "正在向外传播一个非取消类的请求错误。释放失败路径上的状态。"
+
+#: ../../extending/hooks.rst:47
+msgid "Turn hooks"
+msgstr "轮次钩子"
+
+#: ../../extending/hooks.rst:49
+msgid "A request runs one turn per model/tool cycle"
+msgstr "一个请求在每个模型/工具循环中构成一个轮次"
+
+#: ../../extending/hooks.rst:54
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.before_turn`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.before_turn`"
+
+#: ../../extending/hooks.rst:55
+msgid "After before_run, or after the previous turn's after_turn; before compaction, before_model, and the provider call. Messages or tools edited here shape this turn only."
+msgstr "在 before_run 之后，或在上一个轮次的 after_turn 之后；位于压缩、before_model 和模型提供商调用之前。在这里修改的消息或工具只影响本轮次。"
+
+#: ../../extending/hooks.rst:56
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.after_turn`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.after_turn`"
+
+#: ../../extending/hooks.rst:57
+msgid "The turn's AssistantMessage and every ToolMessage it requested are appended and published. Receives the assistant message that opened the turn, including when its tool calls failed or steering superseded them. The final answer closes its turn before after_run."
+msgstr "本轮次的 AssistantMessage 以及它所请求的每一条 ToolMessage 都已追加并发布。该钩子会收到开启本轮次的助手消息，包括工具调用失败或被引导取代的情况。最终答案在 after_run 之前结束自己的轮次。"
+
+#: ../../extending/hooks.rst:60
+msgid "Model and tool hooks"
+msgstr "模型与工具钩子"
+
+#: ../../extending/hooks.rst:62
+msgid "May execute multiple times within one request"
+msgstr "在一个请求中可能执行多次"
+
+#: ../../extending/hooks.rst:67
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.before_model`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.before_model`"
+
+#: ../../extending/hooks.rst:68
+msgid "Receives context and ModelRequest; inspect it or change context.state.messages, context.tools, and context.server_tools."
+msgstr "接收 context 和 ModelRequest；可以检查它，也可以修改 context.state.messages、context.tools 和 context.server_tools。"
+
+#: ../../extending/hooks.rst:69
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.after_model`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.after_model`"
+
+#: ../../extending/hooks.rst:70
+msgid "Complete AssistantMessage already appended; receives ModelResponse including usage."
+msgstr "完整的 AssistantMessage 已追加；该钩子收到包含用量信息的 ModelResponse。"
+
+#: ../../extending/hooks.rst:71
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.before_tool`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.before_tool`"
+
+#: ../../extending/hooks.rst:72
+msgid "Before one tool call. A raised exception fails the request before execution."
+msgstr "在一次工具调用之前。抛出异常会让请求在执行之前就失败。"
+
+#: ../../extending/hooks.rst:73
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.after_tool`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.after_tool`"
+
+#: ../../extending/hooks.rst:74
+msgid "Tool execution has finished but ToolMessage is not appended yet. Inspect the separate error argument and modify the result before context and persistence receive it."
+msgstr "工具已执行完毕，但 ToolMessage 尚未追加。可以检查单独的 error 参数，并在上下文和持久化收到工具结果之前修改它。"
+
+#: ../../extending/hooks.rst:77
+msgid "Middleware hooks"
+msgstr "中间件钩子"
+
+#: ../../extending/hooks.rst:79
+msgid "Wrap the operation instead of observing one side of it"
+msgstr "包装整个操作，而不是只观察它的一侧"
+
+#: ../../extending/hooks.rst:84
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.on_model_request`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.on_model_request`"
+
+#: ../../extending/hooks.rst:85
+msgid "Wraps the provider stream. Pass a ModelRequest to ``call_next`` and close the returned iterator when leaving early."
+msgstr "包装模型提供商的流式输出。把 ModelRequest 传给 ``call_next``，并在提前退出时关闭返回的迭代器。"
+
+#: ../../extending/hooks.rst:86
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.on_tool_call`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.on_tool_call`"
+
+#: ../../extending/hooks.rst:87
+msgid "Wraps one registered local tool handler. It may adjust arguments, transform or short-circuit the result, or raise a normal tool failure."
+msgstr "包装一个已注册的本地工具处理函数。它可以调整参数、转换或短路处理结果，也可以抛出普通的工具失败。"
+
+#: ../../extending/hooks.rst:89
+msgid "These hooks use the same extension priority ordering as lifecycle hooks, with lower priorities forming the outer middleware layers. Provider-hosted tools run inside ``on_model_request`` and do not use the local ``on_tool_call`` boundary."
+msgstr "这些钩子使用与生命周期钩子相同的扩展优先级顺序，优先级更低者构成外层的中间件。模型提供商托管的工具在 ``on_model_request`` 内部运行，不经过本地的 ``on_tool_call`` 边界。"
+
+#: ../../extending/hooks.rst:94
+msgid "Emitting outward events"
+msgstr "向外发出事件"
+
+#: ../../extending/hooks.rst:96
+msgid "Any lifecycle hook may publish visible progress with ``await context.emit(AgentEvent(...))``. The event enters the request-owned queue at that exact point in hook priority order. Internal runtime methods and extensions never expose nested AgentEvent async generators; only :meth:`~zett_agent.agent.Agent.stream` drains the queue and yields to callers."
+msgstr "任何生命周期钩子都可以用 ``await context.emit(AgentEvent(...))`` 发布可见的进度。事件会按钩子优先级顺序，恰好在那个位置进入属于本次请求的队列。运行时的内部方法和扩展从不对外暴露嵌套的 AgentEvent 异步生成器；只有\\ :meth:`~zett_agent.agent.Agent.stream`\\ 会排空队列并把事件产出给调用方。"
+
+#: ../../extending/hooks.rst:102
+msgid "Custom output does not become a phase transition simply because its payload says \"working\". Do not synthesize MODEL_STARTED, TOOL_STARTED, or terminal events that are owned by the core loop. Use ``context.publish`` instead for internal extension-to-extension notifications that should not reach the UI."
+msgstr "自定义输出不会仅仅因为它的载荷里写着“working”就变成一次阶段切换。不要自行合成由核心循环拥有的 MODEL_STARTED、TOOL_STARTED 或终止事件。对于不应到达 UI 的扩展间内部通知，请改用 ``context.publish``\\ 。"
+
+#: ../../extending/hooks.rst:107
+msgid "``before_model`` receives ``(context, request)``. The runtime refreshes request messages and both tool registries before each extension and again before the provider call. Request fields are frozen; edit ``context.state.messages``, ``context.tools``, or ``context.server_tools`` to affect subsequent hooks and the provider. The supplied request is a shallow view at entry, not a live view of later registry changes."
+msgstr "``before_model`` 接收 ``(context, request)``\\ 。运行时会为每个扩展刷新请求消息和两个工具注册表，并在调用模型提供商之前再刷新一次。请求的字段是冻结的；要影响后续钩子和模型提供商，请修改 ``context.state.messages``、``context.tools`` 或 ``context.server_tools``\\ 。传入的 request 是进入时的浅层视图，不会反映之后注册表的变化。"
+
+#: ../../extending/hooks.rst:115
+msgid "Notification and input hooks"
+msgstr "通知与输入钩子"
+
+#: ../../extending/hooks.rst:117
+msgid "These hooks are not UI stream callbacks"
+msgstr "这些钩子不是 UI 流式输出回调"
+
+#: ../../extending/hooks.rst:121
+msgid "Contract"
+msgstr "约定"
+
+#: ../../extending/hooks.rst:122
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.on_event`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.on_event`"
+
+#: ../../extending/hooks.rst:123
+msgid "Awaited for ExtensionEvent published inside the request; inspect concrete event types."
+msgstr "请求内部发布 ExtensionEvent 时会等待该钩子；可以检查具体的事件类型。"
+
+#: ../../extending/hooks.rst:124
+msgid ":meth:`~zett_agent.extensions.base.AgentExtension.accept`"
+msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.accept`"
+
+#: ../../extending/hooks.rst:125
+msgid "Receives config and ExternalEvent from external callers, potentially on another thread. Return whether delivery was accepted."
+msgstr "从外部调用方接收 config 和 ExternalEvent，可能位于另一个线程。返回是否接受投递。"
+
+#: ../../extending/hooks.rst:127
+msgid "Use ExternalEventExtension for pending responses instead of writing your own cross-thread Future handling. If overriding its on_event or on_error methods, call super() so the base can wake and release pending waits."
+msgstr "处理待返回的响应时，请使用 ExternalEventExtension，而不要自己写跨线程的 Future 处理逻辑。如果要覆盖它的 on_event 或 on_error 方法，请调用 super()，让基类能够唤醒并释放待处理的等待。"
+
+#: ../../extending/hooks.rst:132
+msgid "Priority, naming, and exceptions"
+msgstr "优先级、命名与异常"
+
+#: ../../extending/hooks.rst:134
+msgid "``priority = 100`` is the default. Lower values run earlier within each hook stage. Two instances with the same name cannot be registered. Give independently configured instances explicit names through ``extension.name`` when needed."
+msgstr "``priority = 100`` 是默认值。在同一个钩子阶段内，值更小的先运行。不允许注册两个同名的实例。需要时，可以通过 ``extension.name`` 为独立配置的实例指定明确的名字。"
+
+#: ../../extending/hooks.rst:138
+msgid "If a hook fails, previously completed hooks are not rolled back. Cleanup must be idempotent and tolerate partial initialization. Cancellation has its own internal RunCancelledEvent, not an on_cancel method. See :doc:`state`."
+msgstr "如果某个钩子失败，之前已完成的钩子不会被回滚。清理必须幂等，并能容忍部分初始化。取消有自己内部的 RunCancelledEvent，而不是 on_cancel 方法。参见\\ :doc:`state`\\ 。"
+

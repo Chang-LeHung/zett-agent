@@ -149,7 +149,7 @@ msgstr ":meth:`~zett_agent.extensions.base.AgentExtension.after_turn`"
 
 #: ../../extending/hooks.rst:57
 msgid "The turn's AssistantMessage and every ToolMessage it requested are appended and published. Receives the assistant message that opened the turn, including when its tool calls failed or steering superseded them. The final answer closes its turn before after_run."
-msgstr "本轮次的 AssistantMessage 以及它所请求的每一条 ToolMessage 都已追加并发布。该钩子会收到开启本轮次的助手消息，包括工具调用失败或被引导取代的情况。最终答案在 after_run 之前结束自己的轮次。"
+msgstr "本轮次的 AssistantMessage 以及它所请求的每一条 ToolMessage 都已追加并发布。该钩子会收到开启本轮次的助手消息，包括工具调用失败或被 steering 取代的情况。最终答案在 after_run 之前结束自己的轮次。"
 
 #: ../../extending/hooks.rst:60
 msgid "Model and tool hooks"

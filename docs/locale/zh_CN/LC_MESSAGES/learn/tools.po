@@ -34,11 +34,11 @@ msgstr "``@tool`` 会读取类型注解来构建 JSON Schema。文档字符串�
 
 #: ../../learn/tools.rst:20
 msgid "A description and at least one nonempty guideline are required. For a small tool, provide the guideline on the decorator:"
-msgstr "必须提供描述和至少一条非空的使用准则。对于小型工具，可以直接在装饰器上给出使用准则："
+msgstr "必须提供描述和至少一条非空的 guidelines。对于小型工具，可以直接在装饰器上给出 guidelines："
 
 #: ../../learn/tools.rst:32
 msgid "Guidelines and snippets help the model choose the right operation. They are not permission checks. Decorator ``guidelines`` or ``snippet`` values override the corresponding docstring sections."
-msgstr "使用准则和调用示例帮助模型选择正确的操作。它们不是权限检查。装饰器上的 ``guidelines`` 或 ``snippet`` 值会覆盖文档字符串中对应的章节。"
+msgstr "guidelines 和 snippets 帮助模型选择正确的操作。它们不是权限检查。装饰器上的 ``guidelines`` 或 ``snippet`` 值会覆盖文档字符串中对应的章节。"
 
 #: ../../learn/tools.rst:37
 msgid "Design arguments the model can supply"

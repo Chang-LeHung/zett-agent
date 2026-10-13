@@ -91,7 +91,7 @@ msgstr "如果某个服务器无法在\\ ``connect_timeout``\\ 秒（默认 30�
 
 #: ../../learn/mcp.rst:152
 msgid "Tool schemas are sent without ``title`` and ``$schema`` annotations, which server generators attach to every property and which only repeat the property name. Per-tool usage guidelines are omitted too: the system message already states that ``<server>__<tool>`` names belong to their server, so repeating it for every tool only costs prompt tokens. Property names, types, descriptions, and constraints are untouched."
-msgstr "发送工具模式时不会包含\\ ``title``\\ 和\\ ``$schema``\\ 注解；服务器生成器会给每个属性都附上这些注解，而它们只是重复属性名。每个工具的使用准则也会被省略：系统消息已经说明\\ ``<server>__<tool>``\\ 形式的名称属于对应的服务器，因此为每个工具都重复一遍只会消耗提示词 token。属性的名称、类型、描述和约束都保持不变。"
+msgstr "发送工具模式时不会包含\\ ``title``\\ 和\\ ``$schema``\\ 注解；服务器生成器会给每个属性都附上这些注解，而它们只是重复属性名。每个工具的 guidelines 也会被省略：系统消息已经说明\\ ``<server>__<tool>``\\ 形式的名称属于对应的服务器，因此为每个工具都重复一遍只会消耗提示词 token。属性的名称、类型、描述和约束都保持不变。"
 
 #: ../../learn/mcp.rst:159
 msgid "Exposed tool names are limited to letters, digits, ``_`` and ``-`` and at most 64 characters, the intersection of what model providers accept; longer names are shortened with a stable hash. A tool whose exposed name is already registered is skipped with a warning instead of failing the request. Servers that repeat a pagination cursor or return more than 100 pages are treated as unavailable."

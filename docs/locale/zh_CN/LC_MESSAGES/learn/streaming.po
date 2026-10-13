@@ -142,7 +142,7 @@ msgstr "你自己的扩展发出的事件。"
 
 #: ../../learn/streaming.rst:95
 msgid "Provider-hosted tools add ``SERVER_TOOL_*`` events; steering and internal continuations add their own pairs. The full list is on :class:`~zett_agent.events.AgentEventType`."
-msgstr "提供商托管的工具会添加 ``SERVER_TOOL_*`` 事件；引导和内部续写会添加各自的事件对。完整列表见 :class:`~zett_agent.events.AgentEventType`\\ 。"
+msgstr "提供商托管的工具会添加 ``SERVER_TOOL_*`` 事件；steering 和 internal continuation 会添加各自的事件对。完整列表见 :class:`~zett_agent.events.AgentEventType`\\ 。"
 
 #: ../../learn/streaming.rst:100
 msgid "Track model usage"

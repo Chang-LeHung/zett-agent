@@ -134,7 +134,7 @@ msgstr "``max_iterations`` 限制每条用户输入或内部输入能触发的�
 
 #: ../../concepts/architecture.rst:78
 msgid "``max_internal_messages`` caps queued internal continuations in one request."
-msgstr "``max_internal_messages`` 限制一次请求中排队的内部续接数量。"
+msgstr "``max_internal_messages`` 限制一次请求中排队的 internal continuation 数量。"
 
 #: ../../concepts/architecture.rst:79
 msgid "Neither limit is a spending cap or a permission boundary."
@@ -142,7 +142,7 @@ msgstr "这两个限制都不是花费上限，也不是权限边界。"
 
 #: ../../concepts/architecture.rst:81
 msgid "Filesystem, shell, and MCP tools run with the permissions of your process or server. Tool guidance is documentation, not enforcement. Guard untrusted input with explicit allow-lists, approval rules, resource limits, and process isolation."
-msgstr "文件系统、shell 和 MCP 工具以你的进程或服务器的权限运行。工具使用准则只是说明，不是强制约束。请用显式的允许列表、审批规则、资源限制和进程隔离来防护不可信的输入。"
+msgstr "文件系统、shell 和 MCP 工具以你的进程或服务器的权限运行。工具 guidelines 只是说明，不是强制约束。请用显式的允许列表、审批规则、资源限制和进程隔离来防护不可信的输入。"
 
 #: ../../concepts/architecture.rst:86
 msgid "Next: :doc:`lifecycle` for the exact order of hooks inside one request."

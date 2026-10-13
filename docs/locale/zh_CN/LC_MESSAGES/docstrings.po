@@ -90,7 +90,7 @@ msgstr "工具还有一层约定"
 
 #: ../../docstrings.rst:125
 msgid "``Snippet`` and ``Guidelines`` are consumed by the tool decorator and included in model guidance. They are not merely website formatting. Preserve their parser syntax and validate tool-schema tests after editing them. Examples intended for developers belong under Examples rather than in model-facing guidance."
-msgstr "``Snippet`` 和 ``Guidelines`` 由工具装饰器读取，并纳入模型看到的使用准则。它们不只是网站排版。修改它们之后，请保持解析器语法的完整，并运行工具模式的测试加以校验。面向开发者的示例应放在 Examples 小节，而不是写给模型看的准则里。"
+msgstr "``Snippet`` 和 ``Guidelines`` 由工具装饰器读取，并纳入模型看到的 guidelines。它们不只是网站排版。修改它们之后，请保持解析器语法的完整，并运行工具模式的测试加以校验。面向开发者的示例应放在 Examples 小节，而不是写给模型看的准则里。"
 
 #: ../../docstrings.rst:131
 msgid "Build and validate"

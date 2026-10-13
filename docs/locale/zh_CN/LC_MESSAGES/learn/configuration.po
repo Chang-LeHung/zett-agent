@@ -86,7 +86,7 @@ msgstr "``None``"
 
 #: ../../learn/configuration.rst:51
 msgid "Keep default history and tool guidance, or replace them with an explicit list."
-msgstr "保留默认的历史记录和工具使用准则，或者用一个显式列表替换它们。"
+msgstr "保留默认的历史记录和工具 guidelines，或者用一个显式列表替换它们。"
 
 #: ../../learn/configuration.rst:52
 msgid "``reasoning_effort``"
@@ -134,7 +134,7 @@ msgstr "``8``"
 
 #: ../../learn/configuration.rst:63
 msgid "Bound internal continuations queued during a request."
-msgstr "限制一次请求期间排队的内部续写。"
+msgstr "限制一次请求期间排队的 internal continuation。"
 
 #: ../../learn/configuration.rst:64
 msgid "``event_dispatcher``"
@@ -146,7 +146,7 @@ msgstr "可选的回调，在客户端消费事件时被等待执行。"
 
 #: ../../learn/configuration.rst:68
 msgid "Use a positive ``max_iterations`` and a nonnegative integer for ``max_internal_messages`` (``0`` disallows internal continuations). Exhaustion raises :class:`~zett_agent.exceptions.AgentIterationLimitError`; it does not return a successful partial answer. Neither limit caps money, tokens, wall-clock time, or the number of tools in one response. Add an application timeout and tool limits separately; see :doc:`application`."
-msgstr "请为 ``max_iterations`` 使用正整数，为 ``max_internal_messages`` 使用非负整数（``0`` 表示禁止内部续写）。超出上限会抛出 :class:`~zett_agent.exceptions.AgentIterationLimitError`，而不会返回一份成功的部分答案。这两个上限都不限制费用、token 数、墙钟时间或单个响应中的工具数量。请另外设置应用超时和工具限额；参见 :doc:`application`\\ 。"
+msgstr "请为 ``max_iterations`` 使用正整数，为 ``max_internal_messages`` 使用非负整数（``0`` 表示禁止 internal continuation）。超出上限会抛出 :class:`~zett_agent.exceptions.AgentIterationLimitError`，而不会返回一份成功的部分答案。这两个上限都不限制费用、token 数、墙钟时间或单个响应中的工具数量。请另外设置应用超时和工具限额；参见 :doc:`application`\\ 。"
 
 #: ../../learn/configuration.rst:76
 msgid "Override one request"

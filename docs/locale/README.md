@@ -33,6 +33,27 @@ A paragraph is translated as a unit, but its markup is data:
 - Write each message on one logical line; a line break between two Chinese
   characters renders as a space.
 
+## Terms that stay in English
+
+Some words are this project's own concepts, and Chinese has no settled word for
+them. Inventing one makes the page harder to search, harder to match with the
+code, and different from page to page. Keep these in English, in prose as well
+as in headings:
+
+| Keep | Why |
+| --- | --- |
+| `JIT harness`, `harness` | the name of the feature and its package |
+| `internal continuation` | a model step an extension queues itself; there is no common word |
+| `steering` | the user injecting guidance mid-run; also the `SteeringExtension` |
+| `guidelines`, `snippets` | the tool decorator's arguments and docstring sections |
+| `inspection tier` | the JIT tools that read retained details |
+
+Words with an established rendering are translated: 智能体, 工具, 钩子, 中间件,
+压缩, 检查点, 会话. `translation_check.py` fails when a message drops one of the
+English terms above or brings back a retired rendering, so the rule holds as the
+catalogs grow. Add a new project term to `KEEP_ENGLISH` in the same commit as its
+first page.
+
 ## Adding a language
 
 Add it to `LANGUAGES` and `UI_STRINGS` in `docs/_ext/languages.py`, run

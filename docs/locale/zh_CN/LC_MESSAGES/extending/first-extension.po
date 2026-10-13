@@ -74,11 +74,11 @@ msgstr "下面完整的类还额外处理 ``on_error`` 和 ``RunCancelledEvent``
 
 #: ../../extending/first-extension.rst:77
 msgid "Step 5: compose with history and prompt guidance"
-msgstr "第 5 步：与历史记录和提示词使用准则组合"
+msgstr "第 5 步：与历史记录和提示词 guidelines 组合"
 
 #: ../../extending/first-extension.rst:83
 msgid "NoteExtension has priority 50, ahead of default-priority 100 extensions. Hooks still execute stage by stage, not extension by extension. Explicit extension lists replace defaults, which is why memory and tool guidance appear in this list."
-msgstr "NoteExtension 的优先级是 50，排在默认优先级 100 的扩展之前。钩子仍然按阶段执行，而不是按扩展逐个执行。显式给出的扩展列表会替换默认值，因此这个列表里出现了记忆和工具使用准则。"
+msgstr "NoteExtension 的优先级是 50，排在默认优先级 100 的扩展之前。钩子仍然按阶段执行，而不是按扩展逐个执行。显式给出的扩展列表会替换默认值，因此这个列表里出现了记忆和工具 guidelines。"
 
 #: ../../extending/first-extension.rst:88
 msgid "Run and inspect the result"

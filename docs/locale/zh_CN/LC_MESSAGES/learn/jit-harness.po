@@ -42,7 +42,7 @@ msgstr "提供一个模型，以及你的应用自身拥有的基础工具："
 
 #: ../../learn/jit-harness.rst:43
 msgid "Run this inside an async function. ``model`` is a configured function-calling provider and ``add`` is your typed base tool. The extension supplies current tool guidance, so an additional ``ToolGuidelinesExtension`` is not necessary. An explicit extension list replaces optional defaults; include history as above or use :doc:`session persistence <sessions>`."
-msgstr "请在异步函数中运行这段代码。 ``model`` 是一个已配置好的、支持函数调用的模型提供商， ``add`` 则是你定义的类型化基础工具。该扩展会提供当前的工具使用准则，因此不需要再添加 ``ToolGuidelinesExtension``\\ 。显式给出的扩展列表会替换掉可选默认项；请像上面那样包含历史记录，或使用 :doc:`会话持久化 <sessions>`\\ 。"
+msgstr "请在异步函数中运行这段代码。 ``model`` 是一个已配置好的、支持函数调用的模型提供商， ``add`` 则是你定义的类型化基础工具。该扩展会提供当前的工具 guidelines，因此不需要再添加 ``ToolGuidelinesExtension``\\ 。显式给出的扩展列表会替换掉可选默认项；请像上面那样包含历史记录，或使用 :doc:`会话持久化 <sessions>`\\ 。"
 
 #: ../../learn/jit-harness.rst:49
 msgid "The model decides whether to create a tool. Creation does not test the tool body: successful registration means the Python module loaded and the tool definition validated, not that the implementation solves the task."
@@ -54,7 +54,7 @@ msgstr "从高成本的工作流中学习"
 
 #: ../../learn/jit-harness.rst:56
 msgid "When a task involves many exploratory steps or substantial time and tokens, the harness guidance asks the model to consider retaining what worked. Choose Python when stable steps can be automated; choose text when the path still needs judgment, such as selecting relevant evidence or interpreting errors. Neither form should become a dump of the conversation. Keep the useful path, applicability, dependencies, known pitfalls, and outcome checks."
-msgstr "当一项任务涉及大量探索性步骤，或者耗费可观的时间和 token 时，harness 的使用准则会请模型考虑把行之有效的做法保留下来。如果步骤稳定、可以自动化，就选择 Python；如果这条路径仍需要判断，例如挑选相关证据或解读错误，就选择文本。两种形式都不应变成对话的堆砌。请保留其中有用的路径、适用条件、依赖、已知的坑以及结果检查方式。"
+msgstr "当一项任务涉及大量探索性步骤，或者耗费可观的时间和 token 时，harness 的 guidelines 会请模型考虑把行之有效的做法保留下来。如果步骤稳定、可以自动化，就选择 Python；如果这条路径仍需要判断，例如挑选相关证据或解读错误，就选择文本。两种形式都不应变成对话的堆砌。请保留其中有用的路径、适用条件、依赖、已知的坑以及结果检查方式。"
 
 #: ../../learn/jit-harness.rst:63
 msgid "A text tool is a reusable Markdown procedure, similar to a ``SKILL``:"
@@ -66,7 +66,7 @@ msgstr "模型使用同一个 ``create_tool``，并传入 ``kind=\"text\"``\\ �
 
 #: ../../learn/jit-harness.rst:92
 msgid "Loaded text tools expose a reader with ``offset=0`` and ``max_chars=2000``. The model calls it to read relevant steps, then follows them with available tools. Reading text does not execute Python or automatically run a workflow. The full body is not injected into each model request: only the tool's selection hint, reader schema, and guidance are offered. Long workflows use the same exact, budgeted pages as source reads."
-msgstr "已加载的文本工具会暴露一个读取器，默认参数为 ``offset=0`` 和 ``max_chars=2000``\\ 。模型调用它来读取相关步骤，然后配合可用的工具去执行。读取文本不会执行 Python，也不会自动运行工作流。完整正文不会注入每一次模型请求：只提供该工具的选择提示、读取器模式和使用准则。较长的工作流与读取源码时一样，按同一套精确且受预算约束的分页读取。"
+msgstr "已加载的文本工具会暴露一个读取器，默认参数为 ``offset=0`` 和 ``max_chars=2000``\\ 。模型调用它来读取相关步骤，然后配合可用的工具去执行。读取文本不会执行 Python，也不会自动运行工作流。完整正文不会注入每一次模型请求：只提供该工具的选择提示、读取器模式和 guidelines。较长的工作流与读取源码时一样，按同一套精确且受预算约束的分页读取。"
 
 #: ../../learn/jit-harness.rst:99
 msgid "``update_tool(name, markdown, description=...)`` replaces a text workflow without changing its kind or name; omitting ``description`` preserves its current hint. Use ``read_tool_source`` to inspect the full path before editing. Unloading hides the reader while retaining its content; loading restores it. Both Python and text tools are saved in the application's snapshot for reuse in later sessions. Learning remains in memory until the application saves it."
@@ -74,7 +74,7 @@ msgstr "``update_tool(name, markdown, description=...)`` 会替换文本工作�
 
 #: ../../learn/jit-harness.rst:106
 msgid "Validate a proposed optimization against representative tasks and account for the cost of creating and testing it. Guidance encourages this behavior; it does not guarantee that a model will learn, or that a saved path is globally optimal."
-msgstr "请用有代表性的任务验证所提出的优化，并把创建和测试它的成本计算在内。使用准则鼓励这种行为，但并不保证模型一定能学会，也不保证保存下来的路径全局最优。"
+msgstr "请用有代表性的任务验证所提出的优化，并把创建和测试它的成本计算在内。guidelines 鼓励这种行为，但并不保证模型一定能学会，也不保证保存下来的路径全局最优。"
 
 #: ../../learn/jit-harness.rst:111
 msgid "Choose whether to manage base tools"
@@ -206,7 +206,7 @@ msgstr "管理工具的名称是保留的。模型无法覆盖或卸载这些工
 
 #: ../../learn/jit-harness.rst:181
 msgid "The last five read retained details and are the *inspection* tier: ``read_tool_source``, ``read_tool_schema``, ``inspect_tool_stats``, ``inspect_tool_calls``, and ``inspect_tool_errors``. The others are the control loop that builds, changes, and lists capabilities. :ref:`Control what the model sees <jit-control-what-the-model-sees>` explains how to expose the inspection tier."
-msgstr "最后五个工具用于读取保留的细节，属于 *检查* 层级：``read_tool_source``、``read_tool_schema``、``inspect_tool_stats``、``inspect_tool_calls`` 和 ``inspect_tool_errors``\\ 。其余工具是负责构建、修改和列出能力的控制循环。\\ :ref:`控制模型看到什么 <jit-control-what-the-model-sees>` 说明了如何暴露检查层级。"
+msgstr "最后五个工具用于读取保留的细节，属于 *inspection* tier：``read_tool_source``、``read_tool_schema``、``inspect_tool_stats``、``inspect_tool_calls`` 和 ``inspect_tool_errors``\\ 。其余工具是负责构建、修改和列出能力的控制循环。\\ :ref:`控制模型看到什么 <jit-control-what-the-model-sees>` 说明了如何暴露 inspection tier。"
 
 #: ../../learn/jit-harness.rst:187
 #, python-brace-format
@@ -223,7 +223,7 @@ msgstr "目录中的描述最多预览 200 个字符；定义中的描述最多�
 
 #: ../../learn/jit-harness.rst:208
 msgid "Application methods remain complete: ``harness.list_tools()`` returns the full catalog, ``definition(name)`` returns full metadata and schema, ``source(name)`` returns full dynamic source, and ``inspect_tool(name)`` returns schema, guidelines, and source. Measurements stay on their own methods: ``profile_stats(name)`` returns aggregates and ``profile(name)`` returns individual call records. Those methods do not apply the model response budget."
-msgstr "应用侧的方法仍然保持完整：``harness.list_tools()`` 返回完整目录，``definition(name)`` 返回完整的元数据和模式，``source(name)`` 返回完整的动态源码，``inspect_tool(name)`` 返回模式、使用准则和源码。测量数据仍由各自的方法提供：``profile_stats(name)`` 返回聚合数据，``profile(name)`` 返回单次调用的记录。这些方法不受模型响应预算的限制。"
+msgstr "应用侧的方法仍然保持完整：``harness.list_tools()`` 返回完整目录，``definition(name)`` 返回完整的元数据和模式，``source(name)`` 返回完整的动态源码，``inspect_tool(name)`` 返回模式、guidelines 和源码。测量数据仍由各自的方法提供：``profile_stats(name)`` 返回聚合数据，``profile(name)`` 返回单次调用的记录。这些方法不受模型响应预算的限制。"
 
 #: ../../learn/jit-harness.rst:218
 msgid "Control what the model sees"
@@ -231,7 +231,7 @@ msgstr "控制模型看到什么"
 
 #: ../../learn/jit-harness.rst:220
 msgid "Every definition and instruction is sent on every request. The inspection tier is the part most sessions never need, so ``JITHarnessExtension(inspection_tools=...)`` decides how it reaches the model:"
-msgstr "每一次请求都会发送全部定义和指令。检查层级是大多数会话根本用不到的部分，因此由 ``JITHarnessExtension(inspection_tools=...)`` 决定它如何到达模型："
+msgstr "每一次请求都会发送全部定义和指令。inspection tier 是大多数会话根本用不到的部分，因此由 ``JITHarnessExtension(inspection_tools=...)`` 决定它如何到达模型："
 
 #: ../../learn/jit-harness.rst:228
 msgid "Mode"
@@ -311,7 +311,7 @@ msgstr "2,080 tokens"
 
 #: ../../learn/jit-harness.rst:270
 msgid "Each figure covers the control-tool definitions plus the instruction block, before tool guidance and your own tools. Deferring saves the inspection definitions (about 880 tokens); hiding removes those definitions and their instructions (about 290 tokens more). Keep the default when the model should be able to diagnose its own tools, and hide when it should not. Hiding is also the lever that matters on Chat Completions, where deferral has no effect because the protocol always receives every definition."
-msgstr "每个数字都涵盖控制类工具的定义加上指令块，不含工具使用准则和你自己的工具。延迟加载可以省下检查相关的定义（约 880 tokens）；隐藏则会移除这些定义及其指令（再多约 290 tokens）。当模型需要能自行诊断自己的工具时，保持默认值；不需要时则隐藏。在 Chat Completions 上，真正起作用的手段也是隐藏，因为延迟加载在那里没有效果 —— 该协议总是接收全部定义。"
+msgstr "每个数字都涵盖控制类工具的定义加上指令块，不含工具 guidelines 和你自己的工具。延迟加载可以省下检查相关的定义（约 880 tokens）；隐藏则会移除这些定义及其指令（再多约 290 tokens）。当模型需要能自行诊断自己的工具时，保持默认值；不需要时则隐藏。在 Chat Completions 上，真正起作用的手段也是隐藏，因为延迟加载在那里没有效果 —— 该协议总是接收全部定义。"
 
 #: ../../learn/jit-harness.rst:278
 msgid "Deferral depends on a provider feature, so it never changes Chat Completions behaviour. Hiding is a pure application decision, and the harness API stays complete in every mode."
@@ -319,7 +319,7 @@ msgstr "延迟加载依赖模型提供商的一项能力，因此它永远不会
 
 #: ../../learn/jit-harness.rst:282
 msgid "These control definitions are larger than they were before package files and programmatic guidance existed. Most of that size is the JSON Schema rendering itself: every optional argument is written as an ``anyOf`` union and every property carries a generated ``title``, which together account for roughly 280 tokens of the figures above across the eleven tools."
-msgstr "这些控制类定义比引入工具包文件和程序化使用准则之前更大。其中大部分体积来自 JSON Schema 本身的呈现：每个可选参数都写成 ``anyOf`` 联合类型，每个属性都带有一个生成出来的 ``title``，这十一项工具加起来约占上面数字中的 280 tokens。"
+msgstr "这些控制类定义比引入工具包文件和程序化 guidelines 之前更大。其中大部分体积来自 JSON Schema 本身的呈现：每个可选参数都写成 ``anyOf`` 联合类型，每个属性都带有一个生成出来的 ``title``，这十一项工具加起来约占上面数字中的 280 tokens。"
 
 #: ../../learn/jit-harness.rst:289
 msgid "Write and compose tools"
@@ -331,7 +331,7 @@ msgstr "Python 模块会收到 ``tool``、``ToolExecutionMode`` 和 ``harness``\
 
 #: ../../learn/jit-harness.rst:300
 msgid "The tool contract is the same as :doc:`tools`: annotated arguments, a description, and non-empty guidelines. JIT tools are ordinary functions, not deferred or client-side search tools."
-msgstr "工具契约与 :doc:`tools` 相同：带类型注解的参数、一段描述，以及非空的使用准则。JIT 工具是普通函数，不是延迟加载的工具，也不是客户端搜索工具。"
+msgstr "工具契约与 :doc:`tools` 相同：带类型注解的参数、一段描述，以及非空的 guidelines。JIT 工具是普通函数，不是延迟加载的工具，也不是客户端搜索工具。"
 
 #: ../../learn/jit-harness.rst:304
 msgid "Use ``await harness.call_tool(name, **arguments)`` in async tools. For ordinary ``def`` functions, use the blocking composition entry point:"
@@ -456,7 +456,7 @@ msgstr "借助性能分析构建有用的工具"
 
 #: ../../learn/jit-harness.rst:442
 msgid "Every harness records session-local measurements for base, dynamic, and management tools. The model reads aggregate counters through ``inspect_tool_stats`` and single-call measurements through ``inspect_tool_calls``. Guidance asks it to complete the user's task with minimal total token usage and end-to-end time, while preserving correctness, completeness, safety, and answer quality. It encourages JIT optimization when useful, including the costs of inspection, tool creation, and validation in the trade-off. Existing tools or a direct solution remain preferable when they already serve the task efficiently. Relevant measurements help the model decide what to improve and verify the result."
-msgstr "每个 harness 都会为基础工具、动态工具和管理工具记录会话本地的测量数据。模型通过 ``inspect_tool_stats`` 读取聚合计数器，通过 ``inspect_tool_calls`` 读取单次调用的测量数据。使用准则要求它在保证正确性、完整性、安全性和回答质量的前提下，以尽可能少的总 token 用量和端到端时间完成任务。它鼓励在有帮助时进行 JIT 优化，并把检查、工具创建和校验的成本一并纳入权衡。当现有工具或直接方案已经能高效完成任务时，仍然优先选择它们。相关的测量数据能帮助模型决定改进什么，并验证结果。"
+msgstr "每个 harness 都会为基础工具、动态工具和管理工具记录会话本地的测量数据。模型通过 ``inspect_tool_stats`` 读取聚合计数器，通过 ``inspect_tool_calls`` 读取单次调用的测量数据。guidelines 要求它在保证正确性、完整性、安全性和回答质量的前提下，以尽可能少的总 token 用量和端到端时间完成任务。它鼓励在有帮助时进行 JIT 优化，并把检查、工具创建和校验的成本一并纳入权衡。当现有工具或直接方案已经能高效完成任务时，仍然优先选择它们。相关的测量数据能帮助模型决定改进什么，并验证结果。"
 
 #: ../../learn/jit-harness.rst:452
 msgid "Look for repeated caller/dependency relationships that a focused tool could compose, large outputs that can be reduced before they reach the model, and slow or failure-prone implementations. Profiling is evidence about execution, not a quality score: a rarely called tool may still be essential, and fewer characters alone do not mean a better answer."
@@ -596,7 +596,7 @@ msgstr "应用侧的 ``harness.tool_errors`` 返回完整的保留消息，最�
 
 #: ../../learn/jit-harness.rst:633
 msgid "Exception messages may include sensitive application data. Arguments, tracebacks, and exception objects are not stored, but the error text itself is retained. Use applications and tools that redact secrets in their error messages. Diagnostics can also contain untrusted text; model guidance treats them as data, not instructions to execute."
-msgstr "异常消息可能包含应用中的敏感数据。参数、回溯信息和异常对象不会被存储，但错误文本本身会被保留。请使用会在错误消息中抹去机密的应用程序和工具。诊断信息也可能包含不受信任的文本；模型的使用准则会把它们当作数据，而不是要执行的指令。"
+msgstr "异常消息可能包含应用中的敏感数据。参数、回溯信息和异常对象不会被存储，但错误文本本身会被保留。请使用会在错误消息中抹去机密的应用程序和工具。诊断信息也可能包含不受信任的文本；模型的 guidelines 会把它们当作数据，而不是要执行的指令。"
 
 #: ../../learn/jit-harness.rst:640
 msgid "Observe management and dynamic tool calls"

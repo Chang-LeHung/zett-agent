@@ -102,9 +102,9 @@ msgstr "运行说明和预期输出参见\\ :doc:`../examples/approval`\\ 。受
 
 #: ../../extending/events.rst:83
 msgid "Internal continuation versus user steering"
-msgstr "内部续接与用户引导"
+msgstr "internal continuation 与 user steering"
 
 #: ../../extending/events.rst:85
 msgid "Publish ``InternalMessageEvent(AgentMessage(content=...))`` when an extension needs a bounded follow-on model step. GoalExtension uses this to request more work after review. Do not mutate the loop queue directly. Urgent user steering is a separate built-in channel and has priority over internal input. Neither mechanism interrupts an HTTP request in the middle of receiving a model response."
-msgstr "当扩展需要一次有边界的后续模型步骤时，请发布 ``InternalMessageEvent(AgentMessage(content=...))``\\ 。GoalExtension 用它来在评审之后请求更多工作。不要直接修改循环队列。紧急的用户引导是另一条内置通道，优先级高于内部输入。这两种机制都不会中断正在接收模型响应的 HTTP 请求。"
+msgstr "当扩展需要一次有边界的后续模型步骤时，请发布 ``InternalMessageEvent(AgentMessage(content=...))``\\ 。GoalExtension 用它来在评审之后请求更多工作。不要直接修改循环队列。紧急的 user steering 是另一条内置通道，优先级高于内部输入。这两种机制都不会中断正在接收模型响应的 HTTP 请求。"
 

@@ -74,7 +74,7 @@ msgstr "agent"
 
 #: ../../concepts/context.rst:26
 msgid "An internal continuation; providers see it as user input."
-msgstr "内部续接消息；模型提供商会把它当作用户输入。"
+msgstr "internal continuation；模型提供商会把它当作用户输入。"
 
 #: ../../concepts/context.rst:29
 msgid "System instructions are rebuilt each time"

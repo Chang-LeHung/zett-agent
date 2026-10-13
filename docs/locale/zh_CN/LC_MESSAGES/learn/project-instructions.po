@@ -38,7 +38,7 @@ msgstr "显式加载该目录："
 
 #: ../../learn/project-instructions.rst:42
 msgid "Here ``model`` is a configured adapter from :doc:`providers`. This extension adds instructions; it does not add filesystem, editing, or shell tools. Keeping default history and tool guidance requires including them in your explicit extension list; see :doc:`configuration`."
-msgstr "这里的\\ ``model``\\ 是来自\\ :doc:`providers`\\ 的已配置适配器。该扩展只添加指令，不会添加文件系统、编辑或 shell 工具。如果要保留默认的历史记录和工具使用准则，就需要把它们也写进显式的扩展列表；参见\\ :doc:`configuration`\\ 。"
+msgstr "这里的\\ ``model``\\ 是来自\\ :doc:`providers`\\ 的已配置适配器。该扩展只添加指令，不会添加文件系统、编辑或 shell 工具。如果要保留默认的历史记录和工具 guidelines，就需要把它们也写进显式的扩展列表；参见\\ :doc:`configuration`\\ 。"
 
 #: ../../learn/project-instructions.rst:48
 msgid "Choose the discovery scope"

@@ -74,7 +74,7 @@ msgstr "技能名称限制为 64 个字符，描述限制为 1,024 个字符。�
 
 #: ../../learn/on-demand.rst:84
 msgid "An explicit ``extensions=[...]`` list replaces the optional defaults. The example includes history and tool guidance to keep both behaviors."
-msgstr "显式的\\ ``extensions=[...]``\\ 列表会替换这些可选的默认扩展。示例中包含了历史记录和工具使用准则，以同时保留这两种行为。"
+msgstr "显式的\\ ``extensions=[...]``\\ 列表会替换这些可选的默认扩展。示例中包含了历史记录和工具 guidelines，以同时保留这两种行为。"
 
 #: ../../learn/on-demand.rst:88
 msgid "Try a complete offline example"

@@ -124,6 +124,40 @@ def fix_glue(text: str) -> str:
     return "".join(out)
 
 
+#: Concepts this project names itself and Chinese has no settled word for. They stay
+#: English in prose: ``(pattern in the source, pattern the translation must keep)``.
+KEEP_ENGLISH = (
+    (r"\bharness\b", r"\bharness\b"),
+    (r"\bsteer(?:ing|ed)?\b", r"\bsteer(?:ing|ed)?\b"),
+    (r"\bguidelines?\b", r"\bguidelines?\b"),
+    (r"\binternal continuations?\b", r"\binternal continuations?\b"),
+    (r"\binspection\W{0,2} tier\b", r"\binspection\W{0,2} tier\b"),
+)
+
+#: Renderings that were invented for those concepts and must not come back.
+RETIRED_RENDERINGS = ("使用准则", "调用示例", "内部续接", "内部续写", "内部消息", "检查层级", "引导")
+
+CODE = re.compile(r"``.+?``|:[A-Za-z][\w:+.-]*:`[^`]+`|`[^`]+`_{1,2}", re.S)
+
+
+def prose(text: str) -> str:
+    """Return the text without code, roles and links, which are checked separately."""
+    return CODE.sub(" ", text)
+
+
+def kept_english(source: str, translation: str) -> list[str]:
+    """Return the project concepts the translation replaced with a Chinese word."""
+    problems = []
+    source_prose, translation_prose = prose(source), prose(translation)
+    for in_source, in_translation in KEEP_ENGLISH:
+        if re.search(in_source, source_prose, re.I) and not re.search(in_translation, translation_prose, re.I):
+            problems.append(f"keep the project term in English (it has no settled Chinese rendering): {in_source}")
+    for retired in RETIRED_RENDERINGS:
+        if retired in translation_prose:
+            problems.append(f"retired rendering {retired!r}; keep the English project term instead")
+    return problems
+
+
 def check_message(source: str, translation: str) -> list[str]:
     """Return what is wrong with one translated paragraph, empty when it is sound."""
     if not translation.strip():
@@ -146,6 +180,7 @@ def check_message(source: str, translation: str) -> list[str]:
     if source.rstrip().endswith("::") and not translation.rstrip().endswith("::"):
         problems.append("the source ends with '::' to introduce a literal block; keep it")
     problems.extend(glued_markup(translation))
+    problems.extend(kept_english(source, translation))
     return problems
 
 

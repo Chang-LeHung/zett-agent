@@ -22,7 +22,7 @@ msgstr "组合内置扩展"
 
 #: ../../extending/built-ins.rst:4
 msgid "Start with the capability you need. Passing an extension list replaces optional defaults, so explicitly include history and tool guidance if you want them. Do not add ``InternalMessageExtension`` or ``SteeringExtension`` yourself; the runtime already provides them."
-msgstr "先确定你需要的能力。传入扩展列表会替换可选默认值，所以如果需要历史记录和工具使用准则，请显式加入。不要自己添加 ``InternalMessageExtension`` 或 ``SteeringExtension``；运行时已经提供了它们。"
+msgstr "先确定你需要的能力。传入扩展列表会替换可选默认值，所以如果需要历史记录和工具 guidelines，请显式加入。不要自己添加 ``InternalMessageExtension`` 或 ``SteeringExtension``；运行时已经提供了它们。"
 
 #: ../../extending/built-ins.rst:9
 msgid "Capability map"
@@ -82,7 +82,7 @@ msgstr "ToolGuidelinesExtension"
 
 #: ../../extending/built-ins.rst:26
 msgid "Include tool snippets and guidelines in model instructions."
-msgstr "把工具调用示例和使用准则加入模型指令。"
+msgstr "把 tool snippets 和 guidelines 加入模型指令。"
 
 #: ../../extending/built-ins.rst:27
 msgid "Include explicitly when supplying a custom extension list."

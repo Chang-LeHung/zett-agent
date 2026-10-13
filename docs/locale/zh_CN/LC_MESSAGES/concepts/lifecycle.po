@@ -26,7 +26,7 @@ msgstr "了解钩子的顺序，才能选对钩子。每个阶段都会对所有
 
 #: ../../concepts/lifecycle.rst:26
 msgid "Because ``on_tool`` always completes before ``on_state``, a guidance extension can describe every tool no matter which extension registered it. Priority only changes the order *within* a stage."
-msgstr "由于 ``on_tool`` 总是在 ``on_state`` 之前完成，提供使用准则的扩展可以描述每一个工具，无论它是哪个扩展注册的。优先级只改变同一阶段\\ *内部*\\ 的顺序。"
+msgstr "由于 ``on_tool`` 总是在 ``on_state`` 之前完成，提供 guidelines 的扩展可以描述每一个工具，无论它是哪个扩展注册的。优先级只改变同一阶段\\ *内部*\\ 的顺序。"
 
 #: ../../concepts/lifecycle.rst:31
 msgid "One turn"

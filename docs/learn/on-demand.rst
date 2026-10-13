@@ -158,6 +158,10 @@ its own, or unloads running code. Tools execute with the permissions of your
 process. Treat skill files and search results as input, not authorization to
 perform privileged actions.
 
+To create and evolve Python tools during a session, opt in to
+:doc:`jit-harness`. It is a separate trusted-code feature, not an implicit
+behavior of skill loading or deferred tool search.
+
 Next: :doc:`sessions` to keep conversations, or
 :doc:`../extending/built-ins` to choose other capabilities.
 

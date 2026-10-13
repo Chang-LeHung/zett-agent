@@ -12,6 +12,7 @@ import pytest
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "docs" / "_examples"
 EXPECTED = {
+    "jit_harness": "JIT tool created and reused: 42",
     "synchronous": "Synchronous history persisted",
     "first_agent": "Turn 2: Remember this conversation",
     "streaming_tools": "Answer: 42",
@@ -55,6 +56,22 @@ def test_every_example_is_classified_and_valid_python():
     assert {path.stem for path in EXAMPLES.glob("*.py")} == {*EXPECTED, "real_provider"}
     for path in EXAMPLES.glob("*.py"):
         ast.parse(path.read_text())
+
+
+async def test_jit_example_lifecycle_is_repeatable_and_does_not_write_outside_destination(tmp_path):
+    from zett_agent.jit_harness import JITHarnessSnapshot
+
+    example = runpy.run_path(str(EXAMPLES / "jit_harness.py"))
+    path = tmp_path / "pipeline.json"
+    await example["exercise_lifecycle"](path)
+    first = path.read_bytes()
+    await example["exercise_lifecycle"](path)
+    assert path.read_bytes() == first
+    snapshot = JITHarnessSnapshot.load(path)
+    assert snapshot.base_tools == ("add",) and snapshot.unloaded_tools == ("add", "sum_workflow")
+    assert [record.name for record in snapshot.text_tools] == ["sum_workflow"]
+    assert {record.name for record in snapshot.tools} == {"twice", "sum_doubled"}
+    assert list(tmp_path.iterdir()) == [path]
 
 
 async def test_example_extension_isolates_concurrent_requests_and_cleans_errors():

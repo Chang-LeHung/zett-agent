@@ -58,6 +58,9 @@ runtime already provides them.
    * - ToolSearchExtension
      - Search for optional tools instead of sending every definition up front.
      - Requires a compatible Responses tool-search endpoint; see :doc:`../learn/on-demand`.
+   * - JITHarnessExtension
+     - Let a model create, compose, update, unload, and reload Python tools.
+     - Trusted code, not a sandbox; deferred inspection tools keep context small; see :doc:`../learn/jit-harness`.
    * - McpExtension
      - Register remote or subprocess MCP tools.
      - Trust and resource ownership remain application responsibilities.

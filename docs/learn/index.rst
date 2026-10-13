@@ -83,6 +83,12 @@ every extension from the start.
 
       Load skill instructions as needed and search deferred tools on supported endpoints.
 
+   .. grid-item-card:: JIT Python tools
+      :link: jit-harness
+      :link-type: doc
+
+      Let a trusted model compose, evolve, and save a toolbox for reuse.
+
 Build an application
 ------------------------------------------------------------
 
@@ -133,6 +139,7 @@ If you need behavior the built-ins do not provide, follow
    images
    project-instructions
    on-demand
+   jit-harness
    mcp
    configuration
    synchronous

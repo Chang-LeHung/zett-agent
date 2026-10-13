@@ -11,8 +11,8 @@ from zett_agent.sync_runtime import SyncMethodsMixin
 from zett_agent.tools.base import AgentTool
 
 #: The supported public API, grouped by the module that defines each name.
-#: Packages re-export nothing, so this table is the contract the reference
-#: documents: add a name here when a module-level object becomes public.
+#: Each name is documented once at its defining module, including the small
+#: public facade exported by jit_harness.
 PUBLIC_API: dict[str, tuple[str, ...]] = {
     "zett_agent.agent": ("Agent", "AgentRunConfig", "AgentRunContext", "AgentState"),
     "zett_agent.client": ("AgentClient", "create_agent"),
@@ -182,6 +182,30 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "UsageActivityExtension",
     ),
     "zett_agent.ids": ("new_uuid7",),
+    "zett_agent.jit_harness.runtime": ("JITHarness",),
+    "zett_agent.jit_harness.snapshot": ("JITHarnessSnapshot", "PythonToolSource", "TextToolSource"),
+    "zett_agent.jit_harness.extension": (
+        "JIT_TOOL_COMPLETED_EVENT_NAME",
+        "JIT_TOOL_STARTED_EVENT_NAME",
+        "JITHarnessExtension",
+        "JITToolCompletedEvent",
+        "JITToolStartedEvent",
+    ),
+    "zett_agent.jit_harness.results": (
+        "ToolCallDetails",
+        "ToolCallsPage",
+        "ToolCatalogEntry",
+        "ToolDefinitionView",
+        "ToolErrorsPage",
+        "ToolInspection",
+        "ToolListPage",
+        "ToolMutationResult",
+        "ToolStatus",
+        "ToolTextPage",
+    ),
+    "zett_agent.jit_harness.enums": ("InspectionToolExposure", "ToolCallStatus", "ToolKind", "ToolOrigin"),
+    "zett_agent.jit_harness.profiling": ("JITHarnessProfile", "ToolCallProfile", "ToolProfileStats"),
+    "zett_agent.jit_harness.errors": ("ToolErrorRecord", "ToolErrorReport"),
     "zett_agent.json_types": ("JsonValue",),
     "zett_agent.messages": (
         "AgentMessage",
@@ -264,6 +288,7 @@ GROUPS = {
     "model": "Model protocol and usage",
     "providers": "Provider adapters",
     "tools": "Tools and filesystem operations",
+    "jit_harness": "JIT Python tool environments",
     "storage": "Session storage",
     "extensions": "Extensions and lifecycle hooks",
     "constants": "Constants and type aliases",
@@ -277,6 +302,7 @@ GUIDES = {
     "model": ("../extending/model-adapter", "Implement the model contract and normalize usage and stream output."),
     "providers": ("../learn/providers", "Connect a provider and configure retries, credentials, and transport."),
     "tools": ("../learn/tools", "Build typed tools from annotations and docstrings."),
+    "jit_harness": ("../learn/jit-harness", "Create, compose, unload, and save session-local Python tools."),
     "storage": ("../extending/storage-adapter", "Restore model context and preserve immutable original messages."),
     "extensions": ("../extending/first-extension", "Build extensions, choose hooks, and manage request-scoped state."),
     "constants": ("../concepts/events", "Shared event names and public type aliases."),
@@ -286,6 +312,8 @@ GUIDES = {
 def public_group(name, obj):
     """Assign every exported symbol to one stable navigation category."""
     module = getattr(obj, "__module__", "")
+    if ".jit_harness." in module:
+        return "jit_harness"
     if not inspect.isclass(obj) and not inspect.isfunction(obj) and not isinstance(obj, AgentTool):
         return "constants"
     if module.endswith(("persistence", "session_persistence", "sqlite", "storage")):

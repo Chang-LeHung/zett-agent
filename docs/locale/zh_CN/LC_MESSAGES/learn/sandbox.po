@@ -1,0 +1,627 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C)
+# This file is distributed under the same license as the Zett Agent package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-14 22:07+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/sandbox.rst:2
+msgid "Run commands in a sandbox"
+msgstr "在沙箱中运行命令"
+
+#: ../../learn/sandbox.rst:4
+msgid "A tool that runs a shell command, or a program the model just wrote, runs with everything your process can do. A sandbox gives that command a smaller world: it can read the machine, write only where you say, and use the network only if you allow it. The kernel enforces the boundary on the command and on every process it starts."
+msgstr "运行 shell 命令的工具，或者运行模型刚写好的程序的工具，拥有你的进程能做的一切。沙箱给这条命令一个更小的世界：它可以读取这台机器，只能写入你指定的位置，只有你允许时才能使用网络。内核会对这条命令以及它启动的每个进程强制执行这个边界。"
+
+#: ../../learn/sandbox.rst:10
+msgid "The sandbox and an approval prompt are two different controls. The sandbox defines what a command *can* do; asking a person first decides whether it *runs* at all. Use them together, for example with :class:`~zett_agent.extensions.shell_approval.ShellApprovalExtension`."
+msgstr "沙箱和审批提示是两种不同的控制。沙箱决定命令*能*做什么；先询问用户则决定它*是否运行*。两者可以配合使用，例如搭配 :class:`~zett_agent.extensions.shell_approval.ShellApprovalExtension`\\ 。"
+
+#: ../../learn/sandbox.rst:16
+msgid "Use a session"
+msgstr "使用会话"
+
+#: ../../learn/sandbox.rst:18
+msgid ":class:`~zett_agent.sandbox.session.SandboxSession` is the way to use the sandbox. Say where commands may write and how much they may use, then use it like ordinary Python. Leaving the ``with`` block removes everything the session created."
+msgstr ":class:`~zett_agent.sandbox.session.SandboxSession` 是使用沙箱的方式。说明命令可以在哪里写入、可以使用多少资源，然后像普通 Python 一样使用它。离开 ``with`` 代码块时，会话创建的一切都会被清理。"
+
+#: ../../learn/sandbox.rst:31
+msgid "Leave the workspace out and the session makes a private one and deletes it on exit, which is what you want for a program someone else wrote:"
+msgstr "不指定工作区时，会话会创建一个私有目录并在退出时删除，这很适合运行别人写的程序："
+
+#: ../../learn/sandbox.rst:41
+msgid "``run`` behaves like :func:`subprocess.run`. A list runs the program directly with nothing parsed, which is the safer form for anything built from untrusted text; a string runs through ``/bin/sh -c``, so pipes work. ``check=True`` raises :class:`~zett_agent.sandbox.errors.SandboxCommandError`, which carries the whole result. From async code use ``async with`` and ``await sb.arun(...)``."
+msgstr "``run`` 的行为类似 :func:`subprocess.run`\\ 。传入列表时直接运行程序、不做任何解析，对于由不可信文本拼出来的命令这是更安全的形式；传入字符串则通过 ``/bin/sh -c`` 运行，所以管道可以使用。\\ ``check=True`` 会抛出 :class:`~zett_agent.sandbox.errors.SandboxCommandError`，其中带有完整的结果。在异步代码中使用 ``async with`` 和 ``await sb.arun(...)``\\ 。"
+
+#: ../../learn/sandbox.rst:47
+msgid "What the session does for you:"
+msgstr "会话替你做了什么："
+
+#: ../../learn/sandbox.rst:49
+msgid "**Writes are confined** to the workspace and private scratch space. Everything else on the machine is read-only."
+msgstr "**写入被限制** 在工作区和私有临时空间内。机器上的其他位置都是只读的。"
+
+#: ../../learn/sandbox.rst:51
+msgid "**The network is off** unless you pass ``network=True``."
+msgstr "**网络是关闭的**，除非传入 ``network=True``\\ 。"
+
+#: ../../learn/sandbox.rst:52
+msgid "**Secrets stay out.** Credential files such as ``~/.ssh`` are unreadable, and commands get a short environment allowlist rather than a copy of yours."
+msgstr "**机密不会进入。** ``~/.ssh`` 这类凭据文件不可读取，命令拿到的是一份简短的环境变量允许列表，而不是你环境的拷贝。"
+
+#: ../../learn/sandbox.rst:54
+msgid "**Cleanup follows the block.** Closing, normally or through an exception, cancels commands that are still running, kills their process groups and descendants, and then deletes the directories the session created. A program that leaves directories it cannot enter does not block the cleanup. If you never close the session, deleting the object or exiting the interpreter cleans up too. One case cannot be covered everywhere: see \"Processes that detach\" below."
+msgstr "**清理跟随代码块。** 无论是正常退出还是因异常退出，关闭时都会取消仍在运行的命令、杀掉它们的进程组和后代进程，然后删除会话创建的目录。程序留下无法进入的目录也不会阻碍清理。即使你从未关闭会话，对象被销毁或解释器退出时同样会清理。有一种情况无法在所有平台上覆盖：见下文“脱离的进程”。"
+
+#: ../../learn/sandbox.rst:60
+msgid "**Your own directories are never touched.** A ``workspace`` or ``writable`` path you pass is used and left exactly as the commands made it."
+msgstr "**你自己的目录绝不会被动。** 你传入的 ``workspace`` 或 ``writable`` 路径只会被使用，并保持命令留下的样子。"
+
+#: ../../learn/sandbox.rst:63
+msgid "The options map straight onto the lower-level policy described below:"
+msgstr "这些选项直接对应下文介绍的底层策略："
+
+#: ../../learn/sandbox.rst:69
+msgid "Option"
+msgstr "选项"
+
+#: ../../learn/sandbox.rst:70 ../../learn/sandbox.rst:132
+#: ../../learn/sandbox.rst:187
+msgid "Meaning"
+msgstr "含义"
+
+#: ../../learn/sandbox.rst:71
+msgid "``workspace``"
+msgstr "``workspace``"
+
+#: ../../learn/sandbox.rst:72
+msgid "Directory commands may write. Omit it for a private one that is deleted."
+msgstr "命令可以写入的目录。省略则使用一个会被删除的私有目录。"
+
+#: ../../learn/sandbox.rst:73
+msgid "``memory``, ``max_file_size``"
+msgstr "``memory``、``max_file_size``"
+
+#: ../../learn/sandbox.rst:74
+msgid "A byte count or a string such as ``\"512MB\"`` (``K``, ``M``, ``G``, ``T`` are powers of 1024)."
+msgstr "字节数，或形如 ``\"512MB\"`` 的字符串（``K``、``M``、``G``、``T`` 都是 1024 的幂）。"
+
+#: ../../learn/sandbox.rst:75
+msgid "``cpus``"
+msgstr "``cpus``"
+
+#: ../../learn/sandbox.rst:76
+msgid "Cores: ``0.5`` is half of one core. Linux only."
+msgstr "核心数：``0.5`` 表示半个核心。仅限 Linux。"
+
+#: ../../learn/sandbox.rst:77
+msgid "``cpu_seconds``, ``processes``, ``open_files``"
+msgstr "``cpu_seconds``、``processes``、``open_files``"
+
+#: ../../learn/sandbox.rst:78
+msgid "Processor time, processes and threads, and file descriptors."
+msgstr "处理器时间、进程和线程数、文件描述符数。"
+
+#: ../../learn/sandbox.rst:79 ../../learn/sandbox.rst:139
+msgid "``network``"
+msgstr "``network``"
+
+#: ../../learn/sandbox.rst:80
+msgid "``True`` for unrestricted network; the default is none."
+msgstr "``True`` 表示不受限的网络；默认完全没有网络。"
+
+#: ../../learn/sandbox.rst:81
+msgid "``writable``, ``deny_write``, ``deny_read``"
+msgstr "``writable``、``deny_write``、``deny_read``"
+
+#: ../../learn/sandbox.rst:82
+msgid "More writable directories, and paths that stay unwritable or unreadable."
+msgstr "更多可写目录，以及保持不可写或不可读的路径。"
+
+#: ../../learn/sandbox.rst:83
+msgid "``env``, ``timeout``"
+msgstr "``env``、``timeout``"
+
+#: ../../learn/sandbox.rst:84
+msgid "Variables every command gets, and the default time limit in seconds."
+msgstr "每条命令都会得到的环境变量，以及默认的时间限制（秒）。"
+
+#: ../../learn/sandbox.rst:85
+msgid "``backend``, ``require_isolation``, ``memory_strategy``"
+msgstr "``backend``、``require_isolation``、``memory_strategy``"
+
+#: ../../learn/sandbox.rst:86
+msgid "Force a backend, refuse to run unisolated, and choose how memory is limited."
+msgstr "强制指定后端、拒绝在无隔离的情况下运行，以及选择内存的限制方式。"
+
+#: ../../learn/sandbox.rst:90
+msgid "Limits apply to each command, not to the session as a whole: two commands run one after the other each get the full memory budget."
+msgstr "限制作用于每条命令，而不是整个会话：先后运行的两条命令各自都能得到完整的内存预算。"
+
+#: ../../learn/sandbox.rst:93
+msgid ":download:`Download sandbox.py <../_examples/sandbox.py>` for a complete program."
+msgstr "完整程序请 :download:`下载 sandbox.py <../_examples/sandbox.py>`\\ 。"
+
+#: ../../learn/sandbox.rst:100
+msgid "The lower-level API"
+msgstr "底层 API"
+
+#: ../../learn/sandbox.rst:102
+msgid "A session builds the pieces below for you. Use them directly when you need something it does not offer: your own process handling with ``wrap``, one sandbox shared by several workspaces, or a policy built once and reused."
+msgstr "会话替你构建了下面这些组件。当你需要它没有提供的能力时可以直接使用它们：用 ``wrap`` 自己处理进程、让一个沙箱被多个工作区共用，或者构建一次策略并重复使用。"
+
+#: ../../learn/sandbox.rst:114
+msgid "Every backend returns the same :class:`~zett_agent.sandbox.base.SandboxResult`: the exit status, standard output and error, whether it timed out, whether output was cut off, and whether the backend isolated anything."
+msgstr "每个后端都返回相同的 :class:`~zett_agent.sandbox.base.SandboxResult`：退出状态、标准输出和标准错误、是否超时、输出是否被截断，以及后端是否真的做了隔离。"
+
+#: ../../learn/sandbox.rst:119
+msgid "Describe the boundary"
+msgstr "描述边界"
+
+#: ../../learn/sandbox.rst:121
+msgid "One :class:`~zett_agent.sandbox.policy.SandboxPolicy` says what to enforce, and each backend turns it into its own mechanism. It follows the shape the established agent sandboxes share: reads are open and a deny list hides secrets, writes are closed and only listed paths open, the network is closed, and a few paths stay protected even inside a writable one."
+msgstr "一个 :class:`~zett_agent.sandbox.policy.SandboxPolicy` 说明要强制执行什么，每个后端再把它转换成自己的机制。它沿用了成熟的智能体沙箱共有的形态：读取默认开放，用拒绝列表隐藏机密；写入默认关闭，只有列出的路径才开放；网络默认关闭；另外有少数路径即使位于可写目录内也依然受保护。"
+
+#: ../../learn/sandbox.rst:131 ../../learn/sandbox.rst:186
+msgid "Field"
+msgstr "字段"
+
+#: ../../learn/sandbox.rst:133
+msgid "``writable_paths``"
+msgstr "``writable_paths``"
+
+#: ../../learn/sandbox.rst:134
+msgid "Directories the process may write. Empty means it can write only temporary files."
+msgstr "进程可以写入的目录。为空表示只能写入临时文件。"
+
+#: ../../learn/sandbox.rst:135
+msgid "``denied_write_paths``"
+msgstr "``denied_write_paths``"
+
+#: ../../learn/sandbox.rst:136
+msgid "Stay unwritable even inside a writable path. A denial beats a permission."
+msgstr "即使位于可写路径内也保持不可写。拒绝优先于允许。"
+
+#: ../../learn/sandbox.rst:137
+msgid "``denied_read_paths``"
+msgstr "``denied_read_paths``"
+
+#: ../../learn/sandbox.rst:138
+msgid "Cannot be read. Add the secrets that matter to you."
+msgstr "不可读取。请加入对你重要的机密。"
+
+#: ../../learn/sandbox.rst:140
+msgid "``NetworkMode.NONE`` (the default) or ``NetworkMode.FULL``."
+msgstr "``NetworkMode.NONE``\\ （默认）或 ``NetworkMode.FULL``\\ 。"
+
+#: ../../learn/sandbox.rst:141
+msgid "``protect_defaults``"
+msgstr "``protect_defaults``"
+
+#: ../../learn/sandbox.rst:142
+msgid "Keep shell and git configuration, ``.git/hooks`` and editor settings unwritable inside writable paths, and hide common credential files and container sockets from reads."
+msgstr "让 shell 和 git 的配置、``.git/hooks`` 以及编辑器设置在可写路径内保持不可写，并让常见的凭据文件和容器套接字不可读。"
+
+#: ../../learn/sandbox.rst:143
+msgid "``inherit_environment``"
+msgstr "``inherit_environment``"
+
+#: ../../learn/sandbox.rst:144
+msgid "Which host environment variables the process receives."
+msgstr "进程会收到哪些宿主环境变量。"
+
+#: ../../learn/sandbox.rst:145
+msgid "``limits``"
+msgstr "``limits``"
+
+#: ../../learn/sandbox.rst:146
+msgid "How much the process may use: memory, processor time, files and processes."
+msgstr "进程可以使用多少资源：内存、处理器时间、文件和进程。"
+
+#: ../../learn/sandbox.rst:148
+msgid "Paths must be absolute (``~`` is expanded), so a policy means the same thing wherever it is built. ``SandboxPolicy.read_only()`` and ``SandboxPolicy.workspace_write(*roots)`` cover the two common shapes."
+msgstr "路径必须是绝对路径（``~`` 会被展开），因此无论在哪里构建，策略的含义都相同。\\ ``SandboxPolicy.read_only()`` 和 ``SandboxPolicy.workspace_write(*roots)`` 覆盖了两种常见形态。"
+
+#: ../../learn/sandbox.rst:152
+#, python-brace-format
+msgid "The environment is a short allowlist, not a copy of yours. An API key in your shell does not reach a command unless you pass it with ``sandbox.run(..., env={\"TOKEN\": value})``."
+msgstr "环境变量是一份简短的允许列表，而不是你环境的拷贝。你 shell 里的 API 密钥不会到达命令，除非你用 ``sandbox.run(..., env={\"TOKEN\": value})`` 显式传入。"
+
+#: ../../learn/sandbox.rst:156
+msgid "Protected files matter because a process that can write your workspace could plant something that runs later, outside the sandbox: a ``.git/hooks/pre-commit`` script, a line in ``.bashrc``, an editor task. They stay unwritable, and the default read protection hides ``~/.ssh``, ``~/.aws``, ``~/.gnupg`` and the like, because a process that can read a credential and reach the network can send it anywhere."
+msgstr "受保护的文件之所以重要，是因为能写入你工作区的进程可以埋下稍后在沙箱之外运行的东西：一个 ``.git/hooks/pre-commit`` 脚本、``.bashrc`` 里的一行、一个编辑器任务。它们保持不可写；默认的读取保护还会隐藏 ``~/.ssh``、``~/.aws``、``~/.gnupg`` 等，因为既能读取凭据又能访问网络的进程可以把它发送到任何地方。"
+
+#: ../../learn/sandbox.rst:164
+msgid "Limit what a process uses"
+msgstr "限制进程的资源使用"
+
+#: ../../learn/sandbox.rst:166
+msgid "A boundary says *where* a process may act. A budget says *how much* it may use, which is what keeps one runaway command from taking the machine with it. Both live in the same policy::"
+msgstr "边界规定进程可以*在哪里*行动，预算规定它可以使用*多少*资源，正是后者让一条失控的命令不至于把整台机器拖垮。两者都在同一个策略里::"
+
+#: ../../learn/sandbox.rst:188 ../../learn/sandbox.rst:213
+msgid "``memory_bytes``"
+msgstr "``memory_bytes``"
+
+#: ../../learn/sandbox.rst:189
+msgid "Memory the process and everything it starts may use."
+msgstr "进程及其启动的所有进程可以使用的内存。"
+
+#: ../../learn/sandbox.rst:190 ../../learn/sandbox.rst:216
+msgid "``cpu_seconds``"
+msgstr "``cpu_seconds``"
+
+#: ../../learn/sandbox.rst:191
+msgid "Total processor time before the kernel kills the process. A program that sleeps uses none of it."
+msgstr "在被内核杀死之前可以消耗的处理器时间总量。只睡眠的程序不消耗它。"
+
+#: ../../learn/sandbox.rst:192 ../../learn/sandbox.rst:219
+msgid "``cpu_percent``"
+msgstr "``cpu_percent``"
+
+#: ../../learn/sandbox.rst:193
+msgid "Share of one processor, where the kernel can limit a share. 100 is one core."
+msgstr "单个处理器的占用比例（前提是内核能够限制比例）。100 表示一个核心。"
+
+#: ../../learn/sandbox.rst:194 ../../learn/sandbox.rst:222
+msgid "``processes``"
+msgstr "``processes``"
+
+#: ../../learn/sandbox.rst:195
+msgid "Processes the command may add. Linux counts threads as well; macOS does not."
+msgstr "命令可以新增的进程数。Linux 同时统计线程，macOS 不统计。"
+
+#: ../../learn/sandbox.rst:196 ../../learn/sandbox.rst:225
+msgid "``file_size_bytes``"
+msgstr "``file_size_bytes``"
+
+#: ../../learn/sandbox.rst:197
+msgid "Largest file the process may create or extend."
+msgstr "进程可以创建或扩展的最大文件大小。"
+
+#: ../../learn/sandbox.rst:198 ../../learn/sandbox.rst:228
+msgid "``open_files``"
+msgstr "``open_files``"
+
+#: ../../learn/sandbox.rst:199
+msgid "File descriptors the process may hold open."
+msgstr "进程可以同时打开的文件描述符数量。"
+
+#: ../../learn/sandbox.rst:200 ../../learn/sandbox.rst:231
+msgid "``core_dumps``"
+msgstr "``core_dumps``"
+
+#: ../../learn/sandbox.rst:201
+msgid "Off by default: a core file of a large process is large and holds what it read."
+msgstr "默认关闭：大型进程的 core 文件很大，而且包含它读取过的内容。"
+
+#: ../../learn/sandbox.rst:203
+msgid "A limit is a request, not a promise. What the kernel can do about it depends on the platform, and the sandbox uses the strongest mechanism the machine has:"
+msgstr "限制是一种请求，而不是承诺。内核能做到什么取决于平台，沙箱会使用这台机器上最强的手段："
+
+#: ../../learn/sandbox.rst:210
+msgid "Limit"
+msgstr "限制项"
+
+#: ../../learn/sandbox.rst:211 ../../learn/sandbox.rst:328
+msgid "macOS"
+msgstr "macOS"
+
+#: ../../learn/sandbox.rst:212 ../../learn/sandbox.rst:331
+msgid "Linux"
+msgstr "Linux"
+
+#: ../../learn/sandbox.rst:214
+msgid "Sampling watchdog. The kernel has no memory limit to set: macOS rejects the POSIX address-space limit, and there are no cgroups."
+msgstr "采样看门狗。内核没有可设置的内存上限：macOS 拒绝 POSIX 的地址空间限制，而且没有 cgroup。"
+
+#: ../../learn/sandbox.rst:215
+msgid "cgroup ``memory.max`` where one is available (see the note below); otherwise the POSIX address-space limit, per process."
+msgstr "在有可用 cgroup 时使用 ``memory.max``\\ （见下方说明）；否则使用 POSIX 地址空间限制（按进程计算）。"
+
+#: ../../learn/sandbox.rst:217
+msgid "POSIX limit (``RLIMIT_CPU``), inherited by the tree."
+msgstr "POSIX 限制（``RLIMIT_CPU``），由整个进程树继承。"
+
+#: ../../learn/sandbox.rst:218 ../../learn/sandbox.rst:227
+#: ../../learn/sandbox.rst:230 ../../learn/sandbox.rst:233
+msgid "Same."
+msgstr "同上。"
+
+#: ../../learn/sandbox.rst:220
+msgid "Not available; nothing limits a share of a processor."
+msgstr "不可用；没有任何机制可以限制处理器占用比例。"
+
+#: ../../learn/sandbox.rst:221
+msgid "cgroup ``cpu.max``, a quota per 100 ms period."
+msgstr "cgroup 的 ``cpu.max``，以 100 毫秒为周期分配配额。"
+
+#: ../../learn/sandbox.rst:223
+msgid "POSIX limit (``RLIMIT_NPROC``). The kernel compares it with all of the user's processes, so it is applied as the number already running plus your number. Threads are not counted."
+msgstr "POSIX 限制（``RLIMIT_NPROC``）。内核拿它与该用户的所有进程比较，因此实际设置的是当前已运行的进程数加上你给的数字。线程不计入。"
+
+#: ../../learn/sandbox.rst:224
+msgid "cgroup ``pids.max`` when available (it counts the tree, threads included); otherwise ``RLIMIT_NPROC`` as on macOS, with threads counted."
+msgstr "可用时使用 cgroup 的 ``pids.max``\\ （统计整棵进程树，包含线程）；否则像 macOS 一样使用 ``RLIMIT_NPROC``，但线程会被计入。"
+
+#: ../../learn/sandbox.rst:226
+msgid "POSIX limit (``RLIMIT_FSIZE``)."
+msgstr "POSIX 限制（``RLIMIT_FSIZE``）。"
+
+#: ../../learn/sandbox.rst:229
+msgid "POSIX limit (``RLIMIT_NOFILE``)."
+msgstr "POSIX 限制（``RLIMIT_NOFILE``）。"
+
+#: ../../learn/sandbox.rst:232
+msgid "POSIX limit (``RLIMIT_CORE``)."
+msgstr "POSIX 限制（``RLIMIT_CORE``）。"
+
+#: ../../learn/sandbox.rst:237
+msgid "The cgroup rows apply only when this user can create a child cgroup with the controllers enabled. The kernel allows that only in a cgroup that holds no processes of its own, so a login shell's or a service's cgroup does not qualify; it needs delegation, such as systemd's ``Delegate=yes``. A GitHub Actions runner, for one, has a root-owned cgroup and none of this, so there memory falls back to the address-space limit and ``cpus`` cannot be enforced. The cgroup code has been exercised against a fake cgroup tree but never against a real kernel. Ask ``capabilities()`` what a given machine does."
+msgstr "cgroup 相关的行只有在当前用户能够创建启用了控制器的子 cgroup 时才适用。内核只允许在自身不包含进程的 cgroup 中这样做，所以登录 shell 或服务所在的 cgroup 不满足条件；这需要委派，例如 systemd 的 ``Delegate=yes``\\ 。例如 GitHub Actions 的 runner 的 cgroup 属于 root，不具备这些条件，所以在那里内存会退回到地址空间限制，``cpus`` 则无法执行。cgroup 相关代码只在伪造的 cgroup 目录树上测试过，从未在真实内核上运行过。想知道某台机器的实际行为，请调用 ``capabilities()``\\ 。"
+
+#: ../../learn/sandbox.rst:246
+msgid "Windows enforces none of these, so a policy that asks for them gets warnings saying so. On every platform a limit that cannot be enforced is named in ``result.resources.warnings`` rather than quietly skipped, and nothing is ever reported as enforced when it was not."
+msgstr "Windows 一项都无法强制执行，因此要求这些限制的策略会收到相应的警告。在任何平台上，无法强制执行的限制都会出现在 ``result.resources.warnings`` 中，而不是被悄悄跳过；也绝不会把未被执行的事情报告成已执行。"
+
+#: ../../learn/sandbox.rst:252
+msgid "Ask before you run"
+msgstr "运行之前先问清楚"
+
+#: ../../learn/sandbox.rst:254
+msgid ":meth:`~zett_agent.sandbox.base.Sandbox.capabilities` returns how each limit *would* be enforced here, without creating or changing anything. A host can refuse a policy this machine cannot enforce as written instead of finding out from a run:"
+msgstr ":meth:`~zett_agent.sandbox.base.Sandbox.capabilities` 会返回每项限制在这台机器上*将会*如何被执行，而且不会创建或修改任何东西。宿主可以拒绝这台机器无法按原样执行的策略，而不必等到运行时才发现："
+
+#: ../../learn/sandbox.rst:267
+msgid "``result.resources`` also reports what the run measured: the highest memory seen, and which limits the process reached (``memory``, ``cpu`` or ``file_size``)."
+msgstr "``result.resources`` 还会报告本次运行测得的数据：内存使用峰值，以及进程触达了哪些限制（``memory``、``cpu`` 或 ``file_size``）。"
+
+#: ../../learn/sandbox.rst:273
+msgid "Choosing how memory is limited"
+msgstr "选择内存限制的方式"
+
+#: ../../learn/sandbox.rst:275
+msgid "No single mechanism suits every program, so ``memory_bytes`` takes a strategy. Pass it when you build the sandbox:"
+msgstr "没有哪一种机制适合所有程序，因此 ``memory_bytes`` 可以指定策略。在构建沙箱时传入："
+
+#: ../../learn/sandbox.rst:282
+msgid "Strategy"
+msgstr "策略"
+
+#: ../../learn/sandbox.rst:283
+msgid "Behaviour"
+msgstr "行为"
+
+#: ../../learn/sandbox.rst:284
+msgid "``MemoryStrategy.AUTO``"
+msgstr "``MemoryStrategy.AUTO``"
+
+#: ../../learn/sandbox.rst:285
+msgid "The default: cgroup, then the address-space limit, then the watchdog."
+msgstr "默认值：依次尝试 cgroup、地址空间限制、看门狗。"
+
+#: ../../learn/sandbox.rst:286
+msgid "``MemoryStrategy.KERNEL``"
+msgstr "``MemoryStrategy.KERNEL``"
+
+#: ../../learn/sandbox.rst:287
+msgid "Only a kernel limit, and a warning where none exists. Exact, but an address-space limit counts memory a program *maps* rather than uses, so a virtual machine or the JVM inside the sandbox can be refused memory it never touches."
+msgstr "只使用内核限制，没有可用机制时给出警告。它精确，但地址空间限制统计的是程序*映射*的内存而非实际使用的内存，因此沙箱里的虚拟机或 JVM 可能在被拒绝时根本没有触碰那块内存。"
+
+#: ../../learn/sandbox.rst:288
+msgid "``MemoryStrategy.WATCHDOG``"
+msgstr "``MemoryStrategy.WATCHDOG``"
+
+#: ../../learn/sandbox.rst:289
+msgid "Only the watchdog. Start-up is never refused and the limit can be overshot by whatever is allocated between two samples (0.25 s by default, one ``ps`` per sample)."
+msgstr "只使用看门狗。启动阶段永远不会被拒绝，而限制可能被两次采样之间分配的内存超出（默认间隔 0.25 秒，每次采样执行一次 ``ps``）。"
+
+#: ../../learn/sandbox.rst:290
+msgid "``MemoryStrategy.NONE``"
+msgstr "``MemoryStrategy.NONE``"
+
+#: ../../learn/sandbox.rst:291
+msgid "Enforce nothing, and say so."
+msgstr "不做任何强制执行，并如实说明。"
+
+#: ../../learn/sandbox.rst:303
+msgid "A resource limit protects the machine from a process that runs away, which is the usual failure of generated code. It is not a defense against a process that is trying to escape it: the watchdog can be overshot between samples, and a process can use everything it is allowed as fast as it likes."
+msgstr "资源限制保护机器免受失控进程的影响，这正是生成代码常见的失败方式。它不是用来防御刻意逃逸的进程：看门狗可能被两次采样之间的分配超出，而进程可以尽可能快地用光它被允许的资源。"
+
+#: ../../learn/sandbox.rst:309
+msgid "What is not here"
+msgstr "这里没有做什么"
+
+#: ../../learn/sandbox.rst:311
+msgid "**No total disk quota.** Writes are confined to the policy's paths and a single file can be capped, but nothing bounds the total size of a workspace."
+msgstr "**没有磁盘总量配额。** 写入被限制在策略给定的路径内，单个文件也可以设上限，但工作区的总大小没有任何约束。"
+
+#: ../../learn/sandbox.rst:313
+msgid "**No bandwidth limit**, and no limit on *which* hosts the network may reach: see the note above about proxies."
+msgstr "**没有带宽限制**，也不限制网络可以访问*哪些*主机：参见上文关于代理的说明。"
+
+#: ../../learn/sandbox.rst:315
+msgid "**No per-limit grace or priority**: a limit is a hard line, and reaching it ends the process."
+msgstr "**没有按限制项设置的宽限期或优先级**：限制是一条硬线，触碰它就会结束进程。"
+
+#: ../../learn/sandbox.rst:319
+msgid "What each platform provides"
+msgstr "各平台提供什么"
+
+#: ../../learn/sandbox.rst:325
+msgid "Platform"
+msgstr "平台"
+
+#: ../../learn/sandbox.rst:326
+msgid "Backend"
+msgstr "后端"
+
+#: ../../learn/sandbox.rst:327
+msgid "Notes"
+msgstr "说明"
+
+#: ../../learn/sandbox.rst:329
+msgid ":class:`~zett_agent.sandbox.seatbelt.SeatbeltSandbox`"
+msgstr ":class:`~zett_agent.sandbox.seatbelt.SeatbeltSandbox`"
+
+#: ../../learn/sandbox.rst:330
+msgid "Built in; nothing to install. Uses ``sandbox-exec``, which Apple has deprecated but ships."
+msgstr "系统自带，无需安装。使用 ``sandbox-exec``，Apple 已将其弃用，但仍随系统提供。"
+
+#: ../../learn/sandbox.rst:332
+msgid ":class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`"
+msgstr ":class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`"
+
+#: ../../learn/sandbox.rst:333
+msgid "Install ``bubblewrap``. Needs unprivileged user namespaces."
+msgstr "需要安装 ``bubblewrap``，并要求支持非特权用户命名空间。"
+
+#: ../../learn/sandbox.rst:334
+msgid "Windows"
+msgstr "Windows"
+
+#: ../../learn/sandbox.rst:335
+msgid ":class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`"
+msgstr ":class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`"
+
+#: ../../learn/sandbox.rst:336
+msgid "No isolation and no resource limits: Windows has neither rlimits nor cgroups. The interface is the same, ``isolated`` says ``False``, and every limit asked for is reported as unenforced."
+msgstr "没有隔离，也没有资源限制：Windows 既没有 rlimit 也没有 cgroup。接口保持一致，``isolated`` 为 ``False``，每一项被要求的限制都会报告为未执行。"
+
+#: ../../learn/sandbox.rst:338
+msgid ":func:`~zett_agent.sandbox.factory.create_sandbox` picks the platform's own."
+msgstr ":func:`~zett_agent.sandbox.factory.create_sandbox` 会选择该平台自己的后端。"
+
+#: ../../learn/sandbox.rst:342
+msgid "A backend that exists but cannot run raises :class:`~zett_agent.sandbox.errors.SandboxUnavailableError` with what to install or change. The sandbox layer never answers that by running the command unsandboxed. The one case that degrades is a platform with no backend at all: ``create_sandbox`` returns a ``PassthroughSandbox`` and emits a ``SandboxWarning``. Pass ``require_isolation=True`` to make that an error too."
+msgstr "存在但无法运行的后端会抛出 :class:`~zett_agent.sandbox.errors.SandboxUnavailableError`，并说明需要安装或更改什么。沙箱层绝不会因此退而在没有沙箱的情况下运行命令。唯一会降级的情况是平台根本没有后端：``create_sandbox`` 会返回 ``PassthroughSandbox`` 并发出 ``SandboxWarning``\\ 。传入 ``require_isolation=True`` 可以让这种情况也变成错误。"
+
+#: ../../learn/sandbox.rst:350
+msgid "Spawn it yourself"
+msgstr "自己启动进程"
+
+#: ../../learn/sandbox.rst:352
+msgid "``run`` is built on ``wrap``, which rewrites a command to run inside the sandbox and returns it without running anything. A host that manages its own processes, for streaming output or a pty, spawns the result itself:"
+msgstr "``run`` 建立在 ``wrap`` 之上，它会把命令改写成在沙箱内运行的形式并返回，但不会运行任何东西。自己管理进程的宿主（例如要流式输出或使用 pty）可以自行启动这个结果："
+
+#: ../../learn/sandbox.rst:363
+msgid "Start it in its own process group so the whole tree can be stopped."
+msgstr "请让它在自己的进程组中启动，这样才能停止整棵进程树。"
+
+#: ../../learn/sandbox.rst:366
+msgid "What ``run`` adds around the process"
+msgstr "``run`` 在进程之外增加了什么"
+
+#: ../../learn/sandbox.rst:368
+msgid "Every backend shares this, so code behaves the same except in what it can confine:"
+msgstr "所有后端共用这部分，因此除了能限制的内容不同之外，代码的行为是一致的："
+
+#: ../../learn/sandbox.rst:370
+msgid "A time limit (60 seconds by default, ``None`` for none). When it passes, the process group and its descendants are killed."
+msgstr "时间限制（默认 60 秒，``None`` 表示不限制）。超时后进程组及其后代进程会被杀死。"
+
+#: ../../learn/sandbox.rst:372
+msgid "A cap on the output kept from each stream (1 MiB by default). The rest is read and discarded, so a process that prints forever can neither fill memory nor block on a full pipe."
+msgstr "每个输出流保留的字节数上限（默认 1 MiB）。超出的部分会被读取并丢弃，因此无休止打印的进程既不会占满内存，也不会因管道写满而阻塞。"
+
+#: ../../learn/sandbox.rst:375
+msgid "A command that finishes does not leave helpers in its process group behind. They are stopped with it, and a child that still holds the output pipe cannot keep a finished run waiting."
+msgstr "命令结束后，它进程组里的辅助进程不会被遗留。它们会随之停止，仍然占用输出管道的子进程也不能让已经结束的运行继续等待。"
+
+#: ../../learn/sandbox.rst:378
+msgid "Cancelling the awaiting task stops the process group and its descendants before the cancellation propagates."
+msgstr "取消正在等待的任务时，会先停止进程组及其后代进程，再传播取消。"
+
+#: ../../learn/sandbox.rst:382
+msgid "Processes that detach"
+msgstr "脱离的进程"
+
+#: ../../learn/sandbox.rst:384
+msgid "A child that starts a session of its own (``setsid``, or ``start_new_session`` in Python) leaves its parent's process group. While its parent is alive it is still found through the process tree, so a timeout, a cancellation or closing the session stops it. If the parent has already exited, nothing links the child to the command any more, and **on macOS it keeps running after the run and after the session closes**. On Linux the sandbox runs in its own PID namespace, so the kernel ends every process in it when the sandbox ends and this case does not arise."
+msgstr "开启了自己会话的子进程（``setsid``，或 Python 里的 ``start_new_session``）会离开父进程的进程组。只要父进程还活着，仍然可以通过进程树找到它，所以超时、取消或关闭会话都能停止它。如果父进程已经退出，就没有任何东西把这个子进程与命令关联起来了，**在 macOS 上它会在运行结束、会话关闭之后继续运行**\\ 。在 Linux 上，沙箱运行在自己的 PID 命名空间里，沙箱结束时内核会终结其中的所有进程，因此不会出现这种情况。"
+
+#: ../../learn/sandbox.rst:393
+msgid "What it does not do"
+msgstr "它不做什么"
+
+#: ../../learn/sandbox.rst:395
+msgid "Be clear about these before relying on it:"
+msgstr "依赖它之前，请先弄清楚这些："
+
+#: ../../learn/sandbox.rst:397
+msgid "**No filtering by host.** The network is all or nothing. Allowing named domains needs a proxy, which this does not include."
+msgstr "**不按主机过滤。** 网络要么全开要么全关。只允许指定域名需要代理，这里不包含代理。"
+
+#: ../../learn/sandbox.rst:399
+msgid "**No seccomp on Linux.** With the network open the process shares the host network namespace and can reach local services there. Closing it (the default) isolates them."
+msgstr "**Linux 上没有 seccomp。** 网络开放时，进程共享宿主的网络命名空间，可以访问那里的本地服务。关闭网络（默认）则会把它们隔离开。"
+
+#: ../../learn/sandbox.rst:402
+msgid "**No total disk quota and no bandwidth limit**, as above."
+msgstr "**没有磁盘总量配额，也没有带宽限制**，理由同上。"
+
+#: ../../learn/sandbox.rst:403
+msgid "**macOS network and sockets.** ``NetworkMode.FULL`` opens everything, including local services. ``NONE`` closes it all."
+msgstr "**macOS 的网络和套接字。** ``NetworkMode.FULL`` 会全部开放，包括本地服务。\\ ``NONE`` 则全部关闭。"
+
+#: ../../learn/sandbox.rst:405
+msgid "**A protected path that does not exist yet.** macOS protects it from creation. On Linux a path can only be protected once it exists."
+msgstr "**尚不存在的受保护路径。** macOS 会阻止它被创建。在 Linux 上，路径只有存在之后才能被保护。"
+
+#: ../../learn/sandbox.rst:407
+msgid "**Denials are silent.** A blocked operation shows up as the command's own \"Operation not permitted\". The sandbox does not report violations."
+msgstr "**拒绝是无声的。** 被阻止的操作表现为命令自己的 \"Operation not permitted\" 错误。沙箱不会报告违规。"
+
+#: ../../learn/sandbox.rst:409
+msgid "**Nesting.** A process already inside a Seatbelt sandbox cannot start another; ``check`` says so."
+msgstr "**嵌套。** 已经处于 Seatbelt 沙箱内的进程无法再启动另一个；``check`` 会说明这一点。"
+
+#: ../../learn/sandbox.rst:411
+msgid "**Windows.** No isolation at all."
+msgstr "**Windows。** 完全没有隔离。"
+
+#: ../../learn/sandbox.rst:412
+msgid "**Not a defense against a kernel or sandbox vulnerability,** or against a process that misuses the access you did allow."
+msgstr "**无法防御内核或沙箱本身的漏洞，** 也无法防止进程滥用你确实允许的访问权限。"
+
+#: ../../learn/sandbox.rst:415
+msgid "On Linux the working directory must be visible inside the sandbox. ``/tmp`` is a private tmpfs there, so a directory under ``/tmp`` is visible only if it is, or is inside, a writable path."
+msgstr "在 Linux 上，工作目录必须在沙箱内可见。那里的 ``/tmp`` 是私有的 tmpfs，所以 ``/tmp`` 下的目录只有在它本身是可写路径、或位于可写路径之内时才可见。"
+
+#: ../../learn/sandbox.rst:419
+msgid "Next: :doc:`tools` for the shell tool this protects, or :doc:`../extending/built-ins` for the approval extension."
+msgstr "下一步：参阅 :doc:`tools` 了解它所保护的 shell 工具，或参阅 :doc:`../extending/built-ins` 了解审批扩展。"
+
+#: ../../learn/sandbox.rst:422
+msgid "Related API: :class:`~zett_agent.sandbox.session.SandboxSession`, :class:`~zett_agent.sandbox.base.Sandbox`, :class:`~zett_agent.sandbox.policy.SandboxPolicy`, :class:`~zett_agent.sandbox.policy.ResourceLimits`, :class:`~zett_agent.sandbox.resources.ResourceReport`, :class:`~zett_agent.sandbox.resources.MemoryStrategy`, :func:`~zett_agent.sandbox.factory.create_sandbox`."
+msgstr "相关 API：:class:`~zett_agent.sandbox.session.SandboxSession`、:class:`~zett_agent.sandbox.base.Sandbox`、:class:`~zett_agent.sandbox.policy.SandboxPolicy`、:class:`~zett_agent.sandbox.policy.ResourceLimits`、:class:`~zett_agent.sandbox.resources.ResourceReport`、:class:`~zett_agent.sandbox.resources.MemoryStrategy`、:func:`~zett_agent.sandbox.factory.create_sandbox`\\ 。"
+
+#~ msgid "No isolation. The interface is the same, and ``isolated`` says ``False``."
+#~ msgstr "没有隔离。接口相同，``isolated`` 为 ``False``\\ 。"
+
+#~ msgid "**No resource limits.** Memory, CPU time and process counts are not capped. The time limit and the output cap are the only limits."
+#~ msgstr "**没有资源限制。** 内存、CPU 时间和进程数都没有上限。时间限制和输出上限是仅有的两项限制。"
+
+#~ msgid "Run a command"
+#~ msgstr "运行命令"
+
+#~ msgid "Processes and threads the tree may create. On macOS threads count too."
+#~ msgstr "进程树可以创建的进程和线程数。在 macOS 上线程同样计入。"
+
+#~ msgid "POSIX limit (``RLIMIT_NPROC``), counted per user, threads included."
+#~ msgstr "POSIX 限制（``RLIMIT_NPROC``），按用户计数，包含线程。"
+

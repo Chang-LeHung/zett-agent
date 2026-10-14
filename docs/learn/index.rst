@@ -89,6 +89,12 @@ every extension from the start.
 
       Let a trusted model compose, evolve, and save a toolbox for reuse.
 
+   .. grid-item-card:: Sandbox
+      :link: sandbox
+      :link-type: doc
+
+      Run shell commands and agent-written programs inside an operating-system boundary.
+
 Build an application
 ------------------------------------------------------------
 
@@ -151,6 +157,7 @@ If you need behavior the built-ins do not provide, follow
 
    On-demand loading <on-demand>
    JIT harness <jit-harness>
+   Sandbox <sandbox>
    MCP <mcp>
 
 .. toctree::

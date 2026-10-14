@@ -13,7 +13,9 @@ from dataclasses import replace
 from typing import Any, Literal, Protocol, TypedDict
 from weakref import WeakKeyDictionary
 
+from .._compat import StrEnum
 from ..agent import AgentRunContext
+from ..messages import SystemMessage
 from ..model import ModelEvent, ModelRequest, ToolDefinition
 from ..tools.base import (
     AgentTool,
@@ -29,6 +31,41 @@ from .tool_guidelines import ToolGuidelinesExtension
 TOOL_SEARCH_TOOL_NAME = "tool_search"
 
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+
+
+class ToolCatalogPlacement(StrEnum):
+    """Where the list of searchable tools is shown to the model."""
+
+    #: No list: the model finds deferred tools only by guessing search keywords.
+    NONE = "none"
+    #: Appended to the description of the ``tool_search`` tool itself.
+    SEARCH_DESCRIPTION = "search_description"
+    #: A ``# Searchable tools`` section of the system instructions.
+    SYSTEM_PROMPT = "system_prompt"
+
+
+def render_tool_catalog(tools: Sequence[AgentTool], *, snippets: bool = True, guidelines: bool = True) -> str:
+    """Render the deferred tools a model can search for, one entry per tool.
+
+    Each entry is the tool name and description, followed by its snippet and
+    guidelines when enabled. The text has no heading, so a caller places it
+    under whichever one suits where it ends up. It is empty when ``tools`` is.
+
+    Examples:
+        Describe what search can find::
+
+            print(render_tool_catalog([warehouse_stock]))
+    """
+    entries: list[str] = []
+    for registered in tools:
+        lines = [f"- {registered.name}: " + registered.description.strip().replace("\n", "\n  ")]
+        if snippets and registered.snippet:
+            lines.append("  snippet: " + registered.snippet.replace("\n", "\n    "))
+        if guidelines and registered.guidelines:
+            lines.append("  guidelines:")
+            lines.extend(f"  - {guideline}" for guideline in registered.guidelines)
+        entries.append("\n".join(lines))
+    return "\n".join(entries)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -191,6 +228,22 @@ class ToolSearchExtension(AgentExtension):
             declared them. False keeps suppressing them after a checkpoint, so
             the model keeps the tools it loaded earlier but cannot load them
             again by searching.
+        catalog: Where to list the searchable tools so the model knows what
+            exists before it searches. The search description by default, where
+            it travels with the one tool that uses it; the system prompt keeps
+            the search tool's own text short. :attr:`ToolCatalogPlacement.NONE`
+            lists nothing. The list is independent of
+            :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`
+            and combines with either of its placements.
+        catalog_snippets: Include each listed tool's snippet.
+        catalog_guidelines: Include each listed tool's guidelines.
+
+    .. note::
+        The list names every deferred tool registered for the request, not only
+        those the session has not loaded yet. A list that shrank as tools were
+        found would change the request prefix on every search and defeat
+        provider prompt caching; a repeated name in a search result is already
+        filtered out.
 
     .. note::
         Clearing the record after a compaction matters because the checkpoint
@@ -223,7 +276,13 @@ class ToolSearchExtension(AgentExtension):
         b: float = 0.75,
         storage: ToolSearchStorage | None = None,
         resend_definitions_after_compaction: bool = True,
+        catalog: ToolCatalogPlacement = ToolCatalogPlacement.SEARCH_DESCRIPTION,
+        catalog_snippets: bool = True,
+        catalog_guidelines: bool = True,
     ) -> None:
+        self.catalog = ToolCatalogPlacement(catalog)
+        self.catalog_snippets = catalog_snippets
+        self.catalog_guidelines = catalog_guidelines
         self._limit = limit
         self._min_score = min_score
         self._k1 = k1
@@ -237,6 +296,40 @@ class ToolSearchExtension(AgentExtension):
     async def on_tool(self, context: AgentRunContext) -> None:
         """Register the decorated BM25 search tool for this request."""
         context.register_tool(self._build_search_tool(context))
+
+    async def on_state(self, context: AgentRunContext) -> None:
+        """List the searchable tools in the system instructions when that placement is chosen."""
+        if self.catalog is not ToolCatalogPlacement.SYSTEM_PROMPT:
+            return
+        catalog = self._catalog_text(context)
+        if not catalog:
+            return
+        message = SystemMessage(
+            content=(
+                "# Searchable tools\n"
+                f"These tools are not loaded yet. Call {TOOL_SEARCH_TOOL_NAME} with keywords describing what you "
+                "need to load one before using it.\n\n" + catalog
+            ),
+            attributes={"tool_search_catalog": True},
+        )
+        if message not in context.state.messages:
+            instructions = [item for item in context.state.messages if isinstance(item, SystemMessage)]
+            context.add_message(message, index=len(instructions))
+
+    def _catalog_text(self, context: AgentRunContext) -> str:
+        """Render the deferred tools registered for this request."""
+        deferred = [candidate for candidate in context.tools.values() if candidate.deferred]
+        return render_tool_catalog(deferred, snippets=self.catalog_snippets, guidelines=self.catalog_guidelines)
+
+    def _with_catalog(self, context: AgentRunContext, definition: ToolDefinition) -> ToolDefinition:
+        """Append the searchable-tool list to the search tool's own description."""
+        if self.catalog is not ToolCatalogPlacement.SEARCH_DESCRIPTION or not definition.local_tool_search:
+            return definition
+        catalog = self._catalog_text(context)
+        if not catalog:
+            return definition
+        heading = "Searchable tools (not loaded yet; call this tool with keywords to load one before using it):"
+        return replace(definition, description=f"{definition.description}\n\n{heading}\n{catalog}")
 
     async def on_model_request(
         self,
@@ -259,6 +352,7 @@ class ToolSearchExtension(AgentExtension):
             outgoing = replace(request, tools=tuple(self._declared(context, tool) for tool in request.tools))
         else:
             outgoing = replace(request, tools=tuple(tool for tool in request.tools if not tool.deferred))
+        outgoing = replace(outgoing, tools=tuple(self._with_catalog(context, tool) for tool in outgoing.tools))
         async with aclosing(call_next(outgoing)) as events:
             async for event in events:
                 yield event

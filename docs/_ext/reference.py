@@ -184,8 +184,10 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     "zett_agent.extensions.tool_search": (
         "BM25Search",
         "TOOL_SEARCH_TOOL_NAME",
+        "ToolCatalogPlacement",
         "ToolSearchExtension",
         "ToolSearchStorage",
+        "render_tool_catalog",
     ),
     "zett_agent.extensions.usage_activity": (
         "ModelUsageActivityDay",

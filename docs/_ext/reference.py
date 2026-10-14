@@ -280,6 +280,31 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     "zett_agent.providers.google": ("GoogleProvider",),
     "zett_agent.providers.ollama": ("OllamaProvider",),
     "zett_agent.providers.openai": ("OpenAIProvider",),
+    "zett_agent.sandbox.base": (
+        "DEFAULT_MAX_OUTPUT_BYTES",
+        "DEFAULT_TIMEOUT_SECONDS",
+        "Sandbox",
+        "SandboxResult",
+        "SandboxedCommand",
+    ),
+    "zett_agent.sandbox.bubblewrap": ("BubblewrapSandbox", "build_bubblewrap_arguments"),
+    "zett_agent.sandbox.errors": ("SandboxError", "SandboxPolicyError", "SandboxUnavailableError"),
+    "zett_agent.sandbox.factory": ("SandboxBackend", "SandboxWarning", "create_sandbox", "default_backend"),
+    "zett_agent.sandbox.passthrough": ("PassthroughSandbox",),
+    "zett_agent.sandbox.policy": (
+        "DEFAULT_INHERITED_ENVIRONMENT",
+        "NetworkMode",
+        "PROTECTED_DIRECTORY_NAMES",
+        "PROTECTED_FILE_NAMES",
+        "ResolvedPolicy",
+        "SENSITIVE_HOME_PATHS",
+        "SENSITIVE_SOCKET_PATHS",
+        "SandboxPolicy",
+        "build_environment",
+        "command_arguments",
+        "resolve_policy",
+    ),
+    "zett_agent.sandbox.seatbelt": ("SEATBELT_EXECUTABLE", "SeatbeltSandbox", "build_seatbelt_profile"),
     "zett_agent.storage": ("SQLiteSessionStorage",),
     "zett_agent.sync": ("SyncAgent", "SyncModelAdapter", "create_agent_sync"),
     "zett_agent.sync_runtime": ("SyncContext", "SyncObject", "SyncRuntime", "SyncStream"),
@@ -316,6 +341,7 @@ GROUPS = {
     "providers": "Providers",
     "tools": "Tools",
     "jit_harness": "JIT harness",
+    "sandbox": "Sandbox",
     "storage": "Storage",
     "extensions": "Extensions",
     "constants": "Constants",
@@ -330,6 +356,7 @@ GUIDES = {
     "providers": ("../learn/providers", "Connect a provider and configure retries, credentials, and transport."),
     "tools": ("../learn/tools", "Build typed tools from annotations and docstrings."),
     "jit_harness": ("../learn/jit-harness", "Create, compose, unload, and save session-local Python tools."),
+    "sandbox": ("../learn/sandbox", "Run commands and agent-written programs inside an operating-system boundary."),
     "storage": ("../extending/storage-adapter", "Restore model context and preserve immutable original messages."),
     "extensions": ("../extending/first-extension", "Build extensions, choose hooks, and manage request-scoped state."),
     "constants": ("../concepts/events", "Shared event names and public type aliases."),
@@ -341,6 +368,8 @@ def public_group(name, obj):
     module = getattr(obj, "__module__", "")
     if ".jit_harness." in module:
         return "jit_harness"
+    if ".sandbox." in module:
+        return "sandbox"
     if not inspect.isclass(obj) and not inspect.isfunction(obj) and not isinstance(obj, AgentTool):
         return "constants"
     if module.endswith(("persistence", "session_persistence", "sqlite", "storage")):

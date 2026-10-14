@@ -19,6 +19,7 @@ If you are new here, start with :doc:`../learn/index` or
    ../_generated/group-providers
    ../_generated/group-tools
    ../_generated/group-jit_harness
+   ../_generated/group-sandbox
    ../_generated/group-storage
    ../_generated/group-extensions
    ../_generated/group-constants

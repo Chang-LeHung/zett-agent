@@ -1,0 +1,274 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C)
+# This file is distributed under the same license as the Zett Agent package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-14 11:06+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/sandbox.rst:2
+msgid "Run commands in a sandbox"
+msgstr "在沙箱中运行命令"
+
+#: ../../learn/sandbox.rst:4
+msgid "A tool that runs a shell command, or a program the model just wrote, runs with everything your process can do. A sandbox gives that command a smaller world: it can read the machine, write only where you say, and use the network only if you allow it. The kernel enforces the boundary on the command and on every process it starts."
+msgstr "运行 shell 命令的工具，或者运行模型刚写好的程序的工具，拥有你的进程能做的一切。沙箱给这条命令一个更小的世界：它可以读取这台机器，只能写入你指定的位置，只有你允许时才能使用网络。内核会对这条命令以及它启动的每个进程强制执行这个边界。"
+
+#: ../../learn/sandbox.rst:10
+msgid "The sandbox and an approval prompt are two different controls. The sandbox defines what a command *can* do; asking a person first decides whether it *runs* at all. Use them together, for example with :class:`~zett_agent.extensions.shell_approval.ShellApprovalExtension`."
+msgstr "沙箱和审批提示是两种不同的控制。沙箱决定命令*能*做什么；先询问用户则决定它*是否运行*。两者可以配合使用，例如搭配 :class:`~zett_agent.extensions.shell_approval.ShellApprovalExtension`\\ 。"
+
+#: ../../learn/sandbox.rst:16
+msgid "Run a command"
+msgstr "运行命令"
+
+#: ../../learn/sandbox.rst:31
+msgid "Every backend returns the same :class:`~zett_agent.sandbox.base.SandboxResult`: the exit status, standard output and error, whether it timed out, whether output was cut off, and whether the backend isolated anything. A list runs the program directly with nothing parsed, which is the safer form; a string runs through ``/bin/sh -c``, so pipes work."
+msgstr "每个后端都返回相同的 :class:`~zett_agent.sandbox.base.SandboxResult`：退出状态、标准输出和标准错误、是否超时、输出是否被截断，以及后端是否真的做了隔离。传入列表时会直接运行程序，不做任何解析，这是更安全的形式；传入字符串则通过 ``/bin/sh -c`` 运行，所以管道可以使用。"
+
+#: ../../learn/sandbox.rst:37
+msgid ":download:`Download sandbox.py <../_examples/sandbox.py>` for a complete program."
+msgstr "完整程序请 :download:`下载 sandbox.py <../_examples/sandbox.py>`\\ 。"
+
+#: ../../learn/sandbox.rst:44
+msgid "Describe the boundary"
+msgstr "描述边界"
+
+#: ../../learn/sandbox.rst:46
+msgid "One :class:`~zett_agent.sandbox.policy.SandboxPolicy` says what to enforce, and each backend turns it into its own mechanism. It follows the shape the established agent sandboxes share: reads are open and a deny list hides secrets, writes are closed and only listed paths open, the network is closed, and a few paths stay protected even inside a writable one."
+msgstr "一个 :class:`~zett_agent.sandbox.policy.SandboxPolicy` 说明要强制执行什么，每个后端再把它转换成自己的机制。它沿用了成熟的智能体沙箱共有的形态：读取默认开放，用拒绝列表隐藏机密；写入默认关闭，只有列出的路径才开放；网络默认关闭；另外有少数路径即使位于可写目录内也依然受保护。"
+
+#: ../../learn/sandbox.rst:56
+msgid "Field"
+msgstr "字段"
+
+#: ../../learn/sandbox.rst:57
+msgid "Meaning"
+msgstr "含义"
+
+#: ../../learn/sandbox.rst:58
+msgid "``writable_paths``"
+msgstr "``writable_paths``"
+
+#: ../../learn/sandbox.rst:59
+msgid "Directories the process may write. Empty means it can write only temporary files."
+msgstr "进程可以写入的目录。为空表示只能写入临时文件。"
+
+#: ../../learn/sandbox.rst:60
+msgid "``denied_write_paths``"
+msgstr "``denied_write_paths``"
+
+#: ../../learn/sandbox.rst:61
+msgid "Stay unwritable even inside a writable path. A denial beats a permission."
+msgstr "即使位于可写路径内也保持不可写。拒绝优先于允许。"
+
+#: ../../learn/sandbox.rst:62
+msgid "``denied_read_paths``"
+msgstr "``denied_read_paths``"
+
+#: ../../learn/sandbox.rst:63
+msgid "Cannot be read. Add the secrets that matter to you."
+msgstr "不可读取。请加入对你重要的机密。"
+
+#: ../../learn/sandbox.rst:64
+msgid "``network``"
+msgstr "``network``"
+
+#: ../../learn/sandbox.rst:65
+msgid "``NetworkMode.NONE`` (the default) or ``NetworkMode.FULL``."
+msgstr "``NetworkMode.NONE``\\ （默认）或 ``NetworkMode.FULL``\\ 。"
+
+#: ../../learn/sandbox.rst:66
+msgid "``protect_defaults``"
+msgstr "``protect_defaults``"
+
+#: ../../learn/sandbox.rst:67
+msgid "Keep shell and git configuration, ``.git/hooks`` and editor settings unwritable inside writable paths, and hide common credential files and container sockets from reads."
+msgstr "让 shell 和 git 的配置、``.git/hooks`` 以及编辑器设置在可写路径内保持不可写，并让常见的凭据文件和容器套接字不可读。"
+
+#: ../../learn/sandbox.rst:68
+msgid "``inherit_environment``"
+msgstr "``inherit_environment``"
+
+#: ../../learn/sandbox.rst:69
+msgid "Which host environment variables the process receives."
+msgstr "进程会收到哪些宿主环境变量。"
+
+#: ../../learn/sandbox.rst:71
+msgid "Paths must be absolute (``~`` is expanded), so a policy means the same thing wherever it is built. ``SandboxPolicy.read_only()`` and ``SandboxPolicy.workspace_write(*roots)`` cover the two common shapes."
+msgstr "路径必须是绝对路径（``~`` 会被展开），因此无论在哪里构建，策略的含义都相同。\\ ``SandboxPolicy.read_only()`` 和 ``SandboxPolicy.workspace_write(*roots)`` 覆盖了两种常见形态。"
+
+#: ../../learn/sandbox.rst:75
+#, python-brace-format
+msgid "The environment is a short allowlist, not a copy of yours. An API key in your shell does not reach a command unless you pass it with ``sandbox.run(..., env={\"TOKEN\": value})``."
+msgstr "环境变量是一份简短的允许列表，而不是你环境的拷贝。你 shell 里的 API 密钥不会到达命令，除非你用 ``sandbox.run(..., env={\"TOKEN\": value})`` 显式传入。"
+
+#: ../../learn/sandbox.rst:79
+msgid "Protected files matter because a process that can write your workspace could plant something that runs later, outside the sandbox: a ``.git/hooks/pre-commit`` script, a line in ``.bashrc``, an editor task. They stay unwritable, and the default read protection hides ``~/.ssh``, ``~/.aws``, ``~/.gnupg`` and the like, because a process that can read a credential and reach the network can send it anywhere."
+msgstr "受保护的文件之所以重要，是因为能写入你工作区的进程可以埋下稍后在沙箱之外运行的东西：一个 ``.git/hooks/pre-commit`` 脚本、``.bashrc`` 里的一行、一个编辑器任务。它们保持不可写；默认的读取保护还会隐藏 ``~/.ssh``、``~/.aws``、``~/.gnupg`` 等，因为既能读取凭据又能访问网络的进程可以把它发送到任何地方。"
+
+#: ../../learn/sandbox.rst:87
+msgid "What each platform provides"
+msgstr "各平台提供什么"
+
+#: ../../learn/sandbox.rst:93
+msgid "Platform"
+msgstr "平台"
+
+#: ../../learn/sandbox.rst:94
+msgid "Backend"
+msgstr "后端"
+
+#: ../../learn/sandbox.rst:95
+msgid "Notes"
+msgstr "说明"
+
+#: ../../learn/sandbox.rst:96
+msgid "macOS"
+msgstr "macOS"
+
+#: ../../learn/sandbox.rst:97
+msgid ":class:`~zett_agent.sandbox.seatbelt.SeatbeltSandbox`"
+msgstr ":class:`~zett_agent.sandbox.seatbelt.SeatbeltSandbox`"
+
+#: ../../learn/sandbox.rst:98
+msgid "Built in; nothing to install. Uses ``sandbox-exec``, which Apple has deprecated but ships."
+msgstr "系统自带，无需安装。使用 ``sandbox-exec``，Apple 已将其弃用，但仍随系统提供。"
+
+#: ../../learn/sandbox.rst:99
+msgid "Linux"
+msgstr "Linux"
+
+#: ../../learn/sandbox.rst:100
+msgid ":class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`"
+msgstr ":class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`"
+
+#: ../../learn/sandbox.rst:101
+msgid "Install ``bubblewrap``. Needs unprivileged user namespaces."
+msgstr "需要安装 ``bubblewrap``，并要求支持非特权用户命名空间。"
+
+#: ../../learn/sandbox.rst:102
+msgid "Windows"
+msgstr "Windows"
+
+#: ../../learn/sandbox.rst:103
+msgid ":class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`"
+msgstr ":class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`"
+
+#: ../../learn/sandbox.rst:104
+msgid "No isolation. The interface is the same, and ``isolated`` says ``False``."
+msgstr "没有隔离。接口相同，``isolated`` 为 ``False``\\ 。"
+
+#: ../../learn/sandbox.rst:106
+msgid ":func:`~zett_agent.sandbox.factory.create_sandbox` picks the platform's own."
+msgstr ":func:`~zett_agent.sandbox.factory.create_sandbox` 会选择该平台自己的后端。"
+
+#: ../../learn/sandbox.rst:110
+msgid "A backend that exists but cannot run raises :class:`~zett_agent.sandbox.errors.SandboxUnavailableError` with what to install or change. The sandbox layer never answers that by running the command unsandboxed. The one case that degrades is a platform with no backend at all: ``create_sandbox`` returns a ``PassthroughSandbox`` and emits a ``SandboxWarning``. Pass ``require_isolation=True`` to make that an error too."
+msgstr "存在但无法运行的后端会抛出 :class:`~zett_agent.sandbox.errors.SandboxUnavailableError`，并说明需要安装或更改什么。沙箱层绝不会因此退而在没有沙箱的情况下运行命令。唯一会降级的情况是平台根本没有后端：``create_sandbox`` 会返回 ``PassthroughSandbox`` 并发出 ``SandboxWarning``\\ 。传入 ``require_isolation=True`` 可以让这种情况也变成错误。"
+
+#: ../../learn/sandbox.rst:118
+msgid "Spawn it yourself"
+msgstr "自己启动进程"
+
+#: ../../learn/sandbox.rst:120
+msgid "``run`` is built on ``wrap``, which rewrites a command to run inside the sandbox and returns it without running anything. A host that manages its own processes, for streaming output or a pty, spawns the result itself:"
+msgstr "``run`` 建立在 ``wrap`` 之上，它会把命令改写成在沙箱内运行的形式并返回，但不会运行任何东西。自己管理进程的宿主（例如要流式输出或使用 pty）可以自行启动这个结果："
+
+#: ../../learn/sandbox.rst:131
+msgid "Start it in its own process group so the whole tree can be stopped."
+msgstr "请让它在自己的进程组中启动，这样才能停止整棵进程树。"
+
+#: ../../learn/sandbox.rst:134
+msgid "What ``run`` adds around the process"
+msgstr "``run`` 在进程之外增加了什么"
+
+#: ../../learn/sandbox.rst:136
+msgid "Every backend shares this, so code behaves the same except in what it can confine:"
+msgstr "所有后端共用这部分，因此除了能限制的内容不同之外，代码的行为是一致的："
+
+#: ../../learn/sandbox.rst:138
+msgid "A time limit (60 seconds by default, ``None`` for none). When it passes, the whole process group is killed."
+msgstr "时间限制（默认 60 秒，``None`` 表示不限制）。超时后整个进程组会被杀死。"
+
+#: ../../learn/sandbox.rst:140
+msgid "A cap on the output kept from each stream (1 MiB by default). The rest is read and discarded, so a process that prints forever can neither fill memory nor block on a full pipe."
+msgstr "每个输出流保留的字节数上限（默认 1 MiB）。超出的部分会被读取并丢弃，因此无休止打印的进程既不会占满内存，也不会因管道写满而阻塞。"
+
+#: ../../learn/sandbox.rst:143
+msgid "A command that finishes does not leave helpers behind. Background children are stopped with it, and a child that still holds the output pipe cannot keep a finished run waiting."
+msgstr "命令结束后不会留下辅助进程。后台子进程会随之停止，仍然占用输出管道的子进程也不能让已经结束的运行继续等待。"
+
+#: ../../learn/sandbox.rst:146
+msgid "Cancelling the awaiting task stops the process group before the cancellation propagates."
+msgstr "取消正在等待的任务时，会先停止进程组，再传播取消。"
+
+#: ../../learn/sandbox.rst:150
+msgid "What it does not do"
+msgstr "它不做什么"
+
+#: ../../learn/sandbox.rst:152
+msgid "Be clear about these before relying on it:"
+msgstr "依赖它之前，请先弄清楚这些："
+
+#: ../../learn/sandbox.rst:154
+msgid "**No filtering by host.** The network is all or nothing. Allowing named domains needs a proxy, which this does not include."
+msgstr "**不按主机过滤。** 网络要么全开要么全关。只允许指定域名需要代理，这里不包含代理。"
+
+#: ../../learn/sandbox.rst:156
+msgid "**No resource limits.** Memory, CPU time and process counts are not capped. The time limit and the output cap are the only limits."
+msgstr "**没有资源限制。** 内存、CPU 时间和进程数都没有上限。时间限制和输出上限是仅有的两项限制。"
+
+#: ../../learn/sandbox.rst:158
+msgid "**No seccomp on Linux.** With the network open the process shares the host network namespace and can reach local services there. Closing it (the default) isolates them."
+msgstr "**Linux 上没有 seccomp。** 网络开放时，进程共享宿主的网络命名空间，可以访问那里的本地服务。关闭网络（默认）则会把它们隔离开。"
+
+#: ../../learn/sandbox.rst:161
+msgid "**macOS network and sockets.** ``NetworkMode.FULL`` opens everything, including local services. ``NONE`` closes it all."
+msgstr "**macOS 的网络和套接字。** ``NetworkMode.FULL`` 会全部开放，包括本地服务。\\ ``NONE`` 则全部关闭。"
+
+#: ../../learn/sandbox.rst:163
+msgid "**A protected path that does not exist yet.** macOS protects it from creation. On Linux a path can only be protected once it exists."
+msgstr "**尚不存在的受保护路径。** macOS 会阻止它被创建。在 Linux 上，路径只有存在之后才能被保护。"
+
+#: ../../learn/sandbox.rst:165
+msgid "**Denials are silent.** A blocked operation shows up as the command's own \"Operation not permitted\". The sandbox does not report violations."
+msgstr "**拒绝是无声的。** 被阻止的操作表现为命令自己的 \"Operation not permitted\" 错误。沙箱不会报告违规。"
+
+#: ../../learn/sandbox.rst:167
+msgid "**Nesting.** A process already inside a Seatbelt sandbox cannot start another; ``check`` says so."
+msgstr "**嵌套。** 已经处于 Seatbelt 沙箱内的进程无法再启动另一个；``check`` 会说明这一点。"
+
+#: ../../learn/sandbox.rst:169
+msgid "**Windows.** No isolation at all."
+msgstr "**Windows。** 完全没有隔离。"
+
+#: ../../learn/sandbox.rst:170
+msgid "**Not a defense against a kernel or sandbox vulnerability,** or against a process that misuses the access you did allow."
+msgstr "**无法防御内核或沙箱本身的漏洞，** 也无法防止进程滥用你确实允许的访问权限。"
+
+#: ../../learn/sandbox.rst:173
+msgid "On Linux the working directory must be visible inside the sandbox. ``/tmp`` is a private tmpfs there, so a directory under ``/tmp`` is visible only if it is, or is inside, a writable path."
+msgstr "在 Linux 上，工作目录必须在沙箱内可见。那里的 ``/tmp`` 是私有的 tmpfs，所以 ``/tmp`` 下的目录只有在它本身是可写路径、或位于可写路径之内时才可见。"
+
+#: ../../learn/sandbox.rst:177
+msgid "Next: :doc:`tools` for the shell tool this protects, or :doc:`../extending/built-ins` for the approval extension."
+msgstr "下一步：参阅 :doc:`tools` 了解它所保护的 shell 工具，或参阅 :doc:`../extending/built-ins` 了解审批扩展。"
+
+#: ../../learn/sandbox.rst:180
+msgid "Related API: :class:`~zett_agent.sandbox.base.Sandbox`, :class:`~zett_agent.sandbox.policy.SandboxPolicy`, :func:`~zett_agent.sandbox.factory.create_sandbox`."
+msgstr "相关 API：:class:`~zett_agent.sandbox.base.Sandbox`、:class:`~zett_agent.sandbox.policy.SandboxPolicy`、:func:`~zett_agent.sandbox.factory.create_sandbox`\\ 。"
+

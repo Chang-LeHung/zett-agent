@@ -93,6 +93,19 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked --group dev
 
+      - name: Show what this runner's cgroup offers
+        if: runner.os == 'Linux'
+        run: |
+          echo "--- /proc/self/cgroup"; cat /proc/self/cgroup
+          dir="/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)"
+          echo "--- own cgroup: $dir"
+          for f in cgroup.controllers cgroup.subtree_control; do echo "$f: $(cat "$dir/$f" 2>&1)"; done
+          echo "--- parent cgroup: $(dirname "$dir")"
+          for f in cgroup.controllers cgroup.subtree_control; do echo "$f: $(cat "$(dirname "$dir")/$f" 2>&1)"; done
+          echo "--- can this user create a child group?"
+          mkdir "$dir/zett-probe" 2>&1 && { ls "$dir/zett-probe" | tr '\n' ' '; echo; rmdir "$dir/zett-probe"; } || true
+          echo "--- user: $(id -un) uid=$(id -u)"
+
       - name: Report how this runner enforces each limit
         run: |
           uv run --no-sync python - <<'PY'

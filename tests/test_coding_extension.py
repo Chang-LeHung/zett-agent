@@ -32,7 +32,7 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
 
     expected = {
         True: {"read_file", "view_image", "glob", "grep"},
-        False: {"read_file", "view_image", "glob", "grep", "write_file", "replace_in_file", "delete_file"},
+        False: {"read_file", "view_image", "glob", "grep", "write_file", "edit", "delete_file"},
     }
     for read_only, tool_names in expected.items():
         model = Model()
@@ -54,7 +54,7 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
         assert all(f"## {name}" in guidance for name in tool_names)
         if read_only:
             assert "## write_file" not in guidance
-            assert "## replace_in_file" not in guidance
+            assert "## edit" not in guidance
             assert "## delete_file" not in guidance
 
 
@@ -64,7 +64,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
         ToolCall("write", "write_file", {"path": "note.txt", "content": "hello"}),
         ToolCall(
             "replace",
-            "replace_in_file",
+            "edit",
             {"path": "note.txt", "edits": [{"old_text": "hello", "new_text": "world"}]},
         ),
         ToolCall("read", "read_file", {"path": "note.txt"}),
@@ -107,7 +107,7 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
     assert results["write_file"] == "Created note.txt"
     assert results["read_file"] == "world"
     assert results["bash"] == "coding-extension"
-    assert results["replace_in_file"] == "Replaced 1 occurrence in note.txt"
+    assert results["edit"] == "Replaced 1 occurrence in note.txt"
     assert results["glob"] == "note.txt"
     assert results["grep"] == "note.txt:1: world"
     assert results["delete_file"] == "Deleted note.txt"

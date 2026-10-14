@@ -8,10 +8,10 @@ from ..messages import SystemMessage
 from ..tools.base import AgentTool
 from ..tools.coding import (
     delete_file,
+    edit,
     glob,
     grep,
     read_file,
-    replace_in_file,
     write_file,
 )
 from ..tools.images import view_image
@@ -23,7 +23,7 @@ class FileSystemExtension(AgentExtension):
 
     Relative paths start from the current working directory; absolute paths are
     accepted. Read-only mode exposes read_file, view_image, glob, and grep. Writable mode
-    additionally exposes write_file and replace_in_file. Shell execution is
+    additionally exposes write_file and edit. Shell execution is
     deliberately not a filesystem capability because arbitrary commands cannot
     guarantee that they will leave the workspace unchanged.
 
@@ -41,7 +41,7 @@ class FileSystemExtension(AgentExtension):
     def tools(self) -> tuple[AgentTool, ...]:
         """Return the exact immutable registration set for the configured mode."""
         read_tools = (read_file, view_image, glob, grep)
-        return read_tools if self.read_only else (*read_tools, write_file, replace_in_file, delete_file)
+        return read_tools if self.read_only else (*read_tools, write_file, edit, delete_file)
 
     async def on_tool(self, context: AgentRunContext) -> None:
         """Register the selected filesystem tools for this request."""

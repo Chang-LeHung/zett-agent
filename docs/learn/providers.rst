@@ -90,8 +90,9 @@ examples.
              api_key=os.environ["GOOGLE_API_KEY"],
          )
 
-      Uses Google GenAI with an API key. The built-in constructor does not
-      expose Vertex AI project/location configuration.
+      Uses Google GenAI with an API key. ``base_url`` points it at a proxy or
+      a local test server. The built-in constructor does not expose Vertex AI
+      project/location configuration.
 
    .. tab-item:: DeepSeek
 
@@ -169,6 +170,32 @@ The URL is the API root, for example a service's ``.../v1``, not its
 gateways reject optional fields such as ``prompt_cache_key`` or particular
 reasoning levels; configure only supported options and test your combination.
 The adapter does not auto-detect model capabilities from an endpoint URL.
+
+Send extra headers, query parameters, or body fields
+---------------------------------------------------------
+
+Gateways often route, bill, or version on something the adapters do not model.
+Every adapter accepts ``extra_headers``; the OpenAI-style and Anthropic
+adapters also take ``extra_query`` and ``extra_body``, Google takes
+``extra_body`` and ``base_url``, and Ollama takes ``extra_query``.
+
+.. code-block:: python
+
+   model = OpenAIProvider(
+       model=os.environ["GATEWAY_MODEL"],
+       api_key=os.environ["GATEWAY_API_KEY"],
+       base_url=os.environ["GATEWAY_BASE_URL"],
+       extra_headers={"X-Tenant": "acme"},
+       extra_query={"api-version": "2025-01-01"},
+       extra_body={"service_tier": "flex"},
+   )
+
+Headers and query parameters go on every request after the adapter's own, so
+one given here replaces the SDK default of the same name (use it for
+``User-Agent`` or an ``anthropic-beta`` flag). ``extra_body`` is merged into
+the request body last: it adds options the adapter does not model and may also
+override ones it does, such as DeepSeek's ``thinking``. The values are copied
+and validated when the provider is built, and ``extra_body`` must be JSON.
 
 Reasoning effort
 ----------------

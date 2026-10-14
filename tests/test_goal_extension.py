@@ -344,7 +344,7 @@ async def test_default_definition_reuses_parent_model_and_coding_extensions() ->
 
     child_request = next(request for request in model.requests if request.tool_choice is None and request.tools)
     names = {item.name for item in child_request.tools}
-    assert {"read_file", "write_file", "replace_in_file", "delete_file", "glob", "grep", "bash"} <= names
+    assert {"read_file", "write_file", "edit", "delete_file", "glob", "grep", "bash"} <= names
     assert GOAL_EVALUATION_TOOL_NAME in names
     assert child_request.reasoning_effort is ReasoningEffort.HIGH
 

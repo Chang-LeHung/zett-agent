@@ -13,6 +13,15 @@ returns an async iterator of ModelEvent. It has a model-owned RetryOptions polic
 The protocol method is declared as a normal ``def`` returning AsyncIterator;
 an implementation may use ``async def`` with ``yield`` to satisfy that contract.
 
+Besides ``retry`` and ``response``, the protocol declares
+``native_deferred_tools: bool``. Set it to ``True`` only when your endpoint keeps
+a deferred tool out of the model's context yet can load it when a search result
+names it, as Anthropic's ``defer_loading`` does: the adapter then receives every
+deferred definition and marks it deferred itself. Leave it ``False`` (or omit it)
+when the model only learns a deferred tool from a search result, as with the
+Responses API; :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`
+then withholds those definitions from the request.
+
 .. code-block:: python
 
    from collections.abc import AsyncIterator

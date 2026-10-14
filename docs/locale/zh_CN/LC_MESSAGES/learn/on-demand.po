@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"POT-Creation-Date: 2026-10-14 09:58+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -101,34 +101,85 @@ msgid "Defer a large toolbox"
 msgstr "延迟加载大型工具集"
 
 #: ../../learn/on-demand.rst:117
-msgid "With a compatible Responses endpoint, mark rarely used tools as deferred and add :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`:"
-msgstr "使用兼容的 Responses 端点时，可以把很少使用的工具标记为延迟加载，并添加\\ :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`："
+msgid "With a compatible Responses endpoint or the Anthropic Messages API, mark rarely used tools as deferred and add :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`:"
+msgstr "使用兼容的 Responses 端点或 Anthropic Messages API 时，可以把很少使用的工具标记为延迟加载，并添加 :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`："
 
-#: ../../learn/on-demand.rst:140
-msgid "Here ``responses_model`` is a compatible adapter configured with ``response=True``; ``inventory_service`` is your application's inventory client. The model searches for relevant capabilities and receives matching definitions before calling them. Tools without ``deferred=True`` remain visible as ordinary tools."
-msgstr "这里的\\ ``responses_model``\\ 是通过\\ ``response=True``\\ 配置的兼容适配器；``inventory_service``\\ 则是你应用的库存客户端。模型会搜索相关能力，并在调用它们之前收到匹配的定义。没有设置\\ ``deferred=True``\\ 的工具仍然作为普通工具可见。"
+#: ../../learn/on-demand.rst:141
+msgid "Here ``responses_model`` is a compatible adapter configured with ``response=True`` (or an :class:`~zett_agent.providers.anthropic.AnthropicProvider`); ``inventory_service`` is your application's inventory client. The model searches for relevant capabilities and receives matching definitions before calling them. Tools without ``deferred=True`` remain visible as ordinary tools."
+msgstr "这里的 ``responses_model`` 是通过 ``response=True`` 配置的兼容适配器（也可以是 :class:`~zett_agent.providers.anthropic.AnthropicProvider`）；``inventory_service`` 则是你应用的库存客户端。模型会搜索相关能力，并在调用它们之前收到匹配的定义。没有设置 ``deferred=True`` 的工具仍然作为普通工具可见。"
 
-#: ../../learn/on-demand.rst:148
-msgid "Client-side tool search requires the Responses tool-search protocol. Chat Completions, Anthropic, Google, and Ollama do not support this extension. Skill loading uses an ordinary local tool and does not have that restriction."
-msgstr "客户端工具搜索需要 Responses 工具搜索协议。Chat Completions、Anthropic、Google 和 Ollama 都不支持该扩展。技能加载使用的是普通本地工具，没有这个限制。"
+#: ../../learn/on-demand.rst:147
+msgid "The ranking always happens locally, with BM25 over each tool's name, description, parameter descriptions, snippet, and guidelines. Only the wire protocol differs:"
+msgstr "排序始终在本地完成，使用 BM25 检索每个工具的名称、描述、参数描述、snippet 和 guidelines。不同的只是传输协议："
 
-#: ../../learn/on-demand.rst:153
+#: ../../learn/on-demand.rst:155
+msgid "Provider"
+msgstr "提供商"
+
+#: ../../learn/on-demand.rst:156
+msgid "How a deferred tool reaches the model"
+msgstr "延迟加载的工具如何到达模型"
+
+#: ../../learn/on-demand.rst:157
+msgid "Responses API"
+msgstr "Responses API"
+
+#: ../../learn/on-demand.rst:158
+msgid "The search answers with ``tool_search_output`` definitions; deferred tools are not sent up front."
+msgstr "搜索结果以 ``tool_search_output`` 定义的形式返回；延迟加载的工具不会预先发送。"
+
+#: ../../learn/on-demand.rst:159
+msgid "Anthropic Messages API"
+msgstr "Anthropic Messages API"
+
+#: ../../learn/on-demand.rst:160
+msgid "Deferred tools are declared with ``defer_loading``; the search answers with ``tool_reference`` blocks naming the tools to load. Their guidelines ride in the description."
+msgstr "延迟加载的工具会带着 ``defer_loading`` 声明；搜索结果以 ``tool_reference`` 块的形式返回，指明要加载的工具。它们的 guidelines 放在描述里一起发送。"
+
+#: ../../learn/on-demand.rst:162
+msgid "A deferred tool is skipped by :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`, so its description is the only place the model reads its guidance. When that extension is registered, its ``snippets`` and ``guidelines`` switches decide what the description carries, whatever its ``placement``; without it, a deferred tool carries its guidelines only."
+msgstr ":class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` 会跳过延迟加载的工具，所以它的描述是模型读到相关指引的唯一地方。注册了该扩展时，描述里带哪些内容由它的 ``snippets`` 和 ``guidelines`` 开关决定，与 ``placement`` 无关；没有该扩展时，延迟加载的工具只带它的 guidelines。"
+
+#: ../../learn/on-demand.rst:169
+msgid "The difference is one field of the :class:`~zett_agent.model.AgentModel` protocol, ``native_deferred_tools``. It is ``True`` on ``AnthropicProvider`` and ``False`` on every other built-in adapter. A custom adapter sets it to ``True`` when its protocol can load a deferred tool by reference."
+msgstr "区别在于 :class:`~zett_agent.model.AgentModel` 协议中的一个字段 ``native_deferred_tools``\\ 。它在 ``AnthropicProvider`` 上为 ``True``，在其他所有内置适配器上为 ``False``\\ 。自定义适配器的协议能够按引用加载延迟加载的工具时，就把它设为 ``True``\\ 。"
+
+#: ../../learn/on-demand.rst:175
+msgid "Tell the model what it can search for"
+msgstr "告诉模型可以搜索什么"
+
+#: ../../learn/on-demand.rst:177
+msgid "A deferred tool is invisible until it is loaded, so a model with only search keywords to go on has to guess what exists. ``ToolSearchExtension`` therefore lists the deferred tools (each name and description, plus its snippet and guidelines) and puts the list where you choose:"
+msgstr "延迟加载的工具在加载之前是不可见的，只靠搜索关键词的模型只能猜测有哪些工具。因此 ``ToolSearchExtension`` 会列出这些延迟加载的工具（每个工具的名称和描述，以及它的 snippet 和 guidelines），并把这份列表放在你选择的位置："
+
+#: ../../learn/on-demand.rst:196
+msgid "The list is independent of :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` and has its own switches, so the two combine in any placement and any order. The list names every deferred tool registered for the request rather than shrinking as tools are found: a list that changed on every search would change the request prefix each time and defeat provider prompt caching. With many deferred tools the list itself costs tokens, so trim it with the switches or use ``NONE`` and rely on search keywords."
+msgstr "这份列表独立于 :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`，有自己的开关，所以两者可以在任何放置方式和任何顺序下组合使用。列表会列出为该请求注册的所有延迟加载工具，而不会随着工具被找到而缩短：如果列表在每次搜索后都变化，请求前缀就会每次改变，使提供商的提示缓存失效。延迟加载的工具很多时，列表本身也会消耗 token，可以用这些开关精简它，或者使用 ``NONE`` 并依赖搜索关键词。"
+
+#: ../../learn/on-demand.rst:207
+msgid "Client-side tool search requires the Responses tool-search protocol or the Anthropic Messages API. Chat Completions, Google, and Ollama do not support this extension. Skill loading uses an ordinary local tool and does not have that restriction."
+msgstr "客户端工具搜索需要 Responses 工具搜索协议或 Anthropic Messages API。Chat Completions、Google 和 Ollama 都不支持该扩展。技能加载使用的是普通本地工具，没有这个限制。"
+
+#: ../../learn/on-demand.rst:213
 msgid "What this does not do"
 msgstr "本功能不会做什么"
 
-#: ../../learn/on-demand.rst:155
+#: ../../learn/on-demand.rst:215
 msgid "Skills are editable instructions, not an automatic learning system. Neither extension generates tools, learns from a conversation, edits skill files on its own, or unloads running code. Tools execute with the permissions of your process. Treat skill files and search results as input, not authorization to perform privileged actions."
 msgstr "技能是可编辑的指令，而不是自动学习系统。这两个扩展都不会生成工具、不会从对话中学习、不会自行修改技能文件，也不会卸载正在运行的代码。工具以你的进程权限执行。请把技能文件和搜索结果当作输入，而不是执行特权操作的授权。"
 
-#: ../../learn/on-demand.rst:161
+#: ../../learn/on-demand.rst:221
 msgid "To create and evolve Python tools during a session, opt in to :doc:`jit-harness`. It is a separate trusted-code feature, not an implicit behavior of skill loading or deferred tool search."
 msgstr "如果想在会话过程中创建和改进 Python 工具，需要主动启用\\ :doc:`jit-harness`\\ 。它是一个独立的受信任代码功能，而不是技能加载或延迟工具搜索的隐含行为。"
 
-#: ../../learn/on-demand.rst:165
+#: ../../learn/on-demand.rst:225
 msgid "Next: :doc:`sessions` to keep conversations, or :doc:`../extending/built-ins` to choose other capabilities."
 msgstr "下一步：:doc:`sessions`\\ 用于保存对话，或者用\\ :doc:`../extending/built-ins`\\ 选择其他能力。"
 
-#: ../../learn/on-demand.rst:168
+#: ../../learn/on-demand.rst:228
 msgid "Related API: :class:`~zett_agent.extensions.skill.SkillExtension`, :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`."
 msgstr "相关 API：:class:`~zett_agent.extensions.skill.SkillExtension`、:class:`~zett_agent.extensions.tool_search.ToolSearchExtension`\\ 。"
+
+#~ msgid "An adapter takes part in the second row by declaring ``native_deferred_tools: bool = True`` on its class, which tells the extension that the protocol can load a deferred tool by reference and should therefore receive the definition."
+#~ msgstr "适配器只要在类上声明 ``native_deferred_tools: bool = True``\\ ，就属于第二种情况：它告诉扩展，该协议能够按引用加载延迟加载的工具，因此应当收到这些定义。"
 

@@ -468,24 +468,57 @@ def tool(
     return decorate(function) if function is not None else decorate
 
 
-def render_tool_guidance(tools: Sequence[AgentTool]) -> str:
+def render_tool_guidance(tools: Sequence[AgentTool], *, snippets: bool = True, guidelines: bool = True) -> str:
     """Render grouped tool metadata for insertion into a system prompt.
 
     Snippets are presented together so the model can scan the available call
     shapes first. Guidelines follow in one named group per tool, which avoids
-    repeating a tool name for every rule.
+    repeating a tool name for every rule. ``snippets`` and ``guidelines`` switch
+    either section off.
     """
-    snippets = [_render_tool_snippet(registered) for registered in tools if registered.snippet]
+    rendered_snippets = [_render_tool_snippet(registered) for registered in tools if snippets and registered.snippet]
     guideline_groups = [
         f"## {registered.name}\n" + "\n".join(f"- {guideline}" for guideline in registered.guidelines)
         for registered in tools
-        if registered.guidelines
+        if guidelines and registered.guidelines
     ]
     sections = []
-    if snippets:
-        sections.append("# Tool snippets\n" + "\n".join(snippets))
+    if rendered_snippets:
+        sections.append("# Tool snippets\n" + "\n".join(rendered_snippets))
     if guideline_groups:
         sections.append("# Tool guidelines\n" + "\n\n".join(guideline_groups))
+    return "\n\n".join(sections)
+
+
+def render_tool_description(
+    tool: AgentTool, *, snippet: bool = True, guidelines: bool = True, base: str | None = None
+) -> str:
+    """Return a tool description that carries its snippet and guidelines.
+
+    Some endpoints show the model only a tool's ``description``, and a deferred
+    tool reaches the model through tool search with no system prompt beside it.
+    Folding the guidance into the description keeps it next to the tool in both
+    cases. The result is the plain description when the tool has nothing to add,
+    so it is safe to call for every tool.
+
+    Args:
+        tool: Tool whose metadata is rendered.
+        snippet: Include the ``Snippet`` section when the tool has one.
+        guidelines: Include the ``Guidelines`` section when the tool has any.
+        base: Text to put the sections after, instead of ``tool.description``.
+            Extensions that each add to a request's descriptions pass the text
+            they received, so one does not overwrite what another appended.
+
+    Examples:
+        Render everything the model should know in one string::
+
+            text = render_tool_description(read_file)
+    """
+    sections = [tool.description if base is None else base]
+    if snippet and tool.snippet:
+        sections.append("Snippet:\n" + "\n".join(f"- {line}" for line in tool.snippet.splitlines() if line.strip()))
+    if guidelines and tool.guidelines:
+        sections.append("Guidelines:\n" + "\n".join(f"- {guideline}" for guideline in tool.guidelines))
     return "\n\n".join(sections)
 
 

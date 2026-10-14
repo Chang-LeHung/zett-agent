@@ -23,6 +23,7 @@ EXPECTED = {
     "observability": "Reasoning and content boundaries recorded",
     "compaction": "Raw messages: 6; checkpoint boundary: 3; raw tail: 3",
     "subagent": "Two isolated sessions; child links to parent",
+    "async_subagent": "Background task finished; child session is separate",
     "cancellation": "Cancelled request; extension state cleared",
     "goal": "Implementation and tests are complete.",
     "storage_adapter": "load, append:system, append:user, append:assistant",

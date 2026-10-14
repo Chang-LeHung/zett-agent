@@ -11,9 +11,19 @@ from pydantic import Field
 from ..messages import ImageBytesSource, ImageContent
 from .base import tool
 
+#: Largest encoded image a tool returns unless the caller passes a smaller bound.
+MAX_IMAGE_BYTES = 10_000_000
 
-def _image_media_type(data: bytes) -> str:
-    """Return the media type for one supported image signature."""
+#: Bytes needed to recognize every supported image signature.
+IMAGE_SIGNATURE_BYTES = 12
+
+
+def image_media_type(data: bytes) -> str:
+    """Return the media type for one supported image signature.
+
+    Raises:
+        ValueError: When the leading bytes are not a PNG, JPEG, GIF, or WebP.
+    """
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
     if data.startswith(b"\xff\xd8\xff"):
@@ -71,7 +81,7 @@ async def _read_remote_image(url: str, max_bytes: int) -> bytes:
 @tool
 async def view_image(
     path: str,
-    max_bytes: Annotated[int, Field(ge=1, le=20_000_000)] = 10_000_000,
+    max_bytes: Annotated[int, Field(ge=1, le=20_000_000)] = MAX_IMAGE_BYTES,
 ) -> ImageContent:
     """View a PNG, JPEG, GIF, or WebP from a local path or HTTP(S) URL.
 
@@ -99,6 +109,6 @@ async def view_image(
         data = await asyncio.to_thread(_read_local_image, path, max_bytes)
         alt_text = target.name
     return ImageContent(
-        source=ImageBytesSource(data=data, media_type=_image_media_type(data)),
+        source=ImageBytesSource(data=data, media_type=image_media_type(data)),
         alt_text=alt_text,
     )

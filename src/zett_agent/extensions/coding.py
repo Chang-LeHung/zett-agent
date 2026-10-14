@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from ..agent import AgentRunContext
+from ..tools.base import AgentTool
 from ..tools.coding import bash
 from .file_system import FileSystemExtension
 
@@ -40,7 +40,7 @@ class CodingExtension(FileSystemExtension):
         """Include the directory used by both file tools and shell commands."""
         return f"{super()._working_directory_instructions(working_directory)}\nShell commands run from this directory."
 
-    async def on_tool(self, context: AgentRunContext) -> None:
-        """Register writable filesystem tools followed by shell execution."""
-        await super().on_tool(context)
-        context.register_tool(bash)
+    @property
+    def tools(self) -> tuple[AgentTool, ...]:
+        """Return the writable filesystem tools followed by ``bash``."""
+        return (*super().tools, bash)

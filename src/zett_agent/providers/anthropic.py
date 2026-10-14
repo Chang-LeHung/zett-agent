@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import base64
+import json
 import ssl
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -38,9 +39,12 @@ from .base import (
     _reasoning_effort_to_budget,
     _to_model_data,
     _ToolCallAccumulator,
-    reject_local_tool_search,
     retry_model_stream,
+    validate_extra_body,
+    validate_extra_headers,
+    validate_extra_query,
 )
+from .responses import local_tool_search_name
 from .tool_arguments import ToolArgumentsError, decode_tool_arguments
 from .tool_images import expand_tool_images
 
@@ -52,18 +56,60 @@ if TYPE_CHECKING:
 DEFAULT_MAX_TOKENS = 16_384
 
 
-def _tools_to_anthropic_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
-    reject_local_tool_search("Anthropic messages", tools)
+def _tools_to_anthropic_payload(
+    tools: Sequence[ToolDefinition], server_tools: Sequence[ServerToolDefinition] = ()
+) -> list[dict[str, Any]]:
+    """Render local tools, deferring the ones tool search is meant to load.
+
+    A tool marked ``deferred`` is declared with ``defer_loading``: Anthropic
+    keeps it out of the model's context until a ``tool_reference`` names it.
+    That only works when something can produce the reference, so the flag is
+    honored only when the request carries a search: the local search tool, or
+    Anthropic's hosted ``tool_search_tool_*``. Without one the tool is declared
+    normally, because a deferred tool nothing can load would be unusable.
+
+    The local search tool is an ordinary function here, since Anthropic has no
+    client-side search endpoint; the model calls it and its result carries the
+    references (see :func:`_search_result_blocks`).
+    """
+    if sum(tool.local_tool_search for tool in tools) > 1:
+        raise ValueError("Only one local tool search tool can be registered")
+    can_load = any(tool.local_tool_search for tool in tools) or any(
+        tool.type.startswith("tool_search_tool_") for tool in server_tools
+    )
     rendered = []
     for tool in tools:
-        rendered.append(
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": dict(tool.parameters),
-            }
-        )
+        payload = {
+            "name": tool.name,
+            "description": tool.description,
+            "input_schema": dict(tool.parameters),
+        }
+        if tool.deferred and can_load:
+            payload["defer_loading"] = True
+        rendered.append(payload)
     return rendered
+
+
+def _search_result_blocks(message: Any) -> list[dict[str, Any]]:
+    """Turn a local tool search result into ``tool_reference`` blocks.
+
+    The search tool returns the definitions it found; Anthropic needs only their
+    names, because each deferred tool is already declared in the request. A
+    search that finds nothing is reported as text, since an empty reference list
+    is not a valid result.
+    """
+    try:
+        found = json.loads(message.content)
+    except (TypeError, json.JSONDecodeError) as error:
+        raise ProviderResponseError("A local tool search tool must return JSON tool definitions") from error
+    if not isinstance(found, list):
+        raise ProviderResponseError("A local tool search tool must return a list of definitions")
+    names = [item["name"] for item in found if isinstance(item, Mapping) and isinstance(item.get("name"), str)]
+    if len(names) != len(found):
+        raise ProviderResponseError("Every definition a local tool search tool returns needs a name")
+    if not names:
+        return [{"type": "text", "text": "No matching tools found."}]
+    return [{"type": "tool_reference", "tool_name": name} for name in names]
 
 
 def _server_tools_to_anthropic_payload(tools: Sequence[ServerToolDefinition]) -> list[dict[str, Any]]:
@@ -83,8 +129,11 @@ def _apply_prompt_cache(body: dict[str, Any], client_tools: Sequence[dict[str, A
     """
     breakpoint = {"type": "ephemeral"}
     # Server tools are provider-owned definitions and must not carry the marker.
-    if client_tools:
-        client_tools[-1]["cache_control"] = breakpoint
+    # A deferred tool is not part of the cached prefix, so the marker goes on the
+    # last tool that is loaded up front.
+    loaded = [tool for tool in client_tools if not tool.get("defer_loading")]
+    if loaded:
+        loaded[-1]["cache_control"] = breakpoint
     system = body.get("system")
     if isinstance(system, str) and system:
         body["system"] = [{"type": "text", "text": system, "cache_control": breakpoint}]
@@ -95,7 +144,9 @@ def _apply_prompt_cache(body: dict[str, Any], client_tools: Sequence[dict[str, A
             content[-1]["cache_control"] = breakpoint
 
 
-def _to_anthropic_content_blocks(message: Any, *, model: str | None = None) -> list[dict[str, Any]]:
+def _to_anthropic_content_blocks(
+    message: Any, *, model: str | None = None, search_tool: str | None = None
+) -> list[dict[str, Any]]:
     """Convert a domain message into Anthropic content blocks."""
     role = message.role
     match role:
@@ -128,11 +179,16 @@ def _to_anthropic_content_blocks(message: Any, *, model: str | None = None) -> l
                 )
             return blocks
         case "tool":
+            content = (
+                _search_result_blocks(message)
+                if search_tool is not None and message.name == search_tool and message.success
+                else message.content
+            )
             return [
                 {
                     "type": "tool_result",
                     "tool_use_id": message.tool_call_id,
-                    "content": message.content,
+                    "content": content,
                     "is_error": not message.success,
                 }
             ]
@@ -179,6 +235,18 @@ class AnthropicProvider(RetryingProvider):
             this limit leaves the call's JSON incomplete, and the model is then
             told to retry with a smaller call. Lower it for models with a
             smaller output limit.
+        extra_headers: HTTP headers sent on every request, for gateways that
+            route or bill on a header or for ``anthropic-beta`` flags. A header
+            given here replaces the SDK default of the same name.
+        extra_query: URL query parameters sent on every request.
+        extra_body: JSON fields merged into every request body last, so they
+            add an option the adapter does not model and may override one it
+            does.
+
+    Note:
+        Client-side tool search works here too: ``ToolSearchExtension`` ranks the
+        deferred tools locally, and this adapter declares them with
+        ``defer_loading`` and answers the search with ``tool_reference`` blocks.
 
     Note:
         Signed replay blocks belong to the originating provider and model.
@@ -208,6 +276,11 @@ class AnthropicProvider(RetryingProvider):
         :doc:`/concepts/context` explains replay during tool round trips.
     """
 
+    #: See :attr:`zett_agent.model.AgentModel.native_deferred_tools`. The Messages
+    #: API accepts ``defer_loading`` tools and loads one when a ``tool_reference``
+    #: names it, so every deferred definition travels with the request.
+    native_deferred_tools: bool = True
+
     def __init__(
         self,
         model: str,
@@ -219,6 +292,9 @@ class AnthropicProvider(RetryingProvider):
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
         prompt_cache: bool = True,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        extra_headers: Mapping[str, str] | None = None,
+        extra_query: Mapping[str, str] | None = None,
+        extra_body: Mapping[str, Any] | None = None,
     ) -> None:
         import httpx
         import truststore
@@ -234,6 +310,9 @@ class AnthropicProvider(RetryingProvider):
         if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
             raise ValueError("max_tokens must be a positive integer")
         self.max_tokens = max_tokens
+        self.extra_headers = validate_extra_headers(extra_headers)
+        self.extra_query = validate_extra_query(extra_query)
+        self.extra_body = validate_extra_body(extra_body)
         self.retry = retry
         self.response = response
         self.prompt_cache = prompt_cache
@@ -245,7 +324,14 @@ class AnthropicProvider(RetryingProvider):
         )
         from anthropic import AsyncAnthropic
 
-        self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, http_client=self._http_client, max_retries=0)
+        self._client = AsyncAnthropic(
+            api_key=api_key,
+            base_url=base_url,
+            http_client=self._http_client,
+            max_retries=0,
+            default_headers=self.extra_headers or None,
+            default_query=self.extra_query or None,
+        )
 
     async def aclose(self) -> None:
         """Close the owned SDK connection pool."""
@@ -255,6 +341,7 @@ class AnthropicProvider(RetryingProvider):
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         messages: list[dict[str, Any]] = []
         system: list[str] = []
+        search_tool = local_tool_search_name(request.tools)
         for message in expand_tool_images(request.messages):
             match message.role:
                 case "system":
@@ -268,11 +355,11 @@ class AnthropicProvider(RetryingProvider):
                     if content:
                         messages.append({"role": "assistant", "content": content})
                 case "tool":
-                    content = _to_anthropic_content_blocks(message, model=self.model)
+                    content = _to_anthropic_content_blocks(message, model=self.model, search_tool=search_tool)
                     if content:
                         messages.append({"role": "user", "content": content})
 
-        client_tools = _tools_to_anthropic_payload(request.tools)
+        client_tools = _tools_to_anthropic_payload(request.tools, request.server_tools)
         body = {
             "model": self.model,
             "system": "\n\n".join(system),
@@ -317,7 +404,9 @@ class AnthropicProvider(RetryingProvider):
         from anthropic import AnthropicError
 
         try:
-            response = await self._client.messages.create(**body)
+            response = await self._client.messages.create(
+                **body, **({"extra_body": self.extra_body} if self.extra_body else {})
+            )
         except AnthropicError as error:
             status_code = getattr(error, "status_code", None)
             match status_code:

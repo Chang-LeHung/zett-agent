@@ -509,11 +509,20 @@ class PlanModeExtension(ExternalEventExtension):
         instructions = [message for message in context.state.messages if isinstance(message, SystemMessage)]
         if not self.is_plan_mode(context.config.session_id):
             return tuple(instructions)
-        plan_guidance = render_tool_guidance((*self._filesystem_tools, baseline.exit_tool))
+        guidance = next(
+            (
+                extension
+                for extension in context.extensions
+                if isinstance(extension, ToolGuidelinesExtension) and extension.in_system_prompt
+            ),
+            None,
+        )
+        options = {"snippets": guidance.snippets, "guidelines": guidance.guidelines} if guidance else {}
+        plan_guidance = render_tool_guidance((*self._filesystem_tools, baseline.exit_tool), **options)
         if plan_guidance:
             instructions = [message for message in instructions if message.content != plan_guidance]
-        if any(isinstance(extension, ToolGuidelinesExtension) for extension in context.extensions):
-            normal_guidance = render_tool_guidance((*baseline.tools.values(), baseline.enter_tool))
+        if guidance is not None:
+            normal_guidance = render_tool_guidance((*baseline.tools.values(), baseline.enter_tool), **options)
             if normal_guidance:
                 instructions.append(SystemMessage(content=normal_guidance))
         return tuple(instructions)

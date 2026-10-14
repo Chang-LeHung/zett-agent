@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import ssl
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any
 
 from ..messages import (
@@ -28,11 +28,15 @@ from ..model import (
     validate_retry,
 )
 from .base import (
+    ProviderAuthError,
+    ProviderError,
     ProviderResponseError,
     RetryingProvider,
     _reasoning_effort_to_budget,
     reject_local_tool_search,
     retry_model_stream,
+    validate_extra_body,
+    validate_extra_headers,
 )
 from .tool_images import expand_tool_images
 
@@ -49,6 +53,12 @@ class GoogleProvider(RetryingProvider):
         transport: Optional HTTPX transport for test isolation or custom routing.
         response: Must remain false; this adapter uses Google GenerateContent.
         retry: Retry/backoff policy, applied before any model event is emitted.
+        base_url: API root; None uses Google's public Generative Language endpoint.
+            Set it to reach a proxy, a gateway, or a local test server.
+        extra_headers: HTTP headers sent on every request, for gateways that
+            route or bill on a header.
+        extra_body: JSON fields merged into every request body, for options the
+            adapter does not model.
 
     Note:
         ModelResponse retains model-scoped replay parts for subsequent calls.
@@ -84,6 +94,9 @@ class GoogleProvider(RetryingProvider):
         *,
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
+        base_url: str | None = None,
+        extra_headers: Mapping[str, str] | None = None,
+        extra_body: Mapping[str, Any] | None = None,
     ) -> None:
         import httpx
         import truststore
@@ -99,6 +112,8 @@ class GoogleProvider(RetryingProvider):
         self.retry = retry
         self.response = response
         self.model = model
+        self.extra_headers = validate_extra_headers(extra_headers)
+        self.extra_body = validate_extra_body(extra_body)
         self._http_client = httpx.AsyncClient(
             transport=transport,
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
@@ -107,7 +122,11 @@ class GoogleProvider(RetryingProvider):
         self._client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
-                httpx_async_client=self._http_client, retry_options=types.HttpRetryOptions(attempts=1)
+                base_url=base_url,
+                headers=self.extra_headers or None,
+                extra_body=self.extra_body or None,
+                httpx_async_client=self._http_client,
+                retry_options=types.HttpRetryOptions(attempts=1),
             ),
         )
 
@@ -120,9 +139,11 @@ class GoogleProvider(RetryingProvider):
     @retry_model_stream
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         from google.genai import types
+        from google.genai.errors import APIError
 
         system: list[str] = []
         contents: list[types.Content] = []
+        previous_role = ""
         for message in expand_tool_images(request.messages):
             match message.role:
                 case "agent":
@@ -165,14 +186,22 @@ class GoogleProvider(RetryingProvider):
                             for call in message.tool_calls
                         )
                 case "tool":
+                    # Gemini documents ``error`` as the key that marks a failed call.
                     parts = [
                         types.Part.from_function_response(
                             name=message.name,
-                            response={"content": message.content},
+                            response={"content": message.content} if message.success else {"error": message.content},
                         )
                     ]
+                    # The service matches the responses of parallel calls as one
+                    # turn: its count must equal the calls in the model turn, so
+                    # adjacent results join instead of becoming separate turns.
+                    if contents and previous_role == "tool":
+                        contents[-1].parts.extend(parts)
+                        continue
             if parts:
                 contents.append(types.Content(role="model" if message.role == "assistant" else "user", parts=parts))
+            previous_role = message.role
         config = types.GenerateContentConfig(
             system_instruction="\n\n".join(system) or None,
             tools=self._google_tools(types, request),
@@ -197,10 +226,15 @@ class GoogleProvider(RetryingProvider):
         finish_reason = None
         server_tool_sequence = 0
         seen_server_tool_metadata: set[str] = set()
-        stream = await self._client.aio.models.generate_content_stream(
-            model=self.model, contents=contents, config=config
-        )
         try:
+            stream = await self._client.aio.models.generate_content_stream(
+                model=self.model, contents=contents, config=config
+            )
+        except APIError as error:
+            raise _provider_error(error) from error
+        try:
+            # The SDK sends the HTTP request when the first chunk is requested,
+            # so a rejected request surfaces here rather than above.
             async for chunk in stream:
                 for candidate in (chunk.candidates or [])[:1]:
                     server_events, server_tool_sequence = _google_server_tool_events(
@@ -244,6 +278,8 @@ class GoogleProvider(RetryingProvider):
                         # it says nothing about cache usage.
                         cache_reported=info.cached_content_token_count is not None,
                     )
+        except APIError as error:
+            raise _provider_error(error) from error
         finally:
             await stream.aclose()
         if finish_reason is None:
@@ -287,6 +323,17 @@ class GoogleProvider(RetryingProvider):
             except ValueError as error:
                 raise ProviderResponseError(f"Unsupported Google server tool type: {tool.type}") from error
         return tools or None
+
+
+def _provider_error(error: Any) -> ProviderError:
+    """Map an SDK failure to the provider error hierarchy.
+
+    The original error stays reachable through ``__cause__``, which is where the
+    retry policy reads the HTTP status, so a 429 or 5xx is still retried.
+    """
+    if error.code in (401, 403):
+        return ProviderAuthError("Provider rejected API credential")
+    return ProviderResponseError(f"Provider stream request failed: {error.message}")
 
 
 def _google_server_tool_events(candidate: Any, *, sequence: int, seen: set[str]) -> tuple[list[ModelEvent], int]:

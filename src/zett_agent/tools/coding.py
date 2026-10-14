@@ -12,7 +12,9 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from .._compat import TypeAliasType, timeout
+from ..messages import ImageBytesSource, ImageContent, TextContent
 from .base import tool
+from .images import IMAGE_SIGNATURE_BYTES, MAX_IMAGE_BYTES, image_media_type
 from .output import MAX_MATCH_BYTES, MAX_OUTPUT_BYTES, shell_preview, utf8_prefix
 
 FilePath = TypeAliasType("FilePath", Annotated[str, Field(min_length=1)])
@@ -20,6 +22,9 @@ StartLine = TypeAliasType("StartLine", Annotated[int, Field(ge=1)])
 LineCount = TypeAliasType("LineCount", Annotated[int, Field(ge=1, le=2_000)])
 TimeoutSeconds = TypeAliasType("TimeoutSeconds", Annotated[int, Field(ge=1, le=300)])
 MaxResults = TypeAliasType("MaxResults", Annotated[int, Field(ge=1, le=5_000)])
+
+#: Default and maximum wall-clock budget of one ``bash`` call, in seconds.
+DEFAULT_BASH_TIMEOUT_SECONDS = 60
 
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -180,6 +185,42 @@ def grep(
     return result
 
 
+def _read_text_range(path: str, target: Path, start_line: int, line_count: int, start_column: int) -> str:
+    """Return one line range of a UTF-8 file with a continuation hint when more remains."""
+    selected: list[str] = []
+    line_number, column = 1, 1
+    used = 0
+    next_line = next_column = None
+    truncated = False
+    try:
+        with target.open(encoding="utf-8") as source:
+            while fragment := source.readline(4096):
+                if line_number >= start_line and next_line is None:
+                    offset = max(0, start_column - column) if line_number == start_line else 0
+                    available = fragment[offset:]
+                    if line_number >= start_line + line_count:
+                        next_line = line_number
+                    elif available:
+                        part = utf8_prefix(available, MAX_OUTPUT_BYTES - used)
+                        selected.append(part)
+                        used += len(part.encode("utf-8"))
+                        if len(part) < len(available):
+                            next_line, next_column = line_number, column + offset + len(part)
+                            truncated = True
+                if fragment.endswith("\n"):
+                    line_number, column = line_number + 1, 1
+                else:
+                    column += len(fragment)
+    except UnicodeDecodeError as error:
+        raise ValueError(f"File is not UTF-8 text: {path}") from error
+    content = "".join(selected)
+    if truncated:
+        content += f"\n... [line truncated; continue with start_line={next_line}, start_column={next_column}]"
+    elif next_line is not None:
+        content += f"\n... [more lines; continue with start_line={next_line}]"
+    return content
+
+
 @tool
 def read_file(
     path: FilePath, start_line: StartLine = 1, line_count: LineCount = 200, start_column: StartLine = 1
@@ -203,35 +244,54 @@ def read_file(
     _, target = _resolve_file_path(path)
     if not target.is_file():
         raise ValueError(f"File does not exist: {path}")
-    selected: list[str] = []
-    line_number, column = 1, 1
-    used = 0
-    next_line = next_column = None
-    truncated = False
-    with target.open(encoding="utf-8") as source:
-        while fragment := source.readline(4096):
-            if line_number >= start_line and next_line is None:
-                offset = max(0, start_column - column) if line_number == start_line else 0
-                available = fragment[offset:]
-                if line_number >= start_line + line_count:
-                    next_line = line_number
-                elif available:
-                    part = utf8_prefix(available, MAX_OUTPUT_BYTES - used)
-                    selected.append(part)
-                    used += len(part.encode("utf-8"))
-                    if len(part) < len(available):
-                        next_line, next_column = line_number, column + offset + len(part)
-                        truncated = True
-            if fragment.endswith("\n"):
-                line_number, column = line_number + 1, 1
-            else:
-                column += len(fragment)
-    content = "".join(selected)
-    if truncated:
-        content += f"\n... [line truncated; continue with start_line={next_line}, start_column={next_column}]"
-    elif next_line is not None:
-        content += f"\n... [more lines; continue with start_line={next_line}]"
-    return content
+    return _read_text_range(path, target, start_line, line_count, start_column)
+
+
+def _image_media_type_of(target: Path) -> str | None:
+    """Return the image media type of a local file, or None when it is not a supported image."""
+    with target.open("rb") as source:
+        header = source.read(IMAGE_SIGNATURE_BYTES)
+    try:
+        return image_media_type(header)
+    except ValueError:
+        return None
+
+
+@tool
+def read(
+    path: FilePath, start_line: StartLine = 1, line_count: LineCount = 200, start_column: StartLine = 1
+) -> str | list[TextContent | ImageContent]:
+    """Read a local file: UTF-8 text as a line range, or a PNG, JPEG, GIF, or WebP image as an image.
+
+    Args:
+        path: Absolute path or a path relative to the current working directory.
+        start_line: One-based first line to return; ignored for images.
+        line_count: Maximum number of lines to return; ignored for images.
+        start_column: One-based character column on start_line, used to resume a long line; ignored for images.
+
+    Snippet:
+        read(path="docs/diagram.png")
+
+    Guidelines:
+        - Use for any local file when you do not know whether it is text or an image.
+        - A text file comes back as a line range; use line ranges for large files.
+        - A trailing hint gives the next start_line and start_column when more text remains.
+        - An image comes back as an image with a one-line description; the range arguments do not apply to it.
+        - Use view_image for HTTP(S) image URLs. PDF and SVG files are not supported.
+    """
+    _, target = _resolve_file_path(path)
+    if not target.is_file():
+        raise ValueError(f"File does not exist: {path}")
+    media_type = _image_media_type_of(target)
+    if media_type is None:
+        return _read_text_range(path, target, start_line, line_count, start_column)
+    size = target.stat().st_size
+    if size > MAX_IMAGE_BYTES:
+        raise ValueError(f"Image exceeds the {MAX_IMAGE_BYTES}-byte limit: {path}")
+    return [
+        TextContent(text=f"Image {target.name}: {media_type}, {size} bytes"),
+        ImageContent(source=ImageBytesSource(data=target.read_bytes(), media_type=media_type), alt_text=target.name),
+    ]
 
 
 @tool
@@ -248,7 +308,7 @@ def write_file(path: FilePath, content: str, overwrite: bool = True) -> str:
 
     Guidelines:
         - Use for new files or intentional full-file replacement.
-        - Prefer replace_in_file for a small change to an existing file.
+        - Prefer edit for a small change to an existing file.
     """
     working_directory, target = _resolve_file_path(path)
     if target.exists() and not target.is_file():
@@ -278,11 +338,11 @@ class FileEdit(BaseModel):
 
 
 @tool
-def replace_in_file(
+def edit(
     path: FilePath,
     edits: Annotated[list[FileEdit], Field(min_length=1, description="Ordered exact-text edits applied in one call")],
 ) -> str:
-    """Edit an existing UTF-8 file by replacing exact text; the tool for every code or text change.
+    """Edit an existing UTF-8 file by replacing exact text; always use this tool to modify a file.
 
     Args:
         path: Absolute path or a path relative to the current working directory.
@@ -290,11 +350,12 @@ def replace_in_file(
             match when it sets replace_all. Pass a single-element list for one change.
 
     Snippet:
-        replace_in_file(path="notes/plan.md", edits=[{"old_text": "Draft", "new_text": "Final"}])
-        replace_in_file(path="notes/plan.md", edits=[{"old_text": "First", "new_text": "1st"}, {"old_text": "Second", "new_text": "2nd", "replace_all": True}])
+        edit(path="notes/plan.md", edits=[{"old_text": "Draft", "new_text": "Final"}])
+        edit(path="notes/plan.md", edits=[{"old_text": "First", "new_text": "1st"}, {"old_text": "Second", "new_text": "2nd", "replace_all": True}])
 
     Guidelines:
-        - Use this tool for normal edits to an existing file, instead of sed, awk, perl -i, python -c, tee, or shell redirection. Reserve those for bulk or mechanical rewrites this tool cannot express, such as renaming a symbol across many files.
+        - Always use this tool when you need to modify an existing file, instead of sed, awk, perl -i, python -c, tee, or shell redirection. Reserve those for bulk or mechanical rewrites this tool cannot express, such as renaming a symbol across many files.
+        - Avoid sed, cat, and similar shell commands for reading or changing files unless it is necessary; inspect files with read_file, grep, and glob, and change them with this tool.
         - Read the target lines with read_file first and copy old_text exactly: same indentation, quotes, and line breaks.
         - Make old_text unique by including a neighbouring line or two; set replace_all only when every occurrence must change.
         - Send every change for the file in one call: edits apply in order, each one sees the previous result, and nothing is written if any edit fails.
@@ -373,19 +434,19 @@ def delete_file(path: FilePath) -> str:
 @tool
 async def bash(
     command: Annotated[str, Field(min_length=1)],
-    timeout_seconds: TimeoutSeconds = 30,
+    timeout_seconds: TimeoutSeconds = DEFAULT_BASH_TIMEOUT_SECONDS,
 ) -> str:
     """Run a shell command with captured output from the current working directory.
 
     Args:
         command: Shell command to execute.
-        timeout_seconds: Maximum command runtime in seconds.
+        timeout_seconds: Maximum command runtime in seconds; the default is 60.
 
     Snippet:
-        bash(command="git status --short", timeout_seconds=30)
+        bash(command="git status --short", timeout_seconds=60)
 
     Guidelines:
-        - Use for builds, tests, git, and other commands that have no dedicated tool. Prefer read_file, grep, glob, write_file, and replace_in_file for reading, searching, listing, and editing files.
+        - Use for builds, tests, git, and other commands that have no dedicated tool. Prefer read_file, grep, glob, write_file, and edit for reading, searching, listing, and editing files.
         - Use only for bounded commands in a trusted working directory.
         - A non-zero exit code or a timeout is reported as an error carrying the output.
         - Output previews keep startup and final results within byte and line limits.

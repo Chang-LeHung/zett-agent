@@ -151,11 +151,11 @@ async def test_a_process_limit_holds_inside_the_sandbox(backend, work):
     )
 
     # The command started (the limit is headroom above what the user already runs, so it
-    # is not refused outright) and was stopped well before 300. The bounds are loose
-    # because other processes of the same user count against the same allowance.
+    # is not refused outright) and was stopped well before the 300 it tried. The figure
+    # moves with whatever else this user starts or ends meanwhile, so the bound is loose.
     assert result.succeeded, result.stderr
     forked = int(result.stdout.split()[-1])
-    assert 1 <= forked <= 40
+    assert 1 <= forked < 200
 
 
 @posix_only

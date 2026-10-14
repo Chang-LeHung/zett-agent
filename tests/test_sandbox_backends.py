@@ -84,6 +84,11 @@ def make(backend, work, *, limits: ResourceLimits | None = None, strategy: Memor
     return sandbox
 
 
+def ended_by(result, number: int) -> bool:
+    """Whether a signal ended the command: ``-N`` when run directly, ``128 + N`` under bubblewrap's init."""
+    return result.exit_code in (-number, 128 + number)
+
+
 def test_every_backend_reports_how_it_enforces_each_limit(backend, work, capsys):
     """Print what this machine does with each limit; the sandbox job in CI reads it back."""
     limits = ResourceLimits(
@@ -122,20 +127,35 @@ async def test_a_processor_time_limit_holds_inside_the_sandbox(backend, work):
         [sys.executable, "-c", "x=0\nwhile True: x+=1"], cwd=work, timeout=60
     )
 
-    assert result.timed_out is False and result.exit_code == -signal.SIGXCPU
+    assert result.timed_out is False and ended_by(result, signal.SIGXCPU)
     assert result.resources.limits_hit == ("cpu",)
 
 
 @posix_only
 async def test_a_process_limit_holds_inside_the_sandbox(backend, work):
     program = (
-        "import os\nn=0\ntry:\n    for _ in range(200): os.fork(); n+=1\nexcept OSError:\n    print('stopped after', n)"
+        "import os, time\n"
+        "n = 0\n"
+        "try:\n"
+        "    for _ in range(300):\n"
+        "        if os.fork() == 0:\n"
+        "            time.sleep(20)\n"
+        "            os._exit(0)\n"
+        "        n += 1\n"
+        "except OSError:\n"
+        "    pass\n"
+        "print('forked', n)\n"
     )
     result = await make(backend, work, limits=ResourceLimits(processes=32)).run(
         [sys.executable, "-c", program], cwd=work, timeout=60
     )
 
-    assert "stopped after" in result.stdout
+    # The command started (the limit is headroom above what the user already runs, so it
+    # is not refused outright) and was stopped well before 300. The bounds are loose
+    # because other processes of the same user count against the same allowance.
+    assert result.succeeded, result.stderr
+    forked = int(result.stdout.split()[-1])
+    assert 1 <= forked <= 40
 
 
 @posix_only
@@ -462,7 +482,7 @@ def test_a_session_enforces_its_limits(backend):
         with pytest.raises(SandboxCommandError, match="cpu limit"):
             sb.run([sys.executable, "-c", "while True: pass"], check=True)
 
-    assert spin.exit_code == -signal.SIGXCPU and spin.resources.limits_hit == ("cpu",)
+    assert ended_by(spin, signal.SIGXCPU) and spin.resources.limits_hit == ("cpu",)
     assert not grow.succeeded and size <= 100 * 1024
 
 

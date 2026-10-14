@@ -183,18 +183,25 @@ class ResourceLimits:
             also counts memory that is mapped but never touched. On macOS no
             kernel limit exists and a sampling watchdog stops a runaway process
             instead; see :class:`~zett_agent.sandbox.base.MemoryStrategy`.
-        cpu_seconds: Total processor time the process tree may consume. The
-            kernel kills it once the time is spent, which is different from the
-            wall-clock ``timeout`` of a run: a program that sleeps uses no
-            processor time at all.
+        cpu_seconds: Total processor time each process may consume. The kernel
+            ends it with ``SIGXCPU`` once the time is spent, which is different
+            from the wall-clock ``timeout`` of a run: a program that sleeps uses no
+            processor time at all. The limit is per process and inherited, so a
+            command that starts helpers gives each of them the same budget; the
+            hard limit is a second higher, to stop a process that handles the
+            signal.
         cpu_percent: Share of one processor the process tree may use, where the
             kernel can limit it (cgroups). 100 is one core, 250 is two and a
             half. Sleeps and waiting do not count against it.
-        processes: Number of processes and threads the tree may create. The
+        processes: How many processes the command may add. Where a cgroup is
+            available the kernel counts the tree, threads included. Elsewhere the
+            POSIX limit is used, which the kernel compares with every process the
+            user owns, so it is applied as the number already running plus this
+            one; other processes the same user starts meanwhile use the same
+            allowance. Linux counts threads there as well, and macOS does not. The
             smallest accepted value leaves room for the sandbox's own launcher,
-            which is itself a process in the tree; on macOS threads count too, as
-            the kernel counts them. A small value stops a program from starting
-            helpers at all.
+            which is itself a process in the tree, and a small value stops a
+            program from starting helpers at all.
         file_size_bytes: Largest file the process may create or extend. Writing
             past it fails; a file already open can be truncated by it.
         open_files: Number of file descriptors the process may hold open. The

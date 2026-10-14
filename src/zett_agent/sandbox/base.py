@@ -20,8 +20,9 @@ from .resources import (
     MemoryStrategy,
     ResourcePlan,
     ResourceReport,
+    descendant_pids,
     plan_resources,
-    process_group_rss_bytes,
+    process_tree_rss_bytes,
     watchdog_available,
 )
 
@@ -34,10 +35,11 @@ __all__ = [
     "SandboxedCommand",
 ]
 
-#: Signals the kernel uses to report a limit that was reached, mapped to the limit.
+#: Signals the kernel uses to report a limit that was reached, with the limit that
+#: raises each and the field of ``ResourceLimits`` that has to have asked for it.
 _LIMIT_SIGNALS = {
-    getattr(signal, "SIGXCPU", -1000): "cpu",
-    getattr(signal, "SIGXFSZ", -1001): "file_size",
+    getattr(signal, "SIGXCPU", -1000): ("cpu", "cpu_seconds"),
+    getattr(signal, "SIGXFSZ", -1001): ("file_size", "file_size_bytes"),
 }
 
 #: Wall-clock limit of one run unless the caller passes another (or None for none).
@@ -89,7 +91,9 @@ class SandboxResult:
 
     Attributes:
         exit_code: The process's exit status. A negative number is the signal
-            that ended it, which is what a timeout produces.
+            that ended it, which is what a timeout produces. Bubblewrap runs the
+            command under its own init, which reports a signal as ``128`` plus its
+            number (137 for ``SIGKILL``), as a shell does.
         stdout: Standard output, decoded as UTF-8 with undecodable bytes replaced.
         stderr: Standard error, decoded the same way.
         timed_out: Whether the run exceeded its time limit and was killed.
@@ -170,8 +174,19 @@ class _Run(asyncio.SubprocessProtocol):
             self.exited.set_result(None)
 
 
-def _kill(pid: int, transport: asyncio.SubprocessTransport) -> None:
-    """Stop a process and, on POSIX, everything it started in its group."""
+def _kill(pid: int, transport: asyncio.SubprocessTransport, *, tree: bool = False) -> None:
+    """Stop a process and, on POSIX, everything it started in its group.
+
+    With ``tree`` the descendants are found first and killed too, which reaches a
+    child that started a session of its own and so left the group. That costs a
+    ``ps`` call, so it is used when a command is being stopped (a timeout, a
+    cancellation, a memory limit) and not after one that finished by itself, where
+    the parent links it would follow are already gone.
+    """
+    if _POSIX and tree:
+        for process in descendant_pids(pid):
+            with suppress(ProcessLookupError, PermissionError):
+                os.kill(process, signal.SIGKILL)
     with suppress(ProcessLookupError, PermissionError):
         if _POSIX:
             os.killpg(pid, signal.SIGKILL)
@@ -181,7 +196,7 @@ def _kill(pid: int, transport: asyncio.SubprocessTransport) -> None:
 
 @dataclass
 class _MemoryWatchdog:
-    """Sample a process group's memory, and remember the highest value seen.
+    """Sample the memory of a process tree, and remember the highest value seen.
 
     The parent runs this, outside the sandbox, so it sees the whole tree. It is
     the last resort for a memory limit, used where the kernel cannot enforce one;
@@ -198,7 +213,7 @@ class _MemoryWatchdog:
     async def watch(self, exited: asyncio.Future[None]) -> None:
         """Sample until the process exits or the limit is passed."""
         while not exited.done():
-            measured = await asyncio.to_thread(process_group_rss_bytes, self.pid)
+            measured = await asyncio.to_thread(process_tree_rss_bytes, self.pid)
             if measured is None:
                 # Nothing was measured, so nothing is enforced. It is reported
                 # rather than passed off as a run within its limit.
@@ -211,10 +226,27 @@ class _MemoryWatchdog:
             await asyncio.sleep(self.sample_seconds)
 
 
+def _limit_for_exit(exit_code: int | None, requested: tuple[str, ...]) -> str | None:
+    """Name the limit whose signal ended a process, from its exit status.
+
+    A process killed by a signal reports ``-N`` when it is run directly. Bubblewrap
+    runs the command under its own init and reports ``128 + N`` instead, as a shell
+    does, so both are read. The limit has to have been asked for: a status that
+    merely looks like a signal is not attributed to a limit nobody set.
+    """
+    if exit_code is None:
+        return None
+    for number, (limit, field) in _LIMIT_SIGNALS.items():
+        if field in requested and exit_code in (-number, 128 + number):
+            return limit
+    return None
+
+
 def _measurements(
     usage: CgroupUsage | None,
     watchdog: _MemoryWatchdog | None,
     exit_code: int | None,
+    requested: tuple[str, ...] = (),
 ) -> tuple[int | None, tuple[str, ...], tuple[str, ...]]:
     """Collect what the run measured: peak memory, and which limits it reached.
 
@@ -232,14 +264,13 @@ def _measurements(
             peak = usage.peak_memory_bytes
         if usage.oom_kills or usage.memory_events_max:
             hit.append("memory")
-    if exit_code is not None and exit_code < 0:
-        limit = _LIMIT_SIGNALS.get(-exit_code)
-        if limit is not None:
-            hit.append(limit)
+    limit = _limit_for_exit(exit_code, requested)
+    if limit is not None:
+        hit.append(limit)
     warnings: list[str] = []
     if watchdog is not None and watchdog.unreadable:
         warnings.append(
-            "memory_bytes: the watchdog could not read the process group's memory on this machine, "
+            "memory_bytes: the watchdog could not read the command's memory on this machine, "
             "so nothing enforced the limit"
         )
     return peak, tuple(dict.fromkeys(hit)), tuple(warnings)
@@ -486,10 +517,11 @@ class Sandbox(ABC):
                 waiters.append(watcher)
             done, _ = await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
             timed_out = not done
+            stopped = timed_out or (watchdog is not None and watchdog.exceeded)
             # However it ended, stop what is left of the group: a background child
             # must not outlive the run, and one that still holds a pipe would
             # otherwise keep the output open.
-            _kill(pid, transport)
+            _kill(pid, transport, tree=stopped)
             if not run.exited.done():
                 await run.exited
             with suppress(TimeoutError, asyncio.TimeoutError):
@@ -498,7 +530,7 @@ class Sandbox(ABC):
                 # Read while the group still exists: cleanup removes it.
                 usage = plan.cgroup.usage()
         except asyncio.CancelledError:
-            _kill(pid, transport)
+            _kill(pid, transport, tree=True)
             raise
         finally:
             if watcher is not None and not watcher.done():
@@ -509,7 +541,7 @@ class Sandbox(ABC):
             transport.close()
         exit_code = transport.get_returncode()
         out, err = run.out, run.err
-        peak, limits_hit, runs_warnings = _measurements(usage, watchdog, exit_code)
+        peak, limits_hit, runs_warnings = _measurements(usage, watchdog, exit_code, self.policy.limits.requested())
         return SandboxResult(
             exit_code=exit_code,
             stdout=out.text(),

@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import signal
 import sys
 import time
 import warnings
@@ -130,6 +131,77 @@ async def test_a_background_child_cannot_keep_a_finished_run_waiting(sandbox, tm
 
     assert result.stdout == "done\n" and time.monotonic() - started < 5
     assert not marker.exists()  # the helper was stopped with the command, not left running
+
+
+DETACHED_CHILD = (
+    "import subprocess, sys, time\n"
+    "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)\n"
+    "open({pidfile!r}, 'w').write(str(child.pid))\n"
+    "{tail}"
+)
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+async def wait_until_gone(pid: int, seconds: float = 5.0) -> bool:
+    for _ in range(int(seconds / 0.05)):
+        if not alive(pid):
+            return True
+        await asyncio.sleep(0.05)
+    return not alive(pid)
+
+
+@posix
+async def test_a_timeout_also_stops_a_child_that_started_a_session_of_its_own(sandbox, tmp_path):
+    """Killing the process group alone misses it, because setsid took the child out of the group."""
+    pidfile = tmp_path / "child.pid"
+    program = DETACHED_CHILD.format(pidfile=str(pidfile), tail="time.sleep(60)\n")
+
+    result = await sandbox.run([sys.executable, "-c", program], cwd=tmp_path, timeout=1.0)
+
+    assert result.timed_out
+    assert await wait_until_gone(int(pidfile.read_text()))
+
+
+@posix
+async def test_cancelling_also_stops_a_child_that_started_a_session_of_its_own(sandbox, tmp_path):
+    pidfile = tmp_path / "child.pid"
+    program = DETACHED_CHILD.format(pidfile=str(pidfile), tail="time.sleep(60)\n")
+    task = asyncio.create_task(sandbox.run([sys.executable, "-c", program], cwd=tmp_path, timeout=None))
+    for _ in range(200):
+        if pidfile.exists() and pidfile.read_text().strip():
+            break
+        await asyncio.sleep(0.05)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert await wait_until_gone(int(pidfile.read_text()))
+
+
+@posix
+async def test_a_detached_child_left_behind_by_a_command_that_finished_is_a_known_limit(sandbox, tmp_path):
+    """Once the parent has exited, nothing links the child to the command, so only a PID namespace can find it.
+
+    This pins the limit that the documentation states, so it cannot be mistaken for a guarantee.
+    """
+    pidfile = tmp_path / "child.pid"
+    program = DETACHED_CHILD.format(pidfile=str(pidfile), tail="print('parent done')\n")
+
+    result = await sandbox.run([sys.executable, "-c", program], cwd=tmp_path, timeout=30)
+    child = int(pidfile.read_text())
+    try:
+        assert result.succeeded and result.stdout.strip() == "parent done"
+        assert alive(child)
+    finally:
+        os.kill(child, signal.SIGKILL)
 
 
 @posix

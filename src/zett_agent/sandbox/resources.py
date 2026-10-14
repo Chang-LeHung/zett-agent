@@ -19,7 +19,8 @@ limit:
     address-space limit; macOS rejects it, so macOS has no kernel memory limit.
 
 ``watchdog``
-    The parent samples the process group's memory and stops it when it goes over.
+    The parent samples the memory of the command's process tree and group and stops
+    it when it goes over.
     It works anywhere a ``ps`` command does and it can be overshot by whatever the
     program allocates between two samples, so it is a guard rail, not a boundary.
     It is what macOS uses for memory, and what Linux falls back to when neither a
@@ -50,14 +51,23 @@ except ImportError:  # pragma: no cover - exercised on Windows
 __all__ = [
     "CGROUP_ROOT",
     "CPU_PERIOD_MICROSECONDS",
-    "RlimitStep",
+    "CgroupHandle",
+    "CgroupUsage",
+    "CgroupV2",
+    "MemoryStrategy",
     "ResourcePlan",
     "ResourceReport",
+    "RlimitStep",
     "apply_rlimits",
     "cgroup2_mount",
+    "descendant_pids",
     "own_cgroup_path",
     "plan_resources",
+    "plan_rlimits",
+    "process_tree_rss_bytes",
     "rlimit_support",
+    "user_task_count",
+    "watchdog_available",
 ]
 
 #: Where a cgroup v2 hierarchy is mounted when the machine uses the unified layout.
@@ -210,8 +220,32 @@ def rlimit_support() -> frozenset[str]:
     return frozenset(line.strip() for line in result.stdout.splitlines() if line.strip() in _RLIMIT_FIELDS)
 
 
+def user_task_count() -> int | None:
+    """Return how many processes (and, on Linux, threads) this user owns right now.
+
+    ``RLIMIT_NPROC`` is compared with this number, not with the size of one process
+    tree: a fork fails once the user owns that many in total. Linux counts threads
+    too (it is "more precisely" a limit on threads), and macOS counts processes
+    only. ``ps`` is asked rather than ``/proc`` so one code path serves both.
+    None means it could not be counted, and the caller then does not pretend to
+    limit processes.
+    """
+    if os.name != "posix":
+        return None
+    command = ["ps", "-U", str(os.getuid()), "-o", "pid="]
+    if sys.platform.startswith("linux"):
+        command = ["ps", "-L", "-U", str(os.getuid()), "-o", "lwp="]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return sum(1 for line in result.stdout.split() if line.isdigit())
+
+
 def plan_rlimits(
-    limits: ResourceLimits, *, supported: frozenset[str] | None = None
+    limits: ResourceLimits, *, supported: frozenset[str] | None = None, user_tasks: int | None = None
 ) -> tuple[tuple[RlimitStep, ...], tuple[str, ...]]:
     """Turn the POSIX limits into ``setrlimit`` calls, and say what cannot be applied.
 
@@ -220,6 +254,22 @@ def plan_rlimits(
     cannot pass, so the request cannot be honoured as written and the caller is
     told. ``core_dumps`` is off unless asked for, so it appears in almost every
     plan. ``cpu_percent`` has no POSIX limit and is left to the cgroup.
+
+    Two limits are not applied as written:
+
+    * ``cpu_seconds`` sets the hard limit one second above the soft one. With the two
+      equal, Linux skips ``SIGXCPU`` and kills the process with ``SIGKILL``, so the run
+      could not say it hit the limit; with a second between them the process is ended
+      by ``SIGXCPU`` at the limit, and the hard limit still stops one that handles it.
+    * ``processes`` is the number of processes the command may *add*. The kernel
+      compares ``RLIMIT_NPROC`` with every process the user owns, so the limit is that
+      count plus the request. Taking the number literally would stop every command on
+      a machine where the user already runs more than that. Other processes of the same
+      user that start during the run use up the same allowance, which is why a cgroup,
+      where one is available, is preferred.
+
+    Args:
+        user_tasks: The user's current process count; counted here when None.
     """
     kernel = rlimit_support() if supported is None else supported
     steps: list[RlimitStep] = []
@@ -234,13 +284,21 @@ def plan_rlimits(
             warnings.append(f"{name} cannot be limited on {sys.platform}: this kernel does not support {attribute}")
             continue
         requested = 0 if name == "core_dumps" else getattr(limits, name)
+        if name == "processes":
+            current = user_task_count() if user_tasks is None else user_tasks
+            if current is None:
+                warnings.append("processes cannot be limited: the user's current process count could not be read")
+                continue
+            requested += current
         soft, hard = _resource.getrlimit(resource_id)
         ceiling = requested if hard == _resource.RLIM_INFINITY else min(requested, hard)
         if ceiling != requested:
             warnings.append(
                 f"{name}: requested {requested} is above the hard limit {hard} and was lowered to {ceiling}"
             )
-        steps.append(RlimitStep(resource=resource_id, name=name, soft=ceiling, hard=ceiling))
+        grace = 1 if name == "cpu_seconds" else 0
+        upper = ceiling + grace if hard == _resource.RLIM_INFINITY else min(ceiling + grace, hard)
+        steps.append(RlimitStep(resource=resource_id, name=name, soft=ceiling, hard=upper))
     return tuple(steps), tuple(warnings)
 
 
@@ -658,50 +716,83 @@ def plan_resources(
     )
 
 
-def _ps_commands(pid: int) -> tuple[tuple[str, ...], ...]:
-    """Return the ``ps`` invocations to try, cheapest first.
+def _process_table() -> tuple[dict[int, tuple[int, int, int]], dict[int, list[int]]] | None:
+    """Read every process as ``pid -> (parent, group, resident KiB)`` and the parent-to-children map.
 
-    macOS can select a process group directly, which costs about a fifth of
-    listing every process on the machine. The other systems read ``-g`` as a
-    session or group selector, so the whole table is listed there and the rows are
-    filtered here. The whole table is always the last answer, so a ``ps`` that does
-    not accept the cheaper form costs a wasted call rather than a measurement.
+    One ``ps`` call serves both the memory watchdog and the tree kill. None means
+    ``ps`` could not be read.
     """
-    if sys.platform == "darwin":
-        return (("ps", "-o", "pgid=,rss=", "-g", str(pid)), ("ps", "-axo", "pgid=,rss="))
-    return (("ps", "-axo", "pgid=,rss="),)
-
-
-def process_group_rss_bytes(pid: int) -> int | None:
-    """Return the resident memory of the process group ``pid``, or None when it is not readable.
-
-    Every process in the group is asked for its resident size and the rows are
-    summed, so the number covers the whole tree rather than one process. It is the
-    host running this, outside the sandbox, so it sees everything the sandbox
-    started. None means no command could be read, which the watchdog reports
-    rather than treating as "no memory used".
-    """
-    for command in _ps_commands(pid):
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,ppid=,pgid=,rss="], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    rows: dict[int, tuple[int, int, int]] = {}
+    children: dict[int, list[int]] = {}
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 4:
+            continue
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=10, check=False)
-        except (OSError, subprocess.SubprocessError):
+            process, parent, group, rss = (int(field) for field in fields)
+        except ValueError:
             continue
-        if result.returncode != 0:
-            continue
-        total = 0
-        for line in result.stdout.splitlines():
-            fields = line.split()
-            if len(fields) != 2:
-                continue
-            try:
-                group, rss = int(fields[0]), int(fields[1])
-            except ValueError:
-                continue
-            if group == pid:
-                # ps reports resident size in kibibytes.
-                total += rss
-        return total * 1024
-    return None
+        rows[process] = (parent, group, rss)
+        children.setdefault(parent, []).append(process)
+    return rows, children
+
+
+def _tree_members(pid: int, rows: dict[int, tuple[int, int, int]], children: dict[int, list[int]]) -> set[int]:
+    """The processes in ``pid``'s group plus ``pid`` and everything below it."""
+    members = {process for process, (_, group, _) in rows.items() if group == pid}
+    pending = [pid]
+    while pending:
+        current = pending.pop()
+        if current in rows:
+            members.add(current)
+        pending.extend(child for child in children.get(current, ()) if child not in members)
+    return members
+
+
+def descendant_pids(pid: int) -> frozenset[int]:
+    """Return the processes below ``pid``, including ones that started a session of their own.
+
+    A process group is not enough to stop a command: a child that calls ``setsid``
+    leaves the group, and killing the group misses it. While the parent is alive the
+    parent links are still there, so the tree finds it. Once the parent has exited
+    the child is adopted by ``init`` and nothing links it to the command any more,
+    which is why this is used when a command is being stopped, not afterwards.
+    Empty when ``ps`` cannot be read.
+    """
+    table = _process_table()
+    if table is None:
+        return frozenset()
+    rows, children = table
+    return frozenset(_tree_members(pid, rows, children) - {pid, os.getpid()})
+
+
+def process_tree_rss_bytes(pid: int) -> int | None:
+    """Return the resident memory of ``pid``, its descendants and its process group.
+
+    The group alone misses a command that starts its own session, which is exactly
+    what bubblewrap does (``--new-session``), so its processes sit in a group of
+    their own. The descendants alone miss a process that was orphaned and
+    reparented to ``init``, while it is still in the group. A process that does
+    both, detaching and orphaning itself, is in neither and is not counted.
+
+    The host runs this, outside the sandbox, so it sees everything the sandbox
+    started. None means ``ps`` could not be read, which the watchdog reports rather
+    than treating as "no memory used".
+    """
+    table = _process_table()
+    if table is None:
+        return None
+    rows, children = table
+    # ps reports resident size in kibibytes.
+    return sum(rows[process][2] for process in _tree_members(pid, rows, children)) * 1024
 
 
 def watchdog_available() -> bool:

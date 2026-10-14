@@ -11,6 +11,7 @@ import resource
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -31,11 +32,13 @@ from zett_agent.sandbox.resources import (
     ResourceReport,
     apply_rlimits,
     cgroup2_mount,
+    descendant_pids,
     own_cgroup_path,
     plan_resources,
     plan_rlimits,
-    process_group_rss_bytes,
+    process_tree_rss_bytes,
     rlimit_support,
+    user_task_count,
 )
 from zett_agent.sandbox.seatbelt import SeatbeltSandbox
 
@@ -107,12 +110,87 @@ def test_the_kernel_reports_which_limits_it_accepts():
 
 
 @posix_only
-def test_planning_a_limit_asks_for_soft_and_hard_to_be_equal():
-    steps, warnings = plan_rlimits(ResourceLimits(cpu_seconds=30))
+def test_planning_sets_soft_and_hard_equal_so_a_process_cannot_raise_its_own_limit():
+    steps, warnings = plan_rlimits(ResourceLimits(file_size_bytes=4096, open_files=64))
 
     by_name = {step.name: step for step in steps}
-    assert by_name["cpu_seconds"].soft == by_name["cpu_seconds"].hard == 30
+    assert by_name["file_size_bytes"].soft == by_name["file_size_bytes"].hard == 4096
+    assert by_name["open_files"].soft == by_name["open_files"].hard == 64
     assert warnings == ()
+
+
+@posix_only
+def test_the_processor_time_hard_limit_is_a_second_above_the_soft_one():
+    """With the two equal, Linux sends SIGKILL and skips SIGXCPU, so the run could not say it hit the limit."""
+    steps, _ = plan_rlimits(ResourceLimits(cpu_seconds=30))
+
+    cpu = next(step for step in steps if step.name == "cpu_seconds")
+    assert (cpu.soft, cpu.hard) == (30, 31)
+
+
+def test_the_grace_second_never_passes_the_machines_hard_limit(monkeypatch):
+    monkeypatch.setattr(resources_module._resource, "getrlimit", lambda rid: (30, 30))
+
+    steps, _ = plan_rlimits(ResourceLimits(cpu_seconds=30), supported=frozenset({"cpu_seconds"}))
+
+    cpu = next(step for step in steps if step.name == "cpu_seconds")
+    assert (cpu.soft, cpu.hard) == (30, 30)
+
+
+def test_the_process_limit_is_headroom_above_what_the_user_already_runs():
+    """RLIMIT_NPROC is compared with every process the user owns, so the request is added to that count."""
+    supported = frozenset({"processes", "core_dumps"})
+    steps, warnings = plan_rlimits(ResourceLimits(processes=32), supported=supported, user_tasks=500)
+
+    processes = next(step for step in steps if step.name == "processes")
+    assert processes.soft == processes.hard == 532
+    assert warnings == ()
+
+
+def test_an_unreadable_process_count_leaves_the_limit_unenforced_and_says_so(monkeypatch):
+    monkeypatch.setattr(resources_module, "user_task_count", lambda: None)
+
+    steps, warnings = plan_rlimits(ResourceLimits(processes=32), supported=frozenset({"processes"}))
+
+    assert not any(step.name == "processes" for step in steps)
+    assert any("current process count could not be read" in warning for warning in warnings)
+
+
+@posix_only
+def test_the_user_task_count_is_the_number_of_processes_this_user_owns():
+    count = user_task_count()
+
+    assert count is not None and count >= 1
+
+
+def test_the_user_task_count_is_unknown_when_ps_cannot_run(monkeypatch):
+    def broken(*args, **kwargs):
+        raise OSError("no ps")
+
+    monkeypatch.setattr(resources_module.subprocess, "run", broken)
+    assert user_task_count() is None
+
+    monkeypatch.setattr(
+        resources_module.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 1, "", "bad")
+    )
+    assert user_task_count() is None
+
+
+def test_threads_are_counted_on_linux_and_processes_elsewhere(monkeypatch):
+    seen: list[list[str]] = []
+
+    def record(command, **kwargs):
+        seen.append(list(command))
+        return subprocess.CompletedProcess(command, 0, "1\n2\n3\nx\n", "")
+
+    monkeypatch.setattr(resources_module.subprocess, "run", record)
+    monkeypatch.setattr(resources_module.sys, "platform", "linux")
+    assert user_task_count() == 3
+    monkeypatch.setattr(resources_module.sys, "platform", "darwin")
+    assert user_task_count() == 3
+
+    assert "-L" in seen[0] and "lwp=" in seen[0]
+    assert "-L" not in seen[1] and "pid=" in seen[1]
 
 
 def test_core_dumps_are_disabled_unless_asked_for():
@@ -155,7 +233,7 @@ def test_applying_the_steps_sets_what_the_kernel_sees():
     os.close(read)
     os.waitpid(pid, 0)
 
-    assert reported == "(7, 7)"
+    assert reported == "(7, 8)"  # the hard limit is a second above the soft one
 
 
 @posix_only
@@ -483,15 +561,88 @@ def test_a_group_without_the_memory_controller_falls_back(tmp_path, monkeypatch)
 # ------------------------------------------------------------------- sampling
 
 
-def test_the_process_group_memory_is_summed_from_ps():
-    measured = process_group_rss_bytes(os.getpgid(0))
+def ps_table(*rows: tuple[int, int, int, int]):
+    """Build a fake ``ps -axo pid=,ppid=,pgid=,rss=`` that returns the given rows."""
+    text = "".join(f"{pid} {ppid} {pgid} {rss}\n" for pid, ppid, pgid, rss in rows)
+    return lambda command, **kwargs: subprocess.CompletedProcess(list(command), 0, text, "")
+
+
+def test_the_memory_of_a_tree_is_summed_from_ps():
+    measured = process_tree_rss_bytes(os.getpid())
 
     assert measured is not None and measured > 0
     assert measured % 1024 == 0  # ps reports kibibytes
 
 
-def test_a_group_that_does_not_exist_measures_zero():
-    assert process_group_rss_bytes(32000) == 0
+def test_the_tree_is_the_descendants_and_the_process_group_together(monkeypatch):
+    monkeypatch.setattr(
+        resources_module.subprocess,
+        "run",
+        ps_table(
+            (100, 1, 100, 10),  # the launcher, leader of its group
+            (101, 100, 101, 20),  # a child in a session of its own (what bubblewrap does)
+            (102, 101, 101, 40),  # and its child
+            (103, 1, 100, 80),  # orphaned to init but still in the group
+            (104, 1, 104, 5000),  # unrelated
+            (105, 104, 104, 5000),  # unrelated
+        ),
+    )
+
+    assert process_tree_rss_bytes(100) == (10 + 20 + 40 + 80) * 1024
+
+
+def test_a_process_that_exited_leaves_only_what_is_still_in_its_group(monkeypatch):
+    monkeypatch.setattr(resources_module.subprocess, "run", ps_table((200, 1, 100, 64), (300, 1, 300, 999)))
+
+    assert process_tree_rss_bytes(100) == 64 * 1024
+    assert process_tree_rss_bytes(999) == 0
+
+
+def test_descendants_include_children_in_other_sessions_but_not_the_caller_or_strangers(monkeypatch):
+    monkeypatch.setattr(
+        resources_module.subprocess,
+        "run",
+        ps_table((100, 1, 100, 1), (101, 100, 101, 1), (102, 101, 101, 1), (103, 1, 100, 1), (104, 1, 104, 1)),
+    )
+
+    assert descendant_pids(100) == {101, 102, 103}
+
+
+def test_no_descendants_are_reported_when_ps_cannot_be_read(monkeypatch):
+    monkeypatch.setattr(
+        resources_module.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 1, "", "bad")
+    )
+
+    assert descendant_pids(100) == frozenset()
+
+
+def test_a_cycle_in_the_table_cannot_make_the_walk_loop(monkeypatch):
+    monkeypatch.setattr(resources_module.subprocess, "run", ps_table((100, 101, 100, 8), (101, 100, 101, 8)))
+
+    assert process_tree_rss_bytes(100) == 16 * 1024
+
+
+@posix_only
+def test_a_grandchild_in_its_own_session_is_still_counted():
+    """The case a process-group measurement misses: the sandbox starts the command in a new session."""
+    program = (
+        "import os, subprocess, sys, time\n"
+        "subprocess.Popen([sys.executable, '-c', 'import time; x=bytearray(150*1024*1024); time.sleep(30)'],"
+        " start_new_session=True)\n"
+        "time.sleep(30)\n"
+    )
+    child = subprocess.Popen([sys.executable, "-c", program], start_new_session=True)
+    try:
+        measured = 0
+        for _ in range(100):
+            time.sleep(0.1)
+            measured = process_tree_rss_bytes(child.pid) or 0
+            if measured > 120 * 1024**2:
+                break
+        assert measured > 120 * 1024**2
+    finally:
+        os.killpg(child.pid, signal.SIGKILL)
+        child.wait()
 
 
 def test_nothing_can_be_measured_when_ps_cannot_run(monkeypatch):
@@ -499,38 +650,22 @@ def test_nothing_can_be_measured_when_ps_cannot_run(monkeypatch):
         raise OSError("no ps")
 
     monkeypatch.setattr(resources_module.subprocess, "run", broken)
+    assert process_tree_rss_bytes(os.getpid()) is None
 
-    assert process_group_rss_bytes(os.getpgid(0)) is None
-
-
-def test_the_cheap_form_is_tried_first_and_the_full_table_covers_it(monkeypatch):
-    commands: list[tuple[str, ...]] = []
-
-    def record(command, **kwargs):
-        commands.append(tuple(command))
-        # The cheap form matches nothing here, the full table has the group.
-        stdout = "" if "darwin" and "-g" in command else f"{os.getpgid(0)} 2048\n"
-        if sys.platform != "darwin":
-            stdout = f"{os.getpgid(0)} 2048\n"
-        return subprocess.CompletedProcess(list(command), 0 if stdout else 1, stdout, "")
-
-    monkeypatch.setattr(resources_module.subprocess, "run", record)
-
-    assert process_group_rss_bytes(os.getpgid(0)) == 2048 * 1024
-    assert len(commands) >= 1
-    if sys.platform == "darwin":
-        assert commands[0][-2] == "-g" and len(commands) == 2
-    else:
-        assert "-axo" in commands[0] and len(commands) == 1
+    monkeypatch.setattr(
+        resources_module.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 1, "", "bad")
+    )
+    assert process_tree_rss_bytes(os.getpid()) is None
 
 
 def test_unparsable_rows_are_ignored(monkeypatch):
     def noisy(command, **kwargs):
-        return subprocess.CompletedProcess([], 0, f"   \n{os.getpgid(0)} 1024\nnonsense\n1234 x\n", "")
+        text = f"   \n{os.getpid()} 1 {os.getpid()} 1024\nnonsense\n1 2 3 x\n1 2 3\n"
+        return subprocess.CompletedProcess([], 0, text, "")
 
     monkeypatch.setattr(resources_module.subprocess, "run", noisy)
 
-    assert process_group_rss_bytes(os.getpgid(0)) == 1024 * 1024
+    assert process_tree_rss_bytes(os.getpid()) == 1024 * 1024
 
 
 # --------------------------------------------------------- limits in a run
@@ -557,7 +692,7 @@ async def test_a_processor_time_limit_kills_a_busy_loop(tmp_path):
     result = await sandbox.run([sys.executable, "-c", "x=0\nwhile True: x+=1"], cwd=tmp_path, timeout=60)
 
     assert result.timed_out is False  # the limit ended it, not the wall clock
-    assert result.exit_code == -signal.SIGXCPU
+    assert result.exit_code == -signal.SIGXCPU  # SIGXCPU, not SIGKILL: the hard limit is a second higher
     assert result.resources.limits_hit == ("cpu",)
     assert result.resources.cpu_seconds == "rlimit"
 
@@ -575,20 +710,28 @@ async def test_processor_time_does_not_count_sleeping(tmp_path):
 
 
 @posix_only
-async def test_a_process_limit_stops_a_fork_bomb(tmp_path):
+async def test_a_process_limit_stops_a_fork_bomb_after_its_headroom(tmp_path):
     sandbox = sandbox_with(ResourceLimits(processes=32))
-
-    result = await sandbox.run(
-        [
-            sys.executable,
-            "-c",
-            "import os\nn=0\ntry:\n    for _ in range(200): os.fork(); n+=1\nexcept OSError:\n    print('stopped after', n)",
-        ],
-        cwd=tmp_path,
-        timeout=60,
+    program = (
+        "import os, time\n"
+        "n = 0\n"
+        "try:\n"
+        "    for _ in range(300):\n"
+        "        if os.fork() == 0:\n"
+        "            time.sleep(20)\n"
+        "            os._exit(0)\n"
+        "        n += 1\n"
+        "except OSError:\n"
+        "    pass\n"
+        "print('forked', n)\n"
     )
 
-    assert "stopped after" in result.stdout
+    result = await sandbox.run([sys.executable, "-c", program], cwd=tmp_path, timeout=60)
+
+    forked = int(result.stdout.split()[-1])
+    # It could add some processes, and was stopped well short of 300. The exact figure
+    # depends on what else this user starts meanwhile, so the bounds are loose.
+    assert 1 <= forked <= 40
     assert result.resources.processes == "rlimit"
 
 
@@ -643,13 +786,13 @@ async def test_a_program_within_its_memory_limit_is_left_alone(tmp_path):
 
 @posix_only
 async def test_a_watchdog_that_cannot_measure_says_so(tmp_path, monkeypatch):
-    monkeypatch.setattr("zett_agent.sandbox.base.process_group_rss_bytes", lambda pid: None)
+    monkeypatch.setattr("zett_agent.sandbox.base.process_tree_rss_bytes", lambda pid: None)
     sandbox = sandbox_with(ResourceLimits(memory_bytes=64 * 1024**2), memory_strategy=MemoryStrategy.WATCHDOG)
 
     result = await sandbox.run([sys.executable, "-c", "print('ran')"], cwd=tmp_path, timeout=30)
 
     assert result.succeeded and result.resources.limits_hit == ()
-    assert any("could not read the process group's memory" in warning for warning in result.resources.warnings)
+    assert any("could not read the command's memory" in warning for warning in result.resources.warnings)
 
 
 @posix_only

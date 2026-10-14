@@ -51,11 +51,12 @@ What the session does for you:
 * **The network is off** unless you pass ``network=True``.
 * **Secrets stay out.** Credential files such as ``~/.ssh`` are unreadable, and
   commands get a short environment allowlist rather than a copy of yours.
-* **Nothing outlives the block.** Closing, normally or through an exception,
-  cancels commands that are still running, kills their whole process groups, and
-  then deletes the directories the session created. A program that leaves
-  directories it cannot enter does not block the cleanup. If you never close the
-  session, deleting the object or exiting the interpreter cleans up too.
+* **Cleanup follows the block.** Closing, normally or through an exception,
+  cancels commands that are still running, kills their process groups and
+  descendants, and then deletes the directories the session created. A program
+  that leaves directories it cannot enter does not block the cleanup. If you never
+  close the session, deleting the object or exiting the interpreter cleans up too.
+  One case cannot be covered everywhere: see "Processes that detach" below.
 * **Your own directories are never touched.** A ``workspace`` or ``writable``
   path you pass is used and left exactly as the commands made it.
 
@@ -191,7 +192,7 @@ in the same policy::
    * - ``cpu_percent``
      - Share of one processor, where the kernel can limit a share. 100 is one core.
    * - ``processes``
-     - Processes and threads the tree may create. On macOS threads count too.
+     - Processes the command may add. Linux counts threads as well; macOS does not.
    * - ``file_size_bytes``
      - Largest file the process may create or extend.
    * - ``open_files``
@@ -219,8 +220,8 @@ the platform, and the sandbox uses the strongest mechanism the machine has:
      - Not available; nothing limits a share of a processor.
      - cgroup ``cpu.max``, a quota per 100 ms period.
    * - ``processes``
-     - POSIX limit (``RLIMIT_NPROC``), counted per user, threads included.
-     - cgroup ``pids.max`` when available, otherwise ``RLIMIT_NPROC``.
+     - POSIX limit (``RLIMIT_NPROC``). The kernel compares it with all of the user's processes, so it is applied as the number already running plus your number. Threads are not counted.
+     - cgroup ``pids.max`` when available (it counts the tree, threads included); otherwise ``RLIMIT_NPROC`` as on macOS, with threads counted.
    * - ``file_size_bytes``
      - POSIX limit (``RLIMIT_FSIZE``).
      - Same.
@@ -356,15 +357,26 @@ What ``run`` adds around the process
 Every backend shares this, so code behaves the same except in what it can confine:
 
 * A time limit (60 seconds by default, ``None`` for none). When it passes, the
-  whole process group is killed.
+  process group and its descendants are killed.
 * A cap on the output kept from each stream (1 MiB by default). The rest is read
   and discarded, so a process that prints forever can neither fill memory nor
   block on a full pipe.
-* A command that finishes does not leave helpers behind. Background children are
-  stopped with it, and a child that still holds the output pipe cannot keep a
-  finished run waiting.
-* Cancelling the awaiting task stops the process group before the cancellation
-  propagates.
+* A command that finishes does not leave helpers in its process group behind.
+  They are stopped with it, and a child that still holds the output pipe cannot
+  keep a finished run waiting.
+* Cancelling the awaiting task stops the process group and its descendants before
+  the cancellation propagates.
+
+Processes that detach
+----------------------------------------
+
+A child that starts a session of its own (``setsid``, or ``start_new_session`` in
+Python) leaves its parent's process group. While its parent is alive it is still
+found through the process tree, so a timeout, a cancellation or closing the session
+stops it. If the parent has already exited, nothing links the child to the command
+any more, and **on macOS it keeps running after the run and after the session
+closes**. On Linux the sandbox runs in its own PID namespace, so the kernel ends
+every process in it when the sandbox ends and this case does not arise.
 
 What it does not do
 ----------------------------------------

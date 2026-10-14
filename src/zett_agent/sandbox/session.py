@@ -113,7 +113,9 @@ class SandboxSession:
             not enforced.
         cpu_seconds: Total processor time before the kernel kills the process.
             Sleeping costs none of it.
-        processes: Processes and threads the tree may create (at least 8).
+        processes: Processes a command may add (at least 8). See
+            :attr:`~zett_agent.sandbox.policy.ResourceLimits.processes` for what
+            is counted on each platform.
         max_file_size: Largest file the process may create, as bytes or a string.
         open_files: File descriptors the process may hold open (at least 16).
         network: ``True`` for unrestricted network. The default is none at all.
@@ -308,10 +310,12 @@ class SandboxSession:
     def close(self) -> None:
         """Stop everything the session started and remove what it created.
 
-        Commands still running are cancelled and their whole process groups are
-        killed before anything is removed, so nothing keeps writing into a directory
-        that is being deleted. Closing twice is harmless. A directory you supplied is
-        left alone.
+        Commands still running are cancelled and their process groups and
+        descendants are killed before anything is removed, so nothing keeps writing
+        into a directory that is being deleted. A process that detached itself from
+        its parent earlier and outlived it cannot be found on macOS; Linux's PID
+        namespace ends it with the sandbox. Closing twice is harmless. A directory you
+        supplied is left alone.
         """
         with self._lock:
             if self._state != "open":

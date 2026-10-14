@@ -7,9 +7,14 @@ limit:
     A Linux control group gives exact, tree-wide accounting: the kernel charges
     every process the sandbox starts to one group, kills it when it goes over
     ``memory.max``, denies a fork past ``pids.max``, and gives it a share of a
-    processor through ``cpu.max``. It needs a cgroup v2 hierarchy with the
-    controllers delegated to the user, which is common on a normal login and rare
-    inside a container.
+    processor through ``cpu.max``. It needs a cgroup v2 group that this user may
+    create children in, with the controllers enabled for them. The kernel enables
+    controllers for children only in a group that holds no processes itself, so a
+    group that a login shell or a service runs in does not qualify; it takes
+    delegation, such as systemd's ``Delegate=yes``, and a layout where the process
+    sits in a leaf. A GitHub Actions runner, checked in this project's CI, has
+    neither: its group belongs to root and has no controllers enabled for children.
+    Expect the ``rlimit`` and ``watchdog`` mechanisms on most machines.
 
 ``rlimit``
     A POSIX per-process limit, inherited by everything the process starts. The

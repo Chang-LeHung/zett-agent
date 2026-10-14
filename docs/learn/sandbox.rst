@@ -212,7 +212,7 @@ the platform, and the sandbox uses the strongest mechanism the machine has:
      - Linux
    * - ``memory_bytes``
      - Sampling watchdog. The kernel has no memory limit to set: macOS rejects the POSIX address-space limit, and there are no cgroups.
-     - cgroup ``memory.max`` when the controllers are delegated to you; otherwise the POSIX address-space limit, per process.
+     - cgroup ``memory.max`` where one is available (see the note below); otherwise the POSIX address-space limit, per process.
    * - ``cpu_seconds``
      - POSIX limit (``RLIMIT_CPU``), inherited by the tree.
      - Same.
@@ -231,6 +231,17 @@ the platform, and the sandbox uses the strongest mechanism the machine has:
    * - ``core_dumps``
      - POSIX limit (``RLIMIT_CORE``).
      - Same.
+
+.. note::
+
+   The cgroup rows apply only when this user can create a child cgroup with the
+   controllers enabled. The kernel allows that only in a cgroup that holds no
+   processes of its own, so a login shell's or a service's cgroup does not
+   qualify; it needs delegation, such as systemd's ``Delegate=yes``. A GitHub
+   Actions runner, for one, has a root-owned cgroup and none of this, so there
+   memory falls back to the address-space limit and ``cpus`` cannot be enforced.
+   The cgroup code has been exercised against a fake cgroup tree but never against
+   a real kernel. Ask ``capabilities()`` what a given machine does.
 
 Windows enforces none of these, so a policy that asks for them gets warnings
 saying so. On every platform a limit that cannot be enforced is named in

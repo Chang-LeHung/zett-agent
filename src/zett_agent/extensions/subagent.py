@@ -150,6 +150,30 @@ class SubAgentExtension(AgentExtension):
             raise ValueError("Default subagents require an AgentRunContext model")
         return {definition.name: definition for definition in default_subagents(context.model)}
 
+    async def _create_child(
+        self,
+        definition: SubAgentDefinition,
+        child_session_id: str,
+        context: AgentRunContext,
+    ) -> Agent:
+        """Create the isolated child agent for one delegated task.
+
+        Subclasses override this to change how a child is built, for example to
+        add an extension to every child or to pick a model per request.
+        """
+        return await Agent.create(
+            definition.model,
+            config=AgentRunConfig(
+                session_id=child_session_id,
+                parent_session_id=context.config.session_id,
+            ),
+            system_prompt=definition.system_prompt,
+            tools=definition.tools,
+            extensions=definition.extensions,
+            reasoning_effort=definition.reasoning_effort,
+            max_iterations=definition.max_iterations,
+        )
+
     def _build_tool(
         self,
         context: AgentRunContext,
@@ -186,18 +210,7 @@ class SubAgentExtension(AgentExtension):
                 available = ", ".join(subagents)
                 raise ValueError(f"Unknown subagent type {subagent_type!r}; available: {available}")
             child_session_id = new_uuid7()
-            child = await Agent.create(
-                definition.model,
-                config=AgentRunConfig(
-                    session_id=child_session_id,
-                    parent_session_id=context.config.session_id,
-                ),
-                system_prompt=definition.system_prompt,
-                tools=definition.tools,
-                extensions=definition.extensions,
-                reasoning_effort=definition.reasoning_effort,
-                max_iterations=definition.max_iterations,
-            )
+            child = await self._create_child(definition, child_session_id, context)
             result = await child.run(prompt)
             return SubAgentResult(
                 session_id=child_session_id,

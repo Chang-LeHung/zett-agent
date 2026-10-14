@@ -36,6 +36,17 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "AskUserRequest",
         "AskUserResult",
     ),
+    "zett_agent.extensions.async_subagent": (
+        "TASK_CANCEL_TOOL_NAME",
+        "TASK_LIST_TOOL_NAME",
+        "TASK_OUTPUT_TOOL_NAME",
+        "TASK_START_TOOL_NAME",
+        "TASK_STATUS_TOOL_NAME",
+        "AsyncSubAgentExtension",
+        "SubAgentTask",
+        "SubAgentTaskInfo",
+        "SubAgentTaskStatus",
+    ),
     "zett_agent.extensions.base": (
         "AgentEventHooksMixin",
         "AgentExtension",

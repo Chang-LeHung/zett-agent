@@ -33,6 +33,24 @@ Guidelines and snippets help the model choose the right operation. They are
 not permission checks. Decorator ``guidelines`` or ``snippet`` values override
 the corresponding docstring sections.
 
+Where the model reads guidance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`
+writes every tool's snippet and guidelines into the system instructions. Pass
+``placement=ToolGuidancePlacement.DESCRIPTION`` to append them to each tool's own
+description instead, which suits endpoints that surface only tool definitions:
+
+.. code-block:: python
+
+   from zett_agent.extensions.tool_guidelines import ToolGuidancePlacement, ToolGuidelinesExtension
+
+   guidance = ToolGuidelinesExtension(placement=ToolGuidancePlacement.DESCRIPTION)
+
+``snippets=False`` or ``guidelines=False`` drops either part in both modes.
+Only the request sent to the provider changes; registered tools and stored
+history stay as they are.
+
 Design arguments the model can supply
 ------------------------------------------------------------
 
@@ -145,9 +163,28 @@ still need application-level synchronization and authorization.
 Filesystem and shell tools
 --------------------------
 
-``FileSystemExtension(read_only=True)`` adds read, image viewing, glob, and grep.
-Writable mode also adds write, replacement, and deletion tools;
-``CodingExtension`` adds shell execution.
+``FileSystemExtension(read_only=True)`` adds ``read_file``, ``view_image``,
+``glob``, and ``grep``. Writable mode also adds ``write_file``, ``edit``, and
+``delete_file``; ``CodingExtension`` adds ``bash``, whose ``timeout_seconds``
+defaults to 60.
+
+``read_file`` returns UTF-8 text as a line range. The separate ``read`` tool
+(add it with ``ReadExtension``) does the same for text and also returns a PNG,
+JPEG, GIF, or WebP file as an image with a one-line description, so one tool
+covers both. ``view_image`` remains for HTTP(S) image URLs.
+
+Each tool also has its own extension, so an application can offer exactly the
+ones it wants:
+
+.. code-block:: python
+
+   from zett_agent.extensions.bash import BashExtension
+   from zett_agent.extensions.file_system import EditExtension, GrepExtension, ReadExtension
+
+   extensions = [ReadExtension(), GrepExtension(), EditExtension(), BashExtension()]
+
+:class:`~zett_agent.extensions.tool.ToolExtension` wraps any ``@tool`` function
+the same way.
 
 These tools run with the permissions of your process, relative to its working
 directory. They are not a security sandbox: restrict the process or container,
@@ -159,9 +196,10 @@ Load optional tools on demand
 -----------------------------
 
 For a large toolbox, :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`
-keeps tools marked ``deferred=True`` out of the initial provider request and
-lets the model search for their definitions. This requires a compatible
-Responses endpoint; ordinary tool calling works with all built-in providers.
+keeps tools marked ``deferred=True`` out of the model's context and lets it
+search for their definitions. This requires a compatible Responses endpoint or
+the Anthropic Messages API; ordinary tool calling works with all built-in
+providers.
 
 See :doc:`on-demand` for setup, a skill-loading example, and the distinction
 between loading instructions and executing tools.

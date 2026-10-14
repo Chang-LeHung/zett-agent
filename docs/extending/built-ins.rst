@@ -23,8 +23,8 @@ runtime already provides them.
      - Append one self-contained audit record for each Agent turn.
      - One session owns one file; earlier turns are not repeated.
    * - ToolGuidelinesExtension
-     - Include tool snippets and guidelines in model instructions.
-     - Include explicitly when supplying a custom extension list.
+     - Include tool snippets and guidelines in model instructions, or in each tool's description.
+     - Include explicitly when supplying a custom extension list; ``placement`` chooses where the guidance goes.
    * - AgentsMdExtension
      - Load working-directory AGENTS.md files into model instructions.
      - Reads parent directories too; treat files as external input, not authorization.
@@ -34,6 +34,9 @@ runtime already provides them.
    * - CodingExtension
      - Add writable filesystem tools and shell execution.
      - Injects the directory used by relative paths and shell execution.
+   * - ReadFileExtension, EditExtension, and the other single-tool extensions
+     - Offer one built-in tool on its own: read_file, read (text or image), view_image, glob, grep, write_file, edit, delete_file, or bash.
+     - One extension, one tool; they inject no directory message. ``ToolExtension`` wraps any tool the same way.
    * - AskUserExtension
      - Let the model ask the UI a question and wait.
      - Route replies with session ID and tool-call ID.
@@ -52,12 +55,15 @@ runtime already provides them.
    * - SubAgentExtension
      - Delegate to configured child profiles.
      - Models, tools, and persistence live in each definition.
+   * - AsyncSubAgentExtension
+     - Run child profiles in the background and manage them with start, list, status, output, and cancel tools.
+     - Tasks live in memory and need the event loop to keep running; call ``close()`` on shutdown.
    * - SkillExtension
      - Discover skill descriptions and lazily load complete instructions.
      - Treat skill files as external input, not authorization.
    * - ToolSearchExtension
-     - Search for optional tools instead of sending every definition up front.
-     - Requires a compatible Responses tool-search endpoint; see :doc:`../learn/on-demand`.
+     - Search for optional tools instead of sending every definition up front, and list what can be found.
+     - Requires the Responses or Anthropic Messages protocol; see :doc:`../learn/on-demand`.
    * - JITHarnessExtension
      - Let a model create, compose, update, unload, and reload Python tools.
      - Trusted code, not a sandbox; deferred inspection tools keep context small; see :doc:`../learn/jit-harness`.

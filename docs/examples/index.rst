@@ -54,6 +54,12 @@ Start with :doc:`../learn/first-agent`, then build your own extension in
 
       Delegate one task to a child profile with its own tools.
 
+   .. grid-item-card:: Background subagents
+      :link: async-subagent
+      :link-type: doc
+
+      Start children without waiting, then read their reports.
+
    .. grid-item-card:: Cancellation
       :link: cancellation
       :link-type: doc
@@ -97,4 +103,5 @@ connections and use a temporary working directory for each program.
 
    Observability <observability>
    Subagents <subagent>
+   Background subagents <async-subagent>
    Storage adapter <storage-adapter>

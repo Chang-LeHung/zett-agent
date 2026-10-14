@@ -114,8 +114,9 @@ Keep the skill at ``skills/code-review/SKILL.md`` beside the downloaded script.
 Defer a large toolbox
 ----------------------------------------
 
-With a compatible Responses endpoint, mark rarely used tools as deferred and
-add :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`:
+With a compatible Responses endpoint or the Anthropic Messages API, mark
+rarely used tools as deferred and add
+:class:`~zett_agent.extensions.tool_search.ToolSearchExtension`:
 
 .. code-block:: python
 
@@ -138,16 +139,75 @@ add :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`:
    )
 
 Here ``responses_model`` is a compatible adapter configured with
-``response=True``; ``inventory_service`` is your application's inventory
-client. The model searches for relevant capabilities and receives matching
-definitions before calling them. Tools without ``deferred=True`` remain
-visible as ordinary tools.
+``response=True`` (or an :class:`~zett_agent.providers.anthropic.AnthropicProvider`);
+``inventory_service`` is your application's inventory client. The model
+searches for relevant capabilities and receives matching definitions before
+calling them. Tools without ``deferred=True`` remain visible as ordinary tools.
+
+The ranking always happens locally, with BM25 over each tool's name,
+description, parameter descriptions, snippet, and guidelines. Only the wire
+protocol differs:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 76
+
+   * - Provider
+     - How a deferred tool reaches the model
+   * - Responses API
+     - The search answers with ``tool_search_output`` definitions; deferred tools are not sent up front.
+   * - Anthropic Messages API
+     - Deferred tools are declared with ``defer_loading``; the search answers with ``tool_reference`` blocks naming the tools to load. Their guidelines ride in the description.
+
+A deferred tool is skipped by
+:class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`, so its
+description is the only place the model reads its guidance. When that extension
+is registered, its ``snippets`` and ``guidelines`` switches decide what the
+description carries, whatever its ``placement``; without it, a deferred tool
+carries its guidelines only.
+
+The difference is one field of the :class:`~zett_agent.model.AgentModel`
+protocol, ``native_deferred_tools``. It is ``True`` on ``AnthropicProvider`` and
+``False`` on every other built-in adapter. A custom adapter sets it to ``True``
+when its protocol can load a deferred tool by reference.
+
+Tell the model what it can search for
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A deferred tool is invisible until it is loaded, so a model with only search
+keywords to go on has to guess what exists. ``ToolSearchExtension`` therefore
+lists the deferred tools (each name and description, plus its snippet and
+guidelines) and puts the list where you choose:
+
+.. code-block:: python
+
+   from zett_agent.extensions.tool_search import ToolCatalogPlacement, ToolSearchExtension
+
+   # The default: appended to the search tool's own description.
+   ToolSearchExtension()
+
+   # A "# Searchable tools" section of the system instructions instead.
+   ToolSearchExtension(catalog=ToolCatalogPlacement.SYSTEM_PROMPT)
+
+   # Shorter entries, or no list at all.
+   ToolSearchExtension(catalog_snippets=False, catalog_guidelines=False)
+   ToolSearchExtension(catalog=ToolCatalogPlacement.NONE)
+
+The list is independent of
+:class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` and has
+its own switches, so the two combine in any placement and any order. The list
+names every deferred tool registered for the request rather than shrinking as
+tools are found: a list that changed on every search would change the request
+prefix each time and defeat provider prompt caching. With many deferred tools
+the list itself costs tokens, so trim it with the switches or use
+``NONE`` and rely on search keywords.
 
 .. important::
 
-   Client-side tool search requires the Responses tool-search protocol.
-   Chat Completions, Anthropic, Google, and Ollama do not support this extension.
-   Skill loading uses an ordinary local tool and does not have that restriction.
+   Client-side tool search requires the Responses tool-search protocol or the
+   Anthropic Messages API. Chat Completions, Google, and Ollama do not support
+   this extension. Skill loading uses an ordinary local tool and does not have
+   that restriction.
 
 What this does not do
 ----------------------------------------

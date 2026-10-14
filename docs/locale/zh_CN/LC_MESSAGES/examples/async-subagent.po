@@ -1,0 +1,129 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C)
+# This file is distributed under the same license as the Zett Agent package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-14 00:14+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/async-subagent.rst:2
+msgid "Run subagents in the background"
+msgstr "在后台运行子智能体"
+
+#: ../../examples/async-subagent.rst:4
+msgid "Start a child agent without waiting for it, keep the parent working, and read the report when it is ready. Tool restrictions on a child are not an operating-system sandbox."
+msgstr "启动一个子智能体而不等待它，让父智能体继续工作，等报告准备好后再读取。对子智能体的工具限制并不是操作系统层面的沙箱。"
+
+#: ../../examples/async-subagent.rst:9
+msgid "Run it"
+msgstr "运行示例"
+
+#: ../../examples/async-subagent.rst:11
+msgid "From the repository root:"
+msgstr "在仓库根目录执行："
+
+#: ../../examples/async-subagent.rst:17
+msgid "The output includes:"
+msgstr "输出包含："
+
+#: ../../examples/async-subagent.rst:23
+msgid "This program uses deterministic offline models. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序使用确定性的离线模型，不需要 API 密钥，并由文档测试套件执行。"
+
+#: ../../examples/async-subagent.rst:27
+msgid "How the model manages a task"
+msgstr "模型如何管理任务"
+
+#: ../../examples/async-subagent.rst:29
+msgid ":class:`~zett_agent.extensions.async_subagent.AsyncSubAgentExtension` registers five tools:"
+msgstr ":class:`~zett_agent.extensions.async_subagent.AsyncSubAgentExtension` 会注册五个工具："
+
+#: ../../examples/async-subagent.rst:36
+msgid "Tool"
+msgstr "工具"
+
+#: ../../examples/async-subagent.rst:37
+msgid "Purpose"
+msgstr "用途"
+
+#: ../../examples/async-subagent.rst:38
+msgid "``task_start``"
+msgstr "``task_start``"
+
+#: ../../examples/async-subagent.rst:39
+msgid "Start a task from a configured profile; returns its ``task_id`` at once."
+msgstr "用已配置的子智能体配置启动一个任务，并立即返回它的 ``task_id``\\ 。"
+
+#: ../../examples/async-subagent.rst:40
+msgid "``task_list``"
+msgstr "``task_list``"
+
+#: ../../examples/async-subagent.rst:41
+msgid "Show every task of the session with its status."
+msgstr "列出本会话的所有任务及其状态。"
+
+#: ../../examples/async-subagent.rst:42
+msgid "``task_status``"
+msgstr "``task_status``"
+
+#: ../../examples/async-subagent.rst:43
+msgid "Show one task without its report; never waits."
+msgstr "查看单个任务的状态，不含报告；从不等待。"
+
+#: ../../examples/async-subagent.rst:44
+msgid "``task_output``"
+msgstr "``task_output``"
+
+#: ../../examples/async-subagent.rst:45
+msgid "Return the report, waiting up to ``wait_seconds`` when asked."
+msgstr "返回报告；需要时最多等待 ``wait_seconds`` 秒。"
+
+#: ../../examples/async-subagent.rst:46
+msgid "``task_cancel``"
+msgstr "``task_cancel``"
+
+#: ../../examples/async-subagent.rst:47
+msgid "Stop a running task."
+msgstr "停止一个正在运行的任务。"
+
+#: ../../examples/async-subagent.rst:49
+msgid "A finished task is announced before the parent's next model call, or when the session's next request starts, as an ordinary agent message. A task whose result the model already read is not announced again."
+msgstr "任务结束后，会在父智能体下一次调用模型之前，或会话的下一个请求开始时，以普通智能体消息的形式通知它。模型已经读取过结果的任务不会再次通知。"
+
+#: ../../examples/async-subagent.rst:58
+msgid "Customize it by subclassing"
+msgstr "通过子类化来定制"
+
+#: ../../examples/async-subagent.rst:60
+msgid "Override only what you need instead of copying the extension:"
+msgstr "只重写你需要的部分，而不是复制整个扩展："
+
+#: ../../examples/async-subagent.rst:75
+msgid "``task_info`` shapes what each tool returns, ``task_started`` and ``task_finished`` observe the lifecycle (their errors are logged, never raised into the task), and ``_create_child`` changes how each child agent is built. Tasks live in memory for the lifetime of the extension object and are visible only to the session that started them. Call ``await extension.close()`` when the application shuts down."
+msgstr "``task_info`` 决定每个工具返回的内容，``task_started`` 和 ``task_finished`` 用来观察生命周期（它们的错误只会被记录，不会抛进任务里），``_create_child`` 则改变每个子智能体的构建方式。任务在扩展对象的生命周期内保存在内存中，并且只对启动它们的会话可见。应用关闭时请调用 ``await extension.close()``\\ 。"
+
+#: ../../examples/async-subagent.rst:83
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/async-subagent.rst:85
+msgid ":download:`Download async_subagent.py <../_examples/async_subagent.py>`."
+msgstr ":download:`下载 async_subagent.py <../_examples/async_subagent.py>`\\ 。"
+
+#: ../../examples/async-subagent.rst:91
+msgid "Next: :doc:`subagent` for the blocking variant, or :doc:`../extending/built-ins` to compare it with the other capabilities."
+msgstr "下一步：阻塞式的版本见 :doc:`subagent`，或参阅 :doc:`../extending/built-ins` 与其他能力对比。"
+

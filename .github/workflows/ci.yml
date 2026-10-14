@@ -93,8 +93,27 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked --group dev
 
+      - name: Report how this runner enforces each limit
+        run: |
+          uv run --no-sync python - <<'PY'
+          from zett_agent.sandbox.factory import create_sandbox
+          from zett_agent.sandbox.policy import ResourceLimits, SandboxPolicy
+
+          limits = ResourceLimits(
+              memory_bytes=256 * 1024**2, cpu_seconds=30, cpu_percent=50, processes=64, file_size_bytes=10**6
+          )
+          report = create_sandbox(SandboxPolicy(writable_paths=["/tmp"], limits=limits)).capabilities()
+          print("enforcement:", report.mechanisms)
+          for warning in report.warnings:
+              print("warning:", warning)
+          PY
+
       - name: Run sandbox tests
-        run: uv run --no-sync pytest tests/test_sandbox_policy.py tests/test_sandbox_builders.py tests/test_sandbox_runner.py tests/test_sandbox_backends.py -v --no-cov
+        run: |
+          uv run --no-sync pytest tests/test_sandbox_policy.py tests/test_sandbox_builders.py \
+            tests/test_sandbox_runner.py tests/test_sandbox_resources.py tests/test_sandbox_session.py \
+            tests/test_sandbox_backends.py \
+            -v --no-cov
 
   docs:
     name: Documentation

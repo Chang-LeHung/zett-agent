@@ -179,7 +179,8 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "TodoWriteExtension",
         "TodoWriteResult",
     ),
-    "zett_agent.extensions.tool_guidelines": ("ToolGuidelinesExtension",),
+    "zett_agent.extensions.tool": ("ToolExtension",),
+    "zett_agent.extensions.tool_guidelines": ("ToolGuidancePlacement", "ToolGuidelinesExtension"),
     "zett_agent.extensions.tool_search": (
         "BM25Search",
         "TOOL_SEARCH_TOOL_NAME",
@@ -275,6 +276,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "ToolResult",
         "get_tool_guidelines",
         "get_tool_snippet",
+        "render_tool_description",
         "render_tool_guidance",
         "render_tool_search_text",
         "tool",

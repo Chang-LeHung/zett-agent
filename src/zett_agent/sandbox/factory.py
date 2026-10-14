@@ -11,6 +11,7 @@ from .bubblewrap import BubblewrapSandbox
 from .errors import SandboxPolicyError, SandboxUnavailableError
 from .passthrough import PassthroughSandbox
 from .policy import SandboxPolicy
+from .resources import MemoryStrategy
 from .seatbelt import SeatbeltSandbox
 
 __all__ = ["SandboxBackend", "SandboxWarning", "create_sandbox", "default_backend"]
@@ -51,6 +52,7 @@ def create_sandbox(
     *,
     backend: SandboxBackend | str = SandboxBackend.AUTO,
     require_isolation: bool = False,
+    memory_strategy: MemoryStrategy | str = MemoryStrategy.AUTO,
 ) -> Sandbox:
     """Create the sandbox for this machine, failing loudly rather than weakening it.
 
@@ -65,6 +67,8 @@ def create_sandbox(
         policy: The boundary to enforce. Defaults to a read-only policy.
         backend: A backend to force, or ``AUTO`` for this platform's own.
         require_isolation: Raise instead of returning a sandbox that isolates nothing.
+        memory_strategy: How to enforce ``memory_bytes``; see
+            :class:`~zett_agent.sandbox.resources.MemoryStrategy`.
 
     Raises:
         SandboxUnavailableError: If the backend cannot run here, or isolation is
@@ -103,6 +107,6 @@ def create_sandbox(
         SandboxBackend.BUBBLEWRAP: BubblewrapSandbox,
         SandboxBackend.PASSTHROUGH: PassthroughSandbox,
     }
-    sandbox = implementations[chosen](policy)
+    sandbox = implementations[chosen](policy, memory_strategy=memory_strategy)
     sandbox.check()
     return sandbox

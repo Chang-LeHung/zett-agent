@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .._compat import StrEnum
@@ -13,12 +13,14 @@ from .errors import SandboxPolicyError
 
 __all__ = [
     "DEFAULT_INHERITED_ENVIRONMENT",
+    "MINIMUM_MEMORY_BYTES",
     "PROTECTED_DIRECTORY_NAMES",
     "PROTECTED_FILE_NAMES",
     "SENSITIVE_HOME_PATHS",
     "SENSITIVE_SOCKET_PATHS",
     "NetworkMode",
     "ResolvedPolicy",
+    "ResourceLimits",
     "SandboxPolicy",
     "build_environment",
     "command_arguments",
@@ -157,6 +159,127 @@ def _as_paths(values: Iterable[str | os.PathLike[str]], field: str) -> tuple[Pat
     return tuple(_as_path(value, field) for value in values)
 
 
+#: Smallest memory cap the sandbox accepts. A launcher has to start and map the
+#: filesystem inside the sandbox before the command runs, and that needs room.
+MINIMUM_MEMORY_BYTES = 16 * 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceLimits:
+    """What a sandboxed process may use, and how much.
+
+    Every field is optional; ``None`` means the machine's own default, which is
+    usually no limit. A value is a request, not a promise: how much of it the
+    kernel can enforce depends on the platform, and
+    :meth:`~zett_agent.sandbox.base.Sandbox.capabilities` says what a given
+    machine will actually do with each one. What a backend cannot enforce is
+    reported in the run's warnings rather than silently dropped. See
+    :doc:`../../learn/sandbox` for the table of what each platform enforces.
+
+    Args:
+        memory_bytes: Memory the process and everything it starts may use. The
+            kernel accounts for the whole tree where cgroups are available; a
+            per-process address-space limit is used where they are not, which
+            also counts memory that is mapped but never touched. On macOS no
+            kernel limit exists and a sampling watchdog stops a runaway process
+            instead; see :class:`~zett_agent.sandbox.base.MemoryStrategy`.
+        cpu_seconds: Total processor time the process tree may consume. The
+            kernel kills it once the time is spent, which is different from the
+            wall-clock ``timeout`` of a run: a program that sleeps uses no
+            processor time at all.
+        cpu_percent: Share of one processor the process tree may use, where the
+            kernel can limit it (cgroups). 100 is one core, 250 is two and a
+            half. Sleeps and waiting do not count against it.
+        processes: Number of processes and threads the tree may create. The
+            smallest accepted value leaves room for the sandbox's own launcher,
+            which is itself a process in the tree; on macOS threads count too, as
+            the kernel counts them. A small value stops a program from starting
+            helpers at all.
+        file_size_bytes: Largest file the process may create or extend. Writing
+            past it fails; a file already open can be truncated by it.
+        open_files: Number of file descriptors the process may hold open. The
+            smallest accepted value again leaves room for the launcher, which needs
+            descriptors of its own to set the sandbox up.
+        core_dumps: Whether a crash may write a core file. Off by default: a core
+            file of a large process is large, and it holds whatever the process
+            had read.
+        memory_sample_seconds: How often the watchdog measures memory where one
+            is used. Smaller values catch a runaway sooner and cost a little more.
+
+    Examples:
+        Give a command half a processor, 30 seconds of processor time, 512 MiB
+        and no more than 64 processes::
+
+            limits = ResourceLimits(
+                memory_bytes=512 * 1024**2, cpu_seconds=30, cpu_percent=50, processes=64
+            )
+            policy = SandboxPolicy(writable_paths=["/work"], limits=limits)
+
+    .. warning::
+        A resource limit protects the machine from a process that runs away. It
+        is not a defense against a process that respects no limits: it can still
+        use what it is allowed as fast as it likes, and the watchdog used on
+        macOS can be overshot between two samples.
+    """
+
+    memory_bytes: int | None = None
+    cpu_seconds: int | None = None
+    cpu_percent: int | None = None
+    processes: int | None = None
+    file_size_bytes: int | None = None
+    open_files: int | None = None
+    core_dumps: bool = False
+    memory_sample_seconds: float = 0.25
+
+    def __post_init__(self) -> None:
+        # The floors are what the launcher needs to start at all: it is a process in
+        # the tree with descriptors of its own, and a limit below these stops it
+        # before the command runs.
+        for name, minimum, note in (
+            ("cpu_seconds", 1, ""),
+            ("cpu_percent", 1, ""),
+            ("processes", 8, " (the launcher is a process in the tree)"),
+            ("file_size_bytes", 1, ""),
+            ("open_files", 16, " (the launcher needs descriptors of its own)"),
+        ):
+            value = getattr(self, name)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < minimum):
+                raise SandboxPolicyError(f"{name} must be an integer of at least {minimum}{note}, or None")
+        if self.memory_bytes is not None:
+            if (
+                isinstance(self.memory_bytes, bool)
+                or not isinstance(self.memory_bytes, int)
+                or self.memory_bytes < MINIMUM_MEMORY_BYTES
+            ):
+                raise SandboxPolicyError(
+                    f"memory_bytes must be an integer of at least {MINIMUM_MEMORY_BYTES} "
+                    f"({MINIMUM_MEMORY_BYTES // 1024**2} MiB), or None"
+                )
+        if not isinstance(self.core_dumps, bool):
+            raise SandboxPolicyError("core_dumps must be a boolean")
+        if (
+            isinstance(self.memory_sample_seconds, bool)
+            or not isinstance(self.memory_sample_seconds, (int, float))
+            or not 0.01 <= self.memory_sample_seconds <= 60
+        ):
+            raise SandboxPolicyError("memory_sample_seconds must be between 0.01 and 60")
+
+    def requested(self) -> tuple[str, ...]:
+        """Names of the limits that were asked for, in field order."""
+        return tuple(
+            field
+            for field in (
+                "memory_bytes",
+                "cpu_seconds",
+                "cpu_percent",
+                "processes",
+                "file_size_bytes",
+                "open_files",
+            )
+            if getattr(self, field) is not None
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class SandboxPolicy:
     """The boundary a sandboxed process runs inside.
@@ -186,6 +309,9 @@ class SandboxPolicy:
         inherit_environment: Names of host environment variables the process
             receives. The default is a short, secret-free list; a command that
             needs more gets it through the ``env`` argument of a run.
+        limits: What the process may use: memory, processor time, processor
+            share, processes, file size and open files. Empty by default, which
+            leaves the machine's own limits in place.
 
     Examples:
         Let a process write one directory and nothing else::
@@ -212,6 +338,7 @@ class SandboxPolicy:
     network: NetworkMode = NetworkMode.NONE
     protect_defaults: bool = True
     inherit_environment: tuple[str, ...] = DEFAULT_INHERITED_ENVIRONMENT
+    limits: ResourceLimits = field(default_factory=ResourceLimits)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "writable_paths", _as_paths(self.writable_paths, "writable_paths"))
@@ -227,11 +354,15 @@ class SandboxPolicy:
         if isinstance(names, str) or not all(isinstance(name, str) and name and "=" not in name for name in names):
             raise SandboxPolicyError("inherit_environment must be a sequence of variable names")
         object.__setattr__(self, "inherit_environment", tuple(names))
+        if not isinstance(self.limits, ResourceLimits):
+            raise SandboxPolicyError("limits must be a ResourceLimits")
 
     @classmethod
-    def read_only(cls, *, network: NetworkMode = NetworkMode.NONE) -> SandboxPolicy:
+    def read_only(
+        cls, *, network: NetworkMode = NetworkMode.NONE, limits: ResourceLimits | None = None
+    ) -> SandboxPolicy:
         """Return a policy that can read the machine and write nothing but temporary files."""
-        return cls(network=network)
+        return cls(network=network, limits=limits if limits is not None else ResourceLimits())
 
     @classmethod
     def workspace_write(
@@ -239,9 +370,15 @@ class SandboxPolicy:
         *roots: str | os.PathLike[str],
         network: NetworkMode = NetworkMode.NONE,
         protect_defaults: bool = True,
+        limits: ResourceLimits | None = None,
     ) -> SandboxPolicy:
         """Return a policy that can write ``roots``, read the machine, and use the network only if asked."""
-        return cls(writable_paths=roots, network=network, protect_defaults=protect_defaults)
+        return cls(
+            writable_paths=roots,
+            network=network,
+            protect_defaults=protect_defaults,
+            limits=limits if limits is not None else ResourceLimits(),
+        )
 
 
 @dataclass(frozen=True, slots=True)

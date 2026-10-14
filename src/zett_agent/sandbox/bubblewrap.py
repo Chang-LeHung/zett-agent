@@ -11,6 +11,7 @@ from pathlib import Path
 from .base import Sandbox, SandboxedCommand
 from .errors import SandboxUnavailableError
 from .policy import NetworkMode, ResolvedPolicy, SandboxPolicy, resolve_policy
+from .resources import MemoryStrategy
 
 __all__ = ["BubblewrapSandbox", "build_bubblewrap_arguments"]
 
@@ -125,9 +126,13 @@ class BubblewrapSandbox(Sandbox):
     isolated = True
 
     def __init__(
-        self, policy: SandboxPolicy | None = None, *, bwrap_path: str | os.PathLike[str] | None = None
+        self,
+        policy: SandboxPolicy | None = None,
+        *,
+        bwrap_path: str | os.PathLike[str] | None = None,
+        memory_strategy: MemoryStrategy | str = MemoryStrategy.AUTO,
     ) -> None:
-        super().__init__(policy)
+        super().__init__(policy, memory_strategy=memory_strategy)
         self._bwrap_path = None if bwrap_path is None else str(bwrap_path)
         self._executable: str | None = None
 

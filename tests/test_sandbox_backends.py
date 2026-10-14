@@ -9,6 +9,7 @@ so a missing bubblewrap fails the job instead of silently skipping every case.
 
 import asyncio
 import os
+import signal
 import socket
 import sys
 import uuid
@@ -18,7 +19,8 @@ import pytest
 
 from zett_agent.sandbox.errors import SandboxUnavailableError
 from zett_agent.sandbox.factory import SandboxBackend, create_sandbox, default_backend
-from zett_agent.sandbox.policy import NetworkMode, SandboxPolicy
+from zett_agent.sandbox.policy import NetworkMode, ResourceLimits, SandboxPolicy
+from zett_agent.sandbox.resources import MemoryStrategy, watchdog_available
 
 REQUIRED = os.environ.get("ZETT_REQUIRE_SANDBOX") == "1"
 posix_only = pytest.mark.skipif(os.name != "posix", reason="needs a POSIX shell")
@@ -72,9 +74,146 @@ def outside():
         path.unlink()
 
 
-def make(backend, work, **policy) -> "tuple":
-    sandbox = create_sandbox(SandboxPolicy.workspace_write(work, **policy), backend=backend)
+def make(backend, work, *, limits: ResourceLimits | None = None, strategy: MemoryStrategy | None = None, **policy):
+    """Build a sandbox for one case, with the limits and the memory mechanism it asks for."""
+    sandbox = create_sandbox(
+        SandboxPolicy.workspace_write(work, limits=limits or ResourceLimits(), **policy), backend=backend
+    )
+    if strategy is not None:
+        sandbox.memory_strategy = strategy
     return sandbox
+
+
+def test_every_backend_reports_how_it_enforces_each_limit(backend, work, capsys):
+    """Print what this machine does with each limit; the sandbox job in CI reads it back."""
+    limits = ResourceLimits(
+        memory_bytes=256 * 1024**2, cpu_seconds=30, cpu_percent=50, processes=64, file_size_bytes=10**6
+    )
+
+    report = make(backend, work, limits=limits).capabilities()
+
+    with capsys.disabled():
+        print(f"\n{sys.platform} {backend.value}: {report.mechanisms}")
+    assert report.cpu_seconds == "rlimit" and report.core_dumps == "rlimit"
+    assert report.file_size_bytes == "rlimit"
+    assert report.memory in ("cgroup", "rlimit_as", "watchdog", "none")
+    assert report.processes in ("cgroup", "rlimit")
+    assert report.cpu_percent in ("cgroup", "none")
+    if report.memory == "none":
+        assert report.warnings  # nothing enforced it, and that is said out loud
+
+
+@posix_only
+async def test_a_file_size_limit_holds_inside_the_sandbox(backend, work):
+    sandbox = make(backend, work, limits=ResourceLimits(file_size_bytes=200_000, open_files=64))
+
+    result = await sandbox.run(
+        [sys.executable, "-c", "f=open('big.bin','wb')\n[f.write(b'x'*10_000) for _ in range(50)]"], cwd=work
+    )
+
+    assert not result.succeeded
+    assert (work / "big.bin").stat().st_size <= 200_000
+    assert result.resources.file_size_bytes == "rlimit"
+
+
+@posix_only
+async def test_a_processor_time_limit_holds_inside_the_sandbox(backend, work):
+    result = await make(backend, work, limits=ResourceLimits(cpu_seconds=1)).run(
+        [sys.executable, "-c", "x=0\nwhile True: x+=1"], cwd=work, timeout=60
+    )
+
+    assert result.timed_out is False and result.exit_code == -signal.SIGXCPU
+    assert result.resources.limits_hit == ("cpu",)
+
+
+@posix_only
+async def test_a_process_limit_holds_inside_the_sandbox(backend, work):
+    program = (
+        "import os\nn=0\ntry:\n    for _ in range(200): os.fork(); n+=1\nexcept OSError:\n    print('stopped after', n)"
+    )
+    result = await make(backend, work, limits=ResourceLimits(processes=32)).run(
+        [sys.executable, "-c", program], cwd=work, timeout=60
+    )
+
+    assert "stopped after" in result.stdout
+
+
+@posix_only
+async def test_an_open_file_limit_holds_inside_the_sandbox(backend, work):
+    result = await make(backend, work, limits=ResourceLimits(open_files=16)).run(
+        [sys.executable, "-c", "f=[open('/dev/null') for _ in range(200)]\nprint('opened 200')"], cwd=work
+    )
+
+    assert not result.succeeded and "opened 200" not in result.stdout
+
+
+@posix_only
+async def test_core_dumps_are_off_inside_the_sandbox(backend, work):
+    result = await make(backend, work).run(
+        [sys.executable, "-c", "import resource;print(resource.getrlimit(resource.RLIMIT_CORE))"], cwd=work
+    )
+
+    assert result.stdout.strip() == "(0, 0)"
+
+
+@posix_only
+async def test_a_memory_limit_is_enforced_by_whatever_this_machine_has(backend, work):
+    sandbox = make(
+        backend,
+        work,
+        limits=ResourceLimits(memory_bytes=128 * 1024**2),
+    )
+    program = "x=bytearray(600*1024*1024)\nprint('holding')\nimport time; time.sleep(20)"
+    result = await sandbox.run([sys.executable, "-c", program], cwd=work, timeout=60)
+    mechanism = result.resources.memory
+
+    if mechanism == "watchdog":
+        assert result.exit_code == -signal.SIGKILL and result.resources.limits_hit == ("memory",)
+        assert result.resources.peak_memory_bytes > 128 * 1024**2
+    elif mechanism == "rlimit_as":
+        assert not result.succeeded and "holding" not in result.stdout
+    elif mechanism == "cgroup":
+        assert not result.succeeded and result.resources.limits_hit == ("memory",)
+    else:  # pragma: no cover - only on a platform with no memory mechanism at all
+        pytest.fail(f"no memory limit was enforced: {result.resources.warnings}")
+
+
+@posix_only
+async def test_a_watchdog_stops_a_runaway_inside_the_sandbox(backend, work):
+    """The watchdog is the fallback, so it is asked for explicitly wherever it can run."""
+    if not watchdog_available():  # pragma: no cover - POSIX only
+        pytest.skip("no ps to sample with")
+    sandbox = make(
+        backend,
+        work,
+        limits=ResourceLimits(memory_bytes=128 * 1024**2),
+    )
+    sandbox.memory_strategy = MemoryStrategy.WATCHDOG
+    program = "x=bytearray(600*1024*1024)\nimport time; time.sleep(20)"
+
+    result = await sandbox.run([sys.executable, "-c", program], cwd=work, timeout=60)
+
+    assert result.resources.memory == "watchdog" and result.resources.limits_hit == ("memory",)
+    assert result.duration < 15
+
+
+@posix_only
+async def test_limits_travel_with_a_command_a_host_spawns_itself(backend, work):
+    command = make(backend, work, limits=ResourceLimits(file_size_bytes=1000)).wrap(
+        [sys.executable, "-c", "import resource;print(resource.getrlimit(resource.RLIMIT_FSIZE))"], cwd=work
+    )
+
+    process = await asyncio.create_subprocess_exec(
+        *command.argv,
+        cwd=command.cwd,
+        env=dict(command.env),
+        stdout=asyncio.subprocess.PIPE,
+        start_new_session=True,
+        preexec_fn=command.preexec,
+    )
+    out, _ = await process.communicate()
+
+    assert out.decode().strip() == "(1000, 1000)"
 
 
 async def test_the_backend_reports_that_it_isolates(backend, work):

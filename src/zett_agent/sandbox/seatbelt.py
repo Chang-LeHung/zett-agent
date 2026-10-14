@@ -12,6 +12,7 @@ from typing import Final
 from .base import Sandbox, SandboxedCommand
 from .errors import SandboxUnavailableError
 from .policy import NetworkMode, ResolvedPolicy, SandboxPolicy, resolve_policy
+from .resources import MemoryStrategy
 
 __all__ = ["SEATBELT_EXECUTABLE", "SeatbeltSandbox", "build_seatbelt_profile"]
 
@@ -147,8 +148,10 @@ class SeatbeltSandbox(Sandbox):
     name = "seatbelt"
     isolated = True
 
-    def __init__(self, policy: SandboxPolicy | None = None) -> None:
-        super().__init__(policy)
+    def __init__(
+        self, policy: SandboxPolicy | None = None, *, memory_strategy: MemoryStrategy | str = MemoryStrategy.AUTO
+    ) -> None:
+        super().__init__(policy, memory_strategy=memory_strategy)
         self._checked = False
 
     def check(self) -> None:

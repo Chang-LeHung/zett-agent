@@ -463,6 +463,10 @@ class RetryingProvider(SyncMethodsMixin):
 
     retry: RetryOptions = DEFAULT_RETRY_OPTIONS
     response: bool = False
+    #: See :attr:`zett_agent.model.AgentModel.native_deferred_tools`. A provider
+    #: opts in by overriding this on its class; the default keeps Responses,
+    #: Chat Completions, Google, and Ollama on the withhold-and-search path.
+    native_deferred_tools: bool = False
 
     @staticmethod
     def _retryable(error: BaseException) -> bool:

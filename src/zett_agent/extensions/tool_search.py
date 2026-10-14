@@ -14,14 +14,16 @@ from typing import Any, Literal, Protocol, TypedDict
 from weakref import WeakKeyDictionary
 
 from ..agent import AgentRunContext
-from ..model import ModelEvent, ModelRequest
+from ..model import ModelEvent, ModelRequest, ToolDefinition
 from ..tools.base import (
     AgentTool,
+    render_tool_description,
     render_tool_search_text,
     tool,
 )
 from .base import AgentExtension, ModelRequestNext
 from .events import CompactionEvent, ExtensionEvent
+from .tool_guidelines import ToolGuidelinesExtension
 
 #: Public name of the internal search tool; it is never sent as a function.
 TOOL_SEARCH_TOOL_NAME = "tool_search"
@@ -121,7 +123,7 @@ class SearchedToolDefinition(TypedDict):
     strict: bool | None
 
 
-def _definition(tool: AgentTool) -> SearchedToolDefinition:
+def _definition(tool: AgentTool, *, snippet: bool = False, guidelines: bool = True) -> SearchedToolDefinition:
     """Render one tool as the definition the model loads.
 
     A deferred tool never reaches the provider schema and
@@ -129,14 +131,10 @@ def _definition(tool: AgentTool) -> SearchedToolDefinition:
     only place the model can learn its rules: the guidelines travel with the
     description.
     """
-    description = tool.description
-    if tool.guidelines:
-        rules = "\n".join(f"- {guideline}" for guideline in tool.guidelines)
-        description = f"{description}\n\nGuidelines:\n{rules}"
     return SearchedToolDefinition(
         type="function",
         name=tool.name,
-        description=description,
+        description=render_tool_description(tool, snippet=snippet, guidelines=guidelines),
         parameters=tool.parameters,
         strict=None,
     )
@@ -161,7 +159,7 @@ class ToolSearchStorage(Protocol):
 
 
 class ToolSearchExtension(AgentExtension):
-    """Search registered local tools with BM25 through the Responses API.
+    """Search registered local tools with BM25 through the Responses or Anthropic API.
 
     Tools marked ``deferred=True`` are the searchable ones: this extension adds
     one request-scoped ``tool_search`` tool and removes every deferred definition
@@ -209,9 +207,11 @@ class ToolSearchExtension(AgentExtension):
             )
 
     .. note::
-        Client-side tool search needs the Responses API. Chat Completions,
-        Anthropic, Google, and Ollama reject ``local_tool_search`` tools, and an
-        endpoint that ignores the protocol never issues a search.
+        Client-side tool search needs the Responses API or the Anthropic
+        Messages API. On Anthropic the deferred tools stay in the request with
+        ``defer_loading`` and a search answers with ``tool_reference`` blocks.
+        Chat Completions, Google, and Ollama reject ``local_tool_search`` tools,
+        and an endpoint that ignores the protocol never issues a search.
     """
 
     def __init__(
@@ -244,11 +244,56 @@ class ToolSearchExtension(AgentExtension):
         request: ModelRequest,
         call_next: ModelRequestNext,
     ) -> AsyncIterator[ModelEvent]:
-        """Hide deferred definitions; visible tools keep their ordinary schema."""
-        filtered = replace(request, tools=tuple(tool for tool in request.tools if not tool.deferred))
-        async with aclosing(call_next(filtered)) as events:
+        """Hide deferred definitions, or mark them deferred where the provider can.
+
+        A Responses endpoint learns a deferred definition only from the search
+        result, so it never receives the definition up front. An adapter that
+        declares ``AgentModel.native_deferred_tools`` (Anthropic) must instead declare every
+        deferred tool with ``defer_loading`` so a search result can refer to it
+        by name; its guidelines then ride in the description, because no
+        system prompt carries them.
+        """
+        # AgentModel declares the flag; getattr only covers a custom adapter
+        # written before the field existed, which then behaves as False.
+        if getattr(context.model, "native_deferred_tools", False):
+            outgoing = replace(request, tools=tuple(self._declared(context, tool) for tool in request.tools))
+        else:
+            outgoing = replace(request, tools=tuple(tool for tool in request.tools if not tool.deferred))
+        async with aclosing(call_next(outgoing)) as events:
             async for event in events:
                 yield event
+
+    @staticmethod
+    def _declared(context: AgentRunContext, definition: ToolDefinition) -> ToolDefinition:
+        """Give one deferred definition the guidelines the model cannot read elsewhere."""
+        registered = context.tools.get(definition.name)
+        if registered is None or not registered.deferred:
+            return definition
+        snippet, guidelines = ToolSearchExtension._guidance_parts(context)
+        return replace(
+            definition,
+            description=render_tool_description(
+                registered, snippet=snippet, guidelines=guidelines, base=definition.description
+            ),
+        )
+
+    @staticmethod
+    def _guidance_parts(context: AgentRunContext) -> tuple[bool, bool]:
+        """Return which guidance parts a deferred tool's description carries.
+
+        A deferred tool is skipped by
+        :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`,
+        so its description is the only place the model can read that guidance.
+        When that extension is registered its ``snippets`` and ``guidelines``
+        switches decide what the description carries, whatever its placement,
+        so one setting governs every tool. Without it, a deferred tool carries
+        its guidelines only, which keeps the rules next to a tool that has no
+        other channel.
+        """
+        for extension in context.extensions:
+            if isinstance(extension, ToolGuidelinesExtension):
+                return extension.snippets, extension.guidelines
+        return False, True
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Let the conversation rediscover definitions a compaction removed.
@@ -353,6 +398,7 @@ class ToolSearchExtension(AgentExtension):
             index = BM25Search(searchable, limit=self._limit, k1=self._k1, b=self._b)
             matches = index.search(queries, min_score=score)
             discovered = await self._select_new(context, matches)
-            return [_definition(match) for match in discovered]
+            snippet, guidelines = self._guidance_parts(context)
+            return [_definition(match, snippet=snippet, guidelines=guidelines) for match in discovered]
 
         return search

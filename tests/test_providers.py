@@ -38,7 +38,7 @@ from zett_agent.model import (
     ReasoningEffort,
     ToolDefinition,
 )
-from zett_agent.providers.anthropic import AnthropicProvider, _tools_to_anthropic_payload
+from zett_agent.providers.anthropic import AnthropicProvider
 from zett_agent.providers.base import (
     ProviderAuthError,
     _message_to_openai_payload,
@@ -438,13 +438,11 @@ def test_chat_completion_tools_ignore_deferred_loading_marker() -> None:
     ]
 
 
-def test_non_responses_protocols_reject_a_local_tool_search_tool() -> None:
+def test_chat_ollama_and_google_reject_a_local_tool_search_tool() -> None:
     search = ToolDefinition("find_tools", "Find tools", {"type": "object"}, local_tool_search=True)
 
     with pytest.raises(ValueError, match="client-side tool search"):
         _tools_to_openai_payload((search,))
-    with pytest.raises(ValueError, match="client-side tool search"):
-        _tools_to_anthropic_payload((search,))
     with pytest.raises(ValueError, match="client-side tool search"):
         _tools_to_ollama_payload((search,))
     with pytest.raises(ValueError, match="client-side tool search"):

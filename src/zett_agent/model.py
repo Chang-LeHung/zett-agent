@@ -532,6 +532,19 @@ class AgentModel(Protocol):
     #: Whether this adapter uses a Responses-style endpoint instead of its
     #: provider's traditional message or chat-completions endpoint.
     response: bool = False
+    #: Whether the endpoint can load a deferred tool by reference, so the tool's
+    #: definition must be sent with the request.
+    #:
+    #: True means the protocol keeps a deferred definition out of the model's
+    #: context but still accepts a search result that names it (Anthropic
+    #: ``defer_loading`` plus ``tool_reference``). The adapter then needs every
+    #: deferred definition in :attr:`ModelRequest.tools` and marks it deferred
+    #: itself. False means the model learns a deferred definition only from a
+    #: search result (the Responses ``tool_search_output``), or not at all, so
+    #: :class:`~zett_agent.extensions.tool_search.ToolSearchExtension` withholds
+    #: those definitions from the request. Declare it on every adapter; a custom
+    #: adapter that predates the field is treated as False.
+    native_deferred_tools: bool = False
 
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         """Stream deltas and finish with exactly one response event.

@@ -28,6 +28,8 @@ from ..model import (
     validate_retry,
 )
 from .base import (
+    ProviderAuthError,
+    ProviderError,
     ProviderResponseError,
     RetryingProvider,
     _reasoning_effort_to_budget,
@@ -137,9 +139,11 @@ class GoogleProvider(RetryingProvider):
     @retry_model_stream
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         from google.genai import types
+        from google.genai.errors import APIError
 
         system: list[str] = []
         contents: list[types.Content] = []
+        previous_role = ""
         for message in expand_tool_images(request.messages):
             match message.role:
                 case "agent":
@@ -182,14 +186,22 @@ class GoogleProvider(RetryingProvider):
                             for call in message.tool_calls
                         )
                 case "tool":
+                    # Gemini documents ``error`` as the key that marks a failed call.
                     parts = [
                         types.Part.from_function_response(
                             name=message.name,
-                            response={"content": message.content},
+                            response={"content": message.content} if message.success else {"error": message.content},
                         )
                     ]
+                    # The service matches the responses of parallel calls as one
+                    # turn: its count must equal the calls in the model turn, so
+                    # adjacent results join instead of becoming separate turns.
+                    if contents and previous_role == "tool":
+                        contents[-1].parts.extend(parts)
+                        continue
             if parts:
                 contents.append(types.Content(role="model" if message.role == "assistant" else "user", parts=parts))
+            previous_role = message.role
         config = types.GenerateContentConfig(
             system_instruction="\n\n".join(system) or None,
             tools=self._google_tools(types, request),
@@ -214,10 +226,15 @@ class GoogleProvider(RetryingProvider):
         finish_reason = None
         server_tool_sequence = 0
         seen_server_tool_metadata: set[str] = set()
-        stream = await self._client.aio.models.generate_content_stream(
-            model=self.model, contents=contents, config=config
-        )
         try:
+            stream = await self._client.aio.models.generate_content_stream(
+                model=self.model, contents=contents, config=config
+            )
+        except APIError as error:
+            raise _provider_error(error) from error
+        try:
+            # The SDK sends the HTTP request when the first chunk is requested,
+            # so a rejected request surfaces here rather than above.
             async for chunk in stream:
                 for candidate in (chunk.candidates or [])[:1]:
                     server_events, server_tool_sequence = _google_server_tool_events(
@@ -261,6 +278,8 @@ class GoogleProvider(RetryingProvider):
                         # it says nothing about cache usage.
                         cache_reported=info.cached_content_token_count is not None,
                     )
+        except APIError as error:
+            raise _provider_error(error) from error
         finally:
             await stream.aclose()
         if finish_reason is None:
@@ -304,6 +323,17 @@ class GoogleProvider(RetryingProvider):
             except ValueError as error:
                 raise ProviderResponseError(f"Unsupported Google server tool type: {tool.type}") from error
         return tools or None
+
+
+def _provider_error(error: Any) -> ProviderError:
+    """Map an SDK failure to the provider error hierarchy.
+
+    The original error stays reachable through ``__cause__``, which is where the
+    retry policy reads the HTTP status, so a 429 or 5xx is still retried.
+    """
+    if error.code in (401, 403):
+        return ProviderAuthError("Provider rejected API credential")
+    return ProviderResponseError(f"Provider stream request failed: {error.message}")
 
 
 def _google_server_tool_events(candidate: Any, *, sequence: int, seen: set[str]) -> tuple[list[ModelEvent], int]:

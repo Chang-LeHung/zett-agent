@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import ssl
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from ..messages import AssistantMessage, ImageBytesSource, ImageContent, ImageUrlSource, ToolCall
@@ -20,7 +20,14 @@ from ..model import (
     validate_response,
     validate_retry,
 )
-from .base import ProviderResponseError, RetryingProvider, reject_local_tool_search, retry_model_stream
+from .base import (
+    ProviderResponseError,
+    RetryingProvider,
+    reject_local_tool_search,
+    retry_model_stream,
+    validate_extra_headers,
+    validate_extra_query,
+)
 from .tool_images import expand_tool_images
 
 if TYPE_CHECKING:
@@ -53,6 +60,9 @@ class OllamaProvider(RetryingProvider):
         base_url: Ollama server root; defaults to localhost port 11434.
         response: Must remain false; this adapter uses Ollama's chat endpoint.
         retry: Backoff policy for failures before the first streamed event.
+        extra_headers: HTTP headers sent on every request, such as the
+            ``Authorization`` a reverse proxy in front of Ollama expects.
+        extra_query: URL query parameters sent on every request.
 
     Note:
         This adapter does not install models or start the server. Reasoning,
@@ -85,6 +95,8 @@ class OllamaProvider(RetryingProvider):
         base_url: str = "http://localhost:11434",
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
+        extra_headers: Mapping[str, str] | None = None,
+        extra_query: Mapping[str, str] | None = None,
     ) -> None:
         import truststore
         from ollama import AsyncClient
@@ -96,11 +108,15 @@ class OllamaProvider(RetryingProvider):
         self.retry = retry
         self.response = response
         self.model = model
+        self.extra_headers = validate_extra_headers(extra_headers)
+        self.extra_query = validate_extra_query(extra_query)
         self._client = AsyncClient(
             host=base_url,
             transport=transport,
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
             trust_env=True,
+            headers=self.extra_headers or None,
+            params=self.extra_query or None,
         )
 
     async def aclose(self) -> None:

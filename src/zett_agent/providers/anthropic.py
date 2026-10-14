@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import ssl
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -40,6 +40,9 @@ from .base import (
     _ToolCallAccumulator,
     reject_local_tool_search,
     retry_model_stream,
+    validate_extra_body,
+    validate_extra_headers,
+    validate_extra_query,
 )
 from .tool_arguments import ToolArgumentsError, decode_tool_arguments
 from .tool_images import expand_tool_images
@@ -179,6 +182,13 @@ class AnthropicProvider(RetryingProvider):
             this limit leaves the call's JSON incomplete, and the model is then
             told to retry with a smaller call. Lower it for models with a
             smaller output limit.
+        extra_headers: HTTP headers sent on every request, for gateways that
+            route or bill on a header or for ``anthropic-beta`` flags. A header
+            given here replaces the SDK default of the same name.
+        extra_query: URL query parameters sent on every request.
+        extra_body: JSON fields merged into every request body last, so they
+            add an option the adapter does not model and may override one it
+            does.
 
     Note:
         Signed replay blocks belong to the originating provider and model.
@@ -219,6 +229,9 @@ class AnthropicProvider(RetryingProvider):
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
         prompt_cache: bool = True,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        extra_headers: Mapping[str, str] | None = None,
+        extra_query: Mapping[str, str] | None = None,
+        extra_body: Mapping[str, Any] | None = None,
     ) -> None:
         import httpx
         import truststore
@@ -234,6 +247,9 @@ class AnthropicProvider(RetryingProvider):
         if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
             raise ValueError("max_tokens must be a positive integer")
         self.max_tokens = max_tokens
+        self.extra_headers = validate_extra_headers(extra_headers)
+        self.extra_query = validate_extra_query(extra_query)
+        self.extra_body = validate_extra_body(extra_body)
         self.retry = retry
         self.response = response
         self.prompt_cache = prompt_cache
@@ -245,7 +261,14 @@ class AnthropicProvider(RetryingProvider):
         )
         from anthropic import AsyncAnthropic
 
-        self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, http_client=self._http_client, max_retries=0)
+        self._client = AsyncAnthropic(
+            api_key=api_key,
+            base_url=base_url,
+            http_client=self._http_client,
+            max_retries=0,
+            default_headers=self.extra_headers or None,
+            default_query=self.extra_query or None,
+        )
 
     async def aclose(self) -> None:
         """Close the owned SDK connection pool."""
@@ -317,7 +340,9 @@ class AnthropicProvider(RetryingProvider):
         from anthropic import AnthropicError
 
         try:
-            response = await self._client.messages.create(**body)
+            response = await self._client.messages.create(
+                **body, **({"extra_body": self.extra_body} if self.extra_body else {})
+            )
         except AnthropicError as error:
             status_code = getattr(error, "status_code", None)
             match status_code:

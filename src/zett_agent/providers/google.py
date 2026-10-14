@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import ssl
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any
 
 from ..messages import (
@@ -33,6 +33,8 @@ from .base import (
     _reasoning_effort_to_budget,
     reject_local_tool_search,
     retry_model_stream,
+    validate_extra_body,
+    validate_extra_headers,
 )
 from .tool_images import expand_tool_images
 
@@ -49,6 +51,12 @@ class GoogleProvider(RetryingProvider):
         transport: Optional HTTPX transport for test isolation or custom routing.
         response: Must remain false; this adapter uses Google GenerateContent.
         retry: Retry/backoff policy, applied before any model event is emitted.
+        base_url: API root; None uses Google's public Generative Language endpoint.
+            Set it to reach a proxy, a gateway, or a local test server.
+        extra_headers: HTTP headers sent on every request, for gateways that
+            route or bill on a header.
+        extra_body: JSON fields merged into every request body, for options the
+            adapter does not model.
 
     Note:
         ModelResponse retains model-scoped replay parts for subsequent calls.
@@ -84,6 +92,9 @@ class GoogleProvider(RetryingProvider):
         *,
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
+        base_url: str | None = None,
+        extra_headers: Mapping[str, str] | None = None,
+        extra_body: Mapping[str, Any] | None = None,
     ) -> None:
         import httpx
         import truststore
@@ -99,6 +110,8 @@ class GoogleProvider(RetryingProvider):
         self.retry = retry
         self.response = response
         self.model = model
+        self.extra_headers = validate_extra_headers(extra_headers)
+        self.extra_body = validate_extra_body(extra_body)
         self._http_client = httpx.AsyncClient(
             transport=transport,
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
@@ -107,7 +120,11 @@ class GoogleProvider(RetryingProvider):
         self._client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
-                httpx_async_client=self._http_client, retry_options=types.HttpRetryOptions(attempts=1)
+                base_url=base_url,
+                headers=self.extra_headers or None,
+                extra_body=self.extra_body or None,
+                httpx_async_client=self._http_client,
+                retry_options=types.HttpRetryOptions(attempts=1),
             ),
         )
 

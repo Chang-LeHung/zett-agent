@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from ..model import DEFAULT_RETRY_OPTIONS, ModelRequest, ReasoningEffort, RetryOptions
@@ -24,6 +25,14 @@ class DeepSeekProvider(_OpenAIStyleProvider):
             request. Off by default: DeepSeek caches context automatically and
             its compatibility endpoint does not document the field. Enable it
             for gateways that route on the key.
+        extra_headers: HTTP headers sent on every request after the adapter's
+            own, for gateways that route or bill on a header. A header given
+            here replaces the SDK default of the same name.
+        extra_query: URL query parameters sent on every request, such as the
+            ``api-version`` an Azure-style endpoint requires.
+        extra_body: JSON fields merged into every request body last, so they
+            add a vendor option the adapter does not model and may override one
+            it does, such as ``thinking``.
 
     Note:
         Cache-hit counters are normalized into ModelUsage. Reasoning deltas
@@ -66,6 +75,9 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
         send_prompt_cache_key: bool = False,
+        extra_headers: Mapping[str, str] | None = None,
+        extra_query: Mapping[str, str] | None = None,
+        extra_body: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -76,6 +88,9 @@ class DeepSeekProvider(_OpenAIStyleProvider):
             response=response,
             retry=retry,
             send_prompt_cache_key=send_prompt_cache_key,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
         self.provider_name = "deepseek"
 

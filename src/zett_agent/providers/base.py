@@ -80,6 +80,63 @@ class ProviderResponseError(ProviderError):
     """Raised when provider responses do not satisfy the expected stream protocol."""
 
 
+def validate_extra_headers(value: Mapping[str, str] | None) -> dict[str, str]:
+    """Copy extra HTTP headers, rejecting anything that is not a string pair.
+
+    Providers send these on every request, after their own defaults, so a
+    gateway can be given routing, tenant, or beta headers and an application can
+    override a default such as ``User-Agent``. A copy is stored so later changes
+    to the caller's mapping do not alter an adapter that is already in use.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("extra_headers must be a mapping of header names to values")
+    headers: dict[str, str] = {}
+    for name, item in value.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("extra_headers names must be non-empty strings")
+        if not isinstance(item, str):
+            raise ValueError(f"extra_headers value for {name!r} must be a string")
+        headers[name] = item
+    return headers
+
+
+def validate_extra_query(value: Mapping[str, str] | None) -> dict[str, str]:
+    """Copy extra URL query parameters, sent on every request."""
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("extra_query must be a mapping of parameter names to values")
+    query: dict[str, str] = {}
+    for name, item in value.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError("extra_query names must be non-empty strings")
+        if not isinstance(item, str):
+            raise ValueError(f"extra_query value for {name!r} must be a string")
+        query[name] = item
+    return query
+
+
+def validate_extra_body(value: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Copy extra JSON body fields merged into every request body.
+
+    The fields are applied last, so they can add a vendor option the adapter
+    does not model and also override one it does. They must be JSON values.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("extra_body must be a mapping of field names to JSON values")
+    if any(not isinstance(name, str) or not name for name in value):
+        raise ValueError("extra_body names must be non-empty strings")
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"extra_body must contain only JSON values: {error}") from error
+    return dict(value)
+
+
 def _reasoning_effort_to_budget(effort: ReasoningEffort) -> int:
     """Map provider-neutral effort to a token budget used by some vendors."""
     match effort:
@@ -479,6 +536,9 @@ class _OpenAIStyleProvider(RetryingProvider):
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
         send_prompt_cache_key: bool = True,
+        extra_headers: Mapping[str, str] | None = None,
+        extra_query: Mapping[str, str] | None = None,
+        extra_body: Mapping[str, Any] | None = None,
     ) -> None:
         # HTTP clients and the trust store are only needed once a provider is
         # constructed, so importing them here keeps module import cheap.
@@ -489,6 +549,9 @@ class _OpenAIStyleProvider(RetryingProvider):
         validate_response(response)
         self.retry = retry
         self.send_prompt_cache_key = send_prompt_cache_key
+        self.extra_headers = validate_extra_headers(extra_headers)
+        self.extra_query = validate_extra_query(extra_query)
+        self.extra_body = validate_extra_body(extra_body)
         if not api_key:
             raise ValueError("api_key is required")
         self.model = model
@@ -501,7 +564,14 @@ class _OpenAIStyleProvider(RetryingProvider):
         )
         from openai import AsyncOpenAI
 
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=self._http_client, max_retries=0)
+        self._client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            http_client=self._http_client,
+            max_retries=0,
+            default_headers=self.extra_headers or None,
+            default_query=self.extra_query or None,
+        )
 
     async def _request(self, request: ModelRequest) -> Any:
         if self.response:
@@ -531,7 +601,7 @@ class _OpenAIStyleProvider(RetryingProvider):
             payload["tool_choice"] = {"type": "function", "function": {"name": request.tool_choice}}
         if self.send_prompt_cache_key and request.cache_key:
             payload["prompt_cache_key"] = request.cache_key
-        extra_body = self._provider_specific_request_extra_fields(request)
+        extra_body = {**self._provider_specific_request_extra_fields(request), **self.extra_body}
         if extra_body:
             payload["extra_body"] = extra_body
         from openai import APIStatusError
@@ -583,6 +653,8 @@ class _OpenAIStyleProvider(RetryingProvider):
             payload["include"] = ["reasoning.encrypted_content"]
         if self.send_prompt_cache_key and request.cache_key:
             payload["prompt_cache_key"] = request.cache_key
+        if self.extra_body:
+            payload["extra_body"] = dict(self.extra_body)
         from openai import APIStatusError
 
         try:

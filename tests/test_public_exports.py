@@ -25,6 +25,7 @@ THIN_PACKAGES = (
     "zett_agent.providers",
     "zett_agent.extensions",
     "zett_agent.extensions.server_tools",
+    "zett_agent.sandbox",
 )
 
 #: Provider SDKs and storage engines a bare import must not pull in.

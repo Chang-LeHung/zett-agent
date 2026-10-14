@@ -11,11 +11,77 @@ from ..tools.coding import (
     edit,
     glob,
     grep,
+    read,
     read_file,
     write_file,
 )
 from ..tools.images import view_image
 from .base import AgentExtension
+from .tool import ToolExtension
+
+
+class ReadFileExtension(ToolExtension):
+    """Register ``read_file``, which returns a line range of a UTF-8 text file."""
+
+    def __init__(self) -> None:
+        super().__init__(read_file)
+
+
+class ReadExtension(ToolExtension):
+    """Register ``read``, which returns UTF-8 text or a local image.
+
+    Text comes back as a line range with a continuation hint, exactly like
+    ``read_file``. A PNG, JPEG, GIF, or WebP file comes back as an image plus a
+    one-line description, so one tool covers both without the model choosing
+    between them. It is separate from :class:`FileSystemExtension`, so add it
+    next to (or instead of) :class:`ReadFileExtension` when the model should
+    read images through the same tool.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(read)
+
+
+class ViewImageExtension(ToolExtension):
+    """Register ``view_image`` for local images and HTTP(S) image URLs."""
+
+    def __init__(self) -> None:
+        super().__init__(view_image)
+
+
+class GlobExtension(ToolExtension):
+    """Register ``glob`` to find paths by pattern."""
+
+    def __init__(self) -> None:
+        super().__init__(glob)
+
+
+class GrepExtension(ToolExtension):
+    """Register ``grep`` to search file contents by regular expression."""
+
+    def __init__(self) -> None:
+        super().__init__(grep)
+
+
+class WriteFileExtension(ToolExtension):
+    """Register ``write_file`` to create or replace a whole text file."""
+
+    def __init__(self) -> None:
+        super().__init__(write_file)
+
+
+class EditExtension(ToolExtension):
+    """Register ``edit`` to change an existing file by exact-text replacement."""
+
+    def __init__(self) -> None:
+        super().__init__(edit)
+
+
+class DeleteFileExtension(ToolExtension):
+    """Register ``delete_file`` to remove one regular file."""
+
+    def __init__(self) -> None:
+        super().__init__(delete_file)
 
 
 class FileSystemExtension(AgentExtension):
@@ -23,9 +89,12 @@ class FileSystemExtension(AgentExtension):
 
     Relative paths start from the current working directory; absolute paths are
     accepted. Read-only mode exposes read_file, view_image, glob, and grep. Writable mode
-    additionally exposes write_file and edit. Shell execution is
+    additionally exposes write_file, edit, and delete_file. Shell execution is
     deliberately not a filesystem capability because arbitrary commands cannot
     guarantee that they will leave the workspace unchanged.
+
+    Each tool also has its own extension (:class:`ReadFileExtension`,
+    :class:`EditExtension`, and so on) for an application that wants a subset.
 
     Examples:
         Usage::

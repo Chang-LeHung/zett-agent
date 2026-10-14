@@ -48,6 +48,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "ModelRequestNext",
         "ToolCallNext",
     ),
+    "zett_agent.extensions.bash": ("BashExtension",),
     "zett_agent.extensions.coding": ("CodingExtension",),
     "zett_agent.extensions.compaction": ("CompactionExtension",),
     "zett_agent.extensions.events": (
@@ -65,7 +66,17 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "SteeringMessageEvent",
     ),
     "zett_agent.extensions.external": ("ExternalEvent", "ExternalEventExtension"),
-    "zett_agent.extensions.file_system": ("FileSystemExtension",),
+    "zett_agent.extensions.file_system": (
+        "DeleteFileExtension",
+        "EditExtension",
+        "FileSystemExtension",
+        "GlobExtension",
+        "GrepExtension",
+        "ReadExtension",
+        "ReadFileExtension",
+        "ViewImageExtension",
+        "WriteFileExtension",
+    ),
     "zett_agent.extensions.goal": (
         "GOAL_EVALUATION_TOOL_NAME",
         "GOAL_MODE_EVENT_NAME",

@@ -23,3 +23,20 @@ class SandboxUnavailableError(SandboxError):
     the caller chooses :class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`
     explicitly, or fixes the machine.
     """
+
+
+class SandboxClosedError(SandboxError):
+    """The session was closed (or never opened), so it cannot run anything."""
+
+
+class SandboxCommandError(SandboxError):
+    """A command run with ``check=True`` did not succeed.
+
+    Attributes:
+        result: The full :class:`~zett_agent.sandbox.base.SandboxResult`, so the
+            output and the resource report are still available to the handler.
+    """
+
+    def __init__(self, message: str, result: object) -> None:
+        super().__init__(message)
+        self.result = result

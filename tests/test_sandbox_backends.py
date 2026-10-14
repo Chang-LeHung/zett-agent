@@ -413,3 +413,83 @@ async def test_wrap_gives_a_host_a_command_it_can_spawn_itself(backend, work):
     out, _ = await process.communicate()
 
     assert out.decode().strip() == "spawned"
+
+
+# --------------------------------------------------- the session API, for real
+
+
+@posix_only
+def test_a_session_confines_writes_and_destroys_its_workspace(backend, outside):
+    from zett_agent.sandbox.session import SandboxSession
+
+    with SandboxSession(backend=backend.value, memory="512MB", cpu_seconds=30) as sb:
+        root = sb._root
+        inside = sb.run("echo data > note.txt && cat note.txt", check=True)
+        escaped = sb.run(f"echo escaped > {outside}")
+        assert inside.stdout == "data\n" and (sb.workspace / "note.txt").read_text() == "data\n"
+        assert not escaped.succeeded and not outside.exists()
+        assert sb.sandbox.name == backend.value
+
+    assert not root.exists()
+
+
+@posix_only
+def test_a_session_keeps_the_network_off_and_secrets_out(backend, listener, monkeypatch):
+    from zett_agent.sandbox.session import SandboxSession
+
+    monkeypatch.setenv("ZETT_HOST_SECRET", "hunter2")
+    code = "import os;print(os.environ.get('ZETT_HOST_SECRET'))"
+    with SandboxSession(backend=backend.value) as sb:
+        offline = sb.run(connect_program(listener), timeout=20)
+        secret = sb.run([sys.executable, "-c", code])
+    with SandboxSession(backend=backend.value, network=True) as sb:
+        online = sb.run(connect_program(listener), timeout=20)
+
+    assert not offline.succeeded and "connected" not in offline.stdout
+    assert secret.stdout.strip() == "None"
+    assert online.succeeded and online.stdout.strip() == "connected"
+
+
+@posix_only
+def test_a_session_enforces_its_limits(backend):
+    from zett_agent.sandbox.errors import SandboxCommandError
+    from zett_agent.sandbox.session import SandboxSession
+
+    with SandboxSession(backend=backend.value, cpu_seconds=1, max_file_size="100KB", timeout=60) as sb:
+        spin = sb.run([sys.executable, "-c", "while True: pass"])
+        grow = sb.run([sys.executable, "-c", "open('big','wb').write(b'x'*5_000_000)"])
+        size = (sb.workspace / "big").stat().st_size
+        with pytest.raises(SandboxCommandError, match="cpu limit"):
+            sb.run([sys.executable, "-c", "while True: pass"], check=True)
+
+    assert spin.exit_code == -signal.SIGXCPU and spin.resources.limits_hit == ("cpu",)
+    assert not grow.succeeded and size <= 100 * 1024
+
+
+@posix_only
+def test_closing_a_session_stops_a_command_that_is_still_running(backend):
+    import threading
+    import time
+
+    from zett_agent.sandbox.errors import SandboxClosedError
+    from zett_agent.sandbox.session import SandboxSession
+
+    sb = SandboxSession(backend=backend.value, timeout=None).open()
+    root = sb._root
+    caught: list[BaseException] = []
+
+    def work() -> None:
+        try:
+            sb.run("sleep 60")
+        except BaseException as error:  # noqa: BLE001 - inspected below
+            caught.append(error)
+
+    thread = threading.Thread(target=work)
+    thread.start()
+    time.sleep(1.0)
+    started = time.monotonic()
+    sb.close()
+    thread.join(15)
+
+    assert time.monotonic() - started < 10 and not root.exists()
+    assert len(caught) == 1 and isinstance(caught[0], SandboxClosedError)

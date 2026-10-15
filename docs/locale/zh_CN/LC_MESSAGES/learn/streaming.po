@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"POT-Creation-Date: 2026-10-15 09:52+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -125,46 +125,54 @@ msgid "One complete model response, including usage."
 msgstr "一次完整的模型响应，包括用量。"
 
 #: ../../learn/streaming.rst:90
+msgid "``MODEL_STOPPED``"
+msgstr "``MODEL_STOPPED``"
+
+#: ../../learn/streaming.rst:91
+msgid "The model did not finish normally: it was refused, cut off, interrupted, or paused for good. Follows ``MODEL_COMPLETED`` and carries ``stop``; see :doc:`stop-reasons`."
+msgstr "模型没有正常结束：被拒绝、被截断、被中断，或最终停在暂停状态。它紧跟在 ``MODEL_COMPLETED`` 之后并携带 ``stop``；参见 :doc:`stop-reasons`\\ 。"
+
+#: ../../learn/streaming.rst:92
 msgid "``RUN_COMPLETED``"
 msgstr "``RUN_COMPLETED``"
 
-#: ../../learn/streaming.rst:91
+#: ../../learn/streaming.rst:93
 msgid "The request finished successfully."
 msgstr "请求成功结束。"
 
-#: ../../learn/streaming.rst:92
+#: ../../learn/streaming.rst:94
 msgid "``CUSTOM``"
 msgstr "``CUSTOM``"
 
-#: ../../learn/streaming.rst:93
+#: ../../learn/streaming.rst:95
 msgid "An event your own extension emitted."
 msgstr "你自己的扩展发出的事件。"
 
-#: ../../learn/streaming.rst:95
+#: ../../learn/streaming.rst:97
 msgid "Provider-hosted tools add ``SERVER_TOOL_*`` events; steering and internal continuations add their own pairs. The full list is on :class:`~zett_agent.events.AgentEventType`."
 msgstr "提供商托管的工具会添加 ``SERVER_TOOL_*`` 事件；steering 和 internal continuation 会添加各自的事件对。完整列表见 :class:`~zett_agent.events.AgentEventType`\\ 。"
 
-#: ../../learn/streaming.rst:100
+#: ../../learn/streaming.rst:102
 msgid "Track model usage"
 msgstr "跟踪模型用量"
 
-#: ../../learn/streaming.rst:102
+#: ../../learn/streaming.rst:104
 msgid "Read usage from ``event.response.usage`` on ``MODEL_COMPLETED``. It describes one model step, not the whole user request. A tool round trip often produces two or more such events, so sum their counters to measure the primary loop:"
 msgstr "在 ``MODEL_COMPLETED`` 上从 ``event.response.usage`` 读取用量。它描述的是一次模型处理，而不是整个用户请求。一次工具往返通常会产生两个或更多这类事件，因此要把它们的计数相加来衡量主循环："
 
-#: ../../learn/streaming.rst:114
+#: ../../learn/streaming.rst:116
 msgid "``total_tokens`` is input plus output; reasoning and cache counters are already included and must not be added again. Missing usage is not proof of zero cost. Separate compaction or delegated models can incur additional usage outside these primary model events. See :doc:`../examples/observability` for recorded timings and :doc:`providers` for cache reporting."
 msgstr "``total_tokens`` 是输入加输出；推理和缓存计数已经包含在内，不能再加一次。缺少用量并不能证明成本为零。独立的压缩过程或被委派的模型可能在这些主模型事件之外产生额外用量。记录的时间信息见 :doc:`../examples/observability`，缓存上报见 :doc:`providers`\\ 。"
 
-#: ../../learn/streaming.rst:121
+#: ../../learn/streaming.rst:123
 msgid "Failures are exceptions"
 msgstr "失败就是异常"
 
-#: ../../learn/streaming.rst:123
-msgid "``RUN_COMPLETED`` means success. Provider errors, extension errors, and cancellation propagate as exceptions — they are never converted into a synthetic completion event. Wrap the stream when the UI needs to show a failure, and see :doc:`../examples/cancellation` for cleanup and reuse."
-msgstr "``RUN_COMPLETED`` 表示成功。提供商错误、扩展错误和取消都会以异常形式传播，绝不会被转换成合成的完成事件。界面需要展示失败时，请把流包起来；清理和复用见 :doc:`../examples/cancellation`\\ 。"
+#: ../../learn/streaming.rst:125
+msgid "``RUN_COMPLETED`` means the request ran to its end, which is not the same as the model finishing its answer: a refusal ends a request and still completes it. Check ``MODEL_STOPPED`` or ``message.stop`` for that; see :doc:`stop-reasons`. Provider errors, extension errors, and cancellation propagate as exceptions — they are never converted into a synthetic completion event. Wrap the stream when the UI needs to show a failure, and see :doc:`../examples/cancellation` for cleanup and reuse."
+msgstr "``RUN_COMPLETED`` 表示请求运行到了结尾，这与模型完成回答不是一回事：拒绝也会结束并完成一次请求。要判断这一点，请检查 ``MODEL_STOPPED`` 或 ``message.stop``；参见 :doc:`stop-reasons`\\ 。提供方错误、扩展错误和取消都会以异常传播，不会被转换成合成的完成事件。当 UI 需要展示失败时，请包装这个流，并参阅 :doc:`../examples/cancellation` 了解清理与复用。"
 
-#: ../../learn/streaming.rst:128
+#: ../../learn/streaming.rst:132
 msgid "Next: keep the conversation in :doc:`sessions`, or read :doc:`../concepts/events` for the difference between UI events, internal notifications, and external input."
 msgstr "下一步：把对话保存在 :doc:`sessions` 中，或者阅读 :doc:`../concepts/events`，了解界面事件、内部通知和外部输入之间的区别。"
 

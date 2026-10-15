@@ -16,6 +16,7 @@ from ..messages import (
 )
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
+    DEFAULT_TIMEOUT_OPTIONS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
@@ -26,25 +27,35 @@ from ..model import (
     ServerToolDefinition,
     ServerToolInputDelta,
     ServerToolResult,
+    TimeoutOptions,
     ToolCallDelta,
     ToolDefinition,
     validate_response,
     validate_retry,
+    validate_timeout,
 )
+from ..stop import StopInfo, StopReason, classify_stop
 from .base import (
     ProviderAuthError,
     ProviderResponseError,
     RetryingProvider,
+    _empty_stream_message,
     _parse_tool_calls,
     _reasoning_effort_to_budget,
     _to_model_data,
     _ToolCallAccumulator,
+    describe_status_error,
+    guard_idle,
+    http_error,
+    httpx_timeout,
+    require_event_stream,
     retry_model_stream,
     validate_extra_body,
     validate_extra_headers,
     validate_extra_query,
 )
 from .responses import local_tool_search_name
+from .stop_reasons import withhold_replay_blocks
 from .tool_arguments import ToolArgumentsError, decode_tool_arguments
 from .tool_images import expand_tool_images
 
@@ -226,6 +237,10 @@ class AnthropicProvider(RetryingProvider):
         transport: Optional HTTPX transport for isolated tests or custom routing.
         response: Must remain false; this adapter uses Anthropic Messages API.
         retry: Exponential backoff for transient failures before output starts.
+        timeout: How long the provider may stay silent before the request is given up on:
+            connecting, waiting for the response headers, and between chunks of a response
+            that has started. See :class:`~zett_agent.model.TimeoutOptions`; a timeout raises
+            :class:`~zett_agent.providers.base.ProviderTimeoutError` and is not retried.
         prompt_cache: Mark cache breakpoints on the tool definitions, the system
             prompt, and the conversation so far. Anthropic caches only what a
             marker asks for, so disabling this trades prompt-cache reads for a
@@ -295,6 +310,7 @@ class AnthropicProvider(RetryingProvider):
         extra_headers: Mapping[str, str] | None = None,
         extra_query: Mapping[str, str] | None = None,
         extra_body: Mapping[str, Any] | None = None,
+        timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
     ) -> None:
         import httpx
         import truststore
@@ -305,6 +321,7 @@ class AnthropicProvider(RetryingProvider):
         if not api_key:
             raise ValueError("api_key is required")
         validate_retry(retry)
+        validate_timeout(timeout)
         if not isinstance(prompt_cache, bool):
             raise ValueError("prompt_cache must be a boolean")
         if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
@@ -314,6 +331,7 @@ class AnthropicProvider(RetryingProvider):
         self.extra_query = validate_extra_query(extra_query)
         self.extra_body = validate_extra_body(extra_body)
         self.retry = retry
+        self.timeout = timeout
         self.response = response
         self.prompt_cache = prompt_cache
         self.model = model
@@ -329,6 +347,7 @@ class AnthropicProvider(RetryingProvider):
             base_url=base_url,
             http_client=self._http_client,
             max_retries=0,
+            timeout=httpx_timeout(timeout),
             default_headers=self.extra_headers or None,
             default_query=self.extra_query or None,
         )
@@ -395,6 +414,7 @@ class AnthropicProvider(RetryingProvider):
         text = ""
         reasoning = ""
         finish_reason = None
+        stop_details: Mapping[str, Any] = {}
         streams: dict[int, _ToolCallAccumulator] = {}
         server_streams: dict[int, _ToolCallAccumulator] = {}
         server_initial_inputs: dict[int, dict[str, Any]] = {}
@@ -404,19 +424,25 @@ class AnthropicProvider(RetryingProvider):
         from anthropic import AnthropicError
 
         try:
-            response = await self._client.messages.create(
-                **body, **({"extra_body": self.extra_body} if self.extra_body else {})
+            response = await self._first_byte(
+                self._client.messages.create(**body, **({"extra_body": self.extra_body} if self.extra_body else {}))
             )
         except AnthropicError as error:
-            status_code = getattr(error, "status_code", None)
-            match status_code:
-                case 401:
-                    raise ProviderAuthError("Provider rejected API credential") from error
-                case _:
-                    raise ProviderResponseError("Provider stream request failed") from error
+            if getattr(error, "status_code", None) is None:
+                # No HTTP response at all: the connection failed or timed out. The SDK's own
+                # text ("Connection error.") is what says why; a timeout is recognized from the
+                # chain by the retry layer, which turns it into a typed error.
+                raise ProviderResponseError(f"Anthropic request failed: {error}") from error
+            status, failure, message = describe_status_error("anthropic", error)
+            if status == 401:
+                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
+            raise http_error(status, failure, message) from error
 
+        await require_event_stream(response, "anthropic")
+        events_seen = 0
         try:
-            async for event in response:
+            async for event in guard_idle(response, self.timeout):
+                events_seen += 1
                 data = _to_model_data(event)
                 event_type = data.get("type")
                 match event_type:
@@ -516,6 +542,8 @@ class AnthropicProvider(RetryingProvider):
                     case "message_delta":
                         delta = data.get("delta", {})
                         finish_reason = delta.get("stop_reason")
+                        if isinstance(details := delta.get("stop_details"), Mapping):
+                            stop_details = details
                         token_info = data.get("usage", {})
                         usage = replace(
                             usage,
@@ -526,9 +554,18 @@ class AnthropicProvider(RetryingProvider):
         finally:
             await response.close()
 
+        if not events_seen:
+            raise ProviderResponseError(_empty_stream_message("anthropic", response))
         tool_calls = _parse_tool_calls(streams, finish_reason)
         for index, stream in streams.items():
             replay[index]["input"] = _lenient_arguments(stream.argument_buffer, index)
+        stop = _anthropic_stop(finish_reason, stop_details, has_tool_calls=bool(tool_calls))
+        blocks = tuple(replay[index] for index in sorted(replay))
+        if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
+            # A refusal can arrive after a complete ``tool_use`` was streamed. The call is
+            # withheld from the message, and a ``tool_use`` block replayed without a result
+            # would be rejected, so the block goes as well.
+            blocks = withhold_replay_blocks(blocks, lambda block: block.get("type") == "tool_use")
         yield ModelEvent.completed(
             ModelResponse(
                 message=AssistantMessage(
@@ -537,12 +574,36 @@ class AnthropicProvider(RetryingProvider):
                     tool_calls=tool_calls,
                     provider="anthropic",
                     model=self.model,
-                    replay_blocks=tuple(replay[index] for index in sorted(replay)),
+                    replay_blocks=blocks,
                 ),
                 finish_reason=finish_reason,
                 usage=usage,
+                stop=stop,
             )
         )
+
+
+def _anthropic_stop(finish_reason: str | None, details: Mapping[str, Any], *, has_tool_calls: bool) -> StopInfo:
+    """Build the stop of a Messages response from ``stop_reason`` and ``stop_details``.
+
+    ``stop_details`` is null for every reason but ``refusal``. On a refusal its
+    ``category`` and ``explanation`` can both be null, which is a normal value and is not
+    treated as missing data; the category then falls back to the reason itself.
+    """
+    kept = {
+        key: details[key]
+        for key in ("fallback_credit_token", "fallback_has_prefill_claim")
+        if details.get(key) is not None
+    }
+    category, explanation, recommended = (details.get(key) for key in ("category", "explanation", "recommended_model"))
+    return classify_stop(
+        finish_reason,
+        has_tool_calls=has_tool_calls,
+        category=str(category) if category else None,
+        message=str(explanation) if explanation else None,
+        recommended_model=str(recommended) if recommended else None,
+        detail=kept,
+    )
 
 
 def _lenient_arguments(payload: str, index: int) -> dict[str, Any]:

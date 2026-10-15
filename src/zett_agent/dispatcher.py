@@ -109,6 +109,9 @@ class AgentEventDispatcher(SyncMethodsMixin):
     async def on_model_completed_event(self, event: AgentEvent) -> None:
         """Handle the complete model response."""
 
+    async def on_model_stopped_event(self, event: AgentEvent) -> None:
+        """Handle a model step that was refused, cut off, interrupted, or paused for good."""
+
     async def on_tool_started_event(self, event: AgentEvent) -> None:
         """Handle the start of tool execution."""
 

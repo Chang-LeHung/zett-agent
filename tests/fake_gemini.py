@@ -96,6 +96,19 @@ def script(model: str, body: dict[str, Any]) -> list[dict[str, Any]]:
             _chunk([{"text": summary}], finish="STOP", usage=usage),
         ]
     text = _user_text(contents)
+    # Safety behaviour, selected by a phrase in the prompt, as the live service decides it
+    # itself: a blocked prompt has no candidate at all, and a refusal ends a candidate.
+    if "blocked prompt" in text:
+        return [{"promptFeedback": {"blockReason": "PROHIBITED_CONTENT", "blockReasonMessage": "Prompt blocked"}}]
+    if "refused after a call" in text:
+        call = {"functionCall": {"name": "get_weather", "args": {"city": "Paris"}}}
+        return [_chunk([call], finish="SAFETY", usage=usage)]
+    if "refused halfway" in text:
+        chunk = _chunk([{"text": "Here is the start of"}], finish="SAFETY", usage=usage)
+        chunk["candidates"][0]["finishMessage"] = "The response was blocked."
+        return [chunk]
+    if "too long" in text:
+        return [_chunk([{"text": "cut"}], finish="MAX_TOKENS", usage=usage)]
     match = re.search(r"weather in (\w+) and (\w+)", text)
     if match and body.get("tools"):
         names = {declaration["name"] for tool in body["tools"] for declaration in tool.get("functionDeclarations", ())}

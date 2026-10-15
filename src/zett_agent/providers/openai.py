@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from ..model import DEFAULT_RETRY_OPTIONS, ModelRequest, RetryOptions
+from ..model import DEFAULT_RETRY_OPTIONS, DEFAULT_TIMEOUT_OPTIONS, ModelRequest, RetryOptions, TimeoutOptions
 from .base import _OpenAIStyleProvider
 
 if TYPE_CHECKING:
@@ -21,6 +21,10 @@ class OpenAIProvider(_OpenAIStyleProvider):
         temperature: Optional sampling temperature passed to the provider.
         response: Use the Responses API instead of Chat Completions.
         retry: Exponential backoff applied before the first emitted event only.
+        timeout: How long the provider may stay silent before the request is given up on:
+            connecting, waiting for the response headers, and between chunks of a response
+            that has started. See :class:`~zett_agent.model.TimeoutOptions`; a timeout raises
+            :class:`~zett_agent.providers.base.ProviderTimeoutError` and is not retried.
         send_prompt_cache_key: Declare the run's prompt cache key on every
             request. Disable it when a compatible endpoint rejects the field.
         extra_headers: HTTP headers sent on every request after the adapter's
@@ -82,6 +86,7 @@ class OpenAIProvider(_OpenAIStyleProvider):
         extra_headers: Mapping[str, str] | None = None,
         extra_query: Mapping[str, str] | None = None,
         extra_body: Mapping[str, Any] | None = None,
+        timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
     ) -> None:
         super().__init__(
             model=model,
@@ -95,6 +100,7 @@ class OpenAIProvider(_OpenAIStyleProvider):
             extra_headers=extra_headers,
             extra_query=extra_query,
             extra_body=extra_body,
+            timeout=timeout,
         )
         self.provider_name = "openai"
 

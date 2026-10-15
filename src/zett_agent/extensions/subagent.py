@@ -6,14 +6,16 @@ import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
 
 from .._compat import TypeAliasType
 from ..agent import Agent, AgentRunConfig, AgentRunContext
 from ..ids import new_uuid7
+from ..messages import AssistantMessage
 from ..model import AgentModel, ReasoningEffort
+from ..stop import StopInfo
 from ..tools.base import (
     AgentTool,
     tool,
@@ -74,6 +76,33 @@ class SubAgentResult(BaseModel):
     parent_session_id: str = Field(description="Parent session that delegated this task")
     subagent_type: str = Field(description="Selected subagent definition")
     content: str = Field(description="Subagent's final report for the parent agent")
+    stop: StopInfo | None = Field(
+        default=None,
+        description="Why the subagent stopped early; absent when it finished normally. "
+        "If present, the report may be missing or partial.",
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_stop(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Leave ``stop`` out when the subagent finished, so a normal result is exactly what it was."""
+        data = handler(self)
+        if data.get("stop") is None:
+            data.pop("stop", None)
+        return data
+
+
+def subagent_report(result: AssistantMessage) -> str:
+    """Return a subagent's report, with a leading notice when it did not finish.
+
+    A subagent that was refused, cut off, or interrupted still returns a message, and its
+    text can be empty or partial. A parent model that is handed that text as "the report"
+    would treat it as a finished answer, so the notice is part of what it reads.
+    """
+    stop = result.stop
+    if stop is None or stop.ok:
+        return result.content
+    notice = f"[The subagent stopped before finishing: {stop.describe()}. Treat this report as incomplete.]"
+    return f"{notice}\n\n{result.content}" if result.content else notice
 
 
 def default_subagents(model: AgentModel) -> tuple[SubAgentDefinition, ...]:
@@ -216,7 +245,8 @@ class SubAgentExtension(AgentExtension):
                 session_id=child_session_id,
                 parent_session_id=context.config.session_id,
                 subagent_type=definition.name,
-                content=result.content,
+                content=subagent_report(result),
+                stop=result.stop if result.stop is not None and not result.stop.ok else None,
             )
 
         parameters = deepcopy(task.parameters)

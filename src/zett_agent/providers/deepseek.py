@@ -3,7 +3,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from ..model import DEFAULT_RETRY_OPTIONS, ModelRequest, ReasoningEffort, RetryOptions
+from ..model import (
+    DEFAULT_RETRY_OPTIONS,
+    DEFAULT_TIMEOUT_OPTIONS,
+    ModelRequest,
+    ReasoningEffort,
+    RetryOptions,
+    TimeoutOptions,
+)
 from .base import _OpenAIStyleProvider
 
 if TYPE_CHECKING:
@@ -21,6 +28,10 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         temperature: Optional provider sampling temperature.
         response: Use DeepSeek's Responses-compatible endpoint instead of Chat Completions.
         retry: Model-owned retry/backoff policy; never restarts an emitted stream.
+        timeout: How long the provider may stay silent before the request is given up on:
+            connecting, waiting for the response headers, and between chunks of a response
+            that has started. See :class:`~zett_agent.model.TimeoutOptions`; a timeout raises
+            :class:`~zett_agent.providers.base.ProviderTimeoutError` and is not retried.
         send_prompt_cache_key: Declare the run's prompt cache key on every
             request. Off by default: DeepSeek caches context automatically and
             its compatibility endpoint does not document the field. Enable it
@@ -78,6 +89,7 @@ class DeepSeekProvider(_OpenAIStyleProvider):
         extra_headers: Mapping[str, str] | None = None,
         extra_query: Mapping[str, str] | None = None,
         extra_body: Mapping[str, Any] | None = None,
+        timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
     ) -> None:
         super().__init__(
             model=model,
@@ -91,6 +103,7 @@ class DeepSeekProvider(_OpenAIStyleProvider):
             extra_headers=extra_headers,
             extra_query=extra_query,
             extra_body=extra_body,
+            timeout=timeout,
         )
         self.provider_name = "deepseek"
 

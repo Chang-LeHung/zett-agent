@@ -1,0 +1,473 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C)
+# This file is distributed under the same license as the Zett Agent package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-15 09:55+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/stop-reasons.rst:2
+msgid "Know why the model stopped"
+msgstr "了解模型为什么停下"
+
+#: ../../learn/stop-reasons.rst:4
+msgid "A request ends when the model has nothing more to ask for. That is not the same as the model *finishing*. It may have refused, run into its output limit, filled the context window, or lost its connection halfway through a sentence. Providers report each of these differently, and a program that only looks for tool calls sees all of them as \"the model answered\"."
+msgstr "当模型没有更多要请求的东西时，请求就结束了。这与模型*完成*回答不是一回事：它可能拒绝了，可能撞上了输出上限，可能填满了上下文窗口，也可能在句子说到一半时断开了连接。各个提供方报告这些情况的方式都不同，而只检查工具调用的程序会把它们全部看成“模型回答了”。"
+
+#: ../../learn/stop-reasons.rst:10
+msgid "Zett Agent reads every provider's report into one vocabulary and puts it where a host can see it, instead of dropping it."
+msgstr "Zett Agent 会把每个提供方的报告读成同一套词汇，并放到宿主能看见的地方，而不是把它丢掉。"
+
+#: ../../learn/stop-reasons.rst:14
+msgid "Check how it ended"
+msgstr "检查它是怎么结束的"
+
+#: ../../learn/stop-reasons.rst:16
+msgid "An abnormal stop is on the message the run returns:"
+msgstr "非正常停止会记录在运行返回的消息上："
+
+#: ../../learn/stop-reasons.rst:26
+msgid "``message.stop`` is ``None`` when the model finished or asked for tools, which includes every message stored before this existed. When it is set it is a :class:`~zett_agent.stop.StopInfo`:"
+msgstr "当模型正常结束或请求了工具时，``message.stop`` 为 ``None``，这也包括在此功能出现之前存储的所有消息。设置了它时，它是一个 :class:`~zett_agent.stop.StopInfo`："
+
+#: ../../learn/stop-reasons.rst:34
+msgid "Field"
+msgstr "字段"
+
+#: ../../learn/stop-reasons.rst:35 ../../learn/stop-reasons.rst:85
+msgid "Meaning"
+msgstr "含义"
+
+#: ../../learn/stop-reasons.rst:36
+msgid "``reason``"
+msgstr "``reason``"
+
+#: ../../learn/stop-reasons.rst:37
+msgid "The normalized :class:`~zett_agent.stop.StopReason`. Branch on this."
+msgstr "归一化后的 :class:`~zett_agent.stop.StopReason`\\ 。请依据它来分支处理。"
+
+#: ../../learn/stop-reasons.rst:38
+msgid "``raw``"
+msgstr "``raw``"
+
+#: ../../learn/stop-reasons.rst:39
+msgid "The provider's own value, unchanged, such as ``\"content_filter\"``."
+msgstr "提供方自己的取值，原样保留，例如 ``\"content_filter\"``\\ 。"
+
+#: ../../learn/stop-reasons.rst:40
+msgid "``category``"
+msgstr "``category``"
+
+#: ../../learn/stop-reasons.rst:41
+msgid "What kind: the provider's policy category (``\"cyber\"``, ``\"SAFETY\"``) or, if it has none, the raw value."
+msgstr "类别：提供方的策略类别（``\"cyber\"``、``\"SAFETY\"``）；如果提供方没有给出，则为原始取值。"
+
+#: ../../learn/stop-reasons.rst:42
+msgid "``message``"
+msgstr "``message``"
+
+#: ../../learn/stop-reasons.rst:43
+msgid "A sentence for a person: the refusal text, or the provider's explanation. Show it; do not parse it."
+msgstr "给人看的一句话：拒绝文本或提供方的解释。请展示它，不要解析它。"
+
+#: ../../learn/stop-reasons.rst:44
+msgid "``recommended_model``"
+msgstr "``recommended_model``"
+
+#: ../../learn/stop-reasons.rst:45
+msgid "A model the provider suggests retrying on, when it does."
+msgstr "提供方建议改用重试的模型（如果它给出了的话）。"
+
+#: ../../learn/stop-reasons.rst:46
+msgid "``detail``"
+msgstr "``detail``"
+
+#: ../../learn/stop-reasons.rst:47
+msgid "Provider-specific facts with no normalized home, such as an OpenRouter ``native_finish_reason`` or the names of tool calls that were withheld."
+msgstr "没有归一化位置的提供方特有信息，例如 OpenRouter 的 ``native_finish_reason``，或被扣下的工具调用的名称。"
+
+#: ../../learn/stop-reasons.rst:49
+msgid "Scripts can ask to be told instead of checking:"
+msgstr "脚本可以选择被通知，而不是自己检查："
+
+#: ../../learn/stop-reasons.rst:55
+msgid "The runtime never raises it for you. A refusal is a normal outcome, so a host that does not look still gets the conversation back."
+msgstr "运行时绝不会替你抛出它。拒绝是一种正常结果，所以不去检查的宿主依然能拿回对话。"
+
+#: ../../learn/stop-reasons.rst:59
+msgid "Hear about it as it happens"
+msgstr "在它发生时就得知"
+
+#: ../../learn/stop-reasons.rst:61
+msgid "A streaming UI gets a ``MODEL_STOPPED`` event right after ``MODEL_COMPLETED``. It is sent only for an abnormal stop, so there is nothing to filter:"
+msgstr "流式 UI 会在 ``MODEL_COMPLETED`` 之后立即收到一个 ``MODEL_STOPPED`` 事件。它只在非正常停止时发送，所以无需过滤："
+
+#: ../../learn/stop-reasons.rst:70
+msgid "With an :class:`~zett_agent.dispatcher.AgentEventDispatcher`, override ``on_model_stopped_event``. An extension sees the same value as ``response.stop`` in ``after_model``."
+msgstr "使用 :class:`~zett_agent.dispatcher.AgentEventDispatcher` 时，请重写 ``on_model_stopped_event``\\ 。扩展在 ``after_model`` 中看到的是同一个值，即 ``response.stop``\\ 。"
+
+#: ../../learn/stop-reasons.rst:74
+msgid "``RUN_COMPLETED`` still follows. It means the request ran to its end, and a refusal ends a request and completes it; ``MODEL_STOPPED`` is how you tell the two apart."
+msgstr "``RUN_COMPLETED`` 仍然会随后到来。它表示请求运行到了结尾，而拒绝会结束并完成一次请求；要区分这两种情况，就靠 ``MODEL_STOPPED``\\ 。"
+
+#: ../../learn/stop-reasons.rst:78
+msgid "What each reason means"
+msgstr "各个原因的含义"
+
+#: ../../learn/stop-reasons.rst:84
+msgid "Reason"
+msgstr "原因"
+
+#: ../../learn/stop-reasons.rst:86
+msgid "What the runtime does"
+msgstr "运行时会怎么做"
+
+#: ../../learn/stop-reasons.rst:87
+msgid "``END_TURN``"
+msgstr "``END_TURN``"
+
+#: ../../learn/stop-reasons.rst:88
+msgid "The model finished, or hit a stop sequence you set."
+msgstr "模型完成了回答，或遇到了你设置的停止序列。"
+
+#: ../../learn/stop-reasons.rst:89
+msgid "Nothing; not reported."
+msgstr "什么也不做；不上报。"
+
+#: ../../learn/stop-reasons.rst:90
+msgid "``TOOL_USE``"
+msgstr "``TOOL_USE``"
+
+#: ../../learn/stop-reasons.rst:91
+msgid "The model asked for tools."
+msgstr "模型请求了工具。"
+
+#: ../../learn/stop-reasons.rst:92
+msgid "Runs them; not reported."
+msgstr "运行这些工具；不上报。"
+
+#: ../../learn/stop-reasons.rst:93
+msgid "``MAX_OUTPUT``"
+msgstr "``MAX_OUTPUT``"
+
+#: ../../learn/stop-reasons.rst:94
+msgid "The output limit was reached. Text, or a tool call's arguments, is cut off."
+msgstr "达到了输出上限。文本，或某个工具调用的参数，被截断了。"
+
+#: ../../learn/stop-reasons.rst:95
+msgid "Reports it. A tool call with cut-off arguments is answered with an error, as before."
+msgstr "上报它。参数被截断的工具调用会像以前一样得到一个错误作为回应。"
+
+#: ../../learn/stop-reasons.rst:96
+msgid "``CONTEXT_FULL``"
+msgstr "``CONTEXT_FULL``"
+
+#: ../../learn/stop-reasons.rst:97
+msgid "The context window filled. The output is cut off."
+msgstr "上下文窗口被填满了。输出被截断。"
+
+#: ../../learn/stop-reasons.rst:98
+msgid "Reports it."
+msgstr "上报它。"
+
+#: ../../learn/stop-reasons.rst:99
+msgid "``REFUSAL``"
+msgstr "``REFUSAL``"
+
+#: ../../learn/stop-reasons.rst:100
+msgid "The model, or a safety system in front of it, declined."
+msgstr "模型，或位于它前面的安全系统，拒绝了。"
+
+#: ../../learn/stop-reasons.rst:101 ../../learn/stop-reasons.rst:104
+msgid "**Withholds tool calls**, ends the request, reports it."
+msgstr "**扣下工具调用**，结束请求，并上报。"
+
+#: ../../learn/stop-reasons.rst:102
+msgid "``INTERRUPTED``"
+msgstr "``INTERRUPTED``"
+
+#: ../../learn/stop-reasons.rst:103
+msgid "Infrastructure ended the response: a provider error, a dropped stream, no capacity."
+msgstr "基础设施终止了响应：提供方错误、流中断、容量不足。"
+
+#: ../../learn/stop-reasons.rst:105
+msgid "``PAUSED``"
+msgstr "``PAUSED``"
+
+#: ../../learn/stop-reasons.rst:106
+msgid "The provider handed control back and wants the turn continued."
+msgstr "提供方把控制权交了回来，希望继续这一轮。"
+
+#: ../../learn/stop-reasons.rst:107
+msgid "Continues, up to ``Agent.max_pause_continuations`` times (5); reports it only when that runs out."
+msgstr "继续，最多 ``Agent.max_pause_continuations`` 次（5 次）；只有次数用尽时才上报。"
+
+#: ../../learn/stop-reasons.rst:108
+msgid "``OTHER``"
+msgstr "``OTHER``"
+
+#: ../../learn/stop-reasons.rst:109
+msgid "A value this library does not know. ``raw`` has it."
+msgstr "本库不认识的取值。\\ ``raw`` 中保留着它。"
+
+#: ../../learn/stop-reasons.rst:110
+msgid "Reports it and otherwise carries on."
+msgstr "上报它，其余照常进行。"
+
+#: ../../learn/stop-reasons.rst:112
+msgid "A new provider value never breaks a run: it becomes ``OTHER`` with the original kept."
+msgstr "提供方新增的取值绝不会让运行中断：它会变成 ``OTHER``，并保留原值。"
+
+#: ../../learn/stop-reasons.rst:115
+msgid "Tool calls that come with a refusal are not run"
+msgstr "随拒绝而来的工具调用不会被运行"
+
+#: ../../learn/stop-reasons.rst:117
+msgid "A refusal can arrive after a complete tool call was already streamed, and an interrupted stream may end in the middle of one. Running that call would act on output the model or the provider disowned. So for ``REFUSAL`` and ``INTERRUPTED`` the calls are removed from the stored message, the tool is never started, and the names of what was withheld are in ``stop.detail[\"withheld_tool_calls\"]``. The provider's own record of the call goes too, because a ``tool_use`` replayed without a result is rejected by the API."
+msgstr "拒绝可能在一个完整的工具调用已经流出之后才到来，而被中断的流也可能恰好在某个调用中间结束。运行这样的调用，等于按模型或提供方已经否认的输出行事。因此对于 ``REFUSAL`` 和 ``INTERRUPTED``，这些调用会从存储的消息中移除，工具永远不会启动，被扣下的调用名称保存在 ``stop.detail[\"withheld_tool_calls\"]`` 中。提供方自己记录的该调用也会一并去掉，因为没有结果的 ``tool_use`` 被回放时会被 API 拒绝。"
+
+#: ../../learn/stop-reasons.rst:124
+msgid ":download:`Download stop_reasons.py <../_examples/stop_reasons.py>` for a complete, offline program that streams a partial answer and a tool call, refuses, and shows that the tool never ran."
+msgstr "完整的离线程序请 :download:`下载 stop_reasons.py <../_examples/stop_reasons.py>`：它先流出一段部分回答和一个工具调用，然后拒绝，并展示工具从未运行。"
+
+#: ../../learn/stop-reasons.rst:133
+msgid "Where the reason comes from"
+msgstr "原因从哪里来"
+
+#: ../../learn/stop-reasons.rst:135
+msgid "A provider can say it in four ways, and each is read:"
+msgstr "提供方可以用四种方式说明，每一种都会被读取："
+
+#: ../../learn/stop-reasons.rst:137
+msgid "**A value** in ``finish_reason`` or ``stop_reason``. Every provider."
+msgstr "**一个取值**，位于 ``finish_reason`` 或 ``stop_reason``\\ 。所有提供方都有。"
+
+#: ../../learn/stop-reasons.rst:138
+msgid "**A refusal in the content.** OpenAI's ``refusal`` field and content block. The text is kept and shown like any other answer, and it becomes ``stop.message``. This is the one that used to be lost: such a response finishes with ``stop`` and no text."
+msgstr "**内容里的拒绝。** OpenAI 的 ``refusal`` 字段和内容块。文本会被保留，并像其他回答一样展示，同时成为 ``stop.message``\\ 。这正是过去会丢失的那一种：这样的响应以 ``stop`` 结束，而且没有文本。"
+
+#: ../../learn/stop-reasons.rst:141
+msgid "**A refusal before any output**, which arrives as an error rather than a stop: a blocked prompt on Google, a ``content_filter`` ``400`` on Kimi, a moderation or guardrail ``403`` on OpenRouter, a policy failure on the OpenAI Responses API. These are answered as a ``REFUSAL`` with an empty message, so the conversation continues and the host is told why. Every other error status still raises as it did."
+msgstr "**任何输出之前的拒绝**，它以错误而不是停止的形式到来：Google 上被拦截的提示、Kimi 上 ``content_filter`` 的 ``400``、OpenRouter 上的审核或护栏 ``403``、OpenAI Responses API 上的策略失败。这些会被当作消息为空的 ``REFUSAL`` 来回应，使对话得以继续，并让宿主知道原因。其他所有错误状态仍然像以前一样抛出异常。"
+
+#: ../../learn/stop-reasons.rst:146
+msgid "**An error inside a successful stream.** OpenRouter sends one after the ``200`` is committed. With output already written it ends the response as ``INTERRUPTED`` and keeps the text; with none, it is raised as an error, so the usual retry applies."
+msgstr "**成功流内部的错误。** OpenRouter 会在 ``200`` 已经提交之后发送这种错误。如果已经有输出，响应会以 ``INTERRUPTED`` 结束并保留文本；如果还没有输出，则会作为错误抛出，因此通常的重试仍然适用。"
+
+#: ../../learn/stop-reasons.rst:151
+msgid "What each provider sends"
+msgstr "各个提供方发送什么"
+
+#: ../../learn/stop-reasons.rst:153
+msgid "These are the values each provider documents, and what they become. A value not listed is ``OTHER``."
+msgstr "下面是各提供方在文档中列出的取值，以及它们会变成什么。未列出的取值是 ``OTHER``\\ 。"
+
+#: ../../learn/stop-reasons.rst:160
+msgid "Provider"
+msgstr "提供方"
+
+#: ../../learn/stop-reasons.rst:161
+msgid "Values"
+msgstr "取值"
+
+#: ../../learn/stop-reasons.rst:162
+msgid "Refusals arrive as"
+msgstr "拒绝的到达方式"
+
+#: ../../learn/stop-reasons.rst:163
+msgid "Anthropic"
+msgstr "Anthropic"
+
+#: ../../learn/stop-reasons.rst:164
+msgid "``end_turn``, ``stop_sequence``, ``tool_use``, ``max_tokens``, ``pause_turn``, ``refusal``, ``model_context_window_exceeded``"
+msgstr "``end_turn``、``stop_sequence``、``tool_use``、``max_tokens``、``pause_turn``、``refusal``、``model_context_window_exceeded``"
+
+#: ../../learn/stop-reasons.rst:165
+msgid "``stop_reason: \"refusal\"``, possibly mid-stream, with ``stop_details`` (``category``: ``cyber``, ``bio``, ``frontier_llm``, ``reasoning_extraction``, ``general_harms``; ``explanation``; ``recommended_model``)"
+msgstr "``stop_reason: \"refusal\"``，可能出现在流的中途，并带有 ``stop_details``\\ （``category``：``cyber``、``bio``、``frontier_llm``、``reasoning_extraction``、``general_harms``；``explanation``；``recommended_model``）"
+
+#: ../../learn/stop-reasons.rst:166
+msgid "OpenAI Chat"
+msgstr "OpenAI Chat"
+
+#: ../../learn/stop-reasons.rst:167
+msgid "``stop``, ``length``, ``tool_calls``, ``content_filter``, ``function_call``"
+msgstr "``stop``、``length``、``tool_calls``、``content_filter``、``function_call``"
+
+#: ../../learn/stop-reasons.rst:168
+msgid "``content_filter``, or the ``refusal`` field"
+msgstr "``content_filter``，或 ``refusal`` 字段"
+
+#: ../../learn/stop-reasons.rst:169
+msgid "OpenAI Responses"
+msgstr "OpenAI Responses"
+
+#: ../../learn/stop-reasons.rst:170
+msgid "``completed``, or ``incomplete`` with ``max_output_tokens`` or ``content_filter``"
+msgstr "``completed``，或者 ``incomplete`` 并带有 ``max_output_tokens`` 或 ``content_filter``"
+
+#: ../../learn/stop-reasons.rst:171
+msgid "A ``refusal`` content block, ``incomplete`` + ``content_filter``, or a failure with a policy ``error.code`` (``bio_policy``, ``image_content_policy_violation``)"
+msgstr "``refusal`` 内容块、``incomplete`` + ``content_filter``，或带有策略类 ``error.code`` 的失败（``bio_policy``、``image_content_policy_violation``）"
+
+#: ../../learn/stop-reasons.rst:172
+msgid "DeepSeek"
+msgstr "DeepSeek"
+
+#: ../../learn/stop-reasons.rst:173
+msgid "``stop``, ``length``, ``content_filter``, ``tool_calls``, ``insufficient_system_resource``, ``aborted``"
+msgstr "``stop``、``length``、``content_filter``、``tool_calls``、``insufficient_system_resource``、``aborted``"
+
+#: ../../learn/stop-reasons.rst:174
+msgid "``content_filter``. ``length`` also covers an over-long conversation, so it is ``MAX_OUTPUT``."
+msgstr "``content_filter``\\ 。\\ ``length`` 同时涵盖对话过长的情况，所以映射为 ``MAX_OUTPUT``\\ 。"
+
+#: ../../learn/stop-reasons.rst:175
+msgid "GLM (Z.ai)"
+msgstr "GLM（智谱 Z.ai）"
+
+#: ../../learn/stop-reasons.rst:176
+msgid "``stop``, ``tool_calls``, ``length``, ``sensitive``, ``model_context_window_exceeded``, ``network_error``"
+msgstr "``stop``、``tool_calls``、``length``、``sensitive``、``model_context_window_exceeded``、``network_error``"
+
+#: ../../learn/stop-reasons.rst:177
+msgid "``sensitive``"
+msgstr "``sensitive``"
+
+#: ../../learn/stop-reasons.rst:178
+msgid "Kimi (Moonshot)"
+msgstr "Kimi（Moonshot）"
+
+#: ../../learn/stop-reasons.rst:179
+msgid "``stop``, ``length``, ``tool_calls``"
+msgstr "``stop``、``length``、``tool_calls``"
+
+#: ../../learn/stop-reasons.rst:180
+msgid "``HTTP 400`` with ``error.type: \"content_filter\"``"
+msgstr "``HTTP 400``，且 ``error.type: \"content_filter\"``"
+
+#: ../../learn/stop-reasons.rst:181
+msgid "OpenRouter"
+msgstr "OpenRouter"
+
+#: ../../learn/stop-reasons.rst:182
+msgid "``tool_calls``, ``stop``, ``length``, ``content_filter``, ``error``; ``native_finish_reason`` is the upstream value"
+msgstr "``tool_calls``、``stop``、``length``、``content_filter``、``error``；``native_finish_reason`` 是上游的取值"
+
+#: ../../learn/stop-reasons.rst:183
+msgid "``content_filter``; a moderation ``403`` (``metadata.reasons``); a guardrail ``403`` (``metadata.patterns``)"
+msgstr "``content_filter``；审核 ``403``\\ （``metadata.reasons``）；护栏 ``403``\\ （``metadata.patterns``）"
+
+#: ../../learn/stop-reasons.rst:184
+msgid "OpenCode Zen"
+msgstr "OpenCode Zen"
+
+#: ../../learn/stop-reasons.rst:185
+msgid "A gateway: the values of the protocol you choose (Responses, Chat, Messages, or Gemini)"
+msgstr "网关：取你所选协议（Responses、Chat、Messages 或 Gemini）的取值"
+
+#: ../../learn/stop-reasons.rst:186
+msgid "As that protocol"
+msgstr "与所选协议相同"
+
+#: ../../learn/stop-reasons.rst:187
+msgid "Google"
+msgstr "Google"
+
+#: ../../learn/stop-reasons.rst:188
+msgid "``STOP``, ``MAX_TOKENS``, ``SAFETY``, ``RECITATION``, ``BLOCKLIST``, ``PROHIBITED_CONTENT``, ``SPII``, ``IMAGE_SAFETY``, ``IMAGE_PROHIBITED_CONTENT``, ``IMAGE_RECITATION``; others (``OTHER``, ``MALFORMED_FUNCTION_CALL``, ``LANGUAGE``, ...) are ``OTHER``"
+msgstr "``STOP``、``MAX_TOKENS``、``SAFETY``、``RECITATION``、``BLOCKLIST``、``PROHIBITED_CONTENT``、``SPII``、``IMAGE_SAFETY``、``IMAGE_PROHIBITED_CONTENT``、``IMAGE_RECITATION``；其余（``OTHER``、``MALFORMED_FUNCTION_CALL``、``LANGUAGE`` 等）为 ``OTHER``"
+
+#: ../../learn/stop-reasons.rst:189
+msgid "The finish reasons above, or ``prompt_feedback.block_reason`` when the prompt was blocked and there is no candidate"
+msgstr "上述结束原因，或者在提示被拦截、没有候选时的 ``prompt_feedback.block_reason``"
+
+#: ../../learn/stop-reasons.rst:190
+msgid "Mistral"
+msgstr "Mistral"
+
+#: ../../learn/stop-reasons.rst:191
+msgid "``stop``, ``length``, ``model_length``, ``error``, ``tool_calls``"
+msgstr "``stop``、``length``、``model_length``、``error``、``tool_calls``"
+
+#: ../../learn/stop-reasons.rst:192
+msgid "No dedicated value"
+msgstr "没有专门的取值"
+
+#: ../../learn/stop-reasons.rst:193
+msgid "Qwen, Groq, xAI, Ollama"
+msgstr "Qwen、Groq、xAI、Ollama"
+
+#: ../../learn/stop-reasons.rst:194
+msgid "Qwen documents ``stop``, ``length`` and ``tool_calls``. Groq's and xAI's pages do not list the values. Ollama's ``done_reason`` is an open string."
+msgstr "Qwen 在文档中列出了 ``stop``、``length`` 和 ``tool_calls``\\ 。Groq 和 xAI 的页面没有列出取值。Ollama 的 ``done_reason`` 是开放字符串。"
+
+#: ../../learn/stop-reasons.rst:195
+msgid "Not documented by the provider"
+msgstr "提供方没有在文档中说明"
+
+#: ../../learn/stop-reasons.rst:197
+msgid "Gemini reports ``STOP`` whether or not it called a function, so a step that finished with tool calls is ``TOOL_USE``. ``finishMessage`` is dropped by the Gemini API path of the ``google-genai`` SDK (only Vertex keeps it), so a Google refusal has a category but no sentence."
+msgstr "无论是否调用了函数，Gemini 都报告 ``STOP``，所以带着工具调用结束的步骤被视为 ``TOOL_USE``\\ 。\\ ``google-genai`` SDK 的 Gemini API 路径会丢弃 ``finishMessage``\\ （只有 Vertex 会保留），所以 Google 的拒绝只有类别，没有说明文字。"
+
+#: ../../learn/stop-reasons.rst:203
+msgid "Choose whether the model reads a refusal again"
+msgstr "选择模型是否再次读到被拒绝的回答"
+
+#: ../../learn/stop-reasons.rst:205
+msgid "By default a refused answer stays in the history and is sent again with every later request, like any other assistant message. Anthropic advises treating output produced before a refusal as incomplete and discarding it. Add :class:`~zett_agent.extensions.refusal_replay.RefusalReplayExtension` to choose:"
+msgstr "默认情况下，被拒绝的回答会保留在历史中，并随之后每个请求再次发送，与其他助手消息一样。Anthropic 建议把拒绝之前产生的输出视为不完整并丢弃。添加 :class:`~zett_agent.extensions.refusal_replay.RefusalReplayExtension` 来做出选择："
+
+#: ../../learn/stop-reasons.rst:216
+msgid "Only the request changes. The message stays in stored history and on screen, so changing the setting never rewrites a session. Dropping a message can leave two user messages in a row, and providers differ in whether they accept that, so test it against yours."
+msgstr "只有请求会改变。消息仍保留在存储的历史和屏幕上，所以更改设置绝不会改写会话。丢弃一条消息可能导致连续出现两条用户消息，而各个提供方是否接受这种情况并不相同，所以请针对你所用的提供方测试一下。"
+
+#: ../../learn/stop-reasons.rst:221
+msgid "Subagents and goals"
+msgstr "子智能体与目标"
+
+#: ../../learn/stop-reasons.rst:223
+msgid "A subagent that was refused still returns a message, and its text can be empty or partial. The parent model is told: the report starts with a notice, and ``SubAgentResult.stop`` carries the reason. A background task whose child stopped early is still ``completed``, because the child ended, and says so in ``stop``, in its note, and in the completion notice."
+msgstr "被拒绝的子智能体仍然会返回一条消息，它的文本可能为空或不完整。父模型会得到提示：报告以一条通知开头，``SubAgentResult.stop`` 带有原因。子智能体提前停止的后台任务仍然是 ``completed``，因为子智能体已经结束，并会在 ``stop``、它的备注和完成通知中说明这一点。"
+
+#: ../../learn/stop-reasons.rst:228
+msgid "A goal is not evaluated against a refused or interrupted answer. Asking the model to try again would only meet the same refusal, so the request ends and the host hears why."
+msgstr "目标不会针对被拒绝或被中断的回答进行评估。让模型再试一次只会遇到同样的拒绝，所以请求会结束，宿主也会得知原因。"
+
+#: ../../learn/stop-reasons.rst:232
+msgid "What this does not do"
+msgstr "它不做什么"
+
+#: ../../learn/stop-reasons.rst:234
+msgid "**No retry on another model.** A refusal is reported, not worked around. Anthropic documents server-side and client-side fallback to a different model; acting on ``stop.recommended_model`` is left to the host."
+msgstr "**不会换另一个模型重试。** 拒绝只会被上报，不会被绕过。Anthropic 在文档中介绍了回退到其他模型的服务端和客户端方案；是否依据 ``stop.recommended_model`` 行动，由宿主决定。"
+
+#: ../../learn/stop-reasons.rst:237
+msgid "**No removal of a refused turn from the history** unless you choose it above."
+msgstr "**除非你按上文选择，否则不会从历史中移除被拒绝的那一轮。**"
+
+#: ../../learn/stop-reasons.rst:238
+msgid "**No guarantee the provider says why.** A refusal with no category and no text is reported as a refusal with nothing to show."
+msgstr "**不保证提供方会说明原因。** 没有类别也没有文本的拒绝，会被报告为一个没有任何内容可展示的拒绝。"
+
+#: ../../learn/stop-reasons.rst:241
+msgid "Next: :doc:`streaming` for the full event list, or :doc:`providers` to connect one."
+msgstr "下一步：参阅 :doc:`streaming` 了解完整的事件列表，或参阅 :doc:`providers` 连接提供方。"
+
+#: ../../learn/stop-reasons.rst:243
+msgid "Related API: :class:`~zett_agent.stop.StopInfo`, :class:`~zett_agent.stop.StopReason`, :class:`~zett_agent.exceptions.AgentStopError`, :class:`~zett_agent.extensions.refusal_replay.RefusalReplayExtension`."
+msgstr "相关 API：:class:`~zett_agent.stop.StopInfo`、:class:`~zett_agent.stop.StopReason`、:class:`~zett_agent.exceptions.AgentStopError`、:class:`~zett_agent.extensions.refusal_replay.RefusalReplayExtension`\\ 。"
+

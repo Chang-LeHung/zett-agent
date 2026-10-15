@@ -80,6 +80,29 @@ reported nothing and when there were no input tokens;
 protocols often drop the cache breakdown, so prefer a Responses adapter when
 cache visibility matters.
 
+The request just hangs
+----------------------
+
+Nothing is shown and nothing fails. The provider, or a gateway in front of it,
+accepted the request and went silent. Every adapter now gives up and raises
+:class:`~zett_agent.providers.base.ProviderTimeoutError`; its ``phase`` says what
+ran out: ``connect`` (nothing is listening), ``first_byte`` (the headers never came,
+which is how an overloaded gateway looks) or ``idle`` (a response that had started
+stopped). Test the endpoint directly with ``curl``; if it hangs there too, the
+fault is on the provider side and no setting here will help. See
+:ref:`the defaults and how to change them <provider-timeouts>`.
+
+The error mentions a web page or an HTTP status
+-----------------------------------------------
+
+``answered HTTP 502 with a web page`` means something in front of the API, not the
+API itself, replied: a proxy or gateway error, a firewall, or a login page. Check
+``base_url`` and the network path to it. ``returned HTTP 400: ...`` carries the
+provider's own explanation, such as an unknown model name; model ids can be
+case-sensitive and a gateway may use its own. ``answered HTTP 200 with
+application/json instead of an event stream`` usually means the endpoint does not
+stream, or the base URL points at the wrong route.
+
 Retries duplicated text
 -----------------------
 

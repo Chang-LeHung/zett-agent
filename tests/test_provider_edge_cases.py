@@ -185,11 +185,11 @@ def test_remote_providers_reject_empty_api_keys_before_creating_clients(factory)
 @pytest.mark.parametrize(
     ("status", "error_type", "message"),
     [
-        (401, ProviderAuthError, "credential"),
-        (400, ProviderResponseError, "invalid stream payload"),
-        (422, ProviderResponseError, "invalid stream payload"),
-        (500, ProviderResponseError, "invalid stream payload"),
-        (429, ProviderResponseError, "stream request failed"),
+        (401, ProviderAuthError, "credential.*HTTP 401: provider failure"),
+        (400, ProviderResponseError, "HTTP 400: provider failure"),
+        (422, ProviderResponseError, "HTTP 422: provider failure"),
+        (500, ProviderResponseError, "HTTP 500: provider failure"),
+        (429, ProviderResponseError, "HTTP 429: provider failure"),
     ],
 )
 async def test_openai_style_provider_maps_http_failures(status, error_type, message):

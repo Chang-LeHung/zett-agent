@@ -7,6 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._compat import StrEnum
 from .messages import AnyMessage, AssistantMessage
+from .stop import StopInfo, classify_stop
 
 
 class ReasoningEffort(StrEnum):
@@ -259,10 +260,64 @@ class RetryOptions:
 DEFAULT_RETRY_OPTIONS = RetryOptions()
 
 
+@dataclass(frozen=True, slots=True)
+class TimeoutOptions:
+    """How long a provider may stay silent before the request is given up on.
+
+    A model call has three stretches where nothing may arrive, and each gets its own
+    limit, because the right wait is very different for each:
+
+    * **connect**: opening the connection. A reachable host answers in milliseconds.
+    * **first byte**: from sending the request until the response *headers* come back.
+      Streaming APIs answer headers before the model has produced anything, so a long
+      wait here means a gateway or proxy that took the request and did nothing.
+    * **idle**: the longest gap between two chunks once the response has started. This
+      can legitimately be minutes, because a reasoning model may think silently.
+
+    There is deliberately no limit on the *total* time of a response: a long answer
+    that keeps streaming is healthy. A limit that is exceeded raises
+    :class:`~zett_agent.providers.base.ProviderTimeoutError` naming which stretch it
+    was. A timeout is not retried, except for a failed connection, because a retry
+    would wait the whole limit again and the first request may still be running (and
+    billed) on the other side.
+
+    ``None`` disables a limit, which is how a provider behaved when none was set.
+
+    Examples:
+        Fail fast on a gateway that goes silent, and allow long silent reasoning::
+
+            OpenAIProvider("gpt-5", key, timeout=TimeoutOptions(first_byte=30, idle=900))
+    """
+
+    #: Seconds to open the connection.
+    connect: float | None = 5.0
+    #: Seconds from sending the request to receiving the response headers.
+    first_byte: float | None = 60.0
+    #: Seconds of silence tolerated between two chunks of a response that has started.
+    idle: float | None = 600.0
+
+    def __post_init__(self) -> None:
+        for name in ("connect", "first_byte", "idle"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be a finite positive number of seconds, or None")
+
+
+DEFAULT_TIMEOUT_OPTIONS = TimeoutOptions()
+
+
 def validate_retry(retry: RetryOptions) -> None:
     """Reject invalid model configuration before opening network clients."""
     if not isinstance(retry, RetryOptions):
         raise ValueError("retry must be a RetryOptions instance")
+
+
+def validate_timeout(timeout: TimeoutOptions) -> None:
+    """Reject an invalid timeout configuration before opening network clients."""
+    if not isinstance(timeout, TimeoutOptions):
+        raise ValueError("timeout must be a TimeoutOptions instance")
 
 
 def validate_response(response: bool) -> None:
@@ -356,10 +411,24 @@ class ModelResponse:
 
     #: Complete assistant output, including any tool calls and replay blocks.
     message: AssistantMessage
-    #: Provider completion reason, or None when unavailable.
+    #: Provider completion reason, or None when unavailable. It is the provider's own
+    #: value; :attr:`stop` is the normalized form to branch on.
     finish_reason: str | None = None
     #: Normalized usage for this model call, not the entire conversation.
     usage: ModelUsage = field(default_factory=ModelUsage)
+    #: Why the step stopped, normalized. An adapter that knows more than the bare
+    #: ``finish_reason`` says (a refusal category, an error code) supplies it. When it
+    #: does not, it is derived from ``finish_reason`` and the tool calls, so an adapter
+    #: written before this field existed still reports a refusal or a truncation.
+    stop: StopInfo | None = None
+
+    def __post_init__(self) -> None:
+        if self.stop is None:
+            object.__setattr__(
+                self,
+                "stop",
+                classify_stop(self.finish_reason, has_tool_calls=bool(self.message.tool_calls)),
+            )
 
 
 @dataclass(frozen=True, slots=True)

@@ -18,6 +18,7 @@ from .model import (
     ServerToolResult,
     ToolCallDelta,
 )
+from .stop import StopInfo
 
 if TYPE_CHECKING:
     from .extensions.events import (
@@ -52,6 +53,10 @@ class AgentEventType(StrEnum):
     SERVER_TOOL_COMPLETED = "server_tool_completed"
     SERVER_TOOL_FAILED = "server_tool_failed"
     MODEL_COMPLETED = "model_completed"
+    #: A model step ended for a reason other than finishing or asking for tools: it was
+    #: refused, cut off, interrupted, or paused for good. Follows MODEL_COMPLETED and
+    #: carries ``stop``. It is not sent for a step that ended normally.
+    MODEL_STOPPED = "model_stopped"
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"
@@ -406,6 +411,7 @@ class AgentEvent:
         SERVER_TOOL_COMPLETED      server_tool_result
         SERVER_TOOL_FAILED         server_tool_result
         MODEL_COMPLETED            response
+        MODEL_STOPPED              stop, response, message
         RUN_COMPLETED              message
         CUSTOM                     name, payload
 
@@ -450,6 +456,8 @@ class AgentEvent:
     server_tool_result: ServerToolResult | None = None
     #: Final model response, including usage.
     response: ModelResponse | None = None
+    #: Why the model stopped, populated only by MODEL_STOPPED.
+    stop: StopInfo | None = None
     #: Tool result or final assistant answer.
     message: AssistantMessage | ToolMessage | None = None
     #: Internal instruction associated with INTERNAL_MESSAGE_STARTED/COMPLETED.

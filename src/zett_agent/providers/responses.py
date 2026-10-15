@@ -31,6 +31,8 @@ from ..model import (
     ToolCallDelta,
     ToolDefinition,
 )
+from ..stop import StopInfo, StopReason, classify_stop
+from .stop_reasons import refusal_from_response_error, withhold_replay_blocks
 from .tool_arguments import tool_call_from_arguments
 from .tool_images import expand_tool_images
 
@@ -223,6 +225,7 @@ async def stream_responses(
     """Convert one OpenAI-compatible Responses stream to normalized events."""
     text = ""
     reasoning = ""
+    refusal_text = ""
     terminal: Any = None
     server_calls: dict[str, ServerToolCall] = {}
     #: Output items by ``output_index``: opened by ``output_item.added``, closed by ``.done``.
@@ -245,10 +248,12 @@ async def stream_responses(
                     reasoning += delta
                     yield ModelEvent.reasoning(delta)
             case "response.refusal.delta":
-                # A refusal is the model's answer; show it like any other text.
+                # A refusal is the model's answer, so it is shown like any other text, and it is
+                # also what the stop explains itself with.
                 delta = str(getattr(event, "delta", ""))
                 if delta:
                     text += delta
+                    refusal_text += delta
                     yield ModelEvent.text(delta)
             case "response.output_item.added":
                 item = _object_mapping(getattr(event, "item", None))
@@ -301,6 +306,17 @@ async def stream_responses(
             case "response.failed":
                 response = _object_mapping(getattr(event, "response", None))
                 error = _object_mapping(response.get("error"))
+                if (refusal := refusal_from_response_error(error)) is not None:
+                    # A policy refused the request. It is answered as a refusal, with whatever
+                    # was written before it, so the host is told why instead of seeing a crash.
+                    yield ModelEvent.completed(
+                        ModelResponse(
+                            AssistantMessage(content=text, provider=provider, model=model),
+                            finish_reason=refusal.raw,
+                            stop=refusal,
+                        )
+                    )
+                    return
                 message = error.get("message") or "Responses API stream failed"
                 raise RuntimeError(str(message))
             case "error":
@@ -325,6 +341,18 @@ async def stream_responses(
         for index, item in enumerate(output)
         if (call := _local_or_function_call(item, local_search_tool, index=index, finish_reason=reason)) is not None
     )
+    refusal_text = refusal_text or _response_refusal(output)
+    stop = classify_stop(reason, has_tool_calls=bool(calls))
+    if refusal_text and stop.ok:
+        # A refusal content block arrives in a response whose status is ``completed``.
+        stop = StopInfo(StopReason.REFUSAL, raw=reason, category="refusal", message=refusal_text)
+    replay = tuple(output)
+    if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
+        # The calls are withheld from the message, so the provider's record of them goes too.
+        replay = withhold_replay_blocks(
+            replay,
+            lambda item: _local_or_function_call(item, local_search_tool) is not None,
+        )
     yield ModelEvent.completed(
         ModelResponse(
             message=AssistantMessage(
@@ -333,10 +361,11 @@ async def stream_responses(
                 tool_calls=calls,
                 provider=provider,
                 model=model,
-                replay_blocks=tuple(output),
+                replay_blocks=replay,
             ),
-            finish_reason=_finish_reason(payload),
+            finish_reason=reason,
             usage=_responses_usage(_object_mapping(payload.get("usage"))),
+            stop=stop,
         )
     )
 
@@ -435,6 +464,17 @@ def _response_text(output: Sequence[Mapping[str, Any]]) -> str:
         if item.get("type") == "message"
         for part in item.get("content", ())
         if isinstance(part, Mapping) and part.get("type") in {"output_text", "refusal"}
+    )
+
+
+def _response_refusal(output: Sequence[Mapping[str, Any]]) -> str:
+    """Return the text of the refusal content blocks of a response, or an empty string."""
+    return "".join(
+        str(part.get("refusal") or "")
+        for item in output
+        if item.get("type") == "message"
+        for part in item.get("content", ())
+        if isinstance(part, Mapping) and part.get("type") == "refusal"
     )
 
 

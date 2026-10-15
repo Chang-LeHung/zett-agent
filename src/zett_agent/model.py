@@ -7,6 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._compat import StrEnum
 from .messages import AnyMessage, AssistantMessage
+from .stop import StopInfo, classify_stop
 
 
 class ReasoningEffort(StrEnum):
@@ -356,10 +357,24 @@ class ModelResponse:
 
     #: Complete assistant output, including any tool calls and replay blocks.
     message: AssistantMessage
-    #: Provider completion reason, or None when unavailable.
+    #: Provider completion reason, or None when unavailable. It is the provider's own
+    #: value; :attr:`stop` is the normalized form to branch on.
     finish_reason: str | None = None
     #: Normalized usage for this model call, not the entire conversation.
     usage: ModelUsage = field(default_factory=ModelUsage)
+    #: Why the step stopped, normalized. An adapter that knows more than the bare
+    #: ``finish_reason`` says (a refusal category, an error code) supplies it. When it
+    #: does not, it is derived from ``finish_reason`` and the tool calls, so an adapter
+    #: written before this field existed still reports a refusal or a truncation.
+    stop: StopInfo | None = None
+
+    def __post_init__(self) -> None:
+        if self.stop is None:
+            object.__setattr__(
+                self,
+                "stop",
+                classify_stop(self.finish_reason, has_tool_calls=bool(self.message.tool_calls)),
+            )
 
 
 @dataclass(frozen=True, slots=True)

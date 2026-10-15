@@ -2,7 +2,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from ._compat import StrEnum, TypeAliasType
+from ._compat import Self, StrEnum, TypeAliasType
+from .exceptions import AgentStopError
+from .stop import StopInfo
 
 
 class MessageRole(StrEnum):
@@ -246,6 +248,27 @@ class AssistantMessage(Message):
     #: trip; adapters may still decode and encode their transport representation.
     #: They are transport state, not user-visible reasoning or portable content.
     replay_blocks: tuple[Mapping[str, Any], ...] = ()
+    #: Why the model stopped, set by the runtime when it did not finish normally: it was
+    #: refused, cut off, interrupted, or paused. None on a message that finished or asked
+    #: for tools, which is every message stored before this field existed, so the check is
+    #: ``message.stop is None or message.stop.ok``. The stop of a normal step is on
+    #: :attr:`~zett_agent.model.ModelResponse.stop`.
+    stop: StopInfo | None = None
+
+    def raise_for_stop(self) -> Self:
+        """Return this message, or raise if the model did not finish normally.
+
+        It is the blocking-script counterpart of ``response.raise_for_status()``. It does
+        nothing for a message that finished or asked for tools, which have no ``stop``.
+        The runtime never calls it for you.
+
+        Raises:
+            AgentStopError: If the step was refused, truncated, paused, interrupted, or
+                ended for a reason this library does not know.
+        """
+        if self.stop is not None and not self.stop.ok:
+            raise AgentStopError(self.stop, self)
+        return self
 
 
 @dataclass(slots=True, kw_only=True)

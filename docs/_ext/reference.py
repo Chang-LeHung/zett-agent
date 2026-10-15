@@ -25,7 +25,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "AgentPhaseTransitionMixin",
         "ModelOutputTracker",
     ),
-    "zett_agent.exceptions": ("AgentError", "AgentIterationLimitError", "AgentProtocolError"),
+    "zett_agent.exceptions": ("AgentError", "AgentIterationLimitError", "AgentProtocolError", "AgentStopError"),
     "zett_agent.extensions.agents_md": ("AGENTS_FILE_NAME", "AgentsMdExtension"),
     "zett_agent.extensions.ask_user": (
         "ASK_USER_EVENT_NAME",
@@ -334,6 +334,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     ),
     "zett_agent.sandbox.session": ("SandboxSession", "parse_size"),
     "zett_agent.sandbox.seatbelt": ("SEATBELT_EXECUTABLE", "SeatbeltSandbox", "build_seatbelt_profile"),
+    "zett_agent.stop": ("StopInfo", "StopReason", "classify_stop"),
     "zett_agent.storage": ("SQLiteSessionStorage",),
     "zett_agent.sync": ("SyncAgent", "SyncModelAdapter", "create_agent_sync"),
     "zett_agent.sync_runtime": ("SyncContext", "SyncObject", "SyncRuntime", "SyncStream"),

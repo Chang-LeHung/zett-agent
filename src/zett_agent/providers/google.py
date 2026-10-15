@@ -16,6 +16,7 @@ from ..messages import (
 )
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
+    DEFAULT_TIMEOUT_OPTIONS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
@@ -23,9 +24,11 @@ from ..model import (
     RetryOptions,
     ServerToolCall,
     ServerToolResult,
+    TimeoutOptions,
     ToolCallDelta,
     validate_response,
     validate_retry,
+    validate_timeout,
 )
 from ..stop import StopInfo, StopReason, classify_stop
 from .base import (
@@ -34,11 +37,14 @@ from .base import (
     ProviderResponseError,
     RetryingProvider,
     _reasoning_effort_to_budget,
+    guard_idle,
+    http_error,
     reject_local_tool_search,
     retry_model_stream,
     validate_extra_body,
     validate_extra_headers,
 )
+from .http_errors import HttpFailure, failure_message, read_failure
 from .stop_reasons import withhold_replay_blocks
 from .tool_images import expand_tool_images
 
@@ -55,6 +61,11 @@ class GoogleProvider(RetryingProvider):
         transport: Optional HTTPX transport for test isolation or custom routing.
         response: Must remain false; this adapter uses Google GenerateContent.
         retry: Retry/backoff policy, applied before any model event is emitted.
+        timeout: How long the provider may stay silent before the request is given up on.
+            See :class:`~zett_agent.model.TimeoutOptions`. The Google client sends its request
+            when the first chunk is asked for, so ``first_byte`` covers connecting, the response
+            headers and the first chunk. A timeout raises
+            :class:`~zett_agent.providers.base.ProviderTimeoutError` and is not retried.
         base_url: API root; None uses Google's public Generative Language endpoint.
             Set it to reach a proxy, a gateway, or a local test server.
         extra_headers: HTTP headers sent on every request, for gateways that
@@ -99,6 +110,7 @@ class GoogleProvider(RetryingProvider):
         base_url: str | None = None,
         extra_headers: Mapping[str, str] | None = None,
         extra_body: Mapping[str, Any] | None = None,
+        timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
     ) -> None:
         import httpx
         import truststore
@@ -111,7 +123,9 @@ class GoogleProvider(RetryingProvider):
         if not api_key:
             raise ValueError("api_key is required")
         validate_retry(retry)
+        validate_timeout(timeout)
         self.retry = retry
+        self.timeout = timeout
         self.response = response
         self.model = model
         self.extra_headers = validate_extra_headers(extra_headers)
@@ -141,7 +155,7 @@ class GoogleProvider(RetryingProvider):
     @retry_model_stream
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         from google.genai import types
-        from google.genai.errors import APIError
+        from google.genai.errors import APIError, UnknownApiResponseError
 
         system: list[str] = []
         contents: list[types.Content] = []
@@ -239,7 +253,9 @@ class GoogleProvider(RetryingProvider):
         try:
             # The SDK sends the HTTP request when the first chunk is requested,
             # so a rejected request surfaces here rather than above.
-            async for chunk in stream:
+            # The SDK only sends the request when the first chunk is asked for, so the first
+            # wait covers connecting, the response headers and the first chunk.
+            async for chunk in guard_idle(stream, self.timeout, first=self.timeout.first_byte):
                 feedback = getattr(chunk, "prompt_feedback", None)
                 if feedback is not None and getattr(feedback, "block_reason", None):
                     # The prompt was blocked before the model wrote anything. There is no
@@ -290,6 +306,9 @@ class GoogleProvider(RetryingProvider):
                     )
         except APIError as error:
             raise _provider_error(error) from error
+        except UnknownApiResponseError as error:
+            # The SDK could not parse a 200 as JSON: a proxy's page, or a gateway that is not Gemini.
+            raise _unparsable_response(error) from error
         finally:
             await stream.aclose()
         if finish_reason is None and block_reason is not None:
@@ -361,12 +380,31 @@ class GoogleProvider(RetryingProvider):
 def _provider_error(error: Any) -> ProviderError:
     """Map an SDK failure to the provider error hierarchy.
 
-    The original error stays reachable through ``__cause__``, which is where the
-    retry policy reads the HTTP status, so a 429 or 5xx is still retried.
+    The original error stays reachable through ``__cause__``, which is where the retry
+    policy reads the HTTP status, so a 429 or 5xx is still retried. A body that is a web
+    page (a proxy in front of the API) is described as one instead of being pasted in.
     """
-    if error.code in (401, 403):
-        return ProviderAuthError("Provider rejected API credential")
-    return ProviderResponseError(f"Provider stream request failed: {error.message}")
+    status = int(getattr(error, "code", 0) or 0)
+    text = str(error.message) if getattr(error, "message", None) else str(error)
+    failure = read_failure(content_type=None, text=text)
+    message = (
+        failure_message("google", status, failure) if failure.is_html else f"google returned HTTP {status}: {text}"
+    )
+    if status in (401, 403):
+        return ProviderAuthError(f"Provider rejected API credential. {message}")
+    return http_error(status, failure if failure.is_html else HttpFailure(text, False, None, text), message)
+
+
+def _unparsable_response(error: BaseException) -> ProviderResponseError:
+    """Describe a 200 response the SDK could not read as JSON, naming a web page when it was one."""
+    text = str(error)
+    _, _, raw = text.partition("Raw response:")
+    failure = read_failure(content_type=None, text=(raw or text).strip())
+    if failure.is_html:
+        return http_error(200, failure, failure_message("google", 200, failure))
+    return ProviderResponseError(
+        f"google answered HTTP 200 with something that is not a Gemini response: {failure.preview}"
+    )
 
 
 def _google_server_tool_events(candidate: Any, *, sequence: int, seen: set[str]) -> tuple[list[ModelEvent], int]:

@@ -15,19 +15,26 @@ from ..model import (
     ModelUsage,
     ReasoningEffort,
     RetryOptions,
+    TimeoutOptions,
     ToolCallDelta,
     ToolDefinition,
     validate_response,
     validate_retry,
+    validate_timeout,
 )
 from .base import (
+    ProviderAuthError,
     ProviderResponseError,
     RetryingProvider,
+    guard_idle,
+    http_error,
+    httpx_timeout,
     reject_local_tool_search,
     retry_model_stream,
     validate_extra_headers,
     validate_extra_query,
 )
+from .http_errors import failure_message, read_failure
 from .tool_images import expand_tool_images
 
 if TYPE_CHECKING:
@@ -51,6 +58,11 @@ def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, 
     return rendered
 
 
+#: A local model may have to be loaded from disk before it answers, which can take minutes for a
+#: large one, so the wait for the first chunk is longer than for a hosted provider.
+OLLAMA_TIMEOUT_OPTIONS = TimeoutOptions(first_byte=600.0)
+
+
 class OllamaProvider(RetryingProvider):
     """Stream Ollama SDK events without buffering the entire HTTP response.
 
@@ -60,6 +72,10 @@ class OllamaProvider(RetryingProvider):
         base_url: Ollama server root; defaults to localhost port 11434.
         response: Must remain false; this adapter uses Ollama's chat endpoint.
         retry: Backoff policy for failures before the first streamed event.
+        timeout: How long the server may stay silent before the request is given up on. See
+            :class:`~zett_agent.model.TimeoutOptions`. The default allows ten minutes for the
+            first chunk, because a local model may need to be loaded first. A timeout raises
+            :class:`~zett_agent.providers.base.ProviderTimeoutError` and is not retried.
         extra_headers: HTTP headers sent on every request, such as the
             ``Authorization`` a reverse proxy in front of Ollama expects.
         extra_query: URL query parameters sent on every request.
@@ -97,6 +113,7 @@ class OllamaProvider(RetryingProvider):
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
         extra_headers: Mapping[str, str] | None = None,
         extra_query: Mapping[str, str] | None = None,
+        timeout: TimeoutOptions = OLLAMA_TIMEOUT_OPTIONS,
     ) -> None:
         import truststore
         from ollama import AsyncClient
@@ -105,7 +122,9 @@ class OllamaProvider(RetryingProvider):
         if response:
             raise ValueError("OllamaProvider does not support the Responses API")
         validate_retry(retry)
+        validate_timeout(timeout)
         self.retry = retry
+        self.timeout = timeout
         self.response = response
         self.model = model
         self.extra_headers = validate_extra_headers(extra_headers)
@@ -115,6 +134,7 @@ class OllamaProvider(RetryingProvider):
             transport=transport,
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
             trust_env=True,
+            timeout=httpx_timeout(timeout),
             headers=self.extra_headers or None,
             params=self.extra_query or None,
         )
@@ -169,6 +189,8 @@ class OllamaProvider(RetryingProvider):
                     )
         if request.tool_choice:
             messages.insert(0, {"role": "system", "content": f"Respond only by calling {request.tool_choice}."})
+        from ollama import ResponseError
+
         stream = await self._client.chat(
             model=self.model,
             messages=messages,
@@ -182,7 +204,10 @@ class OllamaProvider(RetryingProvider):
         finish_reason = None
         done = False
         try:
-            async for chunk in stream:
+            # The client only sends its request when the first chunk is asked for, so the first
+            # wait covers connecting, the response headers and the first chunk, and an HTTP
+            # failure surfaces here rather than when the stream is opened.
+            async for chunk in guard_idle(stream, self.timeout, first=self.timeout.first_byte):
                 if chunk.message.thinking:
                     reasoning += chunk.message.thinking
                     yield ModelEvent.reasoning(chunk.message.thinking)
@@ -211,6 +236,21 @@ class OllamaProvider(RetryingProvider):
                         output_tokens=chunk.eval_count or 0,
                         cache_reported=False,
                     )
+        except json.JSONDecodeError as error:
+            # Ollama streams one JSON object per line. Anything else is not an Ollama server: a
+            # proxy's page, a login redirect, or a different service on that port.
+            raise ProviderResponseError(
+                "ollama answered with something that is not a stream of JSON lines. A proxy, login page or "
+                "another service on that address is the usual cause; check base_url."
+            ) from error
+        except ResponseError as error:
+            status = int(getattr(error, "status_code", 0) or 0)
+            raw = getattr(error, "error", None)
+            failure = read_failure(content_type=None, text=raw if isinstance(raw, str) else json.dumps(raw), parsed=raw)
+            message = failure_message("ollama", status, failure)
+            if status in (401, 403):
+                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
+            raise http_error(status, failure, message) from error
         finally:
             await stream.aclose()
         if not done:

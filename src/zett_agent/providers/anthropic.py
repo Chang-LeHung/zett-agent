@@ -16,6 +16,7 @@ from ..messages import (
 )
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
+    DEFAULT_TIMEOUT_OPTIONS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
@@ -26,20 +27,28 @@ from ..model import (
     ServerToolDefinition,
     ServerToolInputDelta,
     ServerToolResult,
+    TimeoutOptions,
     ToolCallDelta,
     ToolDefinition,
     validate_response,
     validate_retry,
+    validate_timeout,
 )
 from ..stop import StopInfo, StopReason, classify_stop
 from .base import (
     ProviderAuthError,
     ProviderResponseError,
     RetryingProvider,
+    _empty_stream_message,
     _parse_tool_calls,
     _reasoning_effort_to_budget,
     _to_model_data,
     _ToolCallAccumulator,
+    describe_status_error,
+    guard_idle,
+    http_error,
+    httpx_timeout,
+    require_event_stream,
     retry_model_stream,
     validate_extra_body,
     validate_extra_headers,
@@ -228,6 +237,10 @@ class AnthropicProvider(RetryingProvider):
         transport: Optional HTTPX transport for isolated tests or custom routing.
         response: Must remain false; this adapter uses Anthropic Messages API.
         retry: Exponential backoff for transient failures before output starts.
+        timeout: How long the provider may stay silent before the request is given up on:
+            connecting, waiting for the response headers, and between chunks of a response
+            that has started. See :class:`~zett_agent.model.TimeoutOptions`; a timeout raises
+            :class:`~zett_agent.providers.base.ProviderTimeoutError` and is not retried.
         prompt_cache: Mark cache breakpoints on the tool definitions, the system
             prompt, and the conversation so far. Anthropic caches only what a
             marker asks for, so disabling this trades prompt-cache reads for a
@@ -297,6 +310,7 @@ class AnthropicProvider(RetryingProvider):
         extra_headers: Mapping[str, str] | None = None,
         extra_query: Mapping[str, str] | None = None,
         extra_body: Mapping[str, Any] | None = None,
+        timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
     ) -> None:
         import httpx
         import truststore
@@ -307,6 +321,7 @@ class AnthropicProvider(RetryingProvider):
         if not api_key:
             raise ValueError("api_key is required")
         validate_retry(retry)
+        validate_timeout(timeout)
         if not isinstance(prompt_cache, bool):
             raise ValueError("prompt_cache must be a boolean")
         if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
@@ -316,6 +331,7 @@ class AnthropicProvider(RetryingProvider):
         self.extra_query = validate_extra_query(extra_query)
         self.extra_body = validate_extra_body(extra_body)
         self.retry = retry
+        self.timeout = timeout
         self.response = response
         self.prompt_cache = prompt_cache
         self.model = model
@@ -331,6 +347,7 @@ class AnthropicProvider(RetryingProvider):
             base_url=base_url,
             http_client=self._http_client,
             max_retries=0,
+            timeout=httpx_timeout(timeout),
             default_headers=self.extra_headers or None,
             default_query=self.extra_query or None,
         )
@@ -407,19 +424,25 @@ class AnthropicProvider(RetryingProvider):
         from anthropic import AnthropicError
 
         try:
-            response = await self._client.messages.create(
-                **body, **({"extra_body": self.extra_body} if self.extra_body else {})
+            response = await self._first_byte(
+                self._client.messages.create(**body, **({"extra_body": self.extra_body} if self.extra_body else {}))
             )
         except AnthropicError as error:
-            status_code = getattr(error, "status_code", None)
-            match status_code:
-                case 401:
-                    raise ProviderAuthError("Provider rejected API credential") from error
-                case _:
-                    raise ProviderResponseError("Provider stream request failed") from error
+            if getattr(error, "status_code", None) is None:
+                # No HTTP response at all: the connection failed or timed out. The SDK's own
+                # text ("Connection error.") is what says why; a timeout is recognized from the
+                # chain by the retry layer, which turns it into a typed error.
+                raise ProviderResponseError(f"Anthropic request failed: {error}") from error
+            status, failure, message = describe_status_error("anthropic", error)
+            if status == 401:
+                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
+            raise http_error(status, failure, message) from error
 
+        await require_event_stream(response, "anthropic")
+        events_seen = 0
         try:
-            async for event in response:
+            async for event in guard_idle(response, self.timeout):
+                events_seen += 1
                 data = _to_model_data(event)
                 event_type = data.get("type")
                 match event_type:
@@ -531,6 +554,8 @@ class AnthropicProvider(RetryingProvider):
         finally:
             await response.close()
 
+        if not events_seen:
+            raise ProviderResponseError(_empty_stream_message("anthropic", response))
         tool_calls = _parse_tool_calls(streams, finish_reason)
         for index, stream in streams.items():
             replay[index]["input"] = _lenient_arguments(stream.argument_buffer, index)

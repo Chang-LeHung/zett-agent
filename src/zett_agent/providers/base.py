@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+from .._compat import timeout as async_timeout
 from ..exceptions import AgentError
 from ..messages import (
     AnyMessage,
@@ -27,6 +28,7 @@ from ..messages import (
 )
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
+    DEFAULT_TIMEOUT_OPTIONS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
@@ -34,10 +36,12 @@ from ..model import (
     ReasoningEffort,
     RetryOptions,
     ServerToolDefinition,
+    TimeoutOptions,
     ToolCallDelta,
     ToolDefinition,
     validate_response,
     validate_retry,
+    validate_timeout,
 )
 
 if TYPE_CHECKING:
@@ -57,6 +61,7 @@ if TYPE_CHECKING:
 #: type-check against the SDK's TypedDicts.
 from ..stop import StopInfo, StopReason, classify_stop
 from ..sync_runtime import SyncMethodsMixin
+from .http_errors import HttpFailure, failure_message, read_failure
 from .responses import (
     ResponsesStreamInterrupted,
     local_tool_search_name,
@@ -82,6 +87,45 @@ class ProviderResponseError(ProviderError):
     """Raised when provider responses do not satisfy the expected stream protocol."""
 
 
+class ProviderHTTPError(ProviderResponseError):
+    """The provider answered with an HTTP failure, or with something that was not an API reply.
+
+    The message says what was received: the status, the provider's own explanation when the
+    body was a JSON error, and whether it was a web page (a proxy, gateway, firewall or login
+    page in front of the API). The original SDK error stays on ``__cause__``.
+
+    Attributes:
+        status_code: The HTTP status of the response.
+        reason: The provider's own explanation, or None when the body had none.
+        preview: The start of the body as plain text, for a body with no explanation.
+        is_html: Whether the body was a web page.
+    """
+
+    def __init__(
+        self, message: str, *, status_code: int, reason: str | None = None, preview: str = "", is_html: bool = False
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.reason = reason
+        self.preview = preview
+        self.is_html = is_html
+
+
+class ProviderTimeoutError(ProviderError):
+    """The provider stayed silent for longer than :class:`~zett_agent.model.TimeoutOptions` allows.
+
+    Attributes:
+        phase: Which wait ran out: ``"connect"``, ``"first_byte"`` (no response headers) or
+            ``"idle"`` (a started response went quiet).
+        seconds: The limit that was exceeded, or None when it is not known.
+    """
+
+    def __init__(self, message: str, *, phase: str, seconds: float | None = None) -> None:
+        super().__init__(message)
+        self.phase = phase
+        self.seconds = seconds
+
+
 class ProviderRefusalError(ProviderResponseError):
     """A request was refused before the model produced any output.
 
@@ -97,6 +141,149 @@ class ProviderRefusalError(ProviderResponseError):
     def __init__(self, stop: StopInfo) -> None:
         super().__init__(stop.describe())
         self.stop = stop
+
+
+def describe_status_error(provider: str, error: BaseException) -> tuple[int, HttpFailure, str]:
+    """Read an SDK status error into its HTTP status, what the body was, and one sentence for a person.
+
+    The SDKs keep the response on the error, so the body is available whether it was JSON, a
+    line of text, or a web page. Nothing is raised if it cannot be read: a failure to describe
+    a failure must not hide it.
+    """
+    status = int(getattr(error, "status_code", 0) or 0)
+    response = getattr(error, "response", None)
+    content_type: str | None = None
+    text = ""
+    if response is not None:
+        try:
+            content_type = response.headers.get("content-type")
+            text = response.text
+        except Exception:  # noqa: BLE001 - a body that cannot be read is simply not described
+            text = ""
+    body = getattr(error, "body", None)
+    parsed = body if isinstance(body, (Mapping, str)) else None
+    failure = read_failure(
+        content_type=content_type, text=text or (body if isinstance(body, str) else ""), parsed=parsed
+    )
+    return status, failure, failure_message(provider, status, failure)
+
+
+def http_error(status: int, failure: HttpFailure, message: str) -> ProviderHTTPError:
+    """Build the typed error for one HTTP failure that has already been described."""
+    return ProviderHTTPError(
+        message, status_code=status, reason=failure.reason, preview=failure.preview, is_html=failure.is_html
+    )
+
+
+async def require_event_stream(stream: Any, provider: str) -> None:
+    """Fail clearly when a streaming request was answered with a web page or JSON.
+
+    A reverse proxy's error page, a captive portal, or a gateway that does not support streaming
+    answers ``200`` with HTML or JSON. An SDK reading that as an event stream finds no events and
+    reports an empty, successful answer, which hides the problem entirely. The content type is
+    read as soon as the headers are in, and an HTML or JSON body is read (a bounded amount of
+    it), described, and raised.
+
+    Args:
+        stream: The SDK stream the request returned; anything without a ``response`` is accepted.
+        provider: How to name the provider in the message.
+
+    Raises:
+        ProviderHTTPError: If the response is HTML or JSON instead of a stream.
+    """
+    http = getattr(stream, "response", None)
+    if http is None:
+        return
+    content_type = http.headers.get("content-type", "")
+    kind = content_type.lower()
+    # Only a web page or JSON is certainly not a stream. Some gateways send a real stream
+    # as ``text/plain``, so anything else is read as one; a body with no events in it is
+    # reported by the empty-stream check instead.
+    if "html" not in kind and "json" not in kind:
+        return
+    body = b""
+    try:
+        async for chunk in http.aiter_bytes():
+            body += chunk
+            if len(body) > 65_536:
+                break
+    except Exception:  # noqa: BLE001 - what could be read is enough to describe the response
+        pass
+    close = getattr(stream, "close", None)
+    if close is not None:
+        try:
+            await close()
+        except Exception:  # noqa: BLE001 - the response is already being reported as an error
+            pass
+    status = int(http.status_code)
+    failure = read_failure(content_type=content_type, text=body.decode("utf-8", errors="replace"))
+    if failure.is_html:
+        message = failure_message(provider, status, failure)
+    else:
+        detail = failure.reason or failure.preview
+        kind = content_type.split(";")[0].strip()
+        message = f"{provider} answered HTTP {status} with {kind} instead of an event stream" + (
+            f": {detail}" if detail else ""
+        )
+    raise http_error(status, failure, message)
+
+
+def httpx_timeout(options: TimeoutOptions) -> httpx.Timeout:
+    """Return the transport-level timeouts for an HTTP client.
+
+    Only the connection is limited here. How long to wait for the response headers and for the
+    next chunk are enforced by :meth:`RetryingProvider._first_byte` and :func:`guard_idle`
+    instead, because httpx has a single ``read`` limit for both and they need different values.
+    """
+    import httpx
+
+    return httpx.Timeout(connect=options.connect, read=None, write=options.first_byte, pool=options.connect)
+
+
+async def guard_idle(
+    stream: Any,
+    options: TimeoutOptions,
+    *,
+    first: float | None = None,
+) -> AsyncIterator[Any]:
+    """Yield what ``stream`` yields, giving up when it goes silent for longer than allowed.
+
+    Every wait for the next item is limited by ``options.idle``. A stream whose request is only
+    sent when the first item is asked for (the Google and Ollama clients) passes ``first`` as the
+    limit for that first wait, which then covers connecting, the response headers and the first
+    chunk. The wrapped stream is not closed here: whoever opened it still owns it.
+
+    Raises:
+        ProviderTimeoutError: If a wait exceeds its limit.
+    """
+    iterator = stream.__aiter__()
+    limit: float | None = first if first is not None else options.idle
+    phase = "first_byte" if first is not None else "idle"
+    while True:
+        try:
+            item = await (iterator.__anext__() if limit is None else asyncio.wait_for(iterator.__anext__(), limit))
+        except StopAsyncIteration:
+            return
+        except (TimeoutError, asyncio.TimeoutError):
+            raise timeout_error(phase, limit) from None
+        yield item
+        limit, phase = options.idle, "idle"
+
+
+def timeout_error(phase: str, seconds: float | None) -> ProviderTimeoutError:
+    """Build the typed error for one wait that ran out, in words that say what it means."""
+    shown = f"{seconds:g}" if seconds is not None else "the configured number of"
+    match phase:
+        case "connect":
+            message = f"Could not connect to the provider within {shown} seconds."
+        case "first_byte":
+            message = (
+                f"The provider sent no response within {shown} seconds of the request. "
+                "It, or a gateway in front of it, may be down or overloaded."
+            )
+        case _:
+            message = f"The provider stopped sending data for {shown} seconds; the response is incomplete."
+    return ProviderTimeoutError(message, phase=phase, seconds=seconds)
 
 
 def validate_extra_headers(value: Mapping[str, str] | None) -> dict[str, str]:
@@ -481,20 +668,68 @@ class RetryingProvider(SyncMethodsMixin):
     """
 
     retry: RetryOptions = DEFAULT_RETRY_OPTIONS
+    timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS
     response: bool = False
     #: See :attr:`zett_agent.model.AgentModel.native_deferred_tools`. A provider
     #: opts in by overriding this on its class; the default keeps Responses,
     #: Chat Completions, Google, and Ollama on the withhold-and-search path.
     native_deferred_tools: bool = False
 
+    async def _first_byte(self, opening: Any) -> Any:
+        """Await ``opening`` (the call that returns once the response headers are in) with its limit.
+
+        Raises:
+            ProviderTimeoutError: If the headers do not arrive within ``timeout.first_byte``.
+        """
+        limit = self.timeout.first_byte
+        if limit is None:
+            return await opening
+        try:
+            async with async_timeout(limit):
+                return await opening
+        except (TimeoutError, asyncio.TimeoutError):
+            raise timeout_error("first_byte", limit) from None
+
+    def _normalized(self, error: BaseException) -> BaseException:
+        """Return a typed timeout error for an SDK timeout that leaked out, else the error itself.
+
+        The SDKs turn an expired connection or read into their own exception with the httpx one
+        on ``__cause__``. Recognizing it here, once, gives every adapter the same typed error.
+        """
+        import httpx
+
+        seen: set[int] = set()
+        cause: BaseException | None = error
+        while cause is not None and id(cause) not in seen:
+            seen.add(id(cause))
+            if isinstance(cause, ProviderTimeoutError):
+                return cause
+            if isinstance(cause, (httpx.ConnectTimeout, httpx.PoolTimeout)):
+                return timeout_error("connect", self.timeout.connect)
+            if isinstance(cause, httpx.TimeoutException):
+                return timeout_error("idle", self.timeout.idle)
+            cause = cause.__cause__
+        return error
+
     @staticmethod
     def _retryable(error: BaseException) -> bool:
-        """Inspect SDK status codes and wrapped transport causes without optional imports."""
+        """Inspect SDK status codes and wrapped transport causes without optional imports.
+
+        A timeout is retried only when it was the connection that timed out: that costs a few
+        seconds. A silent provider is not asked again, because that waits the whole limit a second
+        time and the first request may still be running, and billed, on the other side.
+        """
         import httpx
 
         seen: set[int] = set()
         while id(error) not in seen:
             seen.add(id(error))
+            if isinstance(error, ProviderTimeoutError):
+                return error.phase == "connect"
+            if isinstance(error, httpx.ConnectTimeout):
+                return True
+            if isinstance(error, httpx.TimeoutException):
+                return False
             if isinstance(error, ResponsesStreamInterrupted):
                 return True
             status = getattr(error, "status_code", None) or getattr(error, "code", None)
@@ -533,14 +768,28 @@ def retry_model_stream(
                         emitted = True
                         yield event
                 return
-            except Exception as error:
+            except Exception as raised:
+                error = self._normalized(raised)
                 if emitted or attempt == retry.max_retries or not self._retryable(error):
-                    raise
+                    if error is raised:
+                        raise
+                    raise error from raised
                 await asyncio.sleep(delay)
                 # Saturate before doubling to avoid overflow for large delays.
                 delay = retry.max_delay if delay >= retry.max_delay / 2 else delay * 2
 
     return retrying_stream
+
+
+def _empty_stream_message(provider: str, stream: Any) -> str:
+    """Say that a response that looked like a stream contained nothing, and what it did say."""
+    http = getattr(stream, "response", None)
+    status = getattr(http, "status_code", None)
+    content_type = (http.headers.get("content-type", "") if http is not None else "") or "no content type"
+    return (
+        f"{provider} ended the stream without sending any data (HTTP {status}, {content_type}). "
+        "A proxy or gateway in front of the API may have cut the response off, or the endpoint does not stream."
+    )
 
 
 def _stream_error_body(error: BaseException) -> dict[str, Any]:
@@ -618,6 +867,7 @@ class _OpenAIStyleProvider(RetryingProvider):
         extra_headers: Mapping[str, str] | None = None,
         extra_query: Mapping[str, str] | None = None,
         extra_body: Mapping[str, Any] | None = None,
+        timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
     ) -> None:
         # HTTP clients and the trust store are only needed once a provider is
         # constructed, so importing them here keeps module import cheap.
@@ -625,8 +875,10 @@ class _OpenAIStyleProvider(RetryingProvider):
         import truststore
 
         validate_retry(retry)
+        validate_timeout(timeout)
         validate_response(response)
         self.retry = retry
+        self.timeout = timeout
         self.send_prompt_cache_key = send_prompt_cache_key
         self.extra_headers = validate_extra_headers(extra_headers)
         self.extra_query = validate_extra_query(extra_query)
@@ -648,6 +900,7 @@ class _OpenAIStyleProvider(RetryingProvider):
             base_url=base_url,
             http_client=self._http_client,
             max_retries=0,
+            timeout=httpx_timeout(timeout),
             default_headers=self.extra_headers or None,
             default_query=self.extra_query or None,
         )
@@ -686,19 +939,16 @@ class _OpenAIStyleProvider(RetryingProvider):
         from openai import APIStatusError
 
         try:
-            return await self._client.chat.completions.create(**payload)  # type: ignore[misc]
+            return await self._first_byte(self._client.chat.completions.create(**payload))  # type: ignore[misc]
         except APIStatusError as error:
             status_code = error.status_code
             refusal = refusal_from_status_error(status_code, error.body)
             if refusal is not None:
                 raise ProviderRefusalError(refusal) from error
-            match status_code:
-                case 401:
-                    raise ProviderAuthError("Provider rejected API credential") from error
-                case 400 | 422 | 500:
-                    raise ProviderResponseError("Provider returned an invalid stream payload") from error
-                case _:
-                    raise ProviderResponseError("Provider stream request failed") from error
+            status, failure, message = describe_status_error(self.provider_name, error)
+            if status == 401:
+                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
+            raise http_error(status, failure, message) from error
 
     async def _request_response(self, request: ModelRequest) -> Any:
         """Open a stateless Responses API stream for OpenAI or DeepSeek."""
@@ -740,18 +990,15 @@ class _OpenAIStyleProvider(RetryingProvider):
         from openai import APIStatusError
 
         try:
-            return await self._client.responses.create(**payload)  # type: ignore[misc]
+            return await self._first_byte(self._client.responses.create(**payload))  # type: ignore[misc]
         except APIStatusError as error:
             refusal = refusal_from_status_error(error.status_code, error.body)
             if refusal is not None:
                 raise ProviderRefusalError(refusal) from error
-            match error.status_code:
-                case 401:
-                    raise ProviderAuthError("Provider rejected API credential") from error
-                case 400 | 422 | 500:
-                    raise ProviderResponseError("Provider returned an invalid Responses stream") from error
-                case _:
-                    raise ProviderResponseError("Provider Responses request failed") from error
+            status, failure, message = describe_status_error(self.provider_name, error)
+            if status == 401:
+                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
+            raise http_error(status, failure, message) from error
 
     def _provider_specific_request_fields(self, request: ModelRequest) -> dict[str, Any]:
         return (
@@ -786,10 +1033,11 @@ class _OpenAIStyleProvider(RetryingProvider):
                 )
             )
             return
+        await require_event_stream(response, self.provider_name)
         if self.response:
             try:
                 async for event in stream_responses(
-                    response,
+                    guard_idle(response, self.timeout),
                     provider=self.provider_name,
                     model=self.model,
                     local_search_tool=local_search_tool,
@@ -810,10 +1058,12 @@ class _OpenAIStyleProvider(RetryingProvider):
         native_finish_reason: str | None = None
         usage = ModelUsage()
 
+        chunks = 0
         try:
-            async for chunk in response:
+            async for chunk in guard_idle(response, self.timeout):
                 if chunk is None:
                     continue
+                chunks += 1
                 match getattr(chunk, "usage", None):
                     case None:
                         pass
@@ -879,6 +1129,9 @@ class _OpenAIStyleProvider(RetryingProvider):
             stream_error = _stream_error_body(error)
         finally:
             await response.close()
+
+        if not chunks:
+            raise ProviderResponseError(_empty_stream_message(self.provider_name, response))
 
         tool_calls = _parse_tool_calls(streams, finish_reason)
         response_message = AssistantMessage(

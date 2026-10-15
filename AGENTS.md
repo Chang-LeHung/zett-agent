@@ -19,6 +19,11 @@
 
 - `src/zett_agent/` is the runtime; `extensions/` holds optional runtime
   extensions and `providers/` holds provider adapters.
+- `src/zett_agent/_agent/` holds the private mixins that `Agent` is composed of,
+  one module per concern (extension hooks, request lifecycle, the turn loop, a
+  model step, tool execution, recovery). Keep every documented public method on
+  `Agent` itself, because the API reference lists what `vars(Agent)` holds, and
+  keep `_agent` free of imports of `zett_agent.agent` at module level.
 - `tests/` covers the runtime, `examples/` holds runnable programs, and
   `docs/` is the Sphinx manual. `docs/_examples` are executed by the test
   suite, so every example must stay offline and deterministic.

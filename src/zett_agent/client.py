@@ -3,10 +3,10 @@
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import aclosing
 
+from ._agent.lifecycle import final_answer
 from .agent import Agent, AgentRunConfig
 from .dispatcher import AgentEventDispatcher
-from .events import AgentEvent, AgentEventType
-from .exceptions import AgentProtocolError
+from .events import AgentEvent
 from .extensions.base import AgentExtension
 from .extensions.events import CompactionEvent
 from .json_types import JsonValue
@@ -73,18 +73,23 @@ class AgentClient(SyncMethodsMixin):
             Closing early cancels unfinished work. Provider, callback, and
             cancellation exceptions are not converted into synthetic events.
         """
-        async with aclosing(
-            self.agent.stream(
-                message,
-                config=config,
-                model=model,
-                reasoning_effort=reasoning_effort,
-                parallel_tool_call=parallel_tool_call,
-                metadata=metadata,
-                tags=tags,
-            )
-        ) as events:
+        stream = self.agent.stream(
+            message,
+            config=config,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            parallel_tool_call=parallel_tool_call,
+            metadata=metadata,
+            tags=tags,
+        )
+        async with aclosing(self._dispatched(stream)) as events:
             async for event in events:
+                yield event
+
+    async def _dispatched(self, events: AsyncIterator[AgentEvent]) -> AsyncIterator[AgentEvent]:
+        """Hand each event to the bound dispatcher, if there is one, then yield it unchanged."""
+        async with aclosing(events) as stream:
+            async for event in stream:
                 if self.event_dispatcher is not None:
                     await self.event_dispatcher.dispatch(event)
                 yield event
@@ -157,8 +162,7 @@ class AgentClient(SyncMethodsMixin):
             AgentProtocolError: If no final answer is emitted or the runtime is
                 not initialized. Model and callback failures propagate unchanged.
         """
-        result: AssistantMessage | None = None
-        async with aclosing(
+        return await final_answer(
             self.stream(
                 message,
                 config=config,
@@ -168,13 +172,7 @@ class AgentClient(SyncMethodsMixin):
                 metadata=metadata,
                 tags=tags,
             )
-        ) as events:
-            async for event in events:
-                if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
-                    result = event.message
-        if result is None:
-            raise AgentProtocolError("The agent did not produce a final answer")
-        return result
+        )
 
     async def resume_point(
         self,
@@ -204,19 +202,16 @@ class AgentClient(SyncMethodsMixin):
         Use aclosing(client.stream_resume(...)) when stopping consumption early. A session with
         nothing to resume raises :class:`~zett_agent.exceptions.AgentResumeError`.
         """
-        async with aclosing(
-            self.agent.stream_resume(
-                config=config,
-                model=model,
-                reasoning_effort=reasoning_effort,
-                parallel_tool_call=parallel_tool_call,
-                metadata=metadata,
-                tags=tags,
-            )
-        ) as events:
+        stream = self.agent.stream_resume(
+            config=config,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            parallel_tool_call=parallel_tool_call,
+            metadata=metadata,
+            tags=tags,
+        )
+        async with aclosing(self._dispatched(stream)) as events:
             async for event in events:
-                if self.event_dispatcher is not None:
-                    await self.event_dispatcher.dispatch(event)
                 yield event
 
     async def resume(
@@ -233,8 +228,7 @@ class AgentClient(SyncMethodsMixin):
 
         See :meth:`Agent.resume` for what is done in each case and what it raises.
         """
-        result: AssistantMessage | None = None
-        async with aclosing(
+        return await final_answer(
             self.stream_resume(
                 config=config,
                 model=model,
@@ -243,13 +237,7 @@ class AgentClient(SyncMethodsMixin):
                 metadata=metadata,
                 tags=tags,
             )
-        ) as events:
-            async for event in events:
-                if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
-                    result = event.message
-        if result is None:
-            raise AgentProtocolError("The agent did not produce a final answer")
-        return result
+        )
 
 
 async def create_agent(

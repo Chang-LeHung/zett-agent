@@ -15,6 +15,7 @@ from ..exceptions import AgentIterationLimitError, AgentProtocolError
 from ..ids import new_uuid7
 from ..messages import AgentMessage, AssistantMessage, ImageContent, TextContent, UserContent, UserMessage
 from ..model import AgentModel, ModelResponse, ReasoningEffort
+from ..stop import StopReason
 from ..tools.base import tool
 from .base import AgentExtension
 from .coding import CodingExtension
@@ -225,8 +226,15 @@ class GoalExtension(AgentExtension):
         context: AgentRunContext,
         response: ModelResponse,
     ) -> None:
-        """Privately evaluate a candidate answer and enqueue one continuation."""
+        """Privately evaluate a candidate answer and enqueue one continuation.
+
+        A step that was refused or interrupted has no answer to judge, and sending the
+        model back to try again would only meet the same refusal, so it is not evaluated:
+        the run ends and the host is told why through ``MODEL_STOPPED``.
+        """
         if response.message.tool_calls:
+            return
+        if response.stop is not None and response.stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
             return
         run = self._runs.get(context)
         if run is None or run.goal is None or run.raw_content is None:

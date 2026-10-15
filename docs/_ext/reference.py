@@ -176,12 +176,14 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     ),
     "zett_agent.extensions.sqlite": ("SQLiteSessionExtension",),
     "zett_agent.extensions.steering": ("STEERING_MESSAGE_EVENT_NAME", "SteeringExtension"),
+    "zett_agent.extensions.refusal_replay": ("RefusalReplay", "RefusalReplayExtension"),
     "zett_agent.extensions.subagent": (
         "SubAgentDefinition",
         "SubAgentExtension",
         "SubAgentResult",
         "TASK_TOOL_NAME",
         "default_subagents",
+        "subagent_report",
     ),
     "zett_agent.extensions.todo": (
         "TODO_WRITE_TOOL_NAME",

@@ -17,8 +17,9 @@ from ..agent import AgentRunContext
 from ..ids import new_uuid7
 from ..messages import AgentMessage
 from ..model import ModelRequest
+from ..stop import StopInfo
 from ..tools.base import AgentTool, tool
-from .subagent import SubAgentDefinition, SubAgentExtension
+from .subagent import SubAgentDefinition, SubAgentExtension, subagent_report
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,9 @@ class SubAgentTask:
         started_at: Monotonic start time, in seconds.
         finished_at: Monotonic end time, or None while running.
         content: The child's final report once completed.
+        stop: Why the child stopped early, when it did not finish normally; None otherwise.
+            A task whose child was refused or cut off is still ``completed``: the status says
+            the child ended, and this says it did not finish.
         error: Failure description once failed.
         notified: Whether the parent was told that the task finished.
     """
@@ -76,6 +80,7 @@ class SubAgentTask:
     started_at: float = field(default_factory=time.monotonic)
     finished_at: float | None = None
     content: str | None = None
+    stop: StopInfo | None = None
     error: str | None = None
     notified: bool = False
     _runner: asyncio.Task[None] | None = field(default=None, repr=False)
@@ -102,6 +107,10 @@ class SubAgentTaskInfo(BaseModel):
     session_id: str = Field(description="Child session created for this task")
     elapsed_seconds: float = Field(description="How long the task has run or ran")
     content: str | None = Field(default=None, description="The subagent's final report, once completed")
+    stop: StopInfo | None = Field(
+        default=None,
+        description="Why the subagent stopped early, when it did; the report may be missing or partial",
+    )
     error: str | None = Field(default=None, description="Why the task failed, when it did")
     note: str | None = Field(default=None, description="What to do next with this task")
 
@@ -329,6 +338,8 @@ class AsyncSubAgentExtension(SubAgentExtension):
         match task.status:
             case SubAgentTaskStatus.RUNNING:
                 note = "Still running; call task_output with wait_seconds to wait, or check back later."
+            case SubAgentTaskStatus.COMPLETED if task.stop is not None:
+                note = f"The subagent stopped before finishing ({task.stop.describe()}); its report is incomplete."
             case SubAgentTaskStatus.COMPLETED if not include_output:
                 note = "Finished; call task_output to read the report."
             case SubAgentTaskStatus.FAILED:
@@ -343,6 +354,7 @@ class AsyncSubAgentExtension(SubAgentExtension):
             session_id=task.session_id,
             elapsed_seconds=round(task.elapsed, 1),
             content=task.content if include_output else None,
+            stop=task.stop,
             error=task.error,
             note=note,
         )
@@ -354,7 +366,7 @@ class AsyncSubAgentExtension(SubAgentExtension):
         with ``task_list``.
         """
         outcome = {
-            SubAgentTaskStatus.COMPLETED: "finished",
+            SubAgentTaskStatus.COMPLETED: "finished" if task.stop is None else f"ended early ({task.stop.describe()})",
             SubAgentTaskStatus.FAILED: f"failed: {task.error}",
             SubAgentTaskStatus.CANCELLED: "was cancelled",
         }.get(task.status, task.status.value)
@@ -381,7 +393,8 @@ class AsyncSubAgentExtension(SubAgentExtension):
             await self._observe(self.task_started, task)
             child = await self._create_child(definition, task.session_id, context)
             result = await child.run(task.prompt)
-            task.content = result.content
+            task.content = subagent_report(result)
+            task.stop = result.stop if result.stop is not None and not result.stop.ok else None
             task.status = SubAgentTaskStatus.COMPLETED
         except asyncio.CancelledError:
             task.status = SubAgentTaskStatus.CANCELLED

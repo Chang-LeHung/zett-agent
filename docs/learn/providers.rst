@@ -257,7 +257,96 @@ Default transports honor ``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, and
 ``max_retries=3`` permits up to four transport attempts: the initial one plus
 three retries. Authentication and validation failures are not blindly retried.
 The policy belongs to the model adapter, not ``create_agent``. For a total
-request deadline, see :doc:`application`; retries do not bound elapsed time.
+request deadline, see :doc:`application`. A silent provider is bounded by the
+timeouts in the next section, and a timeout is not retried.
+
+.. _provider-timeouts:
+
+When the provider goes quiet
+----------------------------
+
+A provider that takes the request and never answers used to be waited on for ten
+minutes, and then asked three more times; the Google and Ollama adapters waited
+forever. Every adapter now gives up, and says which wait ran out.
+:class:`~zett_agent.model.TimeoutOptions` has one limit for each stretch where
+nothing may arrive:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 14 68
+
+   * - Limit
+     - Default
+     - What it bounds
+   * - ``connect``
+     - 5 s
+     - Opening the connection. A reachable host answers in milliseconds.
+   * - ``first_byte``
+     - 60 s
+     - From sending the request to receiving the response *headers*. Streaming
+       APIs answer the headers before the model has produced anything, so a long
+       wait here means a gateway that took the request and did nothing.
+   * - ``idle``
+     - 600 s
+     - The longest gap between two chunks once the response has started. It is
+       long because a reasoning model may think silently.
+
+.. code-block:: python
+
+   from zett_agent.model import TimeoutOptions
+
+   OpenAIProvider(
+       model=os.environ["OPENAI_MODEL"],
+       api_key=os.environ["OPENAI_API_KEY"],
+       timeout=TimeoutOptions(first_byte=30, idle=900),
+   )
+
+There is deliberately no limit on the *total* time: a long answer that keeps
+streaming is healthy. Set a limit to ``None`` to switch it off. A limit that
+runs out raises :class:`~zett_agent.providers.base.ProviderTimeoutError`, whose
+``phase`` is ``"connect"``, ``"first_byte"`` or ``"idle"``.
+
+A timeout is **not retried**, except for a failed connection. Retrying a silent
+provider waits the whole limit a second time, and the first request may still be
+running, and billed, on the other side. If the response had already started when
+it went quiet, what arrived was delivered, so a UI has shown it; the request then
+fails rather than restarting.
+
+.. note::
+   The Google and Ollama clients send their request when the first chunk is
+   asked for, so for them ``first_byte`` covers connecting, the response headers
+   and the first chunk, and the connection has no limit of its own. Ollama's
+   default allows ten minutes for that first chunk, because a local model may
+   need to be loaded from disk first.
+
+When the provider answers with a web page
+-----------------------------------------
+
+Between you and a provider there is often a reverse proxy, a gateway, a firewall
+or a captive portal. When that fails it answers with an HTML page, a bare line of
+text, or nothing, and a failure used to be reduced to "Provider stream request
+failed". The status, the provider's own explanation, and the fact that it was a web
+page are now in the message:
+
+.. code-block:: text
+
+   openai returned HTTP 400: model [gpt-6-Astra] service info not found
+   openai answered HTTP 502 with a web page ("502 Bad Gateway") instead of an API
+   response. A proxy, gateway, firewall or login page in front of the API usually
+   does this; check the base_url and the network path to it.
+
+Failures arrive as :class:`~zett_agent.providers.base.ProviderHTTPError`, which
+has ``status_code``, ``reason`` (the provider's own words, when the body was a
+JSON error), ``preview`` and ``is_html``. A rejected credential is still a
+:class:`~zett_agent.providers.base.ProviderAuthError`, with the same detail added.
+The SDK's own error stays on ``__cause__``.
+
+A streaming request that is answered with a web page or with JSON is an error too,
+whatever the status. A ``200`` with a login page, or with JSON because the gateway
+does not stream, used to be read as a successful reply with no text; it is now
+raised, naming the content type and what the body said. Any other content type is
+read as a stream, because some gateways send one as ``text/plain``, and a stream
+that ends without a single event is raised as an error.
 
 Streams that end early or carry broken tool calls
 -------------------------------------------------

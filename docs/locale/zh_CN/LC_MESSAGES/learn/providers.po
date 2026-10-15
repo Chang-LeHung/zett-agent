@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 00:14+0800\n"
+"POT-Creation-Date: 2026-10-15 21:54+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -258,62 +258,146 @@ msgid "Default transports honor ``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, 
 msgstr "默认传输会遵循 ``HTTP_PROXY``、``HTTPS_PROXY``、``ALL_PROXY`` 和 ``NO_PROXY``\\ 。当你需要自定义路由时，请传入自己的传输。"
 
 #: ../../learn/providers.rst:257
-msgid "``max_retries=3`` permits up to four transport attempts: the initial one plus three retries. Authentication and validation failures are not blindly retried. The policy belongs to the model adapter, not ``create_agent``. For a total request deadline, see :doc:`application`; retries do not bound elapsed time."
-msgstr "``max_retries=3`` 允许最多四次传输尝试：首次尝试加三次重试。认证和校验失败不会被盲目重试。该策略属于模型适配器，而不是 ``create_agent``\\ 。关于请求的总截止时间，请参见 :doc:`application`；重试不会限制已用时间。"
+msgid "``max_retries=3`` permits up to four transport attempts: the initial one plus three retries. Authentication and validation failures are not blindly retried. The policy belongs to the model adapter, not ``create_agent``. For a total request deadline, see :doc:`application`. A silent provider is bounded by the timeouts in the next section, and a timeout is not retried."
+msgstr "``max_retries=3`` 最多允许四次传输尝试：一次初始请求加三次重试。认证和校验失败不会被盲目重试。该策略属于模型适配器，而不是 ``create_agent``\\ 。如需整个请求的总截止时间，请参阅 :doc:`application`\\ 。静默的提供方由下一节的超时限制，而且超时不会重试。"
 
-#: ../../learn/providers.rst:263
+#: ../../learn/providers.rst:266
+msgid "When the provider goes quiet"
+msgstr "当提供方不再响应"
+
+#: ../../learn/providers.rst:268
+msgid "A provider that takes the request and never answers used to be waited on for ten minutes, and then asked three more times; the Google and Ollama adapters waited forever. Every adapter now gives up, and says which wait ran out. :class:`~zett_agent.model.TimeoutOptions` has one limit for each stretch where nothing may arrive:"
+msgstr "以前，如果提供方收下请求之后一直不回应，会被等待十分钟，然后再被请求三次；Google 和 Ollama 适配器则会永远等下去。现在每个适配器都会放弃，并说明是哪一段等待超时了。\\ :class:`~zett_agent.model.TimeoutOptions` 为每个“不会有任何数据到达”的阶段各设置了一个限制："
+
+#: ../../learn/providers.rst:278
+msgid "Limit"
+msgstr "限制项"
+
+#: ../../learn/providers.rst:279
+msgid "Default"
+msgstr "默认值"
+
+#: ../../learn/providers.rst:280
+msgid "What it bounds"
+msgstr "限制的是什么"
+
+#: ../../learn/providers.rst:281
+msgid "``connect``"
+msgstr "``connect``"
+
+#: ../../learn/providers.rst:282
+msgid "5 s"
+msgstr "5 秒"
+
+#: ../../learn/providers.rst:283
+msgid "Opening the connection. A reachable host answers in milliseconds."
+msgstr "建立连接。可以访问的主机会在几毫秒内应答。"
+
+#: ../../learn/providers.rst:284
+msgid "``first_byte``"
+msgstr "``first_byte``"
+
+#: ../../learn/providers.rst:285
+msgid "60 s"
+msgstr "60 秒"
+
+#: ../../learn/providers.rst:286
+msgid "From sending the request to receiving the response *headers*. Streaming APIs answer the headers before the model has produced anything, so a long wait here means a gateway that took the request and did nothing."
+msgstr "从发出请求到收到响应*头*。流式 API 会在模型产出任何内容之前就返回响应头，所以这里等了很久，说明有网关收下了请求却什么也没做。"
+
+#: ../../learn/providers.rst:289
+msgid "``idle``"
+msgstr "``idle``"
+
+#: ../../learn/providers.rst:290
+msgid "600 s"
+msgstr "600 秒"
+
+#: ../../learn/providers.rst:291
+msgid "The longest gap between two chunks once the response has started. It is long because a reasoning model may think silently."
+msgstr "响应开始之后，两个数据块之间允许的最长间隔。它设得很长，因为推理模型可能会安静地思考。"
+
+#: ../../learn/providers.rst:304
+msgid "There is deliberately no limit on the *total* time: a long answer that keeps streaming is healthy. Set a limit to ``None`` to switch it off. A limit that runs out raises :class:`~zett_agent.providers.base.ProviderTimeoutError`, whose ``phase`` is ``\"connect\"``, ``\"first_byte\"`` or ``\"idle\"``."
+msgstr "我们刻意不限制*总*时长：持续流出的长回答是正常的。把某个限制设为 ``None`` 即可关闭它。某个限制耗尽时会抛出 :class:`~zett_agent.providers.base.ProviderTimeoutError`，其 ``phase`` 为 ``\"connect\"``、``\"first_byte\"`` 或 ``\"idle\"``\\ 。"
+
+#: ../../learn/providers.rst:309
+msgid "A timeout is **not retried**, except for a failed connection. Retrying a silent provider waits the whole limit a second time, and the first request may still be running, and billed, on the other side. If the response had already started when it went quiet, what arrived was delivered, so a UI has shown it; the request then fails rather than restarting."
+msgstr "超时\\ **不会重试**，连接失败除外。重试一个静默的提供方，要把整个限制时间再等一遍，而且第一次请求可能仍在对方那里运行并计费。如果响应已经开始后才安静下来，已经到达的内容会被送达，所以界面上已经显示了；此时请求会失败，而不是重新开始。"
+
+#: ../../learn/providers.rst:316
+msgid "The Google and Ollama clients send their request when the first chunk is asked for, so for them ``first_byte`` covers connecting, the response headers and the first chunk, and the connection has no limit of its own. Ollama's default allows ten minutes for that first chunk, because a local model may need to be loaded from disk first."
+msgstr "Google 和 Ollama 的客户端要等到被索取第一个数据块时才发出请求，所以对它们来说，``first_byte`` 涵盖连接、响应头和第一个数据块，连接本身没有单独的限制。Ollama 的默认值给第一个数据块留了十分钟，因为本地模型可能需要先从磁盘加载。"
+
+#: ../../learn/providers.rst:323
+msgid "When the provider answers with a web page"
+msgstr "当提供方回答的是一个网页"
+
+#: ../../learn/providers.rst:325
+msgid "Between you and a provider there is often a reverse proxy, a gateway, a firewall or a captive portal. When that fails it answers with an HTML page, a bare line of text, or nothing, and a failure used to be reduced to \"Provider stream request failed\". The status, the provider's own explanation, and the fact that it was a web page are now in the message:"
+msgstr "在你和提供方之间，往往还有反向代理、网关、防火墙或强制门户。它出故障时，会返回 HTML 页面、一行纯文本或者什么都没有，而这类失败以前都会被简化成“Provider stream request failed”。现在，状态码、提供方自己的解释，以及它是一个网页这件事，都会写进错误信息："
+
+#: ../../learn/providers.rst:338
+msgid "Failures arrive as :class:`~zett_agent.providers.base.ProviderHTTPError`, which has ``status_code``, ``reason`` (the provider's own words, when the body was a JSON error), ``preview`` and ``is_html``. A rejected credential is still a :class:`~zett_agent.providers.base.ProviderAuthError`, with the same detail added. The SDK's own error stays on ``__cause__``."
+msgstr "失败会以 :class:`~zett_agent.providers.base.ProviderHTTPError` 的形式到达，它带有 ``status_code``、``reason``\\ （当响应体是 JSON 错误时，提供方自己的话）、``preview`` 和 ``is_html``\\ 。被拒绝的凭据仍然是 :class:`~zett_agent.providers.base.ProviderAuthError`，并附上同样的细节。SDK 自己的错误保留在 ``__cause__`` 上。"
+
+#: ../../learn/providers.rst:344
+msgid "A streaming request that is answered with a web page or with JSON is an error too, whatever the status. A ``200`` with a login page, or with JSON because the gateway does not stream, used to be read as a successful reply with no text; it is now raised, naming the content type and what the body said. Any other content type is read as a stream, because some gateways send one as ``text/plain``, and a stream that ends without a single event is raised as an error."
+msgstr "对流式请求，只要回答的是网页或 JSON，无论状态码是什么，也都算错误。以前，带登录页的 ``200``，或者因为网关不支持流式而返回的 JSON，会被当作一次没有文本的成功回复；现在它们会被抛出，并指出内容类型和响应体说了什么。其他任何内容类型都按流来读取，因为有些网关会把流以 ``text/plain`` 发送；一个流如果连一个事件都没有就结束，会作为错误抛出。"
+
+#: ../../learn/providers.rst:352
 msgid "Streams that end early or carry broken tool calls"
 msgstr "提前结束或携带损坏工具调用的流"
 
-#: ../../learn/providers.rst:265
+#: ../../learn/providers.rst:354
 msgid "Providers keep a request alive through three failures that used to end it."
 msgstr "过去有三种失败会让请求终止，现在模型提供商会让请求在这些失败中继续。"
 
-#: ../../learn/providers.rst:267
+#: ../../learn/providers.rst:356
 msgid "**Malformed or truncated tool arguments.** If a tool call's JSON is invalid, for example because the response hit its output limit or a gateway cut the stream, the call is not run. It becomes a failed tool result that says what happened and how to retry, so the model can resend a smaller call. Slightly malformed but complete JSON is still repaired silently. A cut-off payload is never completed by guesswork, because that could write truncated content. ``AnthropicProvider(max_tokens=...)`` sets the per-response output budget (default 16384); raise it for large writes, or lower it for a model with a smaller limit."
 msgstr "**格式错误或被截断的工具参数。** 如果工具调用的 JSON 无效，例如响应达到了输出上限或网关截断了流，这次调用就不会执行。它会变成一条失败的工具结果，说明发生了什么以及如何重试，这样模型就可以重新发送一个更小的调用。轻微格式错误但完整的 JSON 仍会被静默修复。被截断的载荷绝不会靠猜测补全，因为那样可能写入被截断的内容。\\ ``AnthropicProvider(max_tokens=...)`` 设置每次响应的输出预算（默认 16384）；写入量大时可调高，模型上限较小时可调低。"
 
-#: ../../learn/providers.rst:276
+#: ../../learn/providers.rst:365
 msgid "**Responses ``error`` events.** A mid-stream ``error`` event (rate limit, overload) is raised with its own code and message instead of surfacing as a missing terminal response."
 msgstr "**Responses 的 ``error`` 事件。** 流中途出现的 ``error`` 事件（限流、过载）会带着自己的代码和消息抛出，而不会表现为缺少终止响应。"
 
-#: ../../learn/providers.rst:279
+#: ../../learn/providers.rst:368
 msgid "**Responses streams without a terminal event.** If a gateway drops ``response.completed`` after every output item finished, the finished items are used and ``finish_reason`` is ``\"incomplete\"``. If an item never finished, or nothing arrived, the stream raised ``ProviderResponseError``; an empty stream is retried because nothing had been shown yet."
 msgstr "**没有终止事件的 Responses 流。** 如果网关在每个输出项都完成之后丢弃了 ``response.completed``，那么已完成的项会被使用，``finish_reason`` 为 ``\"incomplete\"``\\ 。如果有某个项从未完成，或者什么都没到达，流就会抛出 ``ProviderResponseError``；空流会被重试，因为此时还没有展示任何内容。"
 
-#: ../../learn/providers.rst:286
+#: ../../learn/providers.rst:375
 msgid "Prompt caching"
 msgstr "提示词缓存"
 
-#: ../../learn/providers.rst:288
+#: ../../learn/providers.rst:377
 msgid "The runtime derives a prompt-cache key from the session, so every step of one conversation can use the same routing hint on endpoints that support it. Cache reuse and savings remain provider decisions, not runtime guarantees. Set ``cache_key`` on :class:`~zett_agent.agent.AgentRunConfig` to route several conversations onto one prefix, or construct a provider with ``send_prompt_cache_key=False`` when an endpoint rejects the field."
 msgstr "运行时从会话派生出提示词缓存键，因此在支持该功能的端点上，同一对话的每一步都可以使用相同的路由提示。缓存复用和节省仍由提供商决定，而不是运行时的保证。在 :class:`~zett_agent.agent.AgentRunConfig` 上设置 ``cache_key``，可以把多个对话路由到同一个前缀；当端点拒绝该字段时，可以用 ``send_prompt_cache_key=False`` 构造提供商。"
 
-#: ../../learn/providers.rst:295
+#: ../../learn/providers.rst:384
 msgid "OpenAI sends the key by default. DeepSeek omits it by default because its first-party service caches automatically; enable it only for a gateway that expects it. Other adapters may not expose cache routing."
 msgstr "OpenAI 默认会发送该键。DeepSeek 默认省略它，因为其自有服务会自动缓存；只有网关需要时才应启用。其他适配器可能不提供缓存路由。"
 
-#: ../../learn/providers.rst:299
+#: ../../learn/providers.rst:388
 msgid "When a provider reports cache hits, ``ModelUsage.cache_read_tokens`` and ``cache_hit_rate`` expose them. Requests through gateways that translate protocols often omit the breakdown; ``ModelUsage.cache_reported`` is then ``False``, which distinguishes \"unknown\" from a measured 0% miss."
 msgstr "当提供商报告缓存命中时，``ModelUsage.cache_read_tokens`` 和 ``cache_hit_rate`` 会将其暴露出来。经过协议转换网关的请求往往会省略明细；此时 ``ModelUsage.cache_reported`` 为 ``False``，从而区分“未知”和实测的 0% 未命中。"
 
-#: ../../learn/providers.rst:305
+#: ../../learn/providers.rst:394
 msgid "Always release the adapter"
 msgstr "始终释放适配器"
 
-#: ../../learn/providers.rst:307
+#: ../../learn/providers.rst:396
 msgid "The client does not own a provider you passed in. Close it when the application is done, even if several clients shared it:"
 msgstr "客户端并不拥有你传入的提供商。应用结束时请关闭它，即使多个客户端共享同一个提供商："
 
-#: ../../learn/providers.rst:315
+#: ../../learn/providers.rst:404
 msgid "Changing models mid-conversation"
 msgstr "对话中途更换模型"
 
-#: ../../learn/providers.rst:317
+#: ../../learn/providers.rst:406
 msgid "Pass ``model=other_model`` to ``run`` or ``stream`` to override the default for one request. Ordinary messages and local tools remain provider-neutral, but vision support and hosted tools must still match the new endpoint. Signed reasoning/replay blocks are retained only for the provider/model identity that can consume them; do not treat them as portable instructions."
 msgstr "把 ``model=other_model`` 传给 ``run`` 或 ``stream``，即可为单个请求覆盖默认值。普通消息和本地工具仍然与提供商无关，但视觉支持和托管工具必须与新端点匹配。带签名的推理/重放块只保留给能够消费它们的提供商/模型标识；不要把它们当作可移植的指令。"
 
-#: ../../learn/providers.rst:323
+#: ../../learn/providers.rst:412
 msgid "Next: :doc:`streaming`, or write your own adapter in :doc:`../extending/model-adapter`."
 msgstr "下一步：:doc:`streaming`，或者按照 :doc:`../extending/model-adapter`\\ 编写你自己的适配器。"
 

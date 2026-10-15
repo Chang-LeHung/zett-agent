@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, overload
 from ._compat import UTC, Self, add_note
 from .event_queue import AgentEventQueue
 from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
-from .exceptions import AgentIterationLimitError, AgentProtocolError
+from .exceptions import AgentIterationLimitError, AgentProtocolError, AgentResumeError
 from .ids import new_uuid7
 from .json_types import JsonValue, json_object
 from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
@@ -28,6 +28,7 @@ from .model import (
     ReasoningEffort,
     ServerToolDefinition,
 )
+from .resume import ResumeKind, ResumePoint, classify_resume
 from .stop import StopReason
 from .sync_runtime import SyncMethodsMixin
 from .tools.base import (
@@ -43,6 +44,26 @@ if TYPE_CHECKING:
     from .extensions.base import AgentExtension, ModelRequestNext
     from .extensions.events import ExtensionEvent, MessageTiming
     from .extensions.external import ExternalEvent
+
+
+#: What a tool call is answered with when the request that made it was cancelled while it ran.
+_CANCELLED_TOOL_RESULT = "Request cancelled before tool completion"
+#: What a tool call is answered with when the process stopped while it ran and left no trace. It
+#: says the effect is unknown, because a tool that writes a file may have done so before the stop.
+_INTERRUPTED_TOOL_RESULT = (
+    "The process stopped while this tool was running, so it may or may not have completed, and whatever "
+    "it changes may or may not have happened. Check the current state before running it again."
+)
+#: What the model is told when its response was cut off by a failure and the session is resumed.
+_RETRY_RESPONSE_NOTICE = (
+    "Your previous response was cut off by an interruption (a lost connection or a provider failure) "
+    "before it finished. Start that response again from the beginning."
+)
+#: What the model is told when its response reached the output limit and the session is resumed.
+_CONTINUE_RESPONSE_NOTICE = (
+    "Your previous response was cut off at the output limit. Continue exactly where it stopped, "
+    "without repeating what you already wrote."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -857,6 +878,157 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             return result
         raise AgentProtocolError("The agent did not produce a final answer")
 
+    async def resume_point(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+    ) -> ResumePoint | None:
+        """Report where a session was interrupted, without changing it.
+
+        A request can end without finishing: the connection drops, the user stops it, the
+        process is killed. Nothing records that, so the session is restored exactly as a
+        request restores it and its last message is read. Nothing is written and no model is
+        called.
+
+        Args:
+            config: Session identity; omitted to use the initialized session.
+            model: Only needed when the Agent has no default model.
+
+        Returns:
+            Where it was interrupted and what :meth:`resume` would do, or None when there is
+            nothing to resume: the session is empty, its last request finished, or it ended
+            in a refusal, a full context window, or a stop this library does not know.
+            :meth:`resume` raises for those.
+
+        Examples:
+            Offer a resume only when there is one::
+
+                point = await agent.resume_point()
+                if point is not None:
+                    print(point.description)
+        """
+        context = self._prepare_request_context(config, model, None, None, None)
+        try:
+            await self._start_context_loading(context)
+            await self._notify_on_tool(context)
+            await self._notify_on_state(context)
+            await context.flush_message_events()
+            await self._finish_context_loading(context)
+            try:
+                point: ResumePoint | None = classify_resume(context.state.messages)
+            except AgentResumeError:
+                point = None
+            await self._complete_request(context)
+            return point
+        except asyncio.CancelledError as cancellation:
+            await self._handle_request_cancellation(context, cancellation)
+            raise
+        except Exception as error:
+            await self._handle_request_failure(context, error)
+            raise
+        finally:
+            self._release_request(context)
+            await context.event_queue.close()
+
+    async def resume(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
+    ) -> AssistantMessage:
+        """Pick an interrupted session up where it stopped and return the final answer.
+
+        This is :meth:`run` without a new user message. The session is restored, its last
+        message says how it was interrupted, and the request carries on from there; see
+        :class:`~zett_agent.resume.ResumeKind` for what is done in each case. Pass the same
+        model, tools and settings the interrupted request had: none of them is stored.
+
+        Args:
+            config: Session identity; omitted to use the initialized session.
+            model: Request-specific model; omitted to use the Agent default.
+            reasoning_effort: Optional reasoning override for this request.
+            parallel_tool_call: Optional parallel-call override for this request.
+            metadata: JSON data for extensions and Raw Log persistence, not a prompt.
+            tags: JSON classifications for extensions and Raw Log persistence.
+
+        Returns:
+            The final assistant answer.
+
+        Raises:
+            AgentResumeError: If there is nothing to resume. Ask :meth:`resume_point` first
+                to find out without an exception.
+            AgentIterationLimitError: If the model/internal-message budget is exhausted.
+
+        Examples:
+            Carry on after a failure::
+
+                try:
+                    reply = await agent.run("Refactor the parser")
+                except ProviderTimeoutError:
+                    reply = await agent.resume()
+        """
+        result: AssistantMessage | None = None
+        async with aclosing(
+            self.stream_resume(
+                config=config,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                parallel_tool_call=parallel_tool_call,
+                metadata=metadata,
+                tags=tags,
+            )
+        ) as events:
+            async for event in events:
+                if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
+                    result = event.message
+        if result is not None:
+            return result
+        raise AgentProtocolError("The agent did not produce a final answer")
+
+    async def stream_resume(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
+    ) -> AsyncIterator[AgentEvent]:
+        """Stream :meth:`resume`; the events are those of :meth:`stream`.
+
+        Args:
+            config: Session identity; omitted to use the initialized session.
+            model: Request-specific model; omitted to use the Agent default.
+            reasoning_effort: Reasoning override limited to this request.
+            parallel_tool_call: Parallel-call override limited to this request.
+            metadata: Request data visible to extensions and persistence.
+            tags: Request classifications visible to extensions and persistence.
+
+        Yields:
+            AgentEvent objects in execution order, ending in RUN_COMPLETED on success.
+
+        Note:
+            The session is only known once it is restored, so a session with nothing to resume
+            raises :class:`~zett_agent.exceptions.AgentResumeError` as the request fails, and
+            runs the error hooks like any failed request. Use :meth:`resume_point` to ask first.
+            The ``on_message`` hook is not called, because there is no new input for it to
+            transform, and a goal that was armed for the interrupted request is not re-armed.
+        """
+        effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
+        allow_parallel = self.parallel_tool_call if parallel_tool_call is None else parallel_tool_call
+        if not isinstance(allow_parallel, bool):
+            raise ValueError("parallel_tool_call must be a boolean")
+        context = self._prepare_request_context(config, model, metadata, tags, None)
+        async with aclosing(self._drive_request(context, effort, allow_parallel, resume=True)) as events:
+            async for event in events:
+                yield event
+
     @overload
     def stream(
         self,
@@ -936,8 +1108,25 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         if not isinstance(allow_parallel, bool):
             raise ValueError("parallel_tool_call must be a boolean")
         context = self._prepare_request_context(config, model, metadata, tags, user_message)
+        async with aclosing(self._drive_request(context, effort, allow_parallel, resume=False)) as events:
+            async for event in events:
+                yield event
+
+    async def _drive_request(
+        self,
+        context: AgentRunContext,
+        effort: ReasoningEffort,
+        allow_parallel: bool,
+        *,
+        resume: bool,
+    ) -> AsyncIterator[AgentEvent]:
+        """Run one request in a producer task and yield its events, one at a time.
+
+        Both :meth:`stream` and :meth:`stream_resume` end here, so a request is cancelled,
+        acknowledged and cleaned up the same way whichever of them started it.
+        """
         context.event_queue.enable_acknowledgements()
-        producer = asyncio.create_task(self._run_request(context, effort, allow_parallel))
+        producer = asyncio.create_task(self._run_request(context, effort, allow_parallel, resume=resume))
         try:
             while True:
                 event = await context.event_queue.get()
@@ -963,10 +1152,15 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         context: AgentRunContext,
         reasoning_effort: ReasoningEffort,
         parallel_tool_call: bool,
+        *,
+        resume: bool = False,
     ) -> None:
         """Produce one run into its queue and own every terminal cleanup path."""
         try:
-            await self._open_request(context)
+            if resume:
+                await self._open_resume(context)
+            else:
+                await self._open_request(context)
             await self._run_loop(context, reasoning_effort, parallel_tool_call)
         except asyncio.CancelledError as cancellation:
             await self._handle_request_cancellation(context, cancellation)
@@ -1155,8 +1349,44 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         # order matches the final model context.
         await context.flush_message_events()
         await self._finish_context_loading(context)
+        # A request that was killed could not close its own tool calls. The history is
+        # restored with the results that did arrive, so any call still without one is
+        # answered here, before the new input, or the provider would reject the history.
+        await self._close_unanswered_tool_calls(context, _INTERRUPTED_TOOL_RESULT)
         await context.append_message(context.input_message, MessageTiming.instant())
         await self._notify_before_run(context)
+
+    async def _open_resume(self, context: AgentRunContext) -> None:
+        """Open inboxes, restore history, and prepare the interrupted request to carry on."""
+        self._internal_message_extension.open(context)
+        self._steering_extension.open(context)
+        await self._start_context_loading(context)
+        await self._notify_on_tool(context)
+        await self._notify_on_state(context)
+        await context.flush_message_events()
+        await self._finish_context_loading(context)
+        await self._prepare_resume(context, classify_resume(context.state.messages))
+        await self._notify_before_run(context)
+
+    async def _prepare_resume(self, context: AgentRunContext, point: ResumePoint) -> None:
+        """Make the history ready for the next model call, telling the model what it missed."""
+        from .extensions.events import MessageTiming
+
+        match point.kind:
+            case ResumeKind.RECOVER_TOOLS:
+                await self._close_unanswered_tool_calls(context, _INTERRUPTED_TOOL_RESULT)
+            case ResumeKind.RETRY_RESPONSE:
+                await context.append_message(
+                    AgentMessage(content=_RETRY_RESPONSE_NOTICE, attributes={"resume": point.kind.value}),
+                    MessageTiming.instant(),
+                )
+            case ResumeKind.CONTINUE_RESPONSE:
+                await context.append_message(
+                    AgentMessage(content=_CONTINUE_RESPONSE_NOTICE, attributes={"resume": point.kind.value}),
+                    MessageTiming.instant(),
+                )
+            case ResumeKind.CALL_MODEL:
+                pass
 
     async def _run_loop(
         self,
@@ -1474,13 +1704,13 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         active so the restored conversation remains protocol-complete.
         """
         try:
-            await self._cancel_unanswered_tool_calls(context)
+            await self._close_unanswered_tool_calls(context, _CANCELLED_TOOL_RESULT)
             await self._cancel_request(context)
         except Exception as notification_error:
             add_note(cancellation, f"Cancellation notification failed: {notification_error!r}")
 
-    async def _cancel_unanswered_tool_calls(self, context: AgentRunContext) -> None:
-        """Append cancellation results for the latest unfinished tool-call batch."""
+    async def _close_unanswered_tool_calls(self, context: AgentRunContext, content: str) -> None:
+        """Append a failed result, saying ``content``, for each call of the latest batch that has none."""
         from .extensions.events import MessageTiming
 
         pending: dict[str, ToolCall] = {}
@@ -1502,7 +1732,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 ToolMessage(
                     tool_call_id=call.id,
                     name=call.name,
-                    content="Request cancelled before tool completion",
+                    content=content,
                     success=False,
                 ),
                 MessageTiming.instant(),

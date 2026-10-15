@@ -77,6 +77,10 @@ class JSONLExtension(AgentExtension):
     async def before_run(self, context: AgentRunContext) -> None:
         """Remember the finalized input that marks the start of this turn."""
         message = context.input_message
+        if message is None:
+            # A resumed request has no new input. Its turn starts at the last user message,
+            # which the interrupted request appended, so the record shows the whole turn.
+            message = next((item for item in reversed(context.state.messages) if isinstance(item, UserMessage)), None)
         if message is None or not any(item is message for item in context.state.messages):
             raise RuntimeError("JSONL turn input must be appended before before_run")
         self._pending[context] = _PendingTurn(message, datetime.now(UTC))

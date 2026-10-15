@@ -12,6 +12,7 @@ from .extensions.events import CompactionEvent
 from .json_types import JsonValue
 from .messages import AssistantMessage, UserMessage
 from .model import AgentModel, ReasoningEffort
+from .resume import ResumePoint
 from .sync_runtime import SyncMethodsMixin
 from .tools.base import AgentTool
 
@@ -160,6 +161,81 @@ class AgentClient(SyncMethodsMixin):
         async with aclosing(
             self.stream(
                 message,
+                config=config,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                parallel_tool_call=parallel_tool_call,
+                metadata=metadata,
+                tags=tags,
+            )
+        ) as events:
+            async for event in events:
+                if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
+                    result = event.message
+        if result is None:
+            raise AgentProtocolError("The agent did not produce a final answer")
+        return result
+
+    async def resume_point(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+    ) -> ResumePoint | None:
+        """Report where the session was interrupted, or None when there is nothing to resume.
+
+        See :meth:`Agent.resume_point`. Nothing is written, no model is called, and no event
+        reaches the bound dispatcher.
+        """
+        return await self.agent.resume_point(config=config, model=model)
+
+    async def stream_resume(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
+    ) -> AsyncIterator[AgentEvent]:
+        """Dispatch then yield each event of :meth:`Agent.stream_resume`, in order, exactly once.
+
+        Use aclosing(client.stream_resume(...)) when stopping consumption early. A session with
+        nothing to resume raises :class:`~zett_agent.exceptions.AgentResumeError`.
+        """
+        async with aclosing(
+            self.agent.stream_resume(
+                config=config,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                parallel_tool_call=parallel_tool_call,
+                metadata=metadata,
+                tags=tags,
+            )
+        ) as events:
+            async for event in events:
+                if self.event_dispatcher is not None:
+                    await self.event_dispatcher.dispatch(event)
+                yield event
+
+    async def resume(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
+    ) -> AssistantMessage:
+        """Pick an interrupted session up where it stopped, with callbacks, and return the answer.
+
+        See :meth:`Agent.resume` for what is done in each case and what it raises.
+        """
+        result: AssistantMessage | None = None
+        async with aclosing(
+            self.stream_resume(
                 config=config,
                 model=model,
                 reasoning_effort=reasoning_effort,

@@ -28,6 +28,7 @@ from .model import (
     ReasoningEffort,
     ServerToolDefinition,
 )
+from .stop import StopReason
 from .sync_runtime import SyncMethodsMixin
 from .tools.base import (
     AgentTool,
@@ -500,6 +501,13 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         point. :class:`~zett_agent.client.AgentClient` adds application event dispatch,
         and :doc:`/concepts/lifecycle` explains the complete loop.
     """
+
+    #: How many times in a row a ``paused`` stop is continued without asking anyone. A
+    #: provider returns ``paused`` when it hands control back mid-turn (Anthropic does so
+    #: when a server-tool loop reaches its limit) and expects the turn to be sent again. At
+    #: this many in a row the run ends and ``MODEL_STOPPED`` reports the pause. Zero never
+    #: continues. Set it on an instance to change it.
+    max_pause_continuations: int = 5
 
     def __init__(
         self,
@@ -1163,12 +1171,31 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         active_input: AgentMessage | UserMessage | None = None
         message_iterations = 0
         processed_internal_messages = 0
+        pauses = 0
+        continuing = False
         while True:
             if message_iterations >= self.max_iterations:
                 raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
             message_iterations += 1
-            await self._notify_before_turn(context)
-            response = await self._run_model_step(context, reasoning_effort, parallel_tool_call)
+            # A paused step is continued inside the same turn, so the turn is not reopened.
+            if not continuing:
+                await self._notify_before_turn(context)
+            continuing = False
+            response = await self._run_model_step(
+                context, reasoning_effort, parallel_tool_call, may_pause=pauses < self.max_pause_continuations
+            )
+            stop = response.stop
+            if (
+                stop is not None
+                and stop.reason is StopReason.PAUSED
+                and not response.message.tool_calls
+                and pauses < self.max_pause_continuations
+            ):
+                pauses += 1
+                continuing = True
+                continue
+            pauses = 0
+            await self._announce_stop(context, response)
             if not response.message.tool_calls:
                 if active_input is not None:
                     internal = isinstance(active_input, AgentMessage)
@@ -1253,8 +1280,14 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         context: AgentRunContext,
         reasoning_effort: ReasoningEffort,
         parallel_tool_call: bool,
+        *,
+        may_pause: bool = False,
     ) -> ModelResponse:
-        """Run preprocessing and one model call, validate its stream, and persist output."""
+        """Run preprocessing and one model call, validate its stream, and persist output.
+
+        ``may_pause`` says a paused step will be continued, so its pause is not recorded on the
+        stored message: it would otherwise be reported again whenever the session is restored.
+        """
         config, state = context.config, context.state
         request = ModelRequest(
             messages=tuple(state.messages),
@@ -1359,6 +1392,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         if response is None:
             raise AgentProtocolError("Model stream ended without a response")
 
+        response = self._settle_stop(response, may_pause=may_pause)
         model_completed = await self._finish_model_generation(context)
         await context.append_message(
             response.message,
@@ -1375,6 +1409,48 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             )
         )
         return response
+
+    @staticmethod
+    def _settle_stop(response: ModelResponse, *, may_pause: bool = False) -> ModelResponse:
+        """Put the stop on the message, and withhold tool calls that came with a bad stop.
+
+        A refused or interrupted step cannot be trusted to have produced a whole tool call:
+        a refusal can arrive after the call was streamed, and an interrupted stream may end
+        in the middle of one. Running it would act on output the model or the provider
+        disowned, so the calls are removed from the message that is stored and replayed, and
+        their names are kept in ``stop.detail`` for the host to show.
+        """
+        stop = response.stop
+        message = response.message
+        if stop is None:  # pragma: no cover - ModelResponse always fills it in
+            return response
+        if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED) and message.tool_calls:
+            withheld = [call.name for call in message.tool_calls]
+            stop = replace(stop, detail={**stop.detail, "withheld_tool_calls": withheld})
+            message = replace(message, tool_calls=())
+        # Only an abnormal stop is written to the message. A message that ended normally is
+        # left exactly as the model produced it, so stored history and every comparison
+        # against it are unchanged; the stop of a normal step is still on the response.
+        continued = may_pause and stop.reason is StopReason.PAUSED and not message.tool_calls
+        if not stop.ok and not continued:
+            message = replace(message, stop=stop)
+        return replace(response, message=message, stop=stop)
+
+    async def _announce_stop(self, context: AgentRunContext, response: ModelResponse) -> None:
+        """Tell the host a step ended for a reason other than finishing or asking for tools."""
+        stop = response.stop
+        if stop is None or stop.ok:
+            return
+        await context._emit_runtime(
+            AgentEvent(
+                AgentEventType.MODEL_STOPPED,
+                session_id=context.config.session_id,
+                phase=context.state.phase,
+                response=response,
+                stop=stop,
+                message=response.message,
+            )
+        )
 
     def _select_pending_input(self, context: AgentRunContext) -> tuple[UserMessage | None, AgentMessage | None]:
         """Reserve steering first, or internal input, without a queue-closing race."""

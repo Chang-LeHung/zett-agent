@@ -27,6 +27,7 @@ from ..model import (
     validate_response,
     validate_retry,
 )
+from ..stop import StopInfo, StopReason, classify_stop
 from .base import (
     ProviderAuthError,
     ProviderError,
@@ -38,6 +39,7 @@ from .base import (
     validate_extra_body,
     validate_extra_headers,
 )
+from .stop_reasons import withhold_replay_blocks
 from .tool_images import expand_tool_images
 
 if TYPE_CHECKING:
@@ -224,6 +226,8 @@ class GoogleProvider(RetryingProvider):
         replay: list[dict[str, Any]] = []
         usage = ModelUsage()
         finish_reason = None
+        block_reason: str | None = None
+        block_message: str | None = None
         server_tool_sequence = 0
         seen_server_tool_metadata: set[str] = set()
         try:
@@ -236,6 +240,12 @@ class GoogleProvider(RetryingProvider):
             # The SDK sends the HTTP request when the first chunk is requested,
             # so a rejected request surfaces here rather than above.
             async for chunk in stream:
+                feedback = getattr(chunk, "prompt_feedback", None)
+                if feedback is not None and getattr(feedback, "block_reason", None):
+                    # The prompt was blocked before the model wrote anything. There is no
+                    # candidate, so this is the only place the reason is reported.
+                    block_reason = str(getattr(feedback.block_reason, "value", feedback.block_reason))
+                    block_message = getattr(feedback, "block_reason_message", None) or None
                 for candidate in (chunk.candidates or [])[:1]:
                     server_events, server_tool_sequence = _google_server_tool_events(
                         candidate,
@@ -282,8 +292,30 @@ class GoogleProvider(RetryingProvider):
             raise _provider_error(error) from error
         finally:
             await stream.aclose()
+        if finish_reason is None and block_reason is not None:
+            # Answered as a refusal, not raised: the conversation goes on and the host is
+            # told which safety system blocked the prompt.
+            yield ModelEvent.completed(
+                ModelResponse(
+                    AssistantMessage(content="", provider="google", model=self.model),
+                    finish_reason=block_reason,
+                    usage=usage,
+                    stop=StopInfo(
+                        StopReason.REFUSAL,
+                        raw=block_reason,
+                        category=block_reason,
+                        message=block_message,
+                        detail={"blocked": "prompt"},
+                    ),
+                )
+            )
+            return
         if finish_reason is None:
             raise ProviderResponseError("Google stream ended without a finish reason")
+        stop = classify_stop(finish_reason, has_tool_calls=bool(calls))
+        if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
+            # The calls are withheld from the message, so the parts that carry them go too.
+            replay = list(withhold_replay_blocks(replay, lambda part: "function_call" in part))
         yield ModelEvent.completed(
             ModelResponse(
                 AssistantMessage(
@@ -296,6 +328,7 @@ class GoogleProvider(RetryingProvider):
                 ),
                 finish_reason=finish_reason,
                 usage=usage,
+                stop=stop,
             )
         )
 

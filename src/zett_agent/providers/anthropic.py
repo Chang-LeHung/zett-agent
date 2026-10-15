@@ -31,6 +31,7 @@ from ..model import (
     validate_response,
     validate_retry,
 )
+from ..stop import StopInfo, StopReason, classify_stop
 from .base import (
     ProviderAuthError,
     ProviderResponseError,
@@ -45,6 +46,7 @@ from .base import (
     validate_extra_query,
 )
 from .responses import local_tool_search_name
+from .stop_reasons import withhold_replay_blocks
 from .tool_arguments import ToolArgumentsError, decode_tool_arguments
 from .tool_images import expand_tool_images
 
@@ -395,6 +397,7 @@ class AnthropicProvider(RetryingProvider):
         text = ""
         reasoning = ""
         finish_reason = None
+        stop_details: Mapping[str, Any] = {}
         streams: dict[int, _ToolCallAccumulator] = {}
         server_streams: dict[int, _ToolCallAccumulator] = {}
         server_initial_inputs: dict[int, dict[str, Any]] = {}
@@ -516,6 +519,8 @@ class AnthropicProvider(RetryingProvider):
                     case "message_delta":
                         delta = data.get("delta", {})
                         finish_reason = delta.get("stop_reason")
+                        if isinstance(details := delta.get("stop_details"), Mapping):
+                            stop_details = details
                         token_info = data.get("usage", {})
                         usage = replace(
                             usage,
@@ -529,6 +534,13 @@ class AnthropicProvider(RetryingProvider):
         tool_calls = _parse_tool_calls(streams, finish_reason)
         for index, stream in streams.items():
             replay[index]["input"] = _lenient_arguments(stream.argument_buffer, index)
+        stop = _anthropic_stop(finish_reason, stop_details, has_tool_calls=bool(tool_calls))
+        blocks = tuple(replay[index] for index in sorted(replay))
+        if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
+            # A refusal can arrive after a complete ``tool_use`` was streamed. The call is
+            # withheld from the message, and a ``tool_use`` block replayed without a result
+            # would be rejected, so the block goes as well.
+            blocks = withhold_replay_blocks(blocks, lambda block: block.get("type") == "tool_use")
         yield ModelEvent.completed(
             ModelResponse(
                 message=AssistantMessage(
@@ -537,12 +549,36 @@ class AnthropicProvider(RetryingProvider):
                     tool_calls=tool_calls,
                     provider="anthropic",
                     model=self.model,
-                    replay_blocks=tuple(replay[index] for index in sorted(replay)),
+                    replay_blocks=blocks,
                 ),
                 finish_reason=finish_reason,
                 usage=usage,
+                stop=stop,
             )
         )
+
+
+def _anthropic_stop(finish_reason: str | None, details: Mapping[str, Any], *, has_tool_calls: bool) -> StopInfo:
+    """Build the stop of a Messages response from ``stop_reason`` and ``stop_details``.
+
+    ``stop_details`` is null for every reason but ``refusal``. On a refusal its
+    ``category`` and ``explanation`` can both be null, which is a normal value and is not
+    treated as missing data; the category then falls back to the reason itself.
+    """
+    kept = {
+        key: details[key]
+        for key in ("fallback_credit_token", "fallback_has_prefill_claim")
+        if details.get(key) is not None
+    }
+    category, explanation, recommended = (details.get(key) for key in ("category", "explanation", "recommended_model"))
+    return classify_stop(
+        finish_reason,
+        has_tool_calls=has_tool_calls,
+        category=str(category) if category else None,
+        message=str(explanation) if explanation else None,
+        recommended_model=str(recommended) if recommended else None,
+        detail=kept,
+    )
 
 
 def _lenient_arguments(payload: str, index: int) -> dict[str, Any]:

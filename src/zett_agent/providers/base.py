@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 #: and request failures -- because importing it alone costs a few hundred
 #: milliseconds. Payload rendering therefore uses plain dictionaries that still
 #: type-check against the SDK's TypedDicts.
+from ..stop import StopInfo, StopReason, classify_stop
 from ..sync_runtime import SyncMethodsMixin
 from .responses import (
     ResponsesStreamInterrupted,
@@ -64,6 +65,7 @@ from .responses import (
     responses_tools,
     stream_responses,
 )
+from .stop_reasons import refusal_from_status_error
 from .tool_arguments import ToolArgumentsError, decode_tool_arguments, tool_call_from_arguments
 from .tool_images import expand_tool_images
 
@@ -78,6 +80,23 @@ class ProviderAuthError(ProviderError):
 
 class ProviderResponseError(ProviderError):
     """Raised when provider responses do not satisfy the expected stream protocol."""
+
+
+class ProviderRefusalError(ProviderResponseError):
+    """A request was refused before the model produced any output.
+
+    Adapters raise it from the code that opens the request and catch it in ``stream``,
+    which turns it into a response whose stop is a refusal. A host never sees it unless it
+    calls a private method of an adapter, so the refusal arrives as a message and an event
+    like any other.
+
+    Attributes:
+        stop: The :class:`~zett_agent.stop.StopInfo` that describes the refusal.
+    """
+
+    def __init__(self, stop: StopInfo) -> None:
+        super().__init__(stop.describe())
+        self.stop = stop
 
 
 def validate_extra_headers(value: Mapping[str, str] | None) -> dict[str, str]:
@@ -524,6 +543,62 @@ def retry_model_stream(
     return retrying_stream
 
 
+def _stream_error_body(error: BaseException) -> dict[str, Any]:
+    """Return the ``code``, ``message`` and ``type`` of an error the SDK raised from a stream."""
+    body = getattr(error, "body", None)
+    kept = {key: body[key] for key in ("code", "message", "type") if key in body} if isinstance(body, Mapping) else {}
+    if "message" not in kept and (message := getattr(error, "message", None)):
+        kept["message"] = str(message)
+    return kept
+
+
+def _stream_error_message(error: BaseException) -> str:
+    """Return one line that says what a stream failed with."""
+    body = _stream_error_body(error)
+    return str(body.get("message") or error)
+
+
+def _chat_stop(
+    finish_reason: str | None,
+    *,
+    has_tool_calls: bool,
+    refusal_text: str,
+    stream_error: Mapping[str, Any],
+    native_finish_reason: str | None,
+) -> StopInfo:
+    """Build the stop of one Chat Completions stream from everything it said about its end.
+
+    The ``finish_reason`` is the base. A model that wrote a refusal (OpenAI's ``refusal``
+    field) finished with ``stop``, so the refusal text, not the reason, decides that it was
+    declined. A chunk-level ``error`` means the stream failed even if it names no reason, so
+    it makes the stop an interruption unless the reason already says something stronger.
+    """
+    detail: dict[str, Any] = {}
+    if native_finish_reason is not None and native_finish_reason != finish_reason:
+        detail["native_finish_reason"] = native_finish_reason
+    if stream_error:
+        detail["error"] = {key: stream_error[key] for key in ("code", "message", "type") if key in stream_error}
+    raw = finish_reason
+    if raw is None and stream_error:
+        raw = "error"
+    stop = classify_stop(raw, has_tool_calls=has_tool_calls, detail=detail)
+    if refusal_text and stop.ok:
+        return StopInfo(
+            StopReason.REFUSAL,
+            raw=raw,
+            category="refusal",
+            message=refusal_text,
+            detail=stop.detail,
+        )
+    if refusal_text and stop.message is None:
+        return StopInfo(stop.reason, raw=stop.raw, category=stop.category, message=refusal_text, detail=stop.detail)
+    if stream_error and stop.message is None:
+        message = stream_error.get("message")
+        if message:
+            return StopInfo(stop.reason, raw=stop.raw, category=stop.category, message=str(message), detail=stop.detail)
+    return stop
+
+
 class _OpenAIStyleProvider(RetryingProvider):
     """Shared implementation for providers exposing OpenAI-style streaming chunks."""
 
@@ -614,6 +689,9 @@ class _OpenAIStyleProvider(RetryingProvider):
             return await self._client.chat.completions.create(**payload)  # type: ignore[misc]
         except APIStatusError as error:
             status_code = error.status_code
+            refusal = refusal_from_status_error(status_code, error.body)
+            if refusal is not None:
+                raise ProviderRefusalError(refusal) from error
             match status_code:
                 case 401:
                     raise ProviderAuthError("Provider rejected API credential") from error
@@ -664,6 +742,9 @@ class _OpenAIStyleProvider(RetryingProvider):
         try:
             return await self._client.responses.create(**payload)  # type: ignore[misc]
         except APIStatusError as error:
+            refusal = refusal_from_status_error(error.status_code, error.body)
+            if refusal is not None:
+                raise ProviderRefusalError(refusal) from error
             match error.status_code:
                 case 401:
                     raise ProviderAuthError("Provider rejected API credential") from error
@@ -689,8 +770,23 @@ class _OpenAIStyleProvider(RetryingProvider):
     @retry_model_stream
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         local_search_tool = local_tool_search_name(request.tools)
-        if self.response:
+        from openai import APIConnectionError, APITimeoutError
+        from openai import APIError as OpenAIError
+
+        try:
             response = await self._request(request)
+        except ProviderRefusalError as refusal:
+            # The request was refused before any output. It is answered as a refusal, not
+            # raised, so the conversation goes on and the host is told why.
+            yield ModelEvent.completed(
+                ModelResponse(
+                    AssistantMessage(content="", provider=self.provider_name, model=self.model),
+                    finish_reason=refusal.stop.raw,
+                    stop=refusal.stop,
+                )
+            )
+            return
+        if self.response:
             try:
                 async for event in stream_responses(
                     response,
@@ -709,9 +805,11 @@ class _OpenAIStyleProvider(RetryingProvider):
         reasoning = ""
         streams: dict[int, _ToolCallAccumulator] = {}
         finish_reason = None
+        refusal_text = ""
+        stream_error: Mapping[str, Any] = {}
+        native_finish_reason: str | None = None
         usage = ModelUsage()
 
-        response = await self._request(request)
         try:
             async for chunk in response:
                 if chunk is None:
@@ -726,11 +824,21 @@ class _OpenAIStyleProvider(RetryingProvider):
                 choices = getattr(chunk, "choices", None)
                 if not choices:
                     continue
+                if isinstance(native := getattr(choices[0], "native_finish_reason", None), str):
+                    native_finish_reason = native
                 delta = getattr(choices[0], "delta", None)
                 if delta is None:
                     if getattr(choices[0], "finish_reason", None):
                         finish_reason = choices[0].finish_reason
                     continue
+
+                refusal_fragment = getattr(delta, "refusal", None)
+                if isinstance(refusal_fragment, str) and refusal_fragment:
+                    # A refusal is the model's answer to the user, so it is shown like any
+                    # other text, and it is also what the stop explains itself with.
+                    refusal_text += refusal_fragment
+                    text += refusal_fragment
+                    yield ModelEvent.text(refusal_fragment)
 
                 content = getattr(delta, "content", None)
                 if isinstance(content, str) and content:
@@ -758,6 +866,17 @@ class _OpenAIStyleProvider(RetryingProvider):
                         finish_reason = reason
                     case _:
                         pass
+        except OpenAIError as error:
+            # A gateway reports a failure inside a 200 stream as a chunk with a top-level
+            # ``error`` (OpenRouter does, with ``finish_reason: "error"``), and the SDK turns
+            # that chunk into this exception before the loop above sees it. Before any output
+            # it is raised as a typed error, so a transient failure is retried; after output
+            # the response ends here as an interruption and keeps what was written.
+            if isinstance(error, (APIConnectionError, APITimeoutError)):
+                raise  # a dropped or timed-out connection is not an error the provider reported
+            if not (text or reasoning or streams):
+                raise ProviderResponseError(_stream_error_message(error)) from error
+            stream_error = _stream_error_body(error)
         finally:
             await response.close()
 
@@ -774,5 +893,12 @@ class _OpenAIStyleProvider(RetryingProvider):
                 message=response_message,
                 finish_reason=finish_reason,
                 usage=usage,
+                stop=_chat_stop(
+                    finish_reason,
+                    has_tool_calls=bool(tool_calls),
+                    refusal_text=refusal_text,
+                    stream_error=stream_error,
+                    native_finish_reason=native_finish_reason,
+                ),
             )
         )

@@ -273,6 +273,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     "zett_agent.providers.base": (
         "ProviderAuthError",
         "ProviderError",
+        "ProviderRefusalError",
         "ProviderResponseError",
         "_message_to_openai_payload",
         "_normalize_image_source",
@@ -282,6 +283,12 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     "zett_agent.providers.google": ("GoogleProvider",),
     "zett_agent.providers.ollama": ("OllamaProvider",),
     "zett_agent.providers.openai": ("OpenAIProvider",),
+    "zett_agent.providers.stop_reasons": (
+        "RESPONSES_POLICY_ERROR_CODES",
+        "refusal_from_response_error",
+        "refusal_from_status_error",
+        "withhold_replay_blocks",
+    ),
     "zett_agent.sandbox.base": (
         "DEFAULT_MAX_OUTPUT_BYTES",
         "DEFAULT_TIMEOUT_SECONDS",

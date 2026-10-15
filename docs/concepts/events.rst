@@ -42,6 +42,7 @@ loading states:
      REASONING_STARTED → REASONING_DELTA … → REASONING_COMPLETED
      CONTENT_STARTED   → TEXT_DELTA …      → CONTENT_COMPLETED
    MODEL_COMPLETED
+   MODEL_STOPPED          (only when the model did not finish normally)
 
 An empty delta does not open a segment, and a failure or cancellation leaves the
 open segment without a completion — close your indicator in a ``finally`` block.

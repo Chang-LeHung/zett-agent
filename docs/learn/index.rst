@@ -95,6 +95,12 @@ every extension from the start.
 
       Run shell commands and agent-written programs inside an operating-system boundary.
 
+   .. grid-item-card:: Why the model stopped
+      :link: stop-reasons
+      :link-type: doc
+
+      Tell a refusal, a cut-off answer, and a dropped connection apart from a finished answer.
+
 Build an application
 ------------------------------------------------------------
 
@@ -147,6 +153,7 @@ If you need behavior the built-ins do not provide, follow
    :caption: Conversations
 
    Streaming <streaming>
+   Stop reasons <stop-reasons>
    Sessions <sessions>
    Images <images>
    Project instructions <project-instructions>

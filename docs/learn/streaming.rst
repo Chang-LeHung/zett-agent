@@ -87,6 +87,8 @@ What you will see
      - Older context is being summarized before the next model step.
    * - ``MODEL_COMPLETED``
      - One complete model response, including usage.
+   * - ``MODEL_STOPPED``
+     - The model did not finish normally: it was refused, cut off, interrupted, or paused for good. Follows ``MODEL_COMPLETED`` and carries ``stop``; see :doc:`stop-reasons`.
    * - ``RUN_COMPLETED``
      - The request finished successfully.
    * - ``CUSTOM``
@@ -120,7 +122,9 @@ timings and :doc:`providers` for cache reporting.
 Failures are exceptions
 -----------------------
 
-``RUN_COMPLETED`` means success. Provider errors, extension errors, and
+``RUN_COMPLETED`` means the request ran to its end, which is not the same as the model
+finishing its answer: a refusal ends a request and still completes it. Check
+``MODEL_STOPPED`` or ``message.stop`` for that; see :doc:`stop-reasons`. Provider errors, extension errors, and
 cancellation propagate as exceptions — they are never converted into a synthetic
 completion event. Wrap the stream when the UI needs to show a failure, and see
 :doc:`../examples/cancellation` for cleanup and reuse.

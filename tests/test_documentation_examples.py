@@ -26,6 +26,7 @@ EXPECTED = {
     "async_subagent": "Background task finished; child session is separate",
     "sandbox": "Sandbox ran the program and the command",
     "stop_reasons": "Refusal reported; the tool call was not run",
+    "resume": "Resumed after a failure and a crash; no tool ran twice",
     "cancellation": "Cancelled request; extension state cleared",
     "goal": "Implementation and tests are complete.",
     "storage_adapter": "load, append:system, append:user, append:assistant",

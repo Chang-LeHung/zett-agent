@@ -101,6 +101,12 @@ every extension from the start.
 
       Tell a refusal, a cut-off answer, and a dropped connection apart from a finished answer.
 
+   .. grid-item-card:: Resume a session
+      :link: resume
+      :link-type: doc
+
+      Carry on after a failure, a stop, or a crash without a fake "continue" message or a tool run twice.
+
 Build an application
 ------------------------------------------------------------
 
@@ -154,6 +160,7 @@ If you need behavior the built-ins do not provide, follow
 
    Streaming <streaming>
    Stop reasons <stop-reasons>
+   Resume <resume>
    Sessions <sessions>
    Images <images>
    Project instructions <project-instructions>

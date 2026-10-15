@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 10:44+0800\n"
+"POT-Creation-Date: 2026-10-15 23:02+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -109,62 +109,70 @@ msgid "Nothing is shown and nothing fails. The provider, or a gateway in front o
 msgstr "没有任何显示，也没有任何失败。提供方，或它前面的网关，收下了请求然后沉默了。现在每个适配器都会放弃并抛出 :class:`~zett_agent.providers.base.ProviderTimeoutError`；它的 ``phase`` 说明是哪一段耗尽了：``connect``\\ （没有人在监听）、``first_byte``\\ （响应头一直没来，过载的网关就是这个样子）或 ``idle``\\ （已经开始的响应停了）。请直接用 ``curl`` 测试该端点；如果它在那里也卡住，问题就在提供方一侧，这里的任何设置都帮不上忙。参见 :ref:`默认值以及如何修改 <provider-timeouts>`\\ 。"
 
 #: ../../learn/troubleshooting.rst:96
+msgid "A request failed or was stopped and I want to continue it"
+msgstr "请求失败或被中止了，我想接着做"
+
+#: ../../learn/troubleshooting.rst:98
+msgid "The conversation is saved up to the point it stopped. Call ``agent.resume()``, or ``agent.resume_point()`` first to see whether there is anything to resume and what it will do. Do not send a \"continue\" message: it adds a user message the model did not expect, and it does not tell the model that a tool was interrupted. See :doc:`resume`."
+msgstr "对话已经保存到它停下的位置。请调用 ``agent.resume()``，或者先调用 ``agent.resume_point()``，看看有没有可以恢复的内容、恢复时会做什么。不要发一条“继续”消息：它会增加一条模型没有预期的用户消息，也不会告诉模型有工具被中断了。参见 :doc:`resume`\\ 。"
+
+#: ../../learn/troubleshooting.rst:105
 msgid "The error mentions a web page or an HTTP status"
 msgstr "错误里提到了网页或 HTTP 状态码"
 
-#: ../../learn/troubleshooting.rst:98
+#: ../../learn/troubleshooting.rst:107
 msgid "``answered HTTP 502 with a web page`` means something in front of the API, not the API itself, replied: a proxy or gateway error, a firewall, or a login page. Check ``base_url`` and the network path to it. ``returned HTTP 400: ...`` carries the provider's own explanation, such as an unknown model name; model ids can be case-sensitive and a gateway may use its own. ``answered HTTP 200 with application/json instead of an event stream`` usually means the endpoint does not stream, or the base URL points at the wrong route."
 msgstr "``answered HTTP 502 with a web page`` 表示回应的是 API 前面的东西，而不是 API 本身：可能是代理或网关的错误、防火墙，或者登录页。请检查 ``base_url`` 以及通往它的网络路径。\\ ``returned HTTP 400: ...`` 带有提供方自己的解释，例如未知的模型名；模型 ID 可能区分大小写，网关也可能有自己的命名。\\ ``answered HTTP 200 with application/json instead of an event stream`` 通常意味着该端点不支持流式，或者基础 URL 指向了错误的路由。"
 
-#: ../../learn/troubleshooting.rst:107
+#: ../../learn/troubleshooting.rst:116
 msgid "Retries duplicated text"
 msgstr "重试导致文本重复"
 
-#: ../../learn/troubleshooting.rst:109
+#: ../../learn/troubleshooting.rst:118
 msgid "Built-in retries stop after the first streamed event, so a retry should never replay visible output. Check application-level retries and make sure you are not appending both the final message text and every ``TEXT_DELTA`` fragment to the same buffer."
 msgstr "内置重试在第一个流式事件之后就会停止，因此重试绝不应该重放已经可见的输出。请检查应用层的重试，并确认你没有把最终消息文本和每一个 ``TEXT_DELTA``\\ 片段都追加到同一个缓冲区。"
 
-#: ../../learn/troubleshooting.rst:115
+#: ../../learn/troubleshooting.rst:124
 msgid "Project instructions or a skill did not appear"
 msgstr "项目指令或技能没有出现"
 
-#: ../../learn/troubleshooting.rst:117
+#: ../../learn/troubleshooting.rst:126
 msgid "``AgentsMdExtension`` loads the chosen directory and its ancestors, not every nested file in the workspace. Check ``sources()`` and ``instructions()``, and verify the extension is in your explicit list. Empty or unreadable files are skipped. ``directory`` does not change tool paths. See :doc:`project-instructions`."
 msgstr "``AgentsMdExtension``\\ 加载的是你选定的目录及其各级祖先目录，而不是工作区里所有嵌套的文件。请检查 ``sources()``\\ 和 ``instructions()``，并确认这个扩展在你的显式列表中。空文件或无法读取的文件会被跳过。\\ ``directory``\\ 不会改变工具的路径。参见\\ :doc:`project-instructions`\\ 。"
 
-#: ../../learn/troubleshooting.rst:122
+#: ../../learn/troubleshooting.rst:131
 msgid "For skills, check ``extension.skills``. Discovery occurs at construction time; new files or catalog metadata need a new extension. Existing skill bodies are read on demand, but editing a file does not replace instructions already in history. Pass explicit project roots rather than assuming defaults include the working directory. See :doc:`on-demand`."
 msgstr "技能方面请检查 ``extension.skills``\\ 。发现过程发生在构造时；新增文件或目录元数据需要新建一个扩展。已有技能正文是按需读取的，但编辑文件不会替换已经进入历史记录的指令。请显式传入项目根目录，不要假定默认值包含工作目录。参见\\ :doc:`on-demand`\\ 。"
 
-#: ../../learn/troubleshooting.rst:129
+#: ../../learn/troubleshooting.rst:138
 msgid "An MCP server has no tools or fails before generation"
 msgstr "MCP 服务器没有工具，或在生成之前就失败"
 
-#: ../../learn/troubleshooting.rst:131
+#: ../../learn/troubleshooting.rst:140
 msgid "Check ``extension.servers`` and ``extension.config_path``. A missing config loads no servers, whereas a bad config raises. Discovery connects on every request; a server that cannot be reached fails setup rather than silently disappearing. By default a remote ``search`` tool on ``catalog`` is named ``catalog__search``. See :doc:`mcp` for transports and namespaces."
 msgstr "请检查 ``extension.servers``\\ 和 ``extension.config_path``\\ 。缺少配置文件时不会加载任何服务器，而配置有误则会抛出异常。每次请求都会连接并做发现；连不上的服务器会让初始化失败，而不是悄无声息地消失。默认情况下，``catalog``\\ 上的远程 ``search``\\ 工具名为 ``catalog__search``\\ 。传输方式和命名空间参见\\ :doc:`mcp`\\ 。"
 
-#: ../../learn/troubleshooting.rst:138
+#: ../../learn/troubleshooting.rst:147
 msgid "The runtime rejects a second request"
 msgstr "运行时拒绝第二个请求"
 
-#: ../../learn/troubleshooting.rst:140
+#: ../../learn/troubleshooting.rst:149
 msgid "Two requests for the same session cannot overlap. Queue them or finish/close the first stream, including cleanup. Breaking out of a bare async iterator without ``aclosing`` can leave unfinished work. Different session IDs may run concurrently, but separate runtimes and workers do not share an admission lock. See :doc:`application`."
 msgstr "同一个会话的两个请求不能重叠。请把它们排队，或者结束、关闭第一个流，包括其中的清理工作。从一个裸异步迭代器里直接跳出而不使用 ``aclosing``，可能留下未完成的工作。不同的会话 ID 可以并发运行，但不同的运行时和 worker 不共享准入锁。参见\\ :doc:`application`\\ 。"
 
-#: ../../learn/troubleshooting.rst:147
+#: ../../learn/troubleshooting.rst:156
 msgid "Compaction did not run"
 msgstr "压缩没有执行"
 
-#: ../../learn/troubleshooting.rst:149
+#: ../../learn/troubleshooting.rst:158
 msgid "It needs a crossed size threshold *and* an older completed turn it can replace. The current turn is kept whole, so a single oversized turn is left alone. When the generated summary would not be smaller than the messages it replaces, ``COMPACTION_COMPLETED`` reports ``applied=False``. See :doc:`../examples/compaction` for a reproducible test."
 msgstr "它需要同时越过大小阈值，*并且*\\ 有一个更早的已完成轮次可供替换。当前轮次会完整保留，所以单个过大的轮次会被放过。如果生成的摘要并不比它替换的消息更小，``COMPACTION_COMPLETED``\\ 会报告 ``applied=False``\\ 。可复现的测试见\\ :doc:`../examples/compaction`\\ 。"
 
-#: ../../learn/troubleshooting.rst:156
+#: ../../learn/troubleshooting.rst:165
 msgid "The page has no navigation"
 msgstr "页面没有导航栏"
 
-#: ../../learn/troubleshooting.rst:158
+#: ../../learn/troubleshooting.rst:167
 msgid "If you are reading this locally, rebuild with ``make docs-serve`` and open the printed URL. The left sidebar is global; on a narrow screen, open it with the navigation toggle."
 msgstr "如果你是在本地阅读，请用 ``make docs-serve``\\ 重新构建，然后打开它输出的 URL。左侧边栏是全局的；在窄屏幕上，用导航开关把它打开。"
 

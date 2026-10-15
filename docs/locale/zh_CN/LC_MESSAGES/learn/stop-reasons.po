@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 09:55+0800\n"
+"POT-Creation-Date: 2026-10-15 23:02+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
@@ -460,14 +460,18 @@ msgid "**No removal of a refused turn from the history** unless you choose it ab
 msgstr "**除非你按上文选择，否则不会从历史中移除被拒绝的那一轮。**"
 
 #: ../../learn/stop-reasons.rst:238
+msgid "**No continuing of a cut-off response by itself.** A response that stopped as ``INTERRUPTED`` or ``MAX_OUTPUT`` is picked up again by calling ``resume()``; see :doc:`resume`. A refusal or ``CONTEXT_FULL`` cannot be resumed."
+msgstr "**不会自己续写被截断的响应。** 停止原因为 ``INTERRUPTED`` 或 ``MAX_OUTPUT`` 的响应，需要调用 ``resume()`` 来接着做；参见 :doc:`resume`\\ 。拒绝和 ``CONTEXT_FULL`` 无法恢复。"
+
+#: ../../learn/stop-reasons.rst:241
 msgid "**No guarantee the provider says why.** A refusal with no category and no text is reported as a refusal with nothing to show."
 msgstr "**不保证提供方会说明原因。** 没有类别也没有文本的拒绝，会被报告为一个没有任何内容可展示的拒绝。"
 
-#: ../../learn/stop-reasons.rst:241
+#: ../../learn/stop-reasons.rst:244
 msgid "Next: :doc:`streaming` for the full event list, or :doc:`providers` to connect one."
 msgstr "下一步：参阅 :doc:`streaming` 了解完整的事件列表，或参阅 :doc:`providers` 连接提供方。"
 
-#: ../../learn/stop-reasons.rst:243
+#: ../../learn/stop-reasons.rst:246
 msgid "Related API: :class:`~zett_agent.stop.StopInfo`, :class:`~zett_agent.stop.StopReason`, :class:`~zett_agent.exceptions.AgentStopError`, :class:`~zett_agent.extensions.refusal_replay.RefusalReplayExtension`."
 msgstr "相关 API：:class:`~zett_agent.stop.StopInfo`、:class:`~zett_agent.stop.StopReason`、:class:`~zett_agent.exceptions.AgentStopError`、:class:`~zett_agent.extensions.refusal_replay.RefusalReplayExtension`\\ 。"
 

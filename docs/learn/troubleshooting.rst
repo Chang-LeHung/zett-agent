@@ -92,6 +92,15 @@ stopped). Test the endpoint directly with ``curl``; if it hangs there too, the
 fault is on the provider side and no setting here will help. See
 :ref:`the defaults and how to change them <provider-timeouts>`.
 
+A request failed or was stopped and I want to continue it
+---------------------------------------------------------
+
+The conversation is saved up to the point it stopped. Call ``agent.resume()``, or
+``agent.resume_point()`` first to see whether there is anything to resume and what
+it will do. Do not send a "continue" message: it adds a user message the model did
+not expect, and it does not tell the model that a tool was interrupted. See
+:doc:`resume`.
+
 The error mentions a web page or an HTTP status
 -----------------------------------------------
 

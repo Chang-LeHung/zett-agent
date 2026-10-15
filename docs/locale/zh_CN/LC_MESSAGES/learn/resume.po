@@ -1,0 +1,277 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C)
+# This file is distributed under the same license as the Zett Agent package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-15 23:02+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/resume.rst:2
+msgid "Resume an interrupted session"
+msgstr "恢复被中断的会话"
+
+#: ../../learn/resume.rst:4
+msgid "A request can end without finishing. The connection drops and the retries run out, the user presses stop, the process is killed. The conversation is saved up to that point, and you want to carry on from there instead of typing \"continue\" and hoping the model works out what was missing."
+msgstr "请求可能在没有完成时就结束了：连接断了而重试已经用完，用户按了停止，进程被杀掉。对话保存到了那个位置，你想从那里接着做，而不是输入“继续”再指望模型自己看出缺了什么。"
+
+#: ../../learn/resume.rst:9
+msgid "``resume()`` is :meth:`~zett_agent.agent.Agent.run` without a new user message. The session is restored, its last message says how it was interrupted, and the request picks up from there."
+msgstr "``resume()`` 就是没有新用户消息的 :meth:`~zett_agent.agent.Agent.run`\\ 。会话被恢复，它的最后一条消息说明了它是怎么被中断的，请求从那里接着往下走。"
+
+#: ../../learn/resume.rst:21
+msgid "Ask before you resume"
+msgstr "先问再恢复"
+
+#: ../../learn/resume.rst:23
+msgid "Nothing records that a request did not finish: a process that was killed cannot write anything. What is left is the history, and its last message is the record. A finished request ends in an assistant answer that asked for nothing and stopped normally; every other ending is an interruption."
+msgstr "没有任何东西会记录“请求没有完成”：被杀掉的进程什么也写不了。留下来的只有历史，而它的最后一条消息就是记录。完成了的请求以一条没有请求任何东西、正常停止的助手回答结尾；其他任何结尾都是中断。"
+
+#: ../../learn/resume.rst:28
+msgid ":meth:`~zett_agent.agent.Agent.resume_point` reads the session and says which, without changing it. It writes nothing and calls no model."
+msgstr ":meth:`~zett_agent.agent.Agent.resume_point` 会读取会话并告诉你是哪一种，而不改动它。它不写入任何东西，也不调用任何模型。"
+
+#: ../../learn/resume.rst:37
+msgid "It returns ``None`` when there is nothing to resume. ``resume()`` raises :class:`~zett_agent.exceptions.AgentResumeError` for those cases, with a ``reason``, so you can also just try it."
+msgstr "没有可恢复的内容时，它返回 ``None``\\ 。对这些情况，``resume()`` 会抛出 :class:`~zett_agent.exceptions.AgentResumeError`，并带有 ``reason``，所以你也可以直接试一下。"
+
+#: ../../learn/resume.rst:42 ../../learn/resume.rst:53
+msgid "What resuming does"
+msgstr "恢复会做什么"
+
+#: ../../learn/resume.rst:44
+msgid "The last message decides. ``kind`` on the :class:`~zett_agent.resume.ResumePoint` says which row applies."
+msgstr "由最后一条消息决定。\\ :class:`~zett_agent.resume.ResumePoint` 上的 ``kind`` 说明适用哪一行。"
+
+#: ../../learn/resume.rst:51
+msgid "History ends in"
+msgstr "历史结尾是"
+
+#: ../../learn/resume.rst:52
+msgid "How it got there"
+msgstr "是怎么走到这一步的"
+
+#: ../../learn/resume.rst:54
+msgid "A user or internal message"
+msgstr "一条用户消息或 internal message"
+
+#: ../../learn/resume.rst:55
+msgid "The model never answered: the connection failed, or the request was cancelled."
+msgstr "模型从未回答：连接失败，或请求被取消了。"
+
+#: ../../learn/resume.rst:56
+msgid "``CALL_MODEL``. Calls the model. Nothing is added."
+msgstr "``CALL_MODEL``\\ 。调用模型，不添加任何东西。"
+
+#: ../../learn/resume.rst:57
+msgid "Tool results, all there"
+msgstr "工具结果，且都在"
+
+#: ../../learn/resume.rst:58
+msgid "The tools finished and the next model call failed. Also a cancel during a tool, which already answered the call as cancelled."
+msgstr "工具已经完成，而下一次模型调用失败了。也包括在工具执行中途取消的情况，那时这次调用已经被作为“已取消”回答过了。"
+
+#: ../../learn/resume.rst:60
+msgid "``CALL_MODEL``. Calls the model."
+msgstr "``CALL_MODEL``\\ 。调用模型。"
+
+#: ../../learn/resume.rst:61
+msgid "A step the provider paused"
+msgstr "提供方暂停的一步"
+
+#: ../../learn/resume.rst:62
+msgid "The provider handed control back and the pause limit was reached."
+msgstr "提供方把控制权交了回来，并且已经达到暂停次数的上限。"
+
+#: ../../learn/resume.rst:63
+msgid "``CALL_MODEL``. Calls the model again."
+msgstr "``CALL_MODEL``\\ 。再次调用模型。"
+
+#: ../../learn/resume.rst:64
+msgid "Tool calls with no result"
+msgstr "没有结果的工具调用"
+
+#: ../../learn/resume.rst:65
+msgid "The process stopped while tools ran."
+msgstr "工具运行期间进程停止了。"
+
+#: ../../learn/resume.rst:66
+msgid "``RECOVER_TOOLS``. Adds a result for each missing call saying it was interrupted, then calls the model. See below."
+msgstr "``RECOVER_TOOLS``\\ 。为每个缺少结果的调用补一条结果，说明它被中断了，然后调用模型。见下文。"
+
+#: ../../learn/resume.rst:68
+msgid "A response that stopped as ``INTERRUPTED``"
+msgstr "停止原因为 ``INTERRUPTED`` 的响应"
+
+#: ../../learn/resume.rst:69
+msgid "The stream was cut by a failure."
+msgstr "流被故障切断了。"
+
+#: ../../learn/resume.rst:70
+msgid "``RETRY_RESPONSE``. Keeps the partial response, adds a message telling the model it was interrupted and to start that response again, then calls the model."
+msgstr "``RETRY_RESPONSE``\\ 。保留不完整的响应，添加一条消息告诉模型它被中断了、要把那次响应从头再做一遍，然后调用模型。"
+
+#: ../../learn/resume.rst:72
+msgid "A response that stopped as ``MAX_OUTPUT``"
+msgstr "停止原因为 ``MAX_OUTPUT`` 的响应"
+
+#: ../../learn/resume.rst:73
+msgid "It hit the output limit."
+msgstr "它达到了输出上限。"
+
+#: ../../learn/resume.rst:74
+msgid "``CONTINUE_RESPONSE``. Keeps the response, adds a message telling the model to continue exactly where it stopped, then calls the model."
+msgstr "``CONTINUE_RESPONSE``\\ 。保留该响应，添加一条消息告诉模型从停下的地方原样接着写，然后调用模型。"
+
+#: ../../learn/resume.rst:76
+msgid "A normal answer"
+msgstr "一个正常的回答"
+
+#: ../../learn/resume.rst:77
+msgid "The request finished."
+msgstr "请求已经完成。"
+
+#: ../../learn/resume.rst:78
+msgid "Nothing to resume. Raises ``AgentResumeError(\"completed\")``."
+msgstr "没有可恢复的内容。抛出 ``AgentResumeError(\"completed\")``\\ 。"
+
+#: ../../learn/resume.rst:79
+msgid "A refusal"
+msgstr "一次拒绝"
+
+#: ../../learn/resume.rst:80
+msgid "The model declined."
+msgstr "模型拒绝了。"
+
+#: ../../learn/resume.rst:81
+msgid "Raises ``\"refused\"``. The same input would be declined again."
+msgstr "抛出 ``\"refused\"``\\ 。同样的输入还会被再次拒绝。"
+
+#: ../../learn/resume.rst:82
+msgid "A response that stopped as ``CONTEXT_FULL``"
+msgstr "停止原因为 ``CONTEXT_FULL`` 的响应"
+
+#: ../../learn/resume.rst:83
+msgid "The context window was full."
+msgstr "上下文窗口满了。"
+
+#: ../../learn/resume.rst:84
+msgid "Raises ``\"context_full\"``. Sending the same history fills the window again, so this is left to you: compact the session or start a shorter one."
+msgstr "抛出 ``\"context_full\"``\\ 。把同样的历史再发一次会再次填满窗口，所以这交给你处理：压缩会话，或者开一个更短的会话。"
+
+#: ../../learn/resume.rst:86
+msgid "Any other stop"
+msgstr "其他任何停止原因"
+
+#: ../../learn/resume.rst:87
+msgid "A value this library does not know."
+msgstr "本库不认识的取值。"
+
+#: ../../learn/resume.rst:88
+msgid "Raises ``\"unknown_stop\"``."
+msgstr "抛出 ``\"unknown_stop\"``\\ 。"
+
+#: ../../learn/resume.rst:90
+msgid "An empty session raises ``\"empty\"``, and a history that ends in a tool result that answers no call raises ``\"malformed\"``."
+msgstr "空会话会抛出 ``\"empty\"``；历史以一条不对应任何调用的工具结果结尾，则抛出 ``\"malformed\"``\\ 。"
+
+#: ../../learn/resume.rst:94
+msgid "Tools are never run again on their own"
+msgstr "工具绝不会自己再次运行"
+
+#: ../../learn/resume.rst:96
+msgid "A crash can leave an assistant message that asked for two tool calls with a result for one. The other may have run, may have run halfway, or may never have started, and nothing says which. A tool that writes a file or sends a message may already have done so. Running it again could do it twice."
+msgstr "崩溃可能留下这样的状态：助手消息请求了两个工具调用，却只有一个结果。另一个可能已经运行，可能运行了一半，也可能根本没开始，而没有任何东西能说明是哪种。写文件或发消息的工具可能已经完成了它的动作，再运行一次就可能做两遍。"
+
+#: ../../learn/resume.rst:101
+msgid "So the missing call is answered, not repeated. The model is given a failed result:"
+msgstr "所以缺少结果的调用是被“回答”，而不是被重复执行。模型会得到一条失败的结果："
+
+#: ../../learn/resume.rst:103
+msgid "The process stopped while this tool was running, so it may or may not have completed, and whatever it changes may or may not have happened. Check the current state before running it again."
+msgstr "The process stopped while this tool was running, so it may or may not have completed, and whatever it changes may or may not have happened. Check the current state before running it again.（以上是发给模型的英文原文，意思是：进程在此工具运行期间停止了，它可能完成了也可能没有，它所做的改动可能发生了也可能没有；再次运行之前请先检查当前状态。）"
+
+#: ../../learn/resume.rst:107
+msgid "and decides what to do, which is usually to look at the current state and then repeat the call if it is needed. The result that did arrive is kept, so the model knows the first tool ran."
+msgstr "然后由模型决定怎么做，通常是先查看当前状态，需要的话再重复这次调用。已经到达的那个结果会被保留，所以模型知道第一个工具已经运行过了。"
+
+#: ../../learn/resume.rst:111
+msgid "That is the same rule that applies when a new message arrives instead of a resume. Before the new input is appended, any tool call without a result is closed this way, because a provider rejects a history that has one. Restoring a session used to drop the whole interrupted batch, including the results that had arrived, so the model forgot that those tools had run. It now keeps them."
+msgstr "当到来的是新消息而不是 resume 时，适用同样的规则。在追加新输入之前，任何没有结果的工具调用都会用这种方式关闭，因为提供方会拒绝带有这种调用的历史。以前，恢复会话会把被中断的整批调用都丢掉，包括已经到达的结果，于是模型会忘记那些工具已经运行过；现在这些结果会被保留。"
+
+#: ../../learn/resume.rst:117
+msgid ":download:`Download resume.py <../_examples/resume.py>` for a complete, offline program that resumes after a failure and after a crash, and checks that no tool ran twice."
+msgstr "完整的离线程序请 :download:`下载 resume.py <../_examples/resume.py>`：它在一次失败和一次崩溃之后恢复会话，并检查没有任何工具运行了两次。"
+
+#: ../../learn/resume.rst:126
+msgid "What to pass again"
+msgstr "需要再次传入什么"
+
+#: ../../learn/resume.rst:128
+msgid "Nothing about the interrupted request is stored except its messages. Pass the model, tools, extensions and settings the interrupted request had, as you would for ``run``. You may pass a different model, for example when a provider keeps failing. Resuming does not change whether that model accepts a history that another provider wrote."
+msgstr "被中断的请求，除了它的消息之外，没有任何东西被保存。请像调用 ``run`` 那样，传入被中断请求所用的模型、工具、扩展和设置。你也可以传入另一个模型，例如某个提供方一直失败时；恢复并不会改变那个模型是否接受另一个提供方写下的历史。"
+
+#: ../../learn/resume.rst:134
+msgid "Streaming, callbacks and the synchronous agent"
+msgstr "流式、回调与同步智能体"
+
+#: ../../learn/resume.rst:136
+msgid "``stream_resume()`` yields the same events as ``stream()``, and ``AgentClient`` and ``SyncAgent`` have ``resume``, ``stream_resume`` and ``resume_point`` too. The events that follow are an ordinary request's: a resumed request ends in ``RUN_COMPLETED``, and an abnormal stop in the resumed step is reported through ``MODEL_STOPPED`` like any other, so a response that is cut off again can be resumed again."
+msgstr "``stream_resume()`` 产生的事件和 ``stream()`` 相同，``AgentClient`` 和 ``SyncAgent`` 也有 ``resume``、``stream_resume`` 和 ``resume_point``\\ 。随后的事件就是普通请求的事件：恢复后的请求以 ``RUN_COMPLETED`` 结束，被恢复的那一步如果出现非正常停止，会像其他情况一样通过 ``MODEL_STOPPED`` 报告，所以再次被截断的响应可以再次恢复。"
+
+#: ../../learn/resume.rst:142
+msgid "What is different:"
+msgstr "不同之处："
+
+#: ../../learn/resume.rst:144
+msgid "There is no new user message, so the ``on_message`` hook is not called and ``context.input_message`` is ``None``. The ``before_run`` and ``after_run`` hooks run as for any request. The JSONL extension starts the resumed turn at the last user message."
+msgstr "没有新的用户消息，所以不会调用 ``on_message`` 钩子，``context.input_message`` 为 ``None``\\ 。\\ ``before_run`` 和 ``after_run`` 钩子与普通请求一样运行。JSONL 扩展会把被恢复的这一轮从最后一条用户消息开始记录。"
+
+#: ../../learn/resume.rst:148
+msgid "A goal that was armed for the interrupted request is not armed again."
+msgstr "为被中断请求启用的目标模式，不会被重新启用。"
+
+#: ../../learn/resume.rst:149
+msgid "A session with nothing to resume raises as the request fails, and the error hooks run like for any failed request. Ask ``resume_point()`` first to avoid that."
+msgstr "没有可恢复内容的会话，会作为请求失败而抛出，错误钩子会像其他失败的请求一样运行。想避免这一点，请先调用 ``resume_point()``\\ 。"
+
+#: ../../learn/resume.rst:153
+msgid "What this does not do"
+msgstr "它不做什么"
+
+#: ../../learn/resume.rst:155
+msgid "**It does not recover the text that was streaming when the request stopped.** Partial output is saved only once the model finishes the step, so what a user saw on screen and the model had not completed is lost. After a cut-off response the model is told to start it again."
+msgstr "**它不会找回请求停止时正在流出的文本。** 不完整的输出只有在模型完成这一步之后才会保存，所以用户在屏幕上看到而模型没有完成的内容会丢失。响应被截断之后，模型会被告知把它从头再做一遍。"
+
+#: ../../learn/resume.rst:159
+msgid "**It does not retry for you.** The runtime retries a failed request before any output arrives; ``resume()`` is for when that is over, and it is the host that calls it."
+msgstr "**它不会替你重试。** 运行时会在没有任何输出之前重试失败的请求；``resume()`` 用于重试结束之后，并且由宿主来调用它。"
+
+#: ../../learn/resume.rst:161
+msgid "**It does not stop two processes resuming the same session.** The check that rejects a second request on a session works inside one process."
+msgstr "**它不会阻止两个进程同时恢复同一个会话。** 拒绝同一会话第二个请求的检查只在单个进程内有效。"
+
+#: ../../learn/resume.rst:163
+msgid "**It does not know why the request stopped.** The history says what it was doing, not whether the cause was a timeout, a stop button or a crash, so a host that wants to show the cause keeps it itself."
+msgstr "**它不知道请求为什么停止。** 历史只说明了它当时在做什么，不说明原因是超时、停止按钮还是崩溃，所以想展示原因的宿主需要自己保存。"
+
+#: ../../learn/resume.rst:167
+msgid "Next: :doc:`stop-reasons` for how a response's ending is reported, and :doc:`sessions` for how history is saved and restored."
+msgstr "下一步：参阅 :doc:`stop-reasons` 了解响应的结束方式如何被报告，参阅 :doc:`sessions` 了解历史如何保存和恢复。"
+
+#: ../../learn/resume.rst:170
+msgid "Related API: :class:`~zett_agent.resume.ResumePoint`, :class:`~zett_agent.resume.ResumeKind`, :class:`~zett_agent.exceptions.AgentResumeError`."
+msgstr "相关 API：:class:`~zett_agent.resume.ResumePoint`、:class:`~zett_agent.resume.ResumeKind`、:class:`~zett_agent.exceptions.AgentResumeError`\\ 。"
+

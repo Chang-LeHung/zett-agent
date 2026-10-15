@@ -15,11 +15,13 @@
   <a href="https://chang-lehung.github.io/zett-agent/zh/">中文文档</a>
 </p>
 
-[![PyPI](https://img.shields.io/pypi/v/zett-agent?color=d97706)](https://pypi.org/project/zett-agent/)
-[![Python](https://img.shields.io/badge/python-3.10%2B-7663e0)](https://pypi.org/project/zett-agent/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-7663e0)](https://github.com/Chang-LeHung/zett-agent/blob/main/LICENSE)
-[![CI](https://github.com/Chang-LeHung/zett-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Chang-LeHung/zett-agent/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-chang--lehung.github.io-7663e0)](https://chang-lehung.github.io/zett-agent/)
+<p align="center">
+  <a href="https://pypi.org/project/zett-agent/"><img src="https://img.shields.io/pypi/v/zett-agent?color=d97706" alt="PyPI" /></a>
+  <a href="https://pypi.org/project/zett-agent/"><img src="https://img.shields.io/badge/python-3.10%2B-7663e0" alt="Python 3.10+" /></a>
+  <a href="https://github.com/Chang-LeHung/zett-agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-7663e0" alt="License: MIT" /></a>
+  <a href="https://github.com/Chang-LeHung/zett-agent/actions/workflows/ci.yml"><img src="https://github.com/Chang-LeHung/zett-agent/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://chang-lehung.github.io/zett-agent/"><img src="https://img.shields.io/badge/docs-chang--lehung.github.io-7663e0" alt="Docs" /></a>
+</p>
 
 Zett Agent is a small Python runtime for tool-calling agents. One provider-neutral
 loop calls a model, runs the tools it asks for, and streams every step back to

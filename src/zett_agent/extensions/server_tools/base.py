@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ...agent import AgentRunContext
-from ...model import ServerToolDefinition
+from zett_agent.agent import AgentRunContext
+from zett_agent.model import ServerToolDefinition
+
 from ..base import AgentExtension
 
 

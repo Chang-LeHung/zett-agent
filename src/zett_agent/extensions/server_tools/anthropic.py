@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ...model import ServerToolDefinition
+from zett_agent.model import ServerToolDefinition
+
 from .base import ServerToolExtension
 
 

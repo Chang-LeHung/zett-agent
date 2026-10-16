@@ -22,21 +22,21 @@ from zett_agent.model import (
     ToolCallDelta,
     ToolDefinition,
 )
-from zett_agent.providers.anthropic import AnthropicProvider, _to_anthropic_image_block
+from zett_agent.providers.anthropic import AnthropicProvider
+from zett_agent.providers.anthropic_compatible import image_block
 from zett_agent.providers.base import (
     ProviderAuthError,
     ProviderResponseError,
-    _normalize_image_source,
-    _parse_tool_arguments,
-    _parse_tool_calls,
-    _reasoning_effort_to_budget,
-    _to_model_data,
-    _ToolCallAccumulator,
+    ToolCallAccumulator,
+    parse_tool_calls,
+    reasoning_effort_to_budget,
 )
 from zett_agent.providers.deepseek import DeepSeekProvider
 from zett_agent.providers.google import GoogleProvider
 from zett_agent.providers.ollama import OllamaProvider
 from zett_agent.providers.openai import OpenAIProvider
+from zett_agent.providers.openai_compatible import chat_image
+from zett_agent.providers.tool_arguments import ToolArgumentsError, decode_tool_arguments
 
 
 async def _collect(stream):
@@ -57,69 +57,48 @@ async def _collect(stream):
     ],
 )
 def test_reasoning_effort_budget_mapping_is_exhaustive(effort, budget):
-    assert _reasoning_effort_to_budget(effort) == budget
-
-
-def test_provider_data_normalization_supports_sdk_and_fallback_shapes():
-    class ModernSDKValue:
-        def model_dump(self, *, exclude_none):
-            assert exclude_none is True
-            return {"kind": "modern"}
-
-    class LegacySDKValue:
-        def dict(self):
-            return {"kind": "legacy"}
-
-    assert _to_model_data({"kind": "mapping"}) == {"kind": "mapping"}
-    assert _to_model_data(ModernSDKValue()) == {"kind": "modern"}
-    assert _to_model_data(LegacySDKValue()) == {"kind": "legacy"}
-    assert _to_model_data(SystemMessage(content="instruction", attributes={"private": True})) == {
-        "role": "system",
-        "content": "instruction",
-    }
-    with pytest.raises(ProviderResponseError, match="did not normalize to an object"):
-        _to_model_data(3)
+    assert reasoning_effort_to_budget(effort) == budget
 
 
 def test_image_normalizers_reject_unsupported_or_malformed_sources():
     with pytest.raises(ProviderResponseError, match="Unsupported image source"):
-        _normalize_image_source(object())
+        chat_image(object())
     with pytest.raises(ProviderResponseError, match="must contain base64"):
-        _to_anthropic_image_block(ImageUrlSource("data:image/png,not-base64"))
-    assert _to_anthropic_image_block(ImageBytesSource(b"image", "image/png")) == {
+        image_block(ImageUrlSource("data:image/png,not-base64"))
+    assert image_block(ImageBytesSource(b"image", "image/png")) == {
         "type": "image",
         "source": {"type": "base64", "media_type": "image/png", "data": "aW1hZ2U="},
     }
     with pytest.raises(ProviderResponseError, match="Unsupported image content source"):
-        _to_anthropic_image_block(object())
+        image_block(object())
 
 
 def test_tool_call_parser_orders_calls_generates_ids_and_rejects_missing_names():
-    later = _ToolCallAccumulator(index=2, name="write", argument_buffer='{"path":"a"}')
-    earlier = _ToolCallAccumulator(index=0, call_id="provider-id", name="read")
-    assert _parse_tool_calls({2: later, 0: earlier}) == (
+    later = ToolCallAccumulator(index=2, name="write", argument_buffer='{"path":"a"}')
+    earlier = ToolCallAccumulator(index=0, call_id="provider-id", name="read")
+    assert parse_tool_calls({2: later, 0: earlier}) == (
         ToolCall("provider-id", "read", {}),
         ToolCall("call_2", "write", {"path": "a"}),
     )
 
     with pytest.raises(ProviderResponseError, match="did not provide a name"):
-        _parse_tool_calls({0: _ToolCallAccumulator(index=0, argument_buffer="{}")})
+        parse_tool_calls({0: ToolCallAccumulator(index=0, argument_buffer="{}")})
 
 
 def test_tool_call_parser_accepts_control_characters_but_rejects_non_objects():
-    multiline = _ToolCallAccumulator(
+    multiline = ToolCallAccumulator(
         index=0,
         call_id="call-write",
         name="write",
         argument_buffer='{"content":"first line\nsecond\tline"}',
     )
-    assert _parse_tool_calls({0: multiline}) == (
+    assert parse_tool_calls({0: multiline}) == (
         ToolCall("call-write", "write", {"content": "first line\nsecond\tline"}),
     )
 
-    with pytest.raises(ProviderResponseError, match="must be a JSON object"):
-        _parse_tool_arguments('["value"]', index=0)
-    [call] = _parse_tool_calls({0: _ToolCallAccumulator(index=0, name="write", argument_buffer='["value"]')})
+    with pytest.raises(ToolArgumentsError, match="must be a JSON object"):
+        decode_tool_arguments('["value"]', index=0)
+    [call] = parse_tool_calls({0: ToolCallAccumulator(index=0, name="write", argument_buffer='["value"]')})
     assert call.arguments == {}
     assert call.error is not None and "must be a JSON object" in call.error
 
@@ -129,11 +108,11 @@ def test_tool_call_parser_repairs_complete_malformed_llm_json():
     missing_comma = f'{{"content":"{long_content}" "title":"Compiler parsing"}}'
     unescaped_quote = f'{{"title":"Notes","content":"{long_content}Use the "parse" phase"}}'
 
-    assert _parse_tool_arguments(missing_comma, index=0) == {
+    assert decode_tool_arguments(missing_comma, index=0) == {
         "content": long_content,
         "title": "Compiler parsing",
     }
-    assert _parse_tool_arguments(unescaped_quote, index=0) == {
+    assert decode_tool_arguments(unescaped_quote, index=0) == {
         "title": "Notes",
         "content": f'{long_content}Use the "parse" phase',
     }
@@ -151,9 +130,9 @@ def test_tool_call_parser_repairs_complete_malformed_llm_json():
 def test_truncated_tool_arguments_become_a_model_visible_failure(finish_reason, expected):
     # Valid up to the last value, then cut off: "Expecting ',' delimiter" at the end.
     truncated = '{"path": "notes.md", "content": "hello"'
-    accumulator = _ToolCallAccumulator(index=2, call_id="toolu_1", name="write_file", argument_buffer=truncated)
+    accumulator = ToolCallAccumulator(index=2, call_id="toolu_1", name="write_file", argument_buffer=truncated)
 
-    [call] = _parse_tool_calls({2: accumulator}, finish_reason=finish_reason)
+    [call] = parse_tool_calls({2: accumulator}, finish_reason=finish_reason)
 
     assert (call.id, call.name, call.arguments) == ("toolu_1", "write_file", {})
     assert call.error is not None
@@ -164,8 +143,8 @@ def test_truncated_tool_arguments_become_a_model_visible_failure(finish_reason, 
 
 @pytest.mark.parametrize("payload", ['{"content":"truncated', '"content":"missing object"}'])
 def test_tool_call_parser_does_not_repair_truncated_or_non_object_envelopes(payload):
-    with pytest.raises(ProviderResponseError, match="Invalid tool-call arguments"):
-        _parse_tool_arguments(payload, index=3)
+    with pytest.raises(ToolArgumentsError, match="Invalid tool-call arguments"):
+        decode_tool_arguments(payload, index=3)
 
 
 @pytest.mark.parametrize(
@@ -271,7 +250,7 @@ def test_deepseek_v4_maps_reasoning_effort_levels(effort, expected):
     provider = object.__new__(DeepSeekProvider)
     provider.model = "deepseek-v4-flash"
     request = ModelRequest((UserMessage(content="hello"),), reasoning_effort=effort)
-    assert provider._provider_specific_request_fields(request) == {"reasoning_effort": expected}
+    assert provider.request_fields(request) == {"thinking": {"type": "enabled"}, "reasoning_effort": expected}
 
 
 async def test_google_rejects_a_stream_without_a_finish_reason():

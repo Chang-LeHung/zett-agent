@@ -4,9 +4,10 @@ import base64
 import json
 import ssl
 from collections.abc import AsyncIterator, Mapping
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from .._compat import aclose_stream
+from ..json_types import JsonValue
 from ..messages import (
     AgentMessage,
     AssistantMessage,
@@ -41,9 +42,9 @@ from .base import (
     ProviderError,
     ProviderResponseError,
     RetryingProvider,
-    _reasoning_effort_to_budget,
     guard_idle,
     http_error,
+    reasoning_effort_to_budget,
     reject_local_tool_search,
     retry_model_stream,
     validate_extra_body,
@@ -52,9 +53,14 @@ from .base import (
 from .http_errors import HttpFailure, failure_message, read_failure
 from .stop_reasons import withhold_replay_blocks
 from .tool_images import expand_tool_images
+from .wire import JsonObject
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
     import httpx
+    from google.genai.errors import APIError
+    from google.genai.types import Candidate, ToolListUnion
 
 
 class GoogleProvider(RetryingProvider):
@@ -114,7 +120,7 @@ class GoogleProvider(RetryingProvider):
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
         base_url: str | None = None,
         extra_headers: Mapping[str, str] | None = None,
-        extra_body: Mapping[str, Any] | None = None,
+        extra_body: Mapping[str, JsonValue] | None = None,
         timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
     ) -> None:
         import httpx
@@ -227,7 +233,7 @@ class GoogleProvider(RetryingProvider):
             system_instruction="\n\n".join(system) or None,
             tools=self._google_tools(types, request),
             thinking_config=types.ThinkingConfig(
-                thinking_budget=_reasoning_effort_to_budget(request.reasoning_effort),
+                thinking_budget=reasoning_effort_to_budget(request.reasoning_effort),
                 include_thoughts=True,
             ),
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
@@ -242,7 +248,7 @@ class GoogleProvider(RetryingProvider):
         )
         text, reasoning = "", ""
         calls: list[ToolCall] = []
-        replay: list[dict[str, Any]] = []
+        replay: list[JsonObject] = []
         usage = ModelUsage()
         finish_reason = None
         block_reason: str | None = None
@@ -286,7 +292,9 @@ class GoogleProvider(RetryingProvider):
                                 yield ModelEvent.text(part.text)
                         if part.function_call:
                             call = part.function_call
-                            normalized = ToolCall(call.id or f"call_{len(calls)}", call.name, call.args or {})
+                            # A call without a name is malformed; an empty one reaches the model as an
+                            # unknown tool, which it can correct, instead of failing the whole response.
+                            normalized = ToolCall(call.id or f"call_{len(calls)}", call.name or "", call.args or {})
                             calls.append(normalized)
                             yield ModelEvent.tool_call(
                                 ToolCallDelta(
@@ -357,10 +365,10 @@ class GoogleProvider(RetryingProvider):
         )
 
     @staticmethod
-    def _google_tools(types: Any, request: ModelRequest) -> list[Any] | None:
+    def _google_tools(types: ModuleType, request: ModelRequest) -> ToolListUnion | None:
         """Build local function declarations and native Google server tools."""
         reject_local_tool_search("Google generative AI", request.tools)
-        tools: list[Any] = []
+        tools: ToolListUnion = []
         if request.tools:
             tools.append(
                 types.Tool(
@@ -382,7 +390,7 @@ class GoogleProvider(RetryingProvider):
         return tools or None
 
 
-def _provider_error(error: Any) -> ProviderError:
+def _provider_error(error: APIError) -> ProviderError:
     """Map an SDK failure to the provider error hierarchy.
 
     The original error stays reachable through ``__cause__``, which is where the retry
@@ -412,7 +420,7 @@ def _unparsable_response(error: BaseException) -> ProviderResponseError:
     )
 
 
-def _google_server_tool_events(candidate: Any, *, sequence: int, seen: set[str]) -> tuple[list[ModelEvent], int]:
+def _google_server_tool_events(candidate: Candidate, *, sequence: int, seen: set[str]) -> tuple[list[ModelEvent], int]:
     """Normalize completed Google Search and URL Context metadata.
 
     Generate Content exposes these hosted operations only when result metadata

@@ -4,9 +4,10 @@ import base64
 import json
 import ssl
 from collections.abc import AsyncIterator, Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .._compat import aclose_stream
+from ..json_types import JsonValue
 from ..messages import (
     AgentMessage,
     AssistantMessage,
@@ -47,14 +48,15 @@ from .base import (
 )
 from .http_errors import failure_message, read_failure
 from .tool_images import expand_tool_images
+from .wire import JsonObject
 
 if TYPE_CHECKING:
     import httpx
 
 
-def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
+def _tools_to_ollama_payload(tools: Sequence[ToolDefinition]) -> list[JsonObject]:
     reject_local_tool_search("Ollama chat", tools)
-    rendered = []
+    rendered: list[JsonObject] = []
     for tool in tools:
         rendered.append(
             {
@@ -159,7 +161,7 @@ class OllamaProvider(RetryingProvider):
         if request.server_tools:
             requested = ", ".join(tool.type for tool in request.server_tools)
             raise ProviderResponseError(f"Ollama does not support provider-hosted server tools: {requested}")
-        messages: list[dict[str, Any]] = []
+        messages: list[JsonObject] = []
         for message in expand_tool_images(request.messages):
             match message:
                 case AgentMessage():
@@ -167,8 +169,8 @@ class OllamaProvider(RetryingProvider):
                 case SystemMessage():
                     messages.append({"role": "system", "content": message.content})
                 case UserMessage():
-                    payload: dict[str, Any] = {"role": "user", "content": message.text}
-                    images: list[str] = []
+                    payload: JsonObject = {"role": "user", "content": message.text}
+                    images: list[JsonValue] = []
                     for part in message.parts:
                         match part:
                             case ImageContent(source=ImageBytesSource(data=data)):
@@ -194,7 +196,7 @@ class OllamaProvider(RetryingProvider):
                     messages.append(
                         {
                             "role": "tool",
-                            "content": message.content,
+                            "content": message.text,
                             "tool_name": message.name,
                         }
                     )
@@ -226,7 +228,7 @@ class OllamaProvider(RetryingProvider):
                     text += chunk.message.content
                     yield ModelEvent.text(chunk.message.content)
                 for call in chunk.message.tool_calls or []:
-                    normalized = ToolCall(f"call_{len(calls)}", call.function.name, call.function.arguments)
+                    normalized = ToolCall(f"call_{len(calls)}", call.function.name, dict(call.function.arguments))
                     calls.append(normalized)
                     yield ModelEvent.tool_call(
                         ToolCallDelta(

@@ -21,7 +21,7 @@ from zett_agent.model import (
     ModelEvent,
     ModelResponse,
 )
-from zett_agent.providers.base import _message_to_openai_payload
+from zett_agent.providers.openai_compatible import chat_message
 from zett_agent.providers.responses import responses_input
 from zett_agent.providers.tool_images import expand_tool_images
 from zett_agent.storage import SQLiteSessionStorage, decode_messages, encode_messages
@@ -126,7 +126,7 @@ async def test_parallel_tool_images_follow_all_tool_results(tmp_path):
     wire = expand_tool_images(messages)
     assert [message.role for message in wire] == ["tool", "tool", "user"]
     assert isinstance(wire[-1], UserMessage)
-    assert _message_to_openai_payload(wire[-1])["content"][-1]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert chat_message(wire[-1])["content"][-1]["image_url"]["url"].startswith("data:image/png;base64,")
     output = responses_input(messages, provider="openai", model="vision")
     assert output[-1]["content"][-1]["type"] == "input_image"
     assert messages[0].content == [image]

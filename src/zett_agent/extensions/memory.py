@@ -21,20 +21,20 @@ class InMemoryMessageAccumulator(AgentExtension):
         """Combine current instructions with an independent copy of remembered dialogue."""
         state = context.state
         instructions = [message for message in state.messages if isinstance(message, SystemMessage)]
-        current_dialogue = [
+        current_dialogue: list[AnyMessage] = [
             message
             for message in state.messages
             if message.include_in_messages and not isinstance(message, SystemMessage)
         ]
-        remembered = self._sessions.get(context.config.session_id)
+        remembered = self._sessions.get(context.session_id)
         if remembered is None:
             remembered = list(current_dialogue)
-            self._sessions[context.config.session_id] = remembered
+            self._sessions[context.session_id] = remembered
         context.replace_messages([*instructions, *remembered], emit_new=False)
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Accumulate raw messages and replace dialogue after successful compaction."""
-        session_id = context.config.session_id
+        session_id = context.session_id
         match event:
             case MessageAppendedEvent(message=message) if not message.include_in_messages:
                 return

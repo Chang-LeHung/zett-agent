@@ -161,9 +161,11 @@ class SubAgentExtension(AgentExtension):
     def __init__(self, subagents: Sequence[SubAgentDefinition] | None = None) -> None:
         if subagents is not None and not subagents:
             raise ValueError("At least one subagent must be configured")
-        configured = None if subagents is None else {definition.name: definition for definition in subagents}
-        if configured is not None and len(configured) != len(subagents):
-            raise ValueError("Subagent names must be unique")
+        configured: dict[str, SubAgentDefinition] | None = None
+        if subagents is not None:
+            configured = {definition.name: definition for definition in subagents}
+            if len(configured) != len(subagents):
+                raise ValueError("Subagent names must be unique")
         self._configured_subagents = configured
 
     async def on_tool(self, context: AgentRunContext) -> None:
@@ -194,7 +196,7 @@ class SubAgentExtension(AgentExtension):
             definition.model,
             config=AgentRunConfig(
                 session_id=child_session_id,
-                parent_session_id=context.config.session_id,
+                parent_session_id=context.session_id,
             ),
             system_prompt=definition.system_prompt,
             tools=definition.tools,
@@ -243,7 +245,7 @@ class SubAgentExtension(AgentExtension):
             result = await child.run(prompt)
             return SubAgentResult(
                 session_id=child_session_id,
-                parent_session_id=context.config.session_id,
+                parent_session_id=context.session_id,
                 subagent_type=definition.name,
                 content=subagent_report(result),
                 stop=result.stop if result.stop is not None and not result.stop.ok else None,

@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import RLock, Thread
-from typing import Any
+from typing import Any, Literal
 
 from ..agent import AgentRunContext
 from ..ids import new_uuid7
@@ -181,7 +181,8 @@ class JITHarness:
         # Names hidden from dispatch while their source is retained. Unload only
         # edits this set; loading removes the name again.
         self._unloaded = set(initial.unloaded_tools)
-        dynamic_names = {record.name for record in (*initial.tools, *initial.text_tools)}
+        records: tuple[PythonToolSource | TextToolSource, ...] = (*initial.tools, *initial.text_tools)
+        dynamic_names = {record.name for record in records}
         for candidate in tools:
             _validate_name(candidate.name)
             if candidate.name in dynamic_names or candidate.name in self._provided:
@@ -637,7 +638,9 @@ class JITHarness:
         with self._lock:
             self._known(name)
             registered = self._dynamic.get(name) or self._bases.get(name)
-            status = "unloaded" if self._is_unloaded(name) else "loaded" if registered is not None else "missing"
+            status: Literal["loaded", "unloaded", "missing", "unavailable"] = (
+                "unloaded" if self._is_unloaded(name) else "loaded" if registered is not None else "missing"
+            )
             if self._context is not None and status == "loaded" and name not in self._context.tools:
                 status = "unavailable"
             return {

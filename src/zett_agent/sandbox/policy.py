@@ -381,7 +381,7 @@ class SandboxPolicy:
     ) -> SandboxPolicy:
         """Return a policy that can write ``roots``, read the machine, and use the network only if asked."""
         return cls(
-            writable_paths=roots,
+            writable_paths=_as_paths(roots, "writable_paths"),
             network=network,
             protect_defaults=protect_defaults,
             limits=limits if limits is not None else ResourceLimits(),

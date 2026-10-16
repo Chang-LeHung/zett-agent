@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from collections.abc import AsyncIterator, Mapping, Sequence
-from contextlib import aclosing
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from threading import RLock
@@ -14,7 +13,7 @@ from ._agent.model_step import ModelStepMixin
 from ._agent.recovery import RecoveryMixin
 from ._agent.tool_runner import ToolRunnerMixin
 from ._agent.turns import TurnLoopMixin
-from ._compat import Self
+from ._compat import Self, aclosing_stream
 from .event_queue import AgentEventQueue
 from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin
 from .exceptions import AgentProtocolError
@@ -238,6 +237,19 @@ class AgentRunContext:
         repr=False,
     )
 
+    @property
+    def session_id(self) -> str:
+        """The session this run belongs to.
+
+        ``config.session_id`` is optional because a caller may leave it out, and the runtime fills it in
+        before a context exists, so by the time an extension holds a context this is always set. Use it
+        in place of ``config.session_id`` wherever a ``str`` is needed, such as a dictionary key.
+        """
+        session_id = self.config.session_id
+        if session_id is None:
+            raise AgentProtocolError("The run's configuration has no session ID")
+        return session_id
+
     async def emit(self, event: AgentEvent) -> None:
         """Queue one extension-owned CUSTOM or compaction event for the caller."""
         if event.type not in {
@@ -260,11 +272,11 @@ class AgentRunContext:
         The session is filled in, and the phase is stamped as the event is queued, so a caller names
         only the type and the fields that type carries.
         """
-        await self._emit_runtime(AgentEvent(event_type, session_id=self.config.session_id, **fields))
+        await self._emit_runtime(AgentEvent(event_type, session_id=self.session_id, **fields))
 
     async def _emit(self, event: AgentEvent) -> None:
         """Validate, phase-stamp, and enqueue one outward event."""
-        if event.session_id != self.config.session_id:
+        if event.session_id != self.session_id:
             raise AgentProtocolError("Agent event belongs to another session")
         match event.type:
             case AgentEventType.COMPACTION_STARTED:
@@ -684,9 +696,8 @@ class Agent(
         with self._sessions_lock:
             if config is None and len(self._active_configs) > 1:
                 raise AgentProtocolError("External events require config when multiple sessions are active")
-            routing = (
-                config if config is not None else next(iter(self._active_configs.values()), self._initialized_config)
-            )
+            active = next(iter(self._active_configs.values()), None)
+            routing = config if config is not None else (active if active is not None else self._initialized_config)
         accepted: list[str] = []
         for extension in self.extensions:
             if extension.accept(routing, event):
@@ -943,7 +954,7 @@ class Agent(
         effort, allow_parallel = self._resolve_run_options(reasoning_effort, parallel_tool_call)
         context = self._prepare_request_context(config, model, metadata, tags, None)
         work = self._run_request(context, effort, allow_parallel, resume=True)
-        async with aclosing(self._pump_events(context, work)) as events:
+        async with aclosing_stream(self._pump_events(context, work)) as events:
             async for event in events:
                 yield event
 
@@ -1024,7 +1035,7 @@ class Agent(
         effort, allow_parallel = self._resolve_run_options(reasoning_effort, parallel_tool_call)
         context = self._prepare_request_context(config, model, metadata, tags, user_message)
         work = self._run_request(context, effort, allow_parallel)
-        async with aclosing(self._pump_events(context, work)) as events:
+        async with aclosing_stream(self._pump_events(context, work)) as events:
             async for event in events:
                 yield event
 
@@ -1064,6 +1075,6 @@ class Agent(
         """
         context = self._prepare_request_context(config, model, metadata, tags, None)
         pass_ = self._run_compaction(context)
-        async with aclosing(self._pump_events(context, pass_, ends_silently=True)) as events:
+        async with aclosing_stream(self._pump_events(context, pass_, ends_silently=True)) as events:
             async for event in events:
                 yield event

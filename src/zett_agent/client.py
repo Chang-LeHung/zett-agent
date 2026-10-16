@@ -1,9 +1,9 @@
 """Optional creation and event-handling conveniences around the unchanged Agent."""
 
 from collections.abc import AsyncIterator, Mapping, Sequence
-from contextlib import aclosing
 
 from ._agent.lifecycle import final_answer
+from ._compat import aclosing_stream
 from .agent import Agent, AgentRunConfig
 from .dispatcher import AgentEventDispatcher
 from .events import AgentEvent
@@ -82,13 +82,13 @@ class AgentClient(SyncMethodsMixin):
             metadata=metadata,
             tags=tags,
         )
-        async with aclosing(self._dispatched(stream)) as events:
+        async with aclosing_stream(self._dispatched(stream)) as events:
             async for event in events:
                 yield event
 
     async def _dispatched(self, events: AsyncIterator[AgentEvent]) -> AsyncIterator[AgentEvent]:
         """Hand each event to the bound dispatcher, if there is one, then yield it unchanged."""
-        async with aclosing(events) as stream:
+        async with aclosing_stream(events) as stream:
             async for event in stream:
                 if self.event_dispatcher is not None:
                     await self.event_dispatcher.dispatch(event)
@@ -125,7 +125,9 @@ class AgentClient(SyncMethodsMixin):
                 stored = await client.compact()
         """
         checkpoint: CompactionEvent | None = None
-        async with aclosing(self.agent.compact(config=config, model=model, metadata=metadata, tags=tags)) as events:
+        async with aclosing_stream(
+            self.agent.compact(config=config, model=model, metadata=metadata, tags=tags)
+        ) as events:
             async for event in events:
                 if isinstance(event.compaction, CompactionEvent):
                     checkpoint = event.compaction
@@ -210,7 +212,7 @@ class AgentClient(SyncMethodsMixin):
             metadata=metadata,
             tags=tags,
         )
-        async with aclosing(self._dispatched(stream)) as events:
+        async with aclosing_stream(self._dispatched(stream)) as events:
             async for event in events:
                 yield event
 

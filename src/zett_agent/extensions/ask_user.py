@@ -209,7 +209,7 @@ class AskUserExtension(ExternalEventExtension):
             return
 
         async with self._wait_for_external_event(context, call.id):
-            await context.emit(AskUserEvent(context.config.session_id, call, request))
+            await context.emit(AskUserEvent(context.session_id, call, request))
 
     def _build_tool(self, context: AgentRunContext) -> AgentTool:
         """Create a validated tool whose result belongs to this request context."""

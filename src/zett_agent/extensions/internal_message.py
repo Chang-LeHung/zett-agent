@@ -75,7 +75,7 @@ class InternalMessageExtension(AgentExtension):
                 inbox
                 for inbox in self._inboxes.values()
                 if inbox.accepting
-                and inbox.context.config.session_id == session_id
+                and inbox.context.session_id == session_id
                 and (request_id is None or inbox.context.config.request_id == request_id)
             ]
             if len(matches) != 1:

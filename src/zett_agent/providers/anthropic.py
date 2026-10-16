@@ -5,14 +5,19 @@ import json
 import ssl
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ..messages import (
+    AgentMessage,
+    AnyMessage,
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
     ImageUrlSource,
+    SystemMessage,
     TextContent,
+    ToolMessage,
+    UserMessage,
 )
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
@@ -60,7 +65,10 @@ from .tool_arguments import ToolArgumentsError, decode_tool_arguments
 from .tool_images import expand_tool_images
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     import httpx
+    from anthropic import AsyncStream
 
 #: Output budget per response. The original 4096 truncated any tool call that wrote a
 #: sizeable file, leaving its JSON arguments incomplete.
@@ -88,9 +96,9 @@ def _tools_to_anthropic_payload(
     can_load = any(tool.local_tool_search for tool in tools) or any(
         tool.type.startswith("tool_search_tool_") for tool in server_tools
     )
-    rendered = []
+    rendered: list[dict[str, Any]] = []
     for tool in tools:
-        payload = {
+        payload: dict[str, Any] = {
             "name": tool.name,
             "description": tool.description,
             "input_schema": dict(tool.parameters),
@@ -156,16 +164,15 @@ def _apply_prompt_cache(body: dict[str, Any], client_tools: Sequence[dict[str, A
 
 
 def _to_anthropic_content_blocks(
-    message: Any, *, model: str | None = None, search_tool: str | None = None
+    message: AnyMessage, *, model: str | None = None, search_tool: str | None = None
 ) -> list[dict[str, Any]]:
     """Convert a domain message into Anthropic content blocks."""
-    role = message.role
-    match role:
-        case "user" | "agent":
+    blocks: list[dict[str, Any]] = []
+    match message:
+        case UserMessage() | AgentMessage():
             content = message.content
             if isinstance(content, str):
                 return [{"type": "text", "text": content}] if content else []
-            blocks: list[dict[str, Any]] = []
             for part in content:
                 match part:
                     case TextContent(text=text):
@@ -173,10 +180,9 @@ def _to_anthropic_content_blocks(
                     case ImageContent(source=source):
                         blocks.append(_to_anthropic_image_block(source))
             return blocks
-        case "assistant":
+        case AssistantMessage():
             if message.provider == "anthropic" and message.model == model and message.replay_blocks:
                 return [dict(block) for block in message.replay_blocks]
-            blocks: list[dict[str, Any]] = []
             if message.content:
                 blocks.append({"type": "text", "text": message.content})
             for call in message.tool_calls:
@@ -189,8 +195,8 @@ def _to_anthropic_content_blocks(
                     }
                 )
             return blocks
-        case "tool":
-            content = (
+        case ToolMessage():
+            result = (
                 _search_result_blocks(message)
                 if search_tool is not None and message.name == search_tool and message.success
                 else message.content
@@ -199,7 +205,7 @@ def _to_anthropic_content_blocks(
                 {
                     "type": "tool_result",
                     "tool_use_id": message.tool_call_id,
-                    "content": content,
+                    "content": result,
                     "is_error": not message.success,
                 }
             ]
@@ -362,24 +368,24 @@ class AnthropicProvider(RetryingProvider):
         system: list[str] = []
         search_tool = local_tool_search_name(request.tools)
         for message in expand_tool_images(request.messages):
-            match message.role:
-                case "system":
+            match message:
+                case SystemMessage():
                     system.append(message.content)
-                case "user" | "agent":
+                case UserMessage() | AgentMessage():
                     content = _to_anthropic_content_blocks(message, model=self.model)
                     if content:
                         messages.append({"role": "user", "content": content})
-                case "assistant":
+                case AssistantMessage():
                     content = _to_anthropic_content_blocks(message, model=self.model)
                     if content:
                         messages.append({"role": "assistant", "content": content})
-                case "tool":
+                case ToolMessage():
                     content = _to_anthropic_content_blocks(message, model=self.model, search_tool=search_tool)
                     if content:
                         messages.append({"role": "user", "content": content})
 
         client_tools = _tools_to_anthropic_payload(request.tools, request.server_tools)
-        body = {
+        body: dict[str, Any] = {
             "model": self.model,
             "system": "\n\n".join(system),
             "messages": messages,
@@ -424,8 +430,11 @@ class AnthropicProvider(RetryingProvider):
         from anthropic import AnthropicError
 
         try:
+            # The request body is assembled as a dict, which the SDK's many typed overloads cannot match
+            # (they select on literal ``stream=True``), so the call is typed by what it returns here.
+            create = cast("Callable[..., Awaitable[AsyncStream[Any]]]", self._client.messages.create)
             response = await self._first_byte(
-                self._client.messages.create(**body, **({"extra_body": self.extra_body} if self.extra_body else {}))
+                create(**body, **({"extra_body": self.extra_body} if self.extra_body else {}))
             )
         except AnthropicError as error:
             if getattr(error, "status_code", None) is None:
@@ -433,10 +442,10 @@ class AnthropicProvider(RetryingProvider):
                 # text ("Connection error.") is what says why; a timeout is recognized from the
                 # chain by the retry layer, which turns it into a typed error.
                 raise ProviderResponseError(f"Anthropic request failed: {error}") from error
-            status, failure, message = describe_status_error("anthropic", error)
+            status, failure, description = describe_status_error("anthropic", error)
             if status == 401:
-                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
-            raise http_error(status, failure, message) from error
+                raise ProviderAuthError(f"Provider rejected API credential. {description}") from error
+            raise http_error(status, failure, description) from error
 
         await require_event_stream(response, "anthropic")
         events_seen = 0
@@ -560,7 +569,7 @@ class AnthropicProvider(RetryingProvider):
         for index, stream in streams.items():
             replay[index]["input"] = _lenient_arguments(stream.argument_buffer, index)
         stop = _anthropic_stop(finish_reason, stop_details, has_tool_calls=bool(tool_calls))
-        blocks = tuple(replay[index] for index in sorted(replay))
+        blocks: tuple[Mapping[str, Any], ...] = tuple(replay[index] for index in sorted(replay))
         if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
             # A refusal can arrive after a complete ``tool_use`` was streamed. The call is
             # withheld from the message, and a ``tool_use`` block replayed without a result

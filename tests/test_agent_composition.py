@@ -350,3 +350,110 @@ async def test_only_the_latest_tool_batch_is_closed_and_an_older_broken_one_is_l
 
     assert [message.tool_call_id for message in appended] == ["new"]
     assert appended[0].content == "stopped" and appended[0].success is False
+
+
+# --------------------------------------------------------------- the type contract
+
+
+def contract_declarations() -> tuple[set[str], set[str]]:
+    """The method names and attribute names ``AgentContract`` declares for the type checker, read from source."""
+    tree = ast.parse((SOURCE / "_agent" / "contract.py").read_text())
+    contract = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "AgentContract")
+    block = next(node for node in contract.body if isinstance(node, ast.If))
+    methods = {node.name for node in block.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    attributes = {
+        node.target.id for node in block.body if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+    }
+    return methods, attributes
+
+
+def test_the_contract_adds_nothing_to_agent_at_runtime():
+    from zett_agent._agent.contract import AgentContract
+
+    assert all(issubclass(mixin, AgentContract) for mixin in MIXINS)
+    declared = {name for name in vars(AgentContract) if not name.startswith("__")}
+    # Whatever the phase mixin it builds on defines, the contract itself defines nothing.
+    assert not declared & {"_broadcast", "_run_loop", "state", "extensions", "is_conflict"}
+
+
+def test_everything_the_contract_declares_exists_on_agent():
+    """The declarations are for the type checker, which cannot tell when one goes stale; this can."""
+    methods, attributes = contract_declarations()
+    agent = Agent(None)
+
+    assert methods and attributes
+    assert {name for name in methods if not callable(getattr(agent, name, None))} == set()
+    assert {name for name in attributes if not hasattr(agent, name)} == set()
+
+
+# ------------------------------------------------------------------- session_id
+
+
+def test_a_context_exposes_its_session_as_a_string():
+    from zett_agent.agent import AgentRunContext, AgentState
+
+    context = AgentRunContext(config=AgentRunConfig("chat-1"), state=AgentState(), tools={})
+
+    assert context.session_id == "chat-1"
+
+
+def test_a_context_whose_configuration_lost_its_session_says_so():
+    from zett_agent.agent import AgentRunContext, AgentState
+
+    context = AgentRunContext(config=AgentRunConfig(), state=AgentState(), tools={})
+
+    with pytest.raises(AgentProtocolError, match="no session ID"):
+        context.session_id  # noqa: B018
+
+
+async def test_the_session_id_extensions_see_is_the_one_the_runtime_resolved():
+    seen: list[str] = []
+
+    class Watch(AgentExtension):
+        async def before_run(self, context):
+            seen.append(context.session_id)
+
+    agent = await Agent.create(Scripted(AssistantMessage(content="ok")), extensions=[Watch()])
+    await agent.run("hello")  # no session was configured, so one was generated
+
+    assert len(seen) == 1 and seen[0]
+    assert agent.get_state(seen[0]) is not None  # and it is the key the agent files the session under
+
+
+# --------------------------------------------------------------- closing streams
+
+
+async def test_a_stream_is_closed_when_the_block_ends_even_if_it_was_not_finished():
+    closed: list[str] = []
+
+    async def stream() -> AsyncIterator[int]:
+        try:
+            yield 1
+            yield 2
+        finally:
+            closed.append("closed")
+
+    from zett_agent._compat import aclosing_stream
+
+    async with aclosing_stream(stream()) as events:
+        assert await events.__anext__() == 1
+
+    assert closed == ["closed"]
+
+
+async def test_aclose_stream_runs_the_generators_cleanup():
+    from zett_agent._compat import aclose_stream
+
+    closed: list[str] = []
+
+    async def stream() -> AsyncIterator[int]:
+        try:
+            yield 1
+        finally:
+            closed.append("closed")
+
+    events = stream()
+    await events.__anext__()
+    await aclose_stream(events)
+
+    assert closed == ["closed"]

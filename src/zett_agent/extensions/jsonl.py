@@ -118,7 +118,7 @@ class JSONLExtension(AgentExtension):
 
         record = {
             "version": 1,
-            "session_id": context.config.session_id,
+            "session_id": context.session_id,
             "request_id": context.config.request_id,
             "parent_session_id": context.config.parent_session_id,
             "started_at": pending.started_at.isoformat(),
@@ -131,7 +131,7 @@ class JSONLExtension(AgentExtension):
         if error is not None:
             record["error"] = error
         line = json.dumps(record, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-        await asyncio.to_thread(self._append_line, self.session_path(context.config.session_id), line)
+        await asyncio.to_thread(self._append_line, self.session_path(context.session_id), line)
 
     @staticmethod
     def _turn_messages(context: AgentRunContext, input_message: UserMessage) -> list[AnyMessage]:

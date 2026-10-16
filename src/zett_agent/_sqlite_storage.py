@@ -12,10 +12,11 @@ from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 from weakref import WeakKeyDictionary
 
-from sqlalchemy import Index, Integer, String, Text, delete, event, func, select
-from sqlalchemy.engine import URL
+from sqlalchemy import Delete, Index, Integer, String, Text, delete, event, func, select
+from sqlalchemy.engine import URL, CursorResult
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
@@ -131,6 +132,15 @@ async def ensure_session_type_column(connection: AsyncConnection) -> None:
         await connection.exec_driver_sql(
             "ALTER TABLE agent_sessions ADD COLUMN session_type INTEGER NOT NULL DEFAULT 0"
         )
+
+
+async def _deleted(session: AsyncSession, statement: Delete) -> int:
+    """Run a DELETE and return how many rows it removed.
+
+    ``execute`` is typed as returning a generic ``Result``, which has no ``rowcount``; a DELETE
+    returns a ``CursorResult``, which does.
+    """
+    return cast("CursorResult[Any]", await session.execute(statement)).rowcount
 
 
 def _session_type_code(value: int) -> int:
@@ -499,15 +509,13 @@ class SQLiteSessionStorage(SyncMethodsMixin):
     async def delete_session(self, session_id: str) -> bool:
         """Explicitly delete raw messages and snapshots owned by one session."""
         async with self._session_scope() as session:
-            message_count = (
-                await session.execute(delete(RawLogMessageModel).where(RawLogMessageModel.session_id == session_id))
-            ).rowcount
-            snapshot_count = (
-                await session.execute(delete(ContextSnapshotModel).where(ContextSnapshotModel.session_id == session_id))
-            ).rowcount
-            session_count = (
-                await session.execute(delete(AgentSessionModel).where(AgentSessionModel.id == session_id))
-            ).rowcount
+            message_count = await _deleted(
+                session, delete(RawLogMessageModel).where(RawLogMessageModel.session_id == session_id)
+            )
+            snapshot_count = await _deleted(
+                session, delete(ContextSnapshotModel).where(ContextSnapshotModel.session_id == session_id)
+            )
+            session_count = await _deleted(session, delete(AgentSessionModel).where(AgentSessionModel.id == session_id))
             return bool(message_count or snapshot_count or session_count)
 
     @staticmethod

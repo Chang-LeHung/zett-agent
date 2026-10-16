@@ -304,7 +304,7 @@ class PlanModeExtension(ExternalEventExtension):
             exit_tool=self._build_exit_tool(context),
         )
         self._requests[context] = baseline
-        if self.is_plan_mode(context.config.session_id):
+        if self.is_plan_mode(context.session_id):
             self._replace_plan_tools(context, baseline)
             baseline.plan_applied = True
         else:
@@ -314,7 +314,7 @@ class PlanModeExtension(ExternalEventExtension):
         """Replace system instructions only after Plan Mode was approved."""
         baseline = self._baseline(context)
         baseline.system_messages = self._normal_system_messages(context, baseline)
-        if self.is_plan_mode(context.config.session_id):
+        if self.is_plan_mode(context.session_id):
             self._replace_plan_system_messages(context, baseline)
 
     async def before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
@@ -324,7 +324,7 @@ class PlanModeExtension(ExternalEventExtension):
     def _apply_mode(self, context: AgentRunContext) -> None:
         """Apply session mode without invoking a model lifecycle hook manually."""
         baseline = self._baseline(context)
-        if self.is_plan_mode(context.config.session_id):
+        if self.is_plan_mode(context.session_id):
             self._replace_plan_tools(context, baseline)
             self._replace_plan_system_messages(context, baseline)
             baseline.plan_applied = True
@@ -347,7 +347,7 @@ class PlanModeExtension(ExternalEventExtension):
         if not result.success or call.name not in (ENTER_PLAN_MODE_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME):
             return
         self._apply_mode(context)
-        session_id = context.config.session_id
+        session_id = context.session_id
         if session_id in self._entered_events:
             self._entered_events.remove(session_id)
             await context.emit(PlanModeEnteredEvent(session_id))
@@ -369,10 +369,10 @@ class PlanModeExtension(ExternalEventExtension):
                     call.id,
                     response_event_name=ENTER_PLAN_MODE_RESPONSE_EVENT_NAME,
                 ):
-                    await context.emit(EnterPlanModeEvent(context.config.session_id, call, request))
+                    await context.emit(EnterPlanModeEvent(context.session_id, call, request))
             case name if name == EXIT_PLAN_MODE_TOOL_NAME:
                 try:
-                    request = ExitPlanModeRequest.model_validate(call.arguments)
+                    exit_request = ExitPlanModeRequest.model_validate(call.arguments)
                 except ValidationError:
                     return
                 async with self._wait_for_external_event(
@@ -380,16 +380,16 @@ class PlanModeExtension(ExternalEventExtension):
                     call.id,
                     response_event_name=EXIT_PLAN_MODE_RESPONSE_EVENT_NAME,
                 ):
-                    await context.emit(ExitPlanModeEvent(context.config.session_id, call, request))
+                    await context.emit(ExitPlanModeEvent(context.session_id, call, exit_request))
             case _:
                 return
 
     async def before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
         """Reject tools outside the active Plan Mode capability set."""
         allowed = self._filesystem_tool_names | {EXIT_PLAN_MODE_TOOL_NAME}
-        if self.is_plan_mode(context.config.session_id) and call.name not in allowed:
+        if self.is_plan_mode(context.session_id) and call.name not in allowed:
             raise AgentProtocolError(f"Tool {call.name!r} is not allowed in Plan Mode")
-        if not self.is_plan_mode(context.config.session_id) and call.name == EXIT_PLAN_MODE_TOOL_NAME:
+        if not self.is_plan_mode(context.session_id) and call.name == EXIT_PLAN_MODE_TOOL_NAME:
             raise AgentProtocolError("Cannot exit Plan Mode while it is not active")
         await self._wait_before_tool(context, call)
 
@@ -400,8 +400,8 @@ class PlanModeExtension(ExternalEventExtension):
     async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Wake external waits and release restoration state after failure."""
         self._requests.pop(context, None)
-        self._entered_events.discard(context.config.session_id)
-        self._exited_events.discard(context.config.session_id)
+        self._entered_events.discard(context.session_id)
+        self._exited_events.discard(context.session_id)
         await super().on_error(context, error)
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
@@ -409,8 +409,8 @@ class PlanModeExtension(ExternalEventExtension):
         await super().on_event(context, event)
         if isinstance(event, RunCancelledEvent):
             self._requests.pop(context, None)
-            self._entered_events.discard(context.config.session_id)
-            self._exited_events.discard(context.config.session_id)
+            self._entered_events.discard(context.session_id)
+            self._exited_events.discard(context.session_id)
 
     def _build_enter_tool(self, context: AgentRunContext) -> AgentTool:
         """Create the request-bound Tool that consumes one approved decision."""
@@ -435,7 +435,7 @@ class PlanModeExtension(ExternalEventExtension):
             response = EnterPlanModeResponse.model_validate(event.payload)
             if not response.approved:
                 return EnterPlanModeResult(entered=False, message="The user declined Plan Mode")
-            session_id = context.config.session_id
+            session_id = context.session_id
             if session_id in self._active_sessions:
                 raise AgentProtocolError("Cannot enter Plan Mode while it is already active")
             self._active_sessions.add(session_id)
@@ -467,7 +467,7 @@ class PlanModeExtension(ExternalEventExtension):
             response = ExitPlanModeResponse.model_validate(event.payload)
             if not response.approved:
                 return ExitPlanModeResult(exited=False, message="The user requested more planning")
-            session_id = context.config.session_id
+            session_id = context.session_id
             if session_id not in self._active_sessions:
                 raise AgentProtocolError("Cannot exit Plan Mode while it is not active")
             self._active_sessions.remove(session_id)
@@ -507,7 +507,7 @@ class PlanModeExtension(ExternalEventExtension):
         baseline: _RequestBaseline,
     ) -> tuple[SystemMessage, ...]:
         instructions = [message for message in context.state.messages if isinstance(message, SystemMessage)]
-        if not self.is_plan_mode(context.config.session_id):
+        if not self.is_plan_mode(context.session_id):
             return tuple(instructions)
         guidance = next(
             (

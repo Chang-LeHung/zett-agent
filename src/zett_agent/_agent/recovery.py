@@ -7,11 +7,10 @@ from typing import TYPE_CHECKING
 from ..exceptions import AgentResumeError
 from ..messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage
 from ..resume import ResumeKind, ResumePoint, classify_resume
+from .contract import AgentContract, mixin_api
 
 if TYPE_CHECKING:
     from ..agent import AgentRunContext
-    from ..extensions.internal_message import InternalMessageExtension
-    from ..extensions.steering import SteeringExtension
 
 #: What a tool call is answered with when the request that made it was cancelled while it ran.
 CANCELLED_TOOL_RESULT = "Request cancelled before tool completion"
@@ -39,12 +38,10 @@ _RESUME_NOTICES = {
 }
 
 
-class RecoveryMixin:
+class RecoveryMixin(AgentContract):
     """Read the tail of a session's history and make it ready to carry on from."""
 
-    _internal_message_extension: InternalMessageExtension
-    _steering_extension: SteeringExtension
-
+    @mixin_api
     async def _close_unanswered_tool_calls(self, context: AgentRunContext, content: str) -> None:
         """Append a failed result, saying ``content``, for each call of the latest batch that has none."""
         from ..extensions.events import MessageTiming
@@ -74,6 +71,7 @@ class RecoveryMixin:
                 MessageTiming.instant(),
             )
 
+    @mixin_api
     async def _open_resume(self, context: AgentRunContext) -> None:
         """Open inboxes, restore history, and prepare the interrupted request to carry on."""
         self._internal_message_extension.open(context)
@@ -95,6 +93,7 @@ class RecoveryMixin:
                 MessageTiming.instant(),
             )
 
+    @mixin_api
     async def _inspect_session(self, context: AgentRunContext) -> ResumePoint | None:
         """Restore a session as a request would and report where it was interrupted, changing nothing."""
         await self._restore_context(context)

@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Sequence
 from typing import TYPE_CHECKING, Any
 
 from ..model import AgentModel, ModelEvent, ModelRequest
+from .contract import AgentContract, mixin_api
 
 if TYPE_CHECKING:
     from ..agent import AgentRunContext
@@ -14,13 +15,11 @@ if TYPE_CHECKING:
     from ..extensions.steering import SteeringExtension
 
 
-class ExtensionHooksMixin:
+class ExtensionHooksMixin(AgentContract):
     """Own the extension list and every way the runtime calls into it."""
 
-    #: Every extension, built-ins included, in ascending priority; registration order breaks ties.
-    extensions: tuple[AgentExtension, ...]
-
     @staticmethod
+    @mixin_api
     def _assemble_extensions(
         extensions: Sequence[AgentExtension] | None,
     ) -> tuple[tuple[AgentExtension, ...], InternalMessageExtension, SteeringExtension]:
@@ -58,6 +57,7 @@ class ExtensionHooksMixin:
         # extensions one shared and predictable ordering.
         return tuple(sorted(configured, key=lambda extension: extension.priority)), internal, steering
 
+    @mixin_api
     async def _broadcast(self, hook: str, context: AgentRunContext, *arguments: Any) -> None:
         """Call one lifecycle hook, such as ``"before_run"``, on every extension in priority order.
 
@@ -67,6 +67,7 @@ class ExtensionHooksMixin:
         for extension in self.extensions:
             await getattr(extension, hook)(context, *arguments)
 
+    @mixin_api
     def _stream_model_with_middleware(
         self,
         context: AgentRunContext,

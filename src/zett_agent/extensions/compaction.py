@@ -201,7 +201,7 @@ class CompactionExtension(AgentExtension):
     ) -> CompactedMessage:
         """Summarize compactable history with the summary model."""
         # The runtime replaces an empty session_id before hooks run.
-        session_id = cast(str, context.config.session_id)
+        session_id = cast(str, context.session_id)
         summary_request = ModelRequest(
             messages=(
                 SystemMessage(
@@ -283,7 +283,7 @@ class CompactionExtension(AgentExtension):
         if not force and self._count_context_tokens(context) <= self.max_tokens:
             return None
         # The runtime replaces an empty session_id before hooks run.
-        session_id = cast(str, context.config.session_id)
+        session_id = cast(str, context.session_id)
         window = self._select_compaction_window(
             context.state.messages,
             keep_recent_tokens=self.keep_recent_tokens,
@@ -323,7 +323,7 @@ class CompactionExtension(AgentExtension):
             compressed_to=len(older),
             kept_from=len(older) + 1,
             kept_to=len(older) + len(recent),
-            summary=summary.content,
+            summary=summary.text,
         )
         await context.publish(compacted)
         await context.emit(

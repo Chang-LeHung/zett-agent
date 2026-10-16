@@ -12,10 +12,15 @@ from collections.abc import Sequence
 from dataclasses import asdict
 from enum import IntEnum
 from functools import cache
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .extensions.compaction import CompactedMessage
 from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolMessage, UserMessage
+
+if TYPE_CHECKING:
+    # For the type checker only: at runtime the class resolves lazily through __getattr__ below, so
+    # that importing this module never imports SQLAlchemy.
+    from ._sqlite_storage import SQLiteSessionStorage as SQLiteSessionStorage
 
 #: Session type this runtime stores for the sessions it creates itself.
 #: Applications define every other code they need.

@@ -10,12 +10,20 @@ This module is an implementation detail and is not part of the public API.
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+from contextlib import AbstractAsyncContextManager, aclosing, contextmanager
+from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import asyncio
+    from uuid import UUID
+
+    # Resolved lazily by ``__getattr__`` below; declared here so importers see their real types.
+    def timeout(delay: float | None, /) -> AbstractAsyncContextManager[object]: ...
+    def uuid7() -> UUID: ...
+
+
+_T = TypeVar("_T")
 
 if sys.version_info >= (3, 11):  # pragma: no cover - selected by the interpreter
     from builtins import BaseExceptionGroup, ExceptionGroup
@@ -84,6 +92,22 @@ else:  # pragma: no cover - selected by the interpreter
                 loop.close()
 
 
+async def aclose_stream(stream: AsyncIterator[object]) -> None:
+    """Close ``stream``, an ``AsyncIterator`` that is in fact an async generator; see :func:`aclosing_stream`."""
+    await cast("AsyncGenerator[object, None]", stream).aclose()
+
+
+def aclosing_stream(stream: AsyncIterator[_T]) -> AbstractAsyncContextManager[AsyncIterator[_T]]:
+    """Close ``stream`` when the block ends, as ``contextlib.aclosing`` does, for a typed ``AsyncIterator``.
+
+    Every stream the runtime hands to this is produced by an async generator, which has ``aclose``, but an
+    ``AsyncIterator`` annotation does not say so, and ``aclosing`` only accepts something that does. The
+    public annotations stay ``AsyncIterator`` because narrowing them would break subclasses that override
+    them; this is the one place the narrowing is asserted. Behaviour is exactly that of ``aclosing``.
+    """
+    return aclosing(cast("AsyncGenerator[_T, None]", stream))
+
+
 if sys.version_info >= (3, 12):  # pragma: no cover - selected by the interpreter
     from typing import TypeAliasType
 else:  # pragma: no cover - selected by the interpreter
@@ -98,6 +122,7 @@ def __getattr__(name: str) -> object:
     Resolved values are cached in the module namespace, so later lookups are
     ordinary attribute reads.
     """
+    value: object
     if name == "timeout":
         if sys.version_info >= (3, 11):  # pragma: no cover - selected by the interpreter
             from asyncio import timeout as value
@@ -121,6 +146,8 @@ __all__ = [
     "StrEnum",
     "TypeAliasType",
     "UTC",
+    "aclose_stream",
+    "aclosing_stream",
     "add_note",
     "owned_event_loop",
 ]

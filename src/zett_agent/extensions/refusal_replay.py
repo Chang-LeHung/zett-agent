@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Collection
-from contextlib import aclosing
 from dataclasses import replace
 
-from .._compat import StrEnum
+from .._compat import StrEnum, aclosing_stream
 from ..agent import AgentRunContext
 from ..messages import AssistantMessage
 from ..model import ModelEvent, ModelRequest
@@ -81,7 +80,7 @@ class RefusalReplayExtension(AgentExtension):
             kept = tuple(message for message in request.messages if not self._dropped(message))
             if len(kept) != len(request.messages):
                 request = replace(request, messages=kept)
-        async with aclosing(call_next(request)) as events:
+        async with aclosing_stream(call_next(request)) as events:
             async for event in events:
                 yield event
 

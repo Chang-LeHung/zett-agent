@@ -297,8 +297,8 @@ class BaseSessionPersistenceExtension(AgentExtension, Generic[StorageT]):
 
             tool_messages: list[ToolMessage] = []
             cursor = index + 1
-            while cursor < len(messages) and isinstance(messages[cursor], ToolMessage):
-                tool_messages.append(messages[cursor])
+            while cursor < len(messages) and isinstance(following := messages[cursor], ToolMessage):
+                tool_messages.append(following)
                 cursor += 1
             expected = Counter(call.id for call in message.tool_calls)
             observed = Counter(result.tool_call_id for result in tool_messages)
@@ -309,7 +309,7 @@ class BaseSessionPersistenceExtension(AgentExtension, Generic[StorageT]):
         return restored
 
     async def _restore(self, context: AgentRunContext) -> SessionView:
-        view = await self.storage.load(context.config.session_id)
+        view = await self.storage.load(context.session_id)
         configured_parent = context.state.parent_session_id
         session_exists = view.snapshot is not None or bool(view.raw_tail)
         if configured_parent is not None and session_exists and view.parent_session_id != configured_parent:
@@ -327,7 +327,7 @@ class BaseSessionPersistenceExtension(AgentExtension, Generic[StorageT]):
     async def on_state(self, context: AgentRunContext) -> None:
         """Restore context and map every dialogue position to its Raw Log boundary."""
         view = await self._restore(context)
-        sequences = []
+        sequences: list[int | None] = []
         if view.snapshot is not None:
             sequences.append(view.snapshot.compacted_through_sequence)
         sequences.extend(
@@ -353,7 +353,7 @@ class BaseSessionPersistenceExtension(AgentExtension, Generic[StorageT]):
                 sequence = None
                 if message.persist:
                     sequence = await self.storage.append(
-                        context.config.session_id,
+                        context.session_id,
                         request.request_id,
                         message,
                         timing,
@@ -378,7 +378,7 @@ class BaseSessionPersistenceExtension(AgentExtension, Generic[StorageT]):
             raise ValueError("Compaction must represent at least one persisted Raw Log message")
         compacted_through_sequence = compacted_sequences[-1]
         snapshot = await self.storage.snapshot(
-            context.config.session_id,
+            context.session_id,
             CompactedMessage(content=event.summary),
             compacted_through_sequence,
             request.snapshot_version,

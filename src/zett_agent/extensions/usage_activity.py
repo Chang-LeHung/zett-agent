@@ -63,6 +63,7 @@ class ModelUsageActivityStorage(Protocol):
 
     async def activity(self, *, start: date, end: date) -> list[ModelUsageActivityDay]:
         """Return daily aggregates in the inclusive date range."""
+        ...
 
 
 class UsageActivityExtension(AgentExtension):
@@ -82,7 +83,7 @@ class UsageActivityExtension(AgentExtension):
         usage = response.usage
         await self.storage.record(
             ModelUsageActivityRecord(
-                session_id=context.config.session_id,
+                session_id=context.session_id,
                 request_id=context.config.request_id,
                 provider=response.message.provider,
                 model=response.message.model,

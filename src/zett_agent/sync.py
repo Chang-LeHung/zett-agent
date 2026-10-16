@@ -113,7 +113,7 @@ class SyncAgent(SyncObject[Agent]):
     ) -> None:
         owner = runtime if runtime is not None else SyncRuntime()
         try:
-            agent = owner.call(
+            agent: Agent = owner.call(
                 Agent.create,
                 model,
                 config=config,

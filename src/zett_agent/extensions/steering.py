@@ -79,19 +79,22 @@ class SteeringExtension(AgentExtension):
         if isinstance(message, UserMessage):
             if not message.text and not message.parts:
                 return False
-        elif not isinstance(content, str) or not content.strip():
+            accepted = message
+        elif isinstance(content, str) and content.strip():
+            accepted = UserMessage(content=content)
+        else:
             return False
         with self._lock:
             matches = [
                 inbox
                 for inbox in self._inboxes.values()
                 if inbox.accepting
-                and inbox.context.config.session_id == session_id
+                and inbox.context.session_id == session_id
                 and (request_id is None or inbox.context.config.request_id == request_id)
             ]
             if len(matches) != 1:
                 return False
-            matches[0].messages.append(message if isinstance(message, UserMessage) else UserMessage(content=content))
+            matches[0].messages.append(accepted)
             return True
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:

@@ -20,7 +20,7 @@ from .pages import MAX_MEASURED_CHARS
 #: eviction, so frequent tools still report lifetime aggregates.
 MAX_RETAINED_CALLS = 2_000
 
-_JSON = TypeAdapter(Any)
+_JSON: TypeAdapter[Any] = TypeAdapter(Any)
 
 
 def _measured(size: int) -> int:

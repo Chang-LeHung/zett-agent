@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from contextlib import aclosing
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from .._compat import aclosing_stream
 from ..events import AgentEventType, ModelOutputTracker
 from ..exceptions import AgentProtocolError
 from ..model import ModelEvent, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
 from ..stop import StopReason
+from .contract import AgentContract, mixin_api
 
 if TYPE_CHECKING:
     from ..agent import AgentRunContext
@@ -28,9 +29,10 @@ _RELAYED: dict[ModelEventType, tuple[str, str | None]] = {
 }
 
 
-class ModelStepMixin:
+class ModelStepMixin(AgentContract):
     """Run one provider call inside a request and persist what it produced."""
 
+    @mixin_api
     async def _run_model_step(
         self,
         context: AgentRunContext,
@@ -50,7 +52,7 @@ class ModelStepMixin:
             server_tools=tuple(context.server_tools.values()),
             reasoning_effort=reasoning_effort,
             parallel_tool_call=parallel_tool_call,
-            cache_key=context.config.cache_key or context.config.session_id,
+            cache_key=context.config.cache_key or context.session_id,
         )
         await self._notify_before_model(context, request)
         # before_model hooks may add or replace instructions; publish those
@@ -65,7 +67,7 @@ class ModelStepMixin:
         model = context.model
         if model is None:
             raise AgentProtocolError("The request context has no model")
-        async with aclosing(self._stream_model_with_middleware(context, request, model)) as events:
+        async with aclosing_stream(self._stream_model_with_middleware(context, request, model)) as events:
             async for event in events:
                 if response is not None:
                     raise AgentProtocolError("Model emitted events after its final response")
@@ -148,6 +150,7 @@ class ModelStepMixin:
             message = replace(message, stop=stop)
         return replace(response, message=message, stop=stop)
 
+    @mixin_api
     async def _announce_stop(self, context: AgentRunContext, response: ModelResponse) -> None:
         """Tell the host a step ended for a reason other than finishing or asking for tools."""
         stop = response.stop

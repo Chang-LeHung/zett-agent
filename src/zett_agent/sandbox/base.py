@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from .errors import SandboxError, SandboxPolicyError
 from .policy import ResourceLimits, SandboxPolicy, build_environment, command_arguments
@@ -415,7 +415,7 @@ class Sandbox(ABC):
         if not directory.is_dir():
             raise SandboxPolicyError(f"working directory is not a directory: {directory}")
         environment = build_environment(self.policy.inherit_environment, env)
-        command = self._wrap(arguments, directory, environment)
+        wrapped = self._wrap(arguments, directory, environment)
         # The kernel limits travel with the command: a host that spawns it applies
         # them through `preexec`. What needs the parent (a cgroup to create, or
         # memory to sample) only happens in `run`, and saying so is the point.
@@ -430,10 +430,10 @@ class Sandbox(ABC):
                 "spawn the command with preexec_fn=command.preexec for the rest"
             )
         return replace(
-            command,
+            wrapped,
             limits=self.policy.limits,
             preexec=plan.preexec(),
-            warnings=(*command.warnings, *warnings),
+            warnings=(*wrapped.warnings, *warnings),
         )
 
     async def run(
@@ -507,7 +507,8 @@ class Sandbox(ABC):
         watcher = asyncio.create_task(watchdog.watch(run.exited)) if watchdog is not None else None
         try:
             if data is not None:
-                stdin_pipe = transport.get_pipe_transport(0)
+                # stdin was opened as a pipe above because there is data to send, so this is a writable one.
+                stdin_pipe = cast("asyncio.WriteTransport", transport.get_pipe_transport(0))
                 stdin_pipe.write(data)
                 stdin_pipe.write_eof()
             # Three ways to stop waiting: the command ends, the memory watchdog

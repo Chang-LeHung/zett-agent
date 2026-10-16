@@ -285,7 +285,7 @@ def _build_input_schema(
     from pydantic import ConfigDict, create_model
 
     hints = get_type_hints(function, include_extras=True)
-    fields: dict[str, tuple[Any, Any]] = {}
+    fields: dict[str, Any] = {}  # name -> (annotation, default), as ``create_model`` takes them
     for parameter in inspect.signature(function).parameters.values():
         if parameter.kind not in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY):
             raise ValueError("Tools accept only named parameters")
@@ -307,8 +307,8 @@ def _build_input_schema(
     if unknown_parameters:
         unknown = ", ".join(sorted(unknown_parameters))
         raise ValueError(f"Docstring Args contains unknown parameters: {unknown}")
-    for parameter, description in documentation.parameter_descriptions.items():
-        parameters["properties"][parameter]["description"] = description
+    for described, description in documentation.parameter_descriptions.items():
+        parameters["properties"][described]["description"] = description
     return inputs, tuple(fields), parameters
 
 

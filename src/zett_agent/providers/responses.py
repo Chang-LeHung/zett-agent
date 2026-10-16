@@ -118,7 +118,7 @@ def _tool_search_output(message: ToolMessage) -> dict[str, Any]:
     if not message.success:
         raise ValueError(f"Local tool search failed: {message.content}")
     try:
-        tools = json.loads(message.content)
+        tools = json.loads(message.text)
     except json.JSONDecodeError as error:
         raise ValueError("A local tool search tool must return JSON tool definitions") from error
     from pydantic import ValidationError
@@ -337,16 +337,16 @@ async def stream_responses(
         reasoning = _response_reasoning(output)
     reason = _finish_reason(payload)
     calls = tuple(
-        call
+        local
         for index, item in enumerate(output)
-        if (call := _local_or_function_call(item, local_search_tool, index=index, finish_reason=reason)) is not None
+        if (local := _local_or_function_call(item, local_search_tool, index=index, finish_reason=reason)) is not None
     )
     refusal_text = refusal_text or _response_refusal(output)
     stop = classify_stop(reason, has_tool_calls=bool(calls))
     if refusal_text and stop.ok:
         # A refusal content block arrives in a response whose status is ``completed``.
         stop = StopInfo(StopReason.REFUSAL, raw=reason, category="refusal", message=refusal_text)
-    replay = tuple(output)
+    replay: tuple[Mapping[str, Any], ...] = tuple(output)
     if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
         # The calls are withheld from the message, so the provider's record of them goes too.
         replay = withhold_replay_blocks(

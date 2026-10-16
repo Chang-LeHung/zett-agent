@@ -4,15 +4,20 @@ import base64
 import json
 import ssl
 from collections.abc import AsyncIterator, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
+from .._compat import aclose_stream
 from ..messages import (
+    AgentMessage,
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
     ImageUrlSource,
+    SystemMessage,
     TextContent,
     ToolCall,
+    ToolMessage,
+    UserMessage,
 )
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
@@ -161,32 +166,32 @@ class GoogleProvider(RetryingProvider):
         contents: list[types.Content] = []
         previous_role = ""
         for message in expand_tool_images(request.messages):
-            match message.role:
-                case "agent":
+            parts: list[types.Part] = []
+            match message:
+                case AgentMessage():
                     parts = [types.Part.from_text(text=message.content)]
-                case "system":
+                case SystemMessage():
                     system.append(message.content)
                     continue
-                case "user":
-                    parts: list[types.Part] = []
-                    for part in message.parts:
-                        match part:
+                case UserMessage():
+                    for block in message.parts:
+                        match block:
                             case TextContent(text=text):
                                 parts.append(types.Part.from_text(text=text))
                             case ImageContent(source=ImageBytesSource(data=data, media_type=media_type)):
                                 parts.append(types.Part.from_bytes(data=data, mime_type=media_type))
                             case ImageContent(source=ImageUrlSource(url=url)):
                                 if url.startswith("data:"):
-                                    header, _, data = url.partition(",")
+                                    header, _, encoded = url.partition(",")
                                     parts.append(
                                         types.Part.from_bytes(
-                                            data=base64.b64decode(data, validate=True),
+                                            data=base64.b64decode(encoded, validate=True),
                                             mime_type=header[5:].split(";")[0],
                                         )
                                     )
                                 else:
                                     parts.append(types.Part.from_uri(file_uri=url))
-                case "assistant":
+                case AssistantMessage():
                     if message.provider == "google" and message.model == self.model and message.replay_blocks:
                         parts = [types.Part.model_validate(dict(block)) for block in message.replay_blocks]
                     else:
@@ -201,7 +206,7 @@ class GoogleProvider(RetryingProvider):
                             )
                             for call in message.tool_calls
                         )
-                case "tool":
+                case ToolMessage():
                     # Gemini documents ``error`` as the key that marks a failed call.
                     parts = [
                         types.Part.from_function_response(
@@ -212,8 +217,8 @@ class GoogleProvider(RetryingProvider):
                     # The service matches the responses of parallel calls as one
                     # turn: its count must equal the calls in the model turn, so
                     # adjacent results join instead of becoming separate turns.
-                    if contents and previous_role == "tool":
-                        contents[-1].parts.extend(parts)
+                    if contents and previous_role == "tool" and (joined := contents[-1].parts) is not None:
+                        joined.extend(parts)
                         continue
             if parts:
                 contents.append(types.Content(role="model" if message.role == "assistant" else "user", parts=parts))
@@ -228,7 +233,7 @@ class GoogleProvider(RetryingProvider):
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             tool_config=types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(
-                    mode="ANY",
+                    mode=types.FunctionCallingConfigMode.ANY,
                     allowed_function_names=[request.tool_choice],
                 )
             )
@@ -246,7 +251,7 @@ class GoogleProvider(RetryingProvider):
         seen_server_tool_metadata: set[str] = set()
         try:
             stream = await self._client.aio.models.generate_content_stream(
-                model=self.model, contents=contents, config=config
+                model=self.model, contents=cast("types.ContentListUnion", contents), config=config
             )
         except APIError as error:
             raise _provider_error(error) from error
@@ -310,7 +315,7 @@ class GoogleProvider(RetryingProvider):
             # The SDK could not parse a 200 as JSON: a proxy's page, or a gateway that is not Gemini.
             raise _unparsable_response(error) from error
         finally:
-            await stream.aclose()
+            await aclose_stream(stream)
         if finish_reason is None and block_reason is not None:
             # Answered as a refusal, not raised: the conversation goes on and the host is
             # told which safety system blocked the prompt.
@@ -334,7 +339,7 @@ class GoogleProvider(RetryingProvider):
         stop = classify_stop(finish_reason, has_tool_calls=bool(calls))
         if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
             # The calls are withheld from the message, so the parts that carry them go too.
-            replay = list(withhold_replay_blocks(replay, lambda part: "function_call" in part))
+            replay = [dict(part) for part in withhold_replay_blocks(replay, lambda part: "function_call" in part)]
         yield ModelEvent.completed(
             ModelResponse(
                 AssistantMessage(

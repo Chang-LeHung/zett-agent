@@ -184,7 +184,8 @@ class JITHarnessSnapshot(BaseModel):
     def validate_names(self) -> JITHarnessSnapshot:
         if self.format_version == 1 and any(tool.files for tool in self.tools):
             raise ValueError("Multi-file tools require format_version 2")
-        names = [tool.name for tool in (*self.tools, *self.text_tools)] + list(self.base_tools)
+        sources: tuple[PythonToolSource | TextToolSource, ...] = (*self.tools, *self.text_tools)
+        names = [tool.name for tool in sources] + list(self.base_tools)
         if len(set(names)) != len(names):
             raise ValueError("Snapshot tool names must be unique")
         for name in names:

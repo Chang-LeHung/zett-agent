@@ -5,11 +5,11 @@ import base64
 import json
 import ssl
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import aclosing
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar
 
+from .._compat import aclosing_stream
 from .._compat import timeout as async_timeout
 from ..exceptions import AgentError
 from ..messages import (
@@ -47,10 +47,8 @@ from ..model import (
 if TYPE_CHECKING:
     import httpx
     from openai.types.chat import (
-        ChatCompletionAssistantMessageParam,
         ChatCompletionContentPartImageParam,
         ChatCompletionContentPartParam,
-        ChatCompletionMessageParam,
         ChatCompletionToolParam,
     )
     from openai.types.shared_params import FunctionDefinition
@@ -399,7 +397,13 @@ def _normalize_image_source(
             raise ProviderResponseError(f"Unsupported image source type: {part!r}")
 
 
-def _message_to_openai_payload(message: AnyMessage) -> ChatCompletionMessageParam:
+#: One chat message as this adapter sends it to an OpenAI-compatible endpoint. The SDK's own
+#: ``ChatCompletionMessageParam`` is the strict OpenAI schema, and what is sent here is wider: other
+#: providers take extra keys (DeepSeek's ``reasoning_content``) and multimodal tool results.
+ChatMessagePayload = dict[str, Any]
+
+
+def _message_to_openai_payload(message: AnyMessage) -> ChatMessagePayload:
     role = message.role
     match role:
         case "agent":
@@ -433,7 +437,7 @@ def _message_to_openai_payload(message: AnyMessage) -> ChatCompletionMessagePara
         case "assistant":
             if not isinstance(message, AssistantMessage):
                 raise ProviderResponseError(f"Invalid assistant message data type: {type(message)!r}")
-            payload: ChatCompletionAssistantMessageParam = {"role": "assistant", "content": message.content}
+            payload: ChatMessagePayload = {"role": "assistant", "content": message.content}
             if message.tool_calls:
                 payload["tool_calls"] = [
                     {
@@ -457,10 +461,10 @@ def _message_to_openai_payload(message: AnyMessage) -> ChatCompletionMessagePara
 
 def _replay_reasoning_content(
     source_messages: Sequence[AnyMessage],
-    payload_messages: Sequence[ChatCompletionMessageParam],
+    payload_messages: Sequence[ChatMessagePayload],
     *,
     provider_name: str,
-) -> list[ChatCompletionMessageParam]:
+) -> list[ChatMessagePayload]:
     """Replay same-provider reasoning on OpenAI-compatible assistant history.
 
     Reasoning-aware providers, including DeepSeek thinking mode, require the
@@ -471,7 +475,7 @@ def _replay_reasoning_content(
 
     See https://api-docs.deepseek.com/zh-cn/guides/thinking_mode.
     """
-    rendered = [cast("ChatCompletionMessageParam", dict(payload)) for payload in payload_messages]
+    rendered = [dict(payload) for payload in payload_messages]
     for source, target in zip(source_messages, rendered, strict=True):
         if not isinstance(source, AssistantMessage) or source.reasoning is None:
             continue
@@ -763,7 +767,7 @@ def retry_model_stream(
         emitted = False
         for attempt in range(retry.max_retries + 1):
             try:
-                async with aclosing(stream(self, request)) as events:
+                async with aclosing_stream(stream(self, request)) as events:
                     async for event in events:
                         emitted = True
                         yield event

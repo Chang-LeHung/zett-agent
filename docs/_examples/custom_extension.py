@@ -80,7 +80,7 @@ class NoteExtension(AgentExtension):
         await context.emit(
             AgentEvent(
                 AgentEventType.CUSTOM,
-                session_id=context.config.session_id,
+                session_id=context.session_id,
                 name="note.model_step",
                 payload={"step": self.active[context]},
             )
@@ -101,11 +101,13 @@ class NoteModel:
     retry = RetryOptions(max_retries=0)
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        if isinstance(request.messages[-1], ToolMessage):
+        last = request.messages[-1]
+        if isinstance(last, ToolMessage):
             message = AssistantMessage(content="Extensions customize lifecycle hooks.")
         else:
-            assert request.messages[-1].text == "Look up this note: extensions"
-            assert request.messages[-1].attributes["original_content"] == "/note extensions"
+            assert isinstance(last, UserMessage)
+            assert last.text == "Look up this note: extensions"
+            assert last.attributes["original_content"] == "/note extensions"
             assert any(isinstance(item, SystemMessage) and "note tool" in item.content for item in request.messages)
             message = AssistantMessage(tool_calls=(ToolCall("note-1", "lookup_note", {"topic": "extensions"}),))
         yield ModelEvent.completed(ModelResponse(message))
@@ -113,7 +115,7 @@ class NoteModel:
 
 class NoteEvents(AgentEventDispatcher):
     async def on_custom_event(self, event: AgentEvent) -> None:
-        if event.name == "note.model_step":
+        if event.name == "note.model_step" and event.payload is not None:
             print(f"Model step: {event.payload['step']}")
 
 

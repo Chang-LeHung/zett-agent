@@ -34,7 +34,11 @@
 
 - Use Python 3.10+ and `uv` for dependency management.
 - Use Ruff for formatting and linting, with `line-length = 120`.
-- Run `make check` (Ruff, pytest with the 95% coverage gate, and the
+- Use mypy for type checking (`make typecheck`). It covers `src/zett_agent`,
+  `examples` and `docs/_examples`, so a program the documentation shows must
+  type-check too. Prefer narrowing a type to `# type: ignore`; an ignore needs a
+  reason beside it, and an unused one fails the check.
+- Run `make check` (Ruff, mypy, pytest with the 95% coverage gate, and the
   documentation checks) before handing work over.
 - Tests must never write into the checkout or into user data. Use temporary
   directories and in-memory databases.

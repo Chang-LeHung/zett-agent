@@ -43,7 +43,7 @@ class BuilderModel:
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         last = request.messages[-1]
         if isinstance(last, ToolMessage) and last.name == "inspect_tool_calls":
-            info = json.loads(last.content)
+            info = json.loads(last.text)
             assert info["calls"][0]["output_chars"] == 2
             message = AssistantMessage(content="42")
         elif isinstance(last, ToolMessage) and last.name == "twice":

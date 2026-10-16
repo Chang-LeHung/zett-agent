@@ -32,7 +32,8 @@ async def main() -> None:
     # No demo touches the default database under the user's home directory.
     with TemporaryDirectory(prefix="zett-docs-") as directory:
         path = Path(directory) / "sessions.sqlite"
-        config = AgentRunConfig(session_id="project-notes")
+        session_id = "project-notes"
+        config = AgentRunConfig(session_id=session_id)
         first_storage = SQLiteSessionExtension(path)
         try:
             first = await create_agent(TurnModel(), config=config, extensions=[first_storage])
@@ -44,7 +45,7 @@ async def main() -> None:
         try:
             restored = await create_agent(TurnModel(), config=config, extensions=[restored_storage])
             print((await restored.run("Continue")).content)
-            rows = await restored_storage.list_raw_messages(config.session_id)
+            rows = await restored_storage.list_raw_messages(session_id)
             assert [row.message.role.value for row in rows] == [
                 "system",
                 "user",
@@ -54,14 +55,14 @@ async def main() -> None:
                 "assistant",
             ]
             assert rows[0].metadata == {"origin": "tutorial"}
-            assert len(await restored_storage.list_raw_messages(config.session_id, limit=2, offset=2)) == 2
-            view = await restored_storage.storage.load(config.session_id)
+            assert len(await restored_storage.list_raw_messages(session_id, limit=2, offset=2)) == 2
+            view = await restored_storage.storage.load(session_id)
             assert view.snapshot is None and len(view.raw_tail) == 6
-            await restored_storage.update_session(config.session_id, title="Project notes")
-            renamed = await restored_storage.get_session(config.session_id)
+            await restored_storage.update_session(session_id, title="Project notes")
+            renamed = await restored_storage.get_session(session_id)
             assert renamed is not None and renamed.title == "Project notes"
-            assert await restored_storage.delete_session(config.session_id)
-            assert await restored_storage.list_raw_messages(config.session_id) == []
+            assert await restored_storage.delete_session(session_id)
+            assert await restored_storage.list_raw_messages(session_id) == []
             print("Raw roles: system, user, assistant, system, user, assistant")
             print("Session restored, renamed, and deleted in a temporary database")
         finally:

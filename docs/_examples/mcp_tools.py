@@ -22,14 +22,14 @@ class LocalMcpClient:
                 Tool(
                     name="answer",
                     description="Return the demonstration answer.",
-                    inputSchema={"type": "object", "properties": {}},
+                    input_schema={"type": "object", "properties": {}},
                 )
             ]
         )
 
     async def call_tool(self, name: str, arguments: dict | None = None) -> CallToolResult:
         assert name == "answer" and arguments == {}
-        return CallToolResult(content=[], structuredContent={"answer": 42})
+        return CallToolResult(content=[], structured_content={"answer": 42})
 
 
 class McpModel:

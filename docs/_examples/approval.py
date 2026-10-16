@@ -65,7 +65,7 @@ class ApprovalExtension(ExternalEventExtension):
             await context.emit(
                 AgentEvent(
                     AgentEventType.CUSTOM,
-                    session_id=context.config.session_id,
+                    session_id=context.session_id,
                     name="approval.requested",
                     payload={"tool_call_id": call.id, "action": call.arguments["action"]},
                 )
@@ -77,8 +77,9 @@ class ApprovalModel:
     retry = RetryOptions(max_retries=0)
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        if isinstance(request.messages[-1], ToolMessage):
-            assert request.messages[-1].success
+        last = request.messages[-1]
+        if isinstance(last, ToolMessage):
+            assert last.success
             message = AssistantMessage(content="Approval received; no export was executed in this demo.")
         else:
             message = AssistantMessage(
@@ -92,9 +93,11 @@ async def main() -> None:
     client = await create_agent(
         ApprovalModel(), config=config, extensions=[ApprovalExtension(), ToolGuidelinesExtension()]
     )
-    async with aclosing(client.stream("Export my notes")) as events:
+    # stream() is annotated AsyncIterator but is an async generator, which aclosing needs.
+    async with aclosing(client.stream("Export my notes")) as events:  # type: ignore[type-var]
         async for event in events:
             if event.type == AgentEventType.CUSTOM and event.name == "approval.requested":
+                assert event.payload is not None
                 print(f"Question: {event.payload['action']}?")
                 # A real application sends this from a UI/API callback, not automatically.
                 response = ExternalEvent(
@@ -106,6 +109,7 @@ async def main() -> None:
                 assert client.agent.emit_external_event(response, config=config) == []
                 print("Response accepted; duplicate rejected")
             elif event.type == AgentEventType.RUN_COMPLETED:
+                assert event.message is not None
                 print(event.message.content)
 
 

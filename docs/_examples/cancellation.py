@@ -54,7 +54,8 @@ class StreamingModel:
 async def main() -> None:
     tracker = WorkTracker()
     client = await create_agent(StreamingModel(), extensions=[tracker])
-    async with aclosing(client.stream("Start")) as events:
+    # stream() is annotated AsyncIterator but is an async generator, which aclosing needs.
+    async with aclosing(client.stream("Start")) as events:  # type: ignore[type-var]
         async for event in events:
             if event.type == AgentEventType.TEXT_DELTA:
                 break

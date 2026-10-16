@@ -10,7 +10,7 @@ from importlib.machinery import ModuleSpec
 from importlib.util import spec_from_loader
 from threading import RLock
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from ..ids import new_uuid7
 from ..tools.base import AgentTool, ToolExecutionMode, tool
@@ -122,7 +122,6 @@ def _load_python_tool(
             registered = module.__dict__.get(entrypoint)
             if not isinstance(registered, AgentTool):
                 raise ValueError(f"Entrypoint {entrypoint!r} must be decorated with @tool")
-            registered = cast(AgentTool, registered)
             _validate_name(registered.name)
             if registered.local_tool_search or registered.deferred:
                 raise ValueError("JIT tools must be ordinary, non-deferred function tools")

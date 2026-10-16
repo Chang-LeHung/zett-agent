@@ -32,8 +32,9 @@ class ParentModel:
     retry = RetryOptions(max_retries=0)
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        if isinstance(request.messages[-1], ToolMessage):
-            report = json.loads(request.messages[-1].content)
+        last = request.messages[-1]
+        if isinstance(last, ToolMessage):
+            report = json.loads(last.text)
             message = AssistantMessage(content=f"Child report: {report['content']}")
         else:
             message = AssistantMessage(

@@ -1,6 +1,7 @@
 """Run a complete agent/tool loop without credentials: uv run python examples/basic.py."""
 
 import asyncio
+from collections.abc import AsyncIterator
 
 from zett_agent.agent import (
     Agent,
@@ -15,6 +16,7 @@ from zett_agent.model import (
     ModelEvent,
     ModelRequest,
     ModelResponse,
+    RetryOptions,
 )
 from zett_agent.tools.base import tool
 
@@ -32,9 +34,12 @@ def add(left: int, right: int) -> int:
 class DemoModel:
     """A deterministic model: first request a tool, then read its result."""
 
-    async def stream(self, request: ModelRequest):
+    retry = RetryOptions(max_retries=0)
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         match request.messages[-1]:
-            case ToolMessage(content=result):
+            case ToolMessage() as tool_result:
+                result = tool_result.text
                 yield ModelEvent.text(result)
                 yield ModelEvent.completed(ModelResponse(AssistantMessage(content=result)))
             case _:

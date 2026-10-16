@@ -29,6 +29,7 @@ from zett_agent.extensions.sqlite import SQLiteSessionExtension
 from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
 from zett_agent.ids import new_uuid7
 from zett_agent.messages import (
+    AgentMessage,
     AnyMessage,
     AssistantMessage,
     SystemMessage,
@@ -189,9 +190,11 @@ def message_sections(message: AnyMessage) -> list[tuple[str, str]]:
                 calls = "\n".join(f"{call.name}({call.arguments})" for call in message.tool_calls)
                 sections.append(("tool calls", calls))
             return sections or [("content", "")]
-        case ToolMessage(name=name, content=content):
-            return [(f"tool result: {name}", content)]
+        case ToolMessage() as result:
+            return [(f"tool result: {result.name}", result.text)]
         case SystemMessage(content=content):
+            return [("content", content)]
+        case AgentMessage(content=content):
             return [("content", content)]
 
 
@@ -244,7 +247,7 @@ def print_event(event: AgentEvent, output_state: dict[str, bool]) -> None:
             call = event.tool_calls[0]
             print(f"\n[tool] {call.name}({call.arguments})", flush=True)
         case AgentEventType.TOOL_COMPLETED if isinstance(event.message, ToolMessage):
-            preview = event.message.content
+            preview = event.message.text
             if len(preview) > 500:
                 preview = preview[:497] + "..."
             print(f"[tool result] {preview}", flush=True)

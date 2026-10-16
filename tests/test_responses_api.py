@@ -803,6 +803,25 @@ async def test_responses_emits_start_before_an_unannounced_failed_server_tool_re
     assert events[1].server_tool_result.error_code == "search_unavailable"
 
 
+async def test_responses_accepts_a_hosted_item_failing_without_a_terminal_response() -> None:
+    opened = dict(
+        type="response.output_item.added",
+        output_index=0,
+        item={"type": "mcp_list_tools", "id": "mcpl_1", "tools": [], "server_label": "probe"},
+    )
+    failed = dict(type="response.mcp_list_tools.failed", output_index=0, item_id="mcpl_1")
+
+    events = [event async for event in stream_responses(_objects(opened, failed), provider="openai", model="gpt-5")]
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_FAILED,
+        ModelEventType.RESPONSE,
+    ]
+    assert events[1].server_tool_result is not None
+    assert events[1].server_tool_result.name == "mcp_list_tools"
+
+
 async def test_responses_rejects_failed_or_unterminated_streams() -> None:
     failed = dict(
         type="response.failed",

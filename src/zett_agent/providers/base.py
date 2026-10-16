@@ -364,9 +364,9 @@ def _to_model_data(payload: Any) -> Mapping[str, Any]:
     if isinstance(payload, dict):
         return payload
     if hasattr(payload, "model_dump"):
-        return payload.model_dump(exclude_none=True)  # type: ignore[call-arg]
+        return payload.model_dump(exclude_none=True)
     if hasattr(payload, "dict"):
-        return payload.dict()  # type: ignore[operator]
+        return payload.dict()
     if isinstance(payload, Message):
         data = asdict(payload)
         # The provider SDK may include extra fields that are not part of the public message schema.
@@ -673,8 +673,10 @@ class RetryingProvider(SyncMethodsMixin):
 
     retry: RetryOptions = DEFAULT_RETRY_OPTIONS
     timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS
+    #: Whether this adapter uses a Responses-style endpoint instead of its provider's traditional
+    #: message or chat-completions endpoint. Only the providers read it; the runtime does not.
     response: bool = False
-    #: See :attr:`zett_agent.model.AgentModel.native_deferred_tools`. A provider
+    #: See :attr:`zett_agent.model.NativeDeferredToolsModel.native_deferred_tools`. A provider
     #: opts in by overriding this on its class; the default keeps Responses,
     #: Chat Completions, Google, and Ollama on the withhold-and-search path.
     native_deferred_tools: bool = False
@@ -943,7 +945,7 @@ class _OpenAIStyleProvider(RetryingProvider):
         from openai import APIStatusError
 
         try:
-            return await self._first_byte(self._client.chat.completions.create(**payload))  # type: ignore[misc]
+            return await self._first_byte(self._client.chat.completions.create(**payload))
         except APIStatusError as error:
             status_code = error.status_code
             refusal = refusal_from_status_error(status_code, error.body)
@@ -994,7 +996,7 @@ class _OpenAIStyleProvider(RetryingProvider):
         from openai import APIStatusError
 
         try:
-            return await self._first_byte(self._client.responses.create(**payload))  # type: ignore[misc]
+            return await self._first_byte(self._client.responses.create(**payload))
         except APIStatusError as error:
             refusal = refusal_from_status_error(error.status_code, error.body)
             if refusal is not None:

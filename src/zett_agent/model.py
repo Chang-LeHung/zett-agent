@@ -598,22 +598,6 @@ class AgentModel(Protocol):
     #: Model-owned backoff policy; max_retries=0 disables retries.
     #: This configuration never belongs to ModelRequest.
     retry: RetryOptions = RetryOptions()
-    #: Whether this adapter uses a Responses-style endpoint instead of its
-    #: provider's traditional message or chat-completions endpoint.
-    response: bool = False
-    #: Whether the endpoint can load a deferred tool by reference, so the tool's
-    #: definition must be sent with the request.
-    #:
-    #: True means the protocol keeps a deferred definition out of the model's
-    #: context but still accepts a search result that names it (Anthropic
-    #: ``defer_loading`` plus ``tool_reference``). The adapter then needs every
-    #: deferred definition in :attr:`ModelRequest.tools` and marks it deferred
-    #: itself. False means the model learns a deferred definition only from a
-    #: search result (the Responses ``tool_search_output``), or not at all, so
-    #: :class:`~zett_agent.extensions.tool_search.ToolSearchExtension` withholds
-    #: those definitions from the request. Declare it on every adapter; a custom
-    #: adapter that predates the field is treated as False.
-    native_deferred_tools: bool = False
 
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         """Stream deltas and finish with exactly one response event.
@@ -622,3 +606,22 @@ class AgentModel(Protocol):
         Transient failures may be retried only before the first emitted event.
         """
         ...
+
+
+@runtime_checkable
+class NativeDeferredToolsModel(AgentModel, Protocol):
+    """An :class:`AgentModel` that says whether its endpoint can load a deferred tool by reference.
+
+    The attribute is optional: an adapter that does not declare it is treated as ``False``, so
+    ``retry`` and ``stream`` are all a minimal adapter needs. Declare it only to answer ``True``.
+
+    ``True`` means the protocol keeps a deferred definition out of the model's context but still
+    accepts a search result that names it (Anthropic ``defer_loading`` plus ``tool_reference``).
+    The adapter then receives every deferred definition in :attr:`ModelRequest.tools` and marks it
+    deferred itself. ``False`` means the model learns a deferred definition only from a search
+    result (the Responses ``tool_search_output``), or not at all, so
+    :class:`~zett_agent.extensions.tool_search.ToolSearchExtension` withholds those definitions
+    from the request.
+    """
+
+    native_deferred_tools: bool

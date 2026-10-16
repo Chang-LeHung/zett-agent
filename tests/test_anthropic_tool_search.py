@@ -17,7 +17,15 @@ from zett_agent.agent import Agent, AgentRunConfig
 from zett_agent.extensions.tool_guidelines import ToolGuidancePlacement, ToolGuidelinesExtension
 from zett_agent.extensions.tool_search import ToolSearchExtension
 from zett_agent.messages import AssistantMessage, ToolMessage
-from zett_agent.model import AgentModel, ModelEvent, ModelRequest, ModelResponse, ToolDefinition
+from zett_agent.model import (
+    AgentModel,
+    ModelEvent,
+    ModelRequest,
+    ModelResponse,
+    NativeDeferredToolsModel,
+    RetryOptions,
+    ToolDefinition,
+)
 from zett_agent.providers.anthropic import (
     AnthropicProvider,
     _apply_prompt_cache,
@@ -293,11 +301,30 @@ async def test_a_provider_without_native_deferral_still_hides_deferred_tools():
     assert {item.name for item in seen[0].tools} == {"echo", "tool_search"}
 
 
-def test_every_provider_declares_native_deferral_explicitly():
-    """The flag is a field of the AgentModel protocol, so every adapter answers it with a bool."""
+def test_a_minimal_adapter_is_an_agent_model_and_does_not_defer_natively():
+    """The flag is optional: ``retry`` and ``stream`` are all an adapter needs, and it then answers False."""
 
-    assert get_type_hints(AgentModel)["native_deferred_tools"] is bool
+    class Minimal:
+        retry = RetryOptions(max_retries=0)
+
+        async def stream(self, request):
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="ok")))
+
+    assert isinstance(Minimal(), AgentModel)
+    assert not isinstance(Minimal(), NativeDeferredToolsModel)
+    assert "native_deferred_tools" not in get_type_hints(AgentModel)
+    assert get_type_hints(NativeDeferredToolsModel)["native_deferred_tools"] is bool
+    assert getattr(Minimal(), "native_deferred_tools", False) is False
+
+
+def test_every_provider_declares_native_deferral_explicitly():
+    """The built-in providers answer the flag with a bool, so each is a NativeDeferredToolsModel."""
+
     assert get_type_hints(AnthropicProvider)["native_deferred_tools"] is bool
+    assert all(
+        isinstance(provider(model="m", api_key="k"), NativeDeferredToolsModel)
+        for provider in (AnthropicProvider, OpenAIProvider, DeepSeekProvider, GoogleProvider)
+    )
     declared = {
         provider.__name__: provider.native_deferred_tools
         for provider in (AnthropicProvider, OpenAIProvider, DeepSeekProvider, GoogleProvider, OllamaProvider)

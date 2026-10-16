@@ -35,6 +35,7 @@ from zett_agent.messages import (
 from zett_agent.model import (
     ModelEvent,
     ModelResponse,
+    RetryOptions,
 )
 from zett_agent.sync import (
     SyncAgent,
@@ -374,6 +375,20 @@ def test_sync_custom_model_and_callbacks_can_run_in_async_agent():
 
     with SyncAgent(SyncModelAdapter(Model())) as agent:
         assert agent.run("hi").content == "blocking model"
+
+
+def test_the_adapter_reports_the_wrapped_models_retry_policy_or_none():
+    """The adapter is itself an AgentModel, so it answers for the model it wraps."""
+    policy = RetryOptions(max_retries=3)
+
+    class Retrying:
+        retry = policy
+
+    class Plain:
+        pass
+
+    assert SyncModelAdapter(Retrying()).retry is policy
+    assert SyncModelAdapter(Plain()).retry == RetryOptions(max_retries=0)
 
 
 def test_close_propagates_cleanup_failures():

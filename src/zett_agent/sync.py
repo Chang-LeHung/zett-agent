@@ -15,6 +15,7 @@ from .extensions.external import ExternalEvent
 from .json_types import JsonValue
 from .messages import AssistantMessage, UserMessage
 from .model import AgentModel, ModelEvent, ModelRequest, ReasoningEffort
+from .resume import ResumePoint
 from .sync_runtime import SyncMethodsMixin, SyncObject, SyncRuntime, SyncStream, _callback_loop, _worker
 from .tools.base import AgentTool
 
@@ -175,6 +176,57 @@ class SyncAgent(SyncObject[Agent]):
         return self.runtime.stream(
             self._client.stream,
             message,
+            config=config,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            parallel_tool_call=parallel_tool_call,
+            metadata=metadata,
+            tags=tags,
+        )
+
+    def resume_point(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+    ) -> ResumePoint | None:
+        """Report where the session was interrupted, or None when there is nothing to resume."""
+        return self.runtime.call(self._client.resume_point, config=config, model=model)
+
+    def resume(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
+    ) -> AssistantMessage:
+        """Pick an interrupted session up where it stopped and return the final answer."""
+        return self.runtime.call(
+            self._client.resume,
+            config=config,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            parallel_tool_call=parallel_tool_call,
+            metadata=metadata,
+            tags=tags,
+        )
+
+    def stream_resume(
+        self,
+        *,
+        config: AgentRunConfig | None = None,
+        model: AgentModel | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        parallel_tool_call: bool | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+        tags: Mapping[str, JsonValue] | None = None,
+    ) -> SyncStream[AgentEvent]:
+        """Return a lazy event iterator for a resume; it starts on the first next()."""
+        return self.runtime.stream(
+            self._client.stream_resume,
             config=config,
             model=model,
             reasoning_effort=reasoning_effort,

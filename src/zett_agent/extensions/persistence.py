@@ -268,13 +268,19 @@ class BaseSessionPersistenceExtension(AgentExtension, Generic[StorageT]):
 
     @staticmethod
     def _provider_safe_messages(messages: Sequence[AnyMessage]) -> list[AnyMessage]:
-        """Exclude interrupted tool batches from restored model context.
+        """Exclude interrupted tool batches from restored model context, except the last.
 
-        Raw Log records remain immutable and available to a UI. Older processes
-        may nevertheless have stopped after persisting an AssistantMessage with
-        tool calls and before persisting every matching ToolMessage. Providers
-        reject that sequence, so this projection omits only the malformed
-        assistant/tool batch while retaining surrounding completed dialogue.
+        Raw Log records remain immutable and available to a UI. A process may
+        have stopped after persisting an AssistantMessage with tool calls and
+        before persisting every matching ToolMessage. Providers reject that
+        sequence, so a malformed batch in the middle of the history is omitted
+        while the surrounding completed dialogue is retained.
+
+        The batch at the very end is kept as it is, results that did finish
+        included. It is the request that was interrupted, and the runtime
+        closes it when the next request starts, by adding a result for each
+        call that has none; dropping it would also forget the tools that did
+        run and whatever they changed.
         """
         restored: list[AnyMessage] = []
         index = 0
@@ -296,7 +302,8 @@ class BaseSessionPersistenceExtension(AgentExtension, Generic[StorageT]):
                 cursor += 1
             expected = Counter(call.id for call in message.tool_calls)
             observed = Counter(result.tool_call_id for result in tool_messages)
-            if expected == observed:
+            at_end = cursor == len(messages)
+            if expected == observed or (at_end and not observed - expected):
                 restored.extend((message, *tool_messages))
             index = cursor
         return restored

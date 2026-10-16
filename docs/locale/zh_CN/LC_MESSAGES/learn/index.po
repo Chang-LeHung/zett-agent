@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 09:52+0800\n"
+"POT-Creation-Date: 2026-10-15 23:02+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -16,91 +16,95 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: ../../learn/index.rst:142
+#: ../../learn/index.rst:148
 msgid "Installation"
 msgstr "安装"
 
-#: ../../learn/index.rst:142
+#: ../../learn/index.rst:148
 msgid "First agent"
 msgstr "第一个智能体"
 
-#: ../../learn/index.rst:142
+#: ../../learn/index.rst:148
 msgid "Model providers"
 msgstr "模型提供商"
 
-#: ../../learn/index.rst:142
+#: ../../learn/index.rst:148
 msgid "Tools"
 msgstr "工具"
 
-#: ../../learn/index.rst:142
+#: ../../learn/index.rst:148
 msgid "Basics"
 msgstr "基础"
 
-#: ../../learn/index.rst:151
+#: ../../learn/index.rst:157
 msgid "Streaming"
 msgstr "流式输出"
 
-#: ../../learn/index.rst:151
+#: ../../learn/index.rst:157
 msgid "Stop reasons"
 msgstr "停止原因"
 
-#: ../../learn/index.rst:151
+#: ../../learn/index.rst:157
+msgid "Resume"
+msgstr "恢复"
+
+#: ../../learn/index.rst:157
 msgid "Sessions"
 msgstr "会话"
 
-#: ../../learn/index.rst:151
+#: ../../learn/index.rst:157
 msgid "Images"
 msgstr "图像"
 
-#: ../../learn/index.rst:62 ../../learn/index.rst:151
+#: ../../learn/index.rst:62 ../../learn/index.rst:157
 msgid "Project instructions"
 msgstr "项目指令"
 
-#: ../../learn/index.rst:151
+#: ../../learn/index.rst:157
 msgid "Conversations"
 msgstr "对话"
 
-#: ../../learn/index.rst:161
+#: ../../learn/index.rst:168
 msgid "On-demand loading"
 msgstr "按需加载"
 
-#: ../../learn/index.rst:161
+#: ../../learn/index.rst:168
 msgid "JIT harness"
 msgstr "JIT harness"
 
-#: ../../learn/index.rst:92 ../../learn/index.rst:161
+#: ../../learn/index.rst:92 ../../learn/index.rst:168
 msgid "Sandbox"
 msgstr "沙箱"
 
-#: ../../learn/index.rst:161
+#: ../../learn/index.rst:168
 msgid "MCP"
 msgstr "MCP"
 
-#: ../../learn/index.rst:161
+#: ../../learn/index.rst:168
 msgid "Capabilities"
 msgstr "能力"
 
-#: ../../learn/index.rst:170
+#: ../../learn/index.rst:177
 msgid "Configuration"
 msgstr "配置"
 
-#: ../../learn/index.rst:170
+#: ../../learn/index.rst:177
 msgid "Synchronous use"
 msgstr "同步调用"
 
-#: ../../learn/index.rst:170
+#: ../../learn/index.rst:177
 msgid "Applications"
 msgstr "集成到应用"
 
-#: ../../learn/index.rst:170
+#: ../../learn/index.rst:177
 msgid "Testing"
 msgstr "测试"
 
-#: ../../learn/index.rst:170
+#: ../../learn/index.rst:177
 msgid "Troubleshooting"
 msgstr "故障排查"
 
-#: ../../learn/index.rst:170
+#: ../../learn/index.rst:177
 msgid "Production"
 msgstr "生产环境"
 
@@ -224,47 +228,55 @@ msgstr "模型为什么停下"
 msgid "Tell a refusal, a cut-off answer, and a dropped connection apart from a finished answer."
 msgstr "把拒绝、被截断的回答和中断的连接，与真正完成的回答区分开。"
 
-#: ../../learn/index.rst:105
+#: ../../learn/index.rst:104
+msgid "Resume a session"
+msgstr "恢复会话"
+
+#: ../../learn/index.rst:108
+msgid "Carry on after a failure, a stop, or a crash without a fake \"continue\" message or a tool run twice."
+msgstr "在失败、中止或崩溃之后接着做，不用发一条假的“继续”消息，也不会让工具重复运行。"
+
+#: ../../learn/index.rst:111
 msgid "Build an application"
 msgstr "构建应用"
 
-#: ../../learn/index.rst:107
+#: ../../learn/index.rst:113
 msgid "For a service, follow :doc:`configuration` → :doc:`application` → :doc:`testing`. Blocking scripts can start with :doc:`synchronous`."
 msgstr "如果要做服务，请按 :doc:`configuration` → :doc:`application` → :doc:`testing` 的顺序阅读；阻塞式脚本可以从 :doc:`synchronous` 开始。"
 
-#: ../../learn/index.rst:113
+#: ../../learn/index.rst:119
 msgid "Configure your agent"
 msgstr "配置你的智能体"
 
-#: ../../learn/index.rst:117
+#: ../../learn/index.rst:123
 msgid "Choose defaults, override one request, and compose extensions safely."
 msgstr "选定默认值，覆盖单个请求，并安全地组合扩展。"
 
-#: ../../learn/index.rst:119
+#: ../../learn/index.rst:125
 msgid "Synchronous calls"
 msgstr "同步调用"
 
-#: ../../learn/index.rst:123
+#: ../../learn/index.rst:129
 msgid "Use the same runtime from ordinary blocking code and scripts."
 msgstr "在普通的阻塞式代码和脚本中使用同一个运行时。"
 
-#: ../../learn/index.rst:125
+#: ../../learn/index.rst:131
 msgid "Integrate an application"
 msgstr "集成到应用"
 
-#: ../../learn/index.rst:129
+#: ../../learn/index.rst:135
 msgid "Handle deadlines, concurrent sessions, disconnects, and shutdown."
 msgstr "处理期限、并发会话、连接断开和关闭流程。"
 
-#: ../../learn/index.rst:131
+#: ../../learn/index.rst:137
 msgid "Test your agent"
 msgstr "测试你的智能体"
 
-#: ../../learn/index.rst:135
+#: ../../learn/index.rst:141
 msgid "Check tools and real provider adapters without network access."
 msgstr "在没有网络访问的情况下检查工具和真实的模型提供商适配器。"
 
-#: ../../learn/index.rst:137
+#: ../../learn/index.rst:143
 msgid "Something unexpected? :doc:`troubleshooting` covers missing history, tool registration, endpoint compatibility, project guidance, and stuck approvals. If you need behavior the built-ins do not provide, follow :doc:`the extension tutorial <../extending/first-extension>`."
 msgstr "遇到意外情况？:doc:`troubleshooting` 覆盖了历史记录缺失、工具注册、端点兼容性、项目指引和审批卡住等问题。如果需要内置功能没有提供的行为，请阅读 :doc:`扩展教程 <../extending/first-extension>`\\ 。"
 

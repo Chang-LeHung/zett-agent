@@ -235,6 +235,9 @@ What this does not do
   documents server-side and client-side fallback to a different model; acting on
   ``stop.recommended_model`` is left to the host.
 * **No removal of a refused turn from the history** unless you choose it above.
+* **No continuing of a cut-off response by itself.** A response that stopped as
+  ``INTERRUPTED`` or ``MAX_OUTPUT`` is picked up again by calling ``resume()``; see
+  :doc:`resume`. A refusal or ``CONTEXT_FULL`` cannot be resumed.
 * **No guarantee the provider says why.** A refusal with no category and no text is
   reported as a refusal with nothing to show.
 

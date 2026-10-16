@@ -280,6 +280,8 @@ async def stream_responses(
     open_items: set[int] = set()
     done_items: dict[int, JsonObject] = {}
     last_event = ""
+    #: A hosted item reported its own terminal failure, so a stream ending here is not a dropped one.
+    server_ended = False
 
     async for event in stream:
         event_type = read_str(event.get("type"))
@@ -366,6 +368,20 @@ async def stream_responses(
                     )
                     return
                 raise RuntimeError(read_str(error.get("message")) or "Responses API stream failed")
+            case str(kind) if _is_item_failure(kind):
+                # A hosted item (an MCP server that will not answer, say) reported its own failure.
+                # It is closed here so the stream can end without a terminal response and still be
+                # understood as the service explaining itself rather than a dropped connection.
+                open_items.discard(read_int(event.get("output_index")))
+                server_ended = True
+                yield ModelEvent.server_tool_failed(
+                    ServerToolResult(
+                        call_id=read_str(event.get("item_id")),
+                        name=kind.split(".")[1],
+                        output={"status": "failed"},
+                        error_code="failed",
+                    )
+                )
             case "error":
                 # Mid-stream failures (rate limits, overload, context overflow)
                 # arrive as a bare ``error`` event, after which the stream just
@@ -373,7 +389,16 @@ async def stream_responses(
                 # terminal response.
                 raise RuntimeError(_stream_error_message(event))
 
-    payload = _recover_unterminated(done_items, open_items, last_event) if terminal is None else terminal
+    if terminal is not None:
+        payload = terminal
+    elif server_ended and not open_items:
+        # The service named a failure and stopped. Nothing was cut off, so the answer that was built
+        # so far is returned with the failure in it instead of being thrown away as a broken stream.
+        logger.warning("Responses stream ended after a failed hosted item (%s); no terminal response", last_event)
+        finished: list[JsonValue] = [done_items[index] for index in sorted(done_items)]
+        payload = {"status": "incomplete", "output": finished}
+    else:
+        payload = _recover_unterminated(done_items, open_items, last_event)
     output = read_objects(payload.get("output"))
     if not text:
         text = _response_text(output)
@@ -535,7 +560,22 @@ def _responses_usage(payload: Mapping[str, JsonValue]) -> ModelUsage:
 
 
 def _is_server_tool_item(item_type: str) -> bool:
-    return item_type.endswith("_call") and item_type not in {"function_call", "custom_tool_call"}
+    """Whether an output item is a hosted tool activity rather than a local function call.
+
+    Most hosted calls are named ``*_call``; an MCP server names its tool listing ``mcp_list_tools``.
+    """
+    if item_type in {"function_call", "custom_tool_call"}:
+        return False
+    return item_type.endswith("_call") or item_type in {"mcp_list_tools", "mcp_approval_request"}
+
+
+def _is_item_failure(kind: str) -> bool:
+    """Whether a stream event is one hosted item reporting that it failed.
+
+    A service may end such an item with ``response.<item>.failed`` and then close the stream without
+    a terminal response. That is the service reporting a failure, not a connection that dropped.
+    """
+    return kind.startswith("response.") and kind.count(".") == 2 and kind.rsplit(".", 1)[1] in {"failed", "incomplete"}
 
 
 def _is_client_tool_search(item: Mapping[str, JsonValue]) -> bool:

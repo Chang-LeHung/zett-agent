@@ -1,79 +1,40 @@
 from __future__ import annotations
 
-import asyncio
 import sys
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import aclosing
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from datetime import datetime
 from threading import RLock
-from time import monotonic_ns
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, Any, overload
 
-from ._compat import UTC, Self, add_note
+from ._agent.hooks import ExtensionHooksMixin
+from ._agent.lifecycle import RequestLifecycleMixin, final_answer
+from ._agent.model_step import ModelStepMixin
+from ._agent.recovery import RecoveryMixin
+from ._agent.tool_runner import ToolRunnerMixin
+from ._agent.turns import TurnLoopMixin
+from ._compat import Self
 from .event_queue import AgentEventQueue
-from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin, ModelOutputTracker
-from .exceptions import AgentIterationLimitError, AgentProtocolError, AgentResumeError
+from .events import AgentEvent, AgentEventType, AgentPhase, AgentPhaseTransitionMixin
+from .exceptions import AgentProtocolError
 from .ids import new_uuid7
-from .json_types import JsonValue, json_object
-from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
+from .json_types import JsonValue
+from .messages import AnyMessage, AssistantMessage, UserMessage
 from .model import (
     AgentModel,
-    ModelEvent,
-    ModelEventType,
-    ModelRequest,
-    ModelResponse,
     ModelUsage,
     ReasoningEffort,
     ServerToolDefinition,
 )
-from .resume import ResumeKind, ResumePoint, classify_resume
-from .stop import StopReason
+from .resume import ResumePoint
 from .sync_runtime import SyncMethodsMixin
-from .tools.base import (
-    AgentTool,
-    ToolExecutionMode,
-    ToolResult,
-    _bind_tool_call,
-    _reset_tool_call,
-)
-from .tools.invocation import invoke_tool
+from .tools.base import AgentTool
 
 if TYPE_CHECKING:
-    from .extensions.base import AgentExtension, ModelRequestNext
+    from .extensions.base import AgentExtension
     from .extensions.events import ExtensionEvent, MessageTiming
     from .extensions.external import ExternalEvent
-
-
-#: What a tool call is answered with when the request that made it was cancelled while it ran.
-_CANCELLED_TOOL_RESULT = "Request cancelled before tool completion"
-#: What a tool call is answered with when the process stopped while it ran and left no trace. It
-#: says the effect is unknown, because a tool that writes a file may have done so before the stop.
-_INTERRUPTED_TOOL_RESULT = (
-    "The process stopped while this tool was running, so it may or may not have completed, and whatever "
-    "it changes may or may not have happened. Check the current state before running it again."
-)
-#: What the model is told when its response was cut off by a failure and the session is resumed.
-_RETRY_RESPONSE_NOTICE = (
-    "Your previous response was cut off by an interruption (a lost connection or a provider failure) "
-    "before it finished. Start that response again from the beginning."
-)
-#: What the model is told when its response reached the output limit and the session is resumed.
-_CONTINUE_RESPONSE_NOTICE = (
-    "Your previous response was cut off at the output limit. Continue exactly where it stopped, "
-    "without repeating what you already wrote."
-)
-
-
-@dataclass(frozen=True, slots=True)
-class _ToolInvocation:
-    """Completed handler output retained until ordered lifecycle finalization."""
-
-    call: ToolCall
-    result: ToolMessage
-    error: Exception | None
-    timing: MessageTiming
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,6 +254,14 @@ class AgentRunContext:
         """Queue one core-owned event without exposing runtime event ownership."""
         await self._emit(event)
 
+    async def _emit_event(self, event_type: AgentEventType, **fields: Any) -> None:
+        """Queue one core-owned event of ``event_type`` for this session.
+
+        The session is filled in, and the phase is stamped as the event is queued, so a caller names
+        only the type and the fields that type carries.
+        """
+        await self._emit_runtime(AgentEvent(event_type, session_id=self.config.session_id, **fields))
+
     async def _emit(self, event: AgentEvent) -> None:
         """Validate, phase-stamp, and enqueue one outward event."""
         if event.session_id != self.config.session_id:
@@ -462,7 +431,16 @@ class AgentRunContext:
         await self.publish(MessageAppendedEvent(message, timing, usage))
 
 
-class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
+class Agent(
+    ExtensionHooksMixin,
+    RequestLifecycleMixin,
+    TurnLoopMixin,
+    ModelStepMixin,
+    ToolRunnerMixin,
+    RecoveryMixin,
+    AgentPhaseTransitionMixin,
+    SyncMethodsMixin,
+):
     """Run a model, execute requested tools, and repeat until an answer is ready.
 
     ``Agent`` is the low-level runtime. Most applications can use
@@ -587,11 +565,6 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     reasoning_effort=ReasoningEffort.HIGH,
                 )
         """
-        from .extensions.internal_message import InternalMessageExtension
-        from .extensions.memory import InMemoryMessageAccumulator
-        from .extensions.steering import SteeringExtension
-        from .extensions.tool_guidelines import ToolGuidelinesExtension
-
         if max_iterations < 1:
             raise ValueError("max_iterations must be positive")
         if not isinstance(parallel_tool_call, bool):
@@ -604,29 +577,9 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
         self.tools = {tool.name: tool for tool in tools}
         if len(self.tools) != len(tools):
             raise ValueError("Tool names must be unique")
-        configured_extensions = list(
-            (InMemoryMessageAccumulator(), ToolGuidelinesExtension()) if extensions is None else tuple(extensions)
+        self.extensions, self._internal_message_extension, self._steering_extension = self._assemble_extensions(
+            extensions
         )
-        if any(isinstance(extension, InternalMessageExtension) for extension in configured_extensions):
-            raise ValueError("InternalMessageExtension is an Agent built-in and cannot be supplied in extensions")
-        self._internal_message_extension = InternalMessageExtension()
-        configured_extensions.append(self._internal_message_extension)
-        if any(isinstance(extension, SteeringExtension) for extension in configured_extensions):
-            raise ValueError("SteeringExtension is an Agent built-in and cannot be supplied in extensions")
-        self._steering_extension = SteeringExtension()
-        configured_extensions.append(self._steering_extension)
-        names: set[str] = set()
-        for extension in configured_extensions:
-            name = extension.name
-            if not isinstance(name, str) or not name.strip():
-                raise ValueError("Extension name must be a non-empty string")
-            if name in names:
-                raise ValueError(f"Duplicate extension name: {name!r}")
-            names.add(name)
-        # Python's sort is stable, so extensions sharing a priority preserve the
-        # caller's registration order. Lifecycle and middleware paths both use
-        # this tuple, giving extensions one shared and predictable ordering.
-        self.extensions = tuple(sorted(configured_extensions, key=lambda extension: extension.priority))
         self.system_prompt = system_prompt
         self.reasoning_effort = reasoning_effort
         self.parallel_tool_call = parallel_tool_call
@@ -859,8 +812,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     tags={"domain": "notes"},
                 )
         """
-        result: AssistantMessage | None = None
-        async with aclosing(
+        return await final_answer(
             self.stream(
                 message,
                 config=config,
@@ -870,13 +822,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 metadata=metadata,
                 tags=tags,
             )
-        ) as events:
-            async for event in events:
-                if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
-                    result = event.message
-        if result is not None:
-            return result
-        raise AgentProtocolError("The agent did not produce a final answer")
+        )
 
     async def resume_point(
         self,
@@ -909,27 +855,8 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     print(point.description)
         """
         context = self._prepare_request_context(config, model, None, None, None)
-        try:
-            await self._start_context_loading(context)
-            await self._notify_on_tool(context)
-            await self._notify_on_state(context)
-            await context.flush_message_events()
-            await self._finish_context_loading(context)
-            try:
-                point: ResumePoint | None = classify_resume(context.state.messages)
-            except AgentResumeError:
-                point = None
-            await self._complete_request(context)
-            return point
-        except asyncio.CancelledError as cancellation:
-            await self._handle_request_cancellation(context, cancellation)
-            raise
-        except Exception as error:
-            await self._handle_request_failure(context, error)
-            raise
-        finally:
-            self._release_request(context)
-            await context.event_queue.close()
+        async with self._request_scope(context):
+            return await self._inspect_session(context)
 
     async def resume(
         self,
@@ -972,8 +899,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 except ProviderTimeoutError:
                     reply = await agent.resume()
         """
-        result: AssistantMessage | None = None
-        async with aclosing(
+        return await final_answer(
             self.stream_resume(
                 config=config,
                 model=model,
@@ -982,13 +908,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                 metadata=metadata,
                 tags=tags,
             )
-        ) as events:
-            async for event in events:
-                if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
-                    result = event.message
-        if result is not None:
-            return result
-        raise AgentProtocolError("The agent did not produce a final answer")
+        )
 
     async def stream_resume(
         self,
@@ -1020,12 +940,10 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             The ``on_message`` hook is not called, because there is no new input for it to
             transform, and a goal that was armed for the interrupted request is not re-armed.
         """
-        effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
-        allow_parallel = self.parallel_tool_call if parallel_tool_call is None else parallel_tool_call
-        if not isinstance(allow_parallel, bool):
-            raise ValueError("parallel_tool_call must be a boolean")
+        effort, allow_parallel = self._resolve_run_options(reasoning_effort, parallel_tool_call)
         context = self._prepare_request_context(config, model, metadata, tags, None)
-        async with aclosing(self._drive_request(context, effort, allow_parallel, resume=True)) as events:
+        work = self._run_request(context, effort, allow_parallel, resume=True)
+        async with aclosing(self._pump_events(context, work)) as events:
             async for event in events:
                 yield event
 
@@ -1103,75 +1021,12 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
                     print(event.type, event.session_id)
         """
         user_message = message if isinstance(message, UserMessage) else UserMessage(content=message)
-        effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
-        allow_parallel = self.parallel_tool_call if parallel_tool_call is None else parallel_tool_call
-        if not isinstance(allow_parallel, bool):
-            raise ValueError("parallel_tool_call must be a boolean")
+        effort, allow_parallel = self._resolve_run_options(reasoning_effort, parallel_tool_call)
         context = self._prepare_request_context(config, model, metadata, tags, user_message)
-        async with aclosing(self._drive_request(context, effort, allow_parallel, resume=False)) as events:
+        work = self._run_request(context, effort, allow_parallel)
+        async with aclosing(self._pump_events(context, work)) as events:
             async for event in events:
                 yield event
-
-    async def _drive_request(
-        self,
-        context: AgentRunContext,
-        effort: ReasoningEffort,
-        allow_parallel: bool,
-        *,
-        resume: bool,
-    ) -> AsyncIterator[AgentEvent]:
-        """Run one request in a producer task and yield its events, one at a time.
-
-        Both :meth:`stream` and :meth:`stream_resume` end here, so a request is cancelled,
-        acknowledged and cleaned up the same way whichever of them started it.
-        """
-        context.event_queue.enable_acknowledgements()
-        producer = asyncio.create_task(self._run_request(context, effort, allow_parallel, resume=resume))
-        try:
-            while True:
-                event = await context.event_queue.get()
-                yield event
-                # Acknowledge only after the caller asks for the next event: the
-                # producer then stays parked between events for as long as the
-                # caller handles the current one. A caller that stops early (a UI
-                # stop, a dropped client) therefore cancels the producer before it
-                # starts the next model call or tool, instead of inside one.
-                # Releasing earlier would let it finish work nobody asked for.
-                # AgentEventQueue documents why this replaces a bounded queue.
-                context.event_queue.acknowledge()
-                if event.type is AgentEventType.RUN_COMPLETED:
-                    await producer
-                    return
-        finally:
-            if not producer.done():
-                producer.cancel()
-            await asyncio.gather(producer, return_exceptions=True)
-
-    async def _run_request(
-        self,
-        context: AgentRunContext,
-        reasoning_effort: ReasoningEffort,
-        parallel_tool_call: bool,
-        *,
-        resume: bool = False,
-    ) -> None:
-        """Produce one run into its queue and own every terminal cleanup path."""
-        try:
-            if resume:
-                await self._open_resume(context)
-            else:
-                await self._open_request(context)
-            await self._run_loop(context, reasoning_effort, parallel_tool_call)
-        except asyncio.CancelledError as cancellation:
-            await self._handle_request_cancellation(context, cancellation)
-            await context.event_queue.fail(cancellation)
-            raise
-        except Exception as error:
-            await self._handle_request_failure(context, error)
-            await context.event_queue.fail(error)
-        finally:
-            self._release_request(context)
-            await context.event_queue.close()
 
     async def compact(
         self,
@@ -1208,880 +1063,7 @@ class Agent(AgentPhaseTransitionMixin, SyncMethodsMixin):
             request does.
         """
         context = self._prepare_request_context(config, model, metadata, tags, None)
-        context.event_queue.enable_acknowledgements()
-        producer = asyncio.create_task(self._run_compaction(context))
-        try:
-            while True:
-                event = await self._next_compaction_event(context, producer)
-                if event is None:
-                    return
-                yield event
-                context.event_queue.acknowledge()
-        finally:
-            if not producer.done():
-                producer.cancel()
-            await asyncio.gather(producer, return_exceptions=True)
-
-    async def _next_compaction_event(
-        self,
-        context: AgentRunContext,
-        producer: asyncio.Task[None],
-    ) -> AgentEvent | None:
-        """Return the next compaction event, or None once the pass has ended.
-
-        A pass with nothing to compact emits nothing, so the queue alone cannot
-        say that it is over: acknowledgement keeps the producer parked between
-        events, which makes "the producer finished" and "no more events" the
-        same moment. A queue closed while empty is that moment; anything else
-        the queue reports is a real error and is raised.
-        """
-        waiting = asyncio.ensure_future(context.event_queue.get())
-        await asyncio.wait({waiting, producer}, return_when=asyncio.FIRST_COMPLETED)
-        if waiting.done():
-            error = waiting.exception()
-            if error is None:
-                return waiting.result()
-            if isinstance(error, AgentProtocolError) and context.event_queue.closed and context.event_queue.empty:
-                await producer
-                return None
-            raise error
-        waiting.cancel()
-        await asyncio.gather(waiting, return_exceptions=True)
-        await producer
-        return None
-
-    async def _run_compaction(self, context: AgentRunContext) -> None:
-        """Restore one session's history, then let every extension compact it."""
-        try:
-            await self._start_context_loading(context)
-            await self._notify_on_tool(context)
-            await self._notify_on_state(context)
-            # Setup-generated instructions are persisted before the pass, the
-            # order a request writes them in.
-            await context.flush_message_events()
-            await self._finish_context_loading(context)
-            for extension in self.extensions:
-                await extension.on_compact(context)
-            await self._complete_request(context)
-        except asyncio.CancelledError as cancellation:
-            await self._handle_request_cancellation(context, cancellation)
-            await context.event_queue.fail(cancellation)
-            raise
-        except Exception as error:
-            await self._handle_request_failure(context, error)
-            await context.event_queue.fail(error)
-        finally:
-            self._release_request(context)
-            await context.event_queue.close()
-
-    def _prepare_request_context(
-        self,
-        config: AgentRunConfig | None,
-        model: AgentModel | None,
-        metadata: Mapping[str, JsonValue] | None,
-        tags: Mapping[str, JsonValue] | None,
-        input_message: UserMessage | None,
-    ) -> AgentRunContext:
-        """Validate input, create isolated state/tools, and claim the session.
-
-        ``input_message`` is ``None`` for a maintenance pass — see
-        :meth:`compact` — which claims the session the same way and appends no
-        input later because it never opens a request.
-        """
-        if self._initialized_config is None:
-            raise AgentProtocolError(
-                "Agent is not initialized; await agent.initialize(config=...) or Agent.create(...)"
-            )
-        config = config or self._initialized_config
-        session_id = config.session_id or new_uuid7()
-        if config.parent_session_id == session_id:
-            raise ValueError("parent_session_id must differ from session_id")
-        config = replace(config, session_id=session_id)
-        if config.request_id is None:
-            config = replace(config, request_id=new_uuid7())
-        resolved_model = model if model is not None else self.model
-        if resolved_model is None:
-            raise AgentProtocolError("This request requires a model because the Agent has no default model")
-        # State and dynamic tools are request-scoped. Constructor tools are copied
-        # so extension registrations cannot leak into later requests or sessions.
-        state = AgentState(
-            parent_session_id=config.parent_session_id,
-        )
-        context = AgentRunContext(
-            config=config,
-            state=state,
-            tools={},
-            extensions=self.extensions,
-            model=resolved_model,
-            metadata=json_object(metadata, field_name="Context metadata"),
-            tags=json_object(tags, field_name="Context tags", nonempty_keys=True),
-            input_message=input_message,
-        )
-        if self.system_prompt:
-            context.add_message(SystemMessage(content=self.system_prompt))
-        for registered in self.tools.values():
-            context.register_tool(registered)
-        with self._sessions_lock:
-            previous = self._states.get(config.session_id)
-            if self.is_conflict(config.session_id):
-                phase = previous.phase.value if previous is not None else "active"
-                raise AgentProtocolError(f"Agent cannot start a new request while its current phase is {phase!r}")
-            self._active_configs[config.session_id] = config
-            self._states[config.session_id] = state
-            self.state = state
-        for extension in self.extensions:
-            extension._request_started(context)
-        return context
-
-    async def _open_request(self, context: AgentRunContext) -> None:
-        """Open inboxes, restore history through hooks, then append the new input."""
-        from .extensions.events import MessageTiming
-
-        self._internal_message_extension.open(context)
-        self._steering_extension.open(context)
-        await self._start_context_loading(context)
-        await self._notify_on_tool(context)
-        await self._notify_on_state(context)
-        await self._notify_on_message(context)
-        if not isinstance(context.input_message, UserMessage):
-            raise AgentProtocolError("Request setup must produce a UserMessage")
-        # Persist setup-generated instructions before the user input so Raw Log
-        # order matches the final model context.
-        await context.flush_message_events()
-        await self._finish_context_loading(context)
-        # A request that was killed could not close its own tool calls. The history is
-        # restored with the results that did arrive, so any call still without one is
-        # answered here, before the new input, or the provider would reject the history.
-        await self._close_unanswered_tool_calls(context, _INTERRUPTED_TOOL_RESULT)
-        await context.append_message(context.input_message, MessageTiming.instant())
-        await self._notify_before_run(context)
-
-    async def _open_resume(self, context: AgentRunContext) -> None:
-        """Open inboxes, restore history, and prepare the interrupted request to carry on."""
-        self._internal_message_extension.open(context)
-        self._steering_extension.open(context)
-        await self._start_context_loading(context)
-        await self._notify_on_tool(context)
-        await self._notify_on_state(context)
-        await context.flush_message_events()
-        await self._finish_context_loading(context)
-        await self._prepare_resume(context, classify_resume(context.state.messages))
-        await self._notify_before_run(context)
-
-    async def _prepare_resume(self, context: AgentRunContext, point: ResumePoint) -> None:
-        """Make the history ready for the next model call, telling the model what it missed."""
-        from .extensions.events import MessageTiming
-
-        match point.kind:
-            case ResumeKind.RECOVER_TOOLS:
-                await self._close_unanswered_tool_calls(context, _INTERRUPTED_TOOL_RESULT)
-            case ResumeKind.RETRY_RESPONSE:
-                await context.append_message(
-                    AgentMessage(content=_RETRY_RESPONSE_NOTICE, attributes={"resume": point.kind.value}),
-                    MessageTiming.instant(),
-                )
-            case ResumeKind.CONTINUE_RESPONSE:
-                await context.append_message(
-                    AgentMessage(content=_CONTINUE_RESPONSE_NOTICE, attributes={"resume": point.kind.value}),
-                    MessageTiming.instant(),
-                )
-            case ResumeKind.CALL_MODEL:
-                pass
-
-    async def _run_loop(
-        self,
-        context: AgentRunContext,
-        reasoning_effort: ReasoningEffort,
-        parallel_tool_call: bool,
-    ) -> None:
-        """Alternate model and tool steps while emitting into the run queue."""
-        from .extensions.events import MessageTiming
-
-        config, state = context.config, context.state
-        active_input: AgentMessage | UserMessage | None = None
-        message_iterations = 0
-        processed_internal_messages = 0
-        pauses = 0
-        continuing = False
-        while True:
-            if message_iterations >= self.max_iterations:
-                raise AgentIterationLimitError(f"Agent exceeded {self.max_iterations} model iterations")
-            message_iterations += 1
-            # A paused step is continued inside the same turn, so the turn is not reopened.
-            if not continuing:
-                await self._notify_before_turn(context)
-            continuing = False
-            response = await self._run_model_step(
-                context, reasoning_effort, parallel_tool_call, may_pause=pauses < self.max_pause_continuations
-            )
-            stop = response.stop
-            if (
-                stop is not None
-                and stop.reason is StopReason.PAUSED
-                and not response.message.tool_calls
-                and pauses < self.max_pause_continuations
-            ):
-                pauses += 1
-                continuing = True
-                continue
-            pauses = 0
-            await self._announce_stop(context, response)
-            if not response.message.tool_calls:
-                if active_input is not None:
-                    internal = isinstance(active_input, AgentMessage)
-                    await context._emit_runtime(
-                        AgentEvent(
-                            AgentEventType.INTERNAL_MESSAGE_COMPLETED
-                            if internal
-                            else AgentEventType.STEERING_COMPLETED,
-                            session_id=config.session_id,
-                            phase=state.phase,
-                            message=response.message,
-                            internal_message=active_input if internal else None,
-                            steering_message=active_input if isinstance(active_input, UserMessage) else None,
-                        )
-                    )
-                    active_input = None
-
-                # The answer ends this turn: close the turn before the runtime
-                # decides whether the request continues with new input.
-                await self._notify_after_turn(context, response.message)
-                steering, next_input = self._select_pending_input(context)
-                if steering is not None:
-                    await self._start_steering(context, steering)
-                    active_input = steering
-                    message_iterations = 0
-                    continue
-                if next_input is not None:
-                    if processed_internal_messages >= self.max_internal_messages:
-                        raise AgentIterationLimitError(
-                            f"Agent exceeded {self.max_internal_messages} internal messages in one request"
-                        )
-                    processed_internal_messages += 1
-                    message_iterations = 0
-                    await context._emit_runtime(
-                        AgentEvent(
-                            AgentEventType.INTERNAL_MESSAGE_STARTED,
-                            session_id=config.session_id,
-                            phase=state.phase,
-                            internal_message=next_input,
-                        )
-                    )
-                    await context.append_message(next_input, MessageTiming.instant())
-                    active_input = next_input
-                    continue
-
-                await self._notify_after_run(context, response.message)
-                await self._notify_on_success(context, response.message)
-                await self._complete_request(context)
-                await context._emit_runtime(
-                    AgentEvent(
-                        AgentEventType.RUN_COMPLETED,
-                        session_id=config.session_id,
-                        phase=state.phase,
-                        message=response.message,
-                    )
-                )
-                return
-
-            steering = self._steering_extension.take(context)
-            if steering is not None:
-                await self._start_steering(context, steering, response.message.tool_calls, active_input)
-                # Steering skipped the requested tools; their skipped results are
-                # appended, so the turn closes before the next turn begins.
-                await self._notify_after_turn(context, response.message)
-                active_input = steering
-                message_iterations = 0
-                continue
-
-            steering = await self._execute_tools(
-                context,
-                response.message.tool_calls,
-                parallel_tool_call,
-                active_input,
-            )
-            await self._notify_after_turn(context, response.message)
-            if steering is not None:
-                active_input = steering
-                message_iterations = 0
-
-    async def _run_model_step(
-        self,
-        context: AgentRunContext,
-        reasoning_effort: ReasoningEffort,
-        parallel_tool_call: bool,
-        *,
-        may_pause: bool = False,
-    ) -> ModelResponse:
-        """Run preprocessing and one model call, validate its stream, and persist output.
-
-        ``may_pause`` says a paused step will be continued, so its pause is not recorded on the
-        stored message: it would otherwise be reported again whenever the session is restored.
-        """
-        config, state = context.config, context.state
-        request = ModelRequest(
-            messages=tuple(state.messages),
-            tools=tuple(tool.definition for tool in context.tools.values()),
-            server_tools=tuple(context.server_tools.values()),
-            reasoning_effort=reasoning_effort,
-            parallel_tool_call=parallel_tool_call,
-            cache_key=config.cache_key or config.session_id,
-        )
-        await self._notify_before_model(context, request)
-        # before_model hooks may add or replace instructions; publish those
-        # changes before rebuilding the request sent to the provider.
-        await context.flush_message_events()
-
-        request = self._refresh_model_request(context, request)
-        model_started = await self._start_model_generation(context)
-        output_tracker = ModelOutputTracker()
-        await context._emit_runtime(
-            AgentEvent(
-                AgentEventType.MODEL_STARTED,
-                session_id=config.session_id,
-                phase=state.phase,
-            )
-        )
-        response = None
-        model = context.model
-        if model is None:
-            raise AgentProtocolError("The request context has no model")
-        async with aclosing(self._stream_model_with_middleware(context, request, model)) as events:
+        pass_ = self._run_compaction(context)
+        async with aclosing(self._pump_events(context, pass_, ends_silently=True)) as events:
             async for event in events:
-                if response is not None:
-                    raise AgentProtocolError("Model emitted events after its final response")
-                for boundary in await output_tracker.observe(context, event):
-                    await context._emit_runtime(AgentEvent(boundary, session_id=config.session_id, phase=state.phase))
-                match event.type:
-                    case ModelEventType.TEXT_DELTA:
-                        await context._emit_runtime(
-                            AgentEvent(
-                                AgentEventType.TEXT_DELTA,
-                                session_id=config.session_id,
-                                phase=state.phase,
-                                delta=event.delta,
-                            )
-                        )
-                    case ModelEventType.REASONING_DELTA:
-                        await context._emit_runtime(
-                            AgentEvent(
-                                AgentEventType.REASONING_DELTA,
-                                session_id=config.session_id,
-                                phase=state.phase,
-                                delta=event.delta,
-                            )
-                        )
-                    case ModelEventType.TOOL_CALL_DELTA:
-                        if event.tool_call_delta is None:
-                            raise AgentProtocolError("Missing tool-call delta")
-                        await context._emit_runtime(
-                            AgentEvent(
-                                AgentEventType.TOOL_CALL_DELTA,
-                                session_id=config.session_id,
-                                phase=state.phase,
-                                tool_call_delta=event.tool_call_delta,
-                            )
-                        )
-                    case ModelEventType.SERVER_TOOL_STARTED:
-                        if event.server_tool_call is None:
-                            raise AgentProtocolError("Missing server-tool call")
-                        await context._emit_runtime(
-                            AgentEvent(
-                                AgentEventType.SERVER_TOOL_STARTED,
-                                session_id=config.session_id,
-                                phase=state.phase,
-                                server_tool_call=event.server_tool_call,
-                            )
-                        )
-                    case ModelEventType.SERVER_TOOL_INPUT_DELTA:
-                        if event.server_tool_input_delta is None:
-                            raise AgentProtocolError("Missing server-tool input delta")
-                        await context._emit_runtime(
-                            AgentEvent(
-                                AgentEventType.SERVER_TOOL_INPUT_DELTA,
-                                session_id=config.session_id,
-                                phase=state.phase,
-                                server_tool_input_delta=event.server_tool_input_delta,
-                            )
-                        )
-                    case ModelEventType.SERVER_TOOL_COMPLETED | ModelEventType.SERVER_TOOL_FAILED:
-                        if event.server_tool_result is None:
-                            raise AgentProtocolError("Missing server-tool result")
-                        await context._emit_runtime(
-                            AgentEvent(
-                                AgentEventType(event.type.value),
-                                session_id=config.session_id,
-                                phase=state.phase,
-                                server_tool_result=event.server_tool_result,
-                            )
-                        )
-                    case ModelEventType.RESPONSE:
-                        if event.response is None:
-                            raise AgentProtocolError("Missing model response")
-                        response = event.response
-        if response is None:
-            raise AgentProtocolError("Model stream ended without a response")
-
-        response = self._settle_stop(response, may_pause=may_pause)
-        model_completed = await self._finish_model_generation(context)
-        await context.append_message(
-            response.message,
-            output_tracker.message_timing(model_started, model_completed),
-            response.usage,
-        )
-        await self._notify_after_model(context, response)
-        await context._emit_runtime(
-            AgentEvent(
-                AgentEventType.MODEL_COMPLETED,
-                session_id=config.session_id,
-                phase=state.phase,
-                response=response,
-            )
-        )
-        return response
-
-    @staticmethod
-    def _settle_stop(response: ModelResponse, *, may_pause: bool = False) -> ModelResponse:
-        """Put the stop on the message, and withhold tool calls that came with a bad stop.
-
-        A refused or interrupted step cannot be trusted to have produced a whole tool call:
-        a refusal can arrive after the call was streamed, and an interrupted stream may end
-        in the middle of one. Running it would act on output the model or the provider
-        disowned, so the calls are removed from the message that is stored and replayed, and
-        their names are kept in ``stop.detail`` for the host to show.
-        """
-        stop = response.stop
-        message = response.message
-        if stop is None:  # pragma: no cover - ModelResponse always fills it in
-            return response
-        if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED) and message.tool_calls:
-            withheld = [call.name for call in message.tool_calls]
-            stop = replace(stop, detail={**stop.detail, "withheld_tool_calls": withheld})
-            message = replace(message, tool_calls=())
-        # Only an abnormal stop is written to the message. A message that ended normally is
-        # left exactly as the model produced it, so stored history and every comparison
-        # against it are unchanged; the stop of a normal step is still on the response.
-        continued = may_pause and stop.reason is StopReason.PAUSED and not message.tool_calls
-        if not stop.ok and not continued:
-            message = replace(message, stop=stop)
-        return replace(response, message=message, stop=stop)
-
-    async def _announce_stop(self, context: AgentRunContext, response: ModelResponse) -> None:
-        """Tell the host a step ended for a reason other than finishing or asking for tools."""
-        stop = response.stop
-        if stop is None or stop.ok:
-            return
-        await context._emit_runtime(
-            AgentEvent(
-                AgentEventType.MODEL_STOPPED,
-                session_id=context.config.session_id,
-                phase=context.state.phase,
-                response=response,
-                stop=stop,
-                message=response.message,
-            )
-        )
-
-    def _select_pending_input(self, context: AgentRunContext) -> tuple[UserMessage | None, AgentMessage | None]:
-        """Reserve steering first, or internal input, without a queue-closing race."""
-        internal: AgentMessage | None = None
-
-        def reserve_internal_input() -> bool:
-            nonlocal internal
-            internal = self._internal_message_extension.next_message(context)
-            return internal is not None
-
-        steering = self._steering_extension.select_next(context, reserve_internal_input)
-        return steering, internal
-
-    async def _handle_request_cancellation(self, context: AgentRunContext, cancellation: BaseException) -> None:
-        """Close interrupted tool calls, then publish the request cancellation.
-
-        A completed assistant tool-call message is persisted before execution
-        starts. If cancellation interrupts a tool, leaving that message without
-        one ToolMessage per call makes the next provider request invalid. Write
-        explicit failed observations while persistence bookkeeping is still
-        active so the restored conversation remains protocol-complete.
-        """
-        try:
-            await self._close_unanswered_tool_calls(context, _CANCELLED_TOOL_RESULT)
-            await self._cancel_request(context)
-        except Exception as notification_error:
-            add_note(cancellation, f"Cancellation notification failed: {notification_error!r}")
-
-    async def _close_unanswered_tool_calls(self, context: AgentRunContext, content: str) -> None:
-        """Append a failed result, saying ``content``, for each call of the latest batch that has none."""
-        from .extensions.events import MessageTiming
-
-        pending: dict[str, ToolCall] = {}
-        for message in context.state.messages:
-            match message:
-                case AssistantMessage(tool_calls=calls) if calls:
-                    pending = {call.id: call for call in calls}
-                case ToolMessage(tool_call_id=tool_call_id) if pending:
-                    pending.pop(tool_call_id, None)
-                case _:
-                    # A valid tool batch is contiguous. Another message means
-                    # this is older malformed history, not the operation that
-                    # the current cancellation interrupted.
-                    if pending:
-                        pending.clear()
-
-        for call in pending.values():
-            await context.append_message(
-                ToolMessage(
-                    tool_call_id=call.id,
-                    name=call.name,
-                    content=content,
-                    success=False,
-                ),
-                MessageTiming.instant(),
-            )
-
-    async def _handle_request_failure(self, context: AgentRunContext, error: Exception) -> None:
-        """Report failure without masking the original error or terminal phase."""
-        # A terminal transition is already committed before subscribers run.
-        # Never replace the original error with an illegal terminal transition
-        # or a secondary failure in an error-reporting hook.
-        if context.state.phase in self._ACTIVE_PHASES:
-            try:
-                await self._fail_request(context)
-            except Exception as notification_error:
-                add_note(error, f"Failure notification failed: {notification_error!r}")
-        try:
-            await self._notify_error(context, error)
-        except Exception as notification_error:
-            add_note(error, f"Error hook failed: {notification_error!r}")
-
-    def _release_request(self, context: AgentRunContext) -> None:
-        """Clear only this request's inboxes and release its session for reuse."""
-        self._steering_extension.close(context)
-        self._internal_message_extension.close(context)
-        for extension in self.extensions:
-            extension._request_finished(context)
-        with self._sessions_lock:
-            self._active_configs.pop(context.config.session_id, None)
-
-    async def _execute_tools(
-        self,
-        context: AgentRunContext,
-        calls: Sequence[ToolCall],
-        parallel_tool_call: bool,
-        active_input: AgentMessage | UserMessage | None = None,
-    ) -> UserMessage | None:
-        parallel_calls: list[ToolCall] = []
-        serial_calls: list[ToolCall] = []
-        for call in calls:
-            registered = context.tools.get(call.name)
-            if (
-                parallel_tool_call
-                and registered is not None
-                and registered.execution_mode is ToolExecutionMode.PARALLEL
-            ):
-                parallel_calls.append(call)
-            else:
-                serial_calls.append(call)
-
-        if parallel_calls:
-            await self._execute_parallel_tools(context, parallel_calls)
-            steering = self._steering_extension.take(context)
-            if steering is not None:
-                await self._start_steering(context, steering, serial_calls, active_input)
-                return steering
-
-        return await self._execute_serial_tools(context, serial_calls, active_input)
-
-    async def _execute_parallel_tools(
-        self,
-        context: AgentRunContext,
-        calls: Sequence[ToolCall],
-    ) -> None:
-        """Run one parallel batch and emit each result as its handler finishes."""
-        for call in calls:
-            await self._notify_before_tool(context, call)
-
-        await self._start_tool_execution(context)
-        await context._emit_runtime(
-            AgentEvent(
-                AgentEventType.TOOL_STARTED,
-                session_id=context.config.session_id,
-                phase=context.state.phase,
-                tool_calls=list(calls),
-            )
-        )
-        tasks = [asyncio.create_task(self._invoke_tool(context, call)) for call in calls]
-        remaining = len(tasks)
-        try:
-            for completed in asyncio.as_completed(tasks):
-                invocation = await completed
-                remaining -= 1
-                if remaining == 0:
-                    await self._finish_tool_execution(context)
-                await self._finalize_tool(context, invocation)
-        except BaseException:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            raise
-
-    async def _execute_serial_tools(
-        self,
-        context: AgentRunContext,
-        calls: Sequence[ToolCall],
-        active_input: AgentMessage | UserMessage | None,
-    ) -> UserMessage | None:
-        """Run serial calls one at a time and stop at a steering boundary."""
-        for index, call in enumerate(calls):
-            await self._notify_before_tool(context, call)
-            await self._start_tool_execution(context)
-            await context._emit_runtime(
-                AgentEvent(
-                    AgentEventType.TOOL_STARTED,
-                    session_id=context.config.session_id,
-                    phase=context.state.phase,
-                    tool_calls=[call],
-                )
-            )
-            invocation = await self._invoke_tool(context, call)
-            await self._finish_tool_execution(context)
-            await self._finalize_tool(context, invocation)
-            steering = self._steering_extension.take(context)
-            if steering is not None:
-                await self._start_steering(context, steering, calls[index + 1 :], active_input)
-                return steering
-        return None
-
-    async def _invoke_tool(self, context: AgentRunContext, call: ToolCall) -> _ToolInvocation:
-        """Run only a handler concurrently; lifecycle hooks remain serialized."""
-        from .extensions.events import MessageTiming
-
-        started_at = datetime.now(UTC)
-        started_ns = monotonic_ns()
-        error = None
-        token = _bind_tool_call(call.id)
-        try:
-            try:
-                if call.error is not None:
-                    raise ValueError(call.error)
-                registered = context.tools.get(call.name)
-                if registered is None:
-                    raise ValueError(f"Unknown tool: {call.name}")
-                output = await self._call_tool_with_middleware(context, call, registered)
-                from .messages import ImageContent, TextContent
-
-                if isinstance(output, (ImageContent, TextContent)):
-                    content = [output]
-                elif (
-                    isinstance(output, list)
-                    and output
-                    and all(isinstance(part, (ImageContent, TextContent)) for part in output)
-                ):
-                    content = output
-                else:
-                    content = registered.serialize_result(output)
-            except Exception as tool_error:
-                error = tool_error
-                content = str(tool_error)
-        finally:
-            _reset_tool_call(token)
-        completed_ns = monotonic_ns()
-        completed_at = datetime.now(UTC)
-        result = ToolMessage(
-            tool_call_id=call.id,
-            name=call.name,
-            content=content,
-            success=error is None,
-        )
-        return _ToolInvocation(
-            call=call,
-            result=result,
-            error=error,
-            timing=MessageTiming(
-                started_at=started_at,
-                completed_at=completed_at,
-                duration_ns=max(0, completed_ns - started_ns),
-            ),
-        )
-
-    def _stream_model_with_middleware(
-        self,
-        context: AgentRunContext,
-        request: ModelRequest,
-        model: AgentModel,
-    ) -> AsyncIterator[ModelEvent]:
-        """Build one request middleware chain with registration order outside-in."""
-        call_next: ModelRequestNext = model.stream
-        for extension in reversed(self.extensions):
-            inner = call_next
-
-            def wrapped(
-                next_request: ModelRequest,
-                *,
-                hook: AgentExtension = extension,
-                next_handler: ModelRequestNext = inner,
-            ) -> AsyncIterator[ModelEvent]:
-                return hook.on_model_request(context, next_request, next_handler)
-
-            call_next = wrapped
-        return call_next(request)
-
-    async def _call_tool_with_middleware(
-        self,
-        context: AgentRunContext,
-        call: ToolCall,
-        registered: AgentTool,
-    ) -> ToolResult:
-        """Build one tool middleware chain independently for each invocation task."""
-
-        return await invoke_tool(context, call, registered)
-
-    async def _finalize_tool(
-        self,
-        context: AgentRunContext,
-        invocation: _ToolInvocation,
-    ) -> None:
-        """Publish one completed invocation and append its result to context."""
-        call, result, error = invocation.call, invocation.result, invocation.error
-        await self._notify_after_tool(context, call, result, error)
-        await context.append_message(result, invocation.timing)
-        await context._emit_runtime(
-            AgentEvent(
-                AgentEventType.TOOL_FAILED if error else AgentEventType.TOOL_COMPLETED,
-                session_id=context.config.session_id,
-                phase=context.state.phase,
-                tool_calls=[call],
-                message=result,
-                error=error,
-            )
-        )
-
-    async def _start_steering(
-        self,
-        context: AgentRunContext,
-        message: UserMessage,
-        pending_calls: Sequence[ToolCall] = (),
-        active_input: AgentMessage | UserMessage | None = None,
-    ) -> None:
-        """Finish pending tool protocol entries before appending urgent user input.
-
-        Skipped calls are never invoked and do not trigger execution hooks. Their
-        explicit failed ToolMessages preserve the provider's call/result pairing
-        and Raw Log history. Interrupted inputs never emit a false completion.
-        """
-        from .extensions.events import MessageTiming
-
-        if active_input is not None:
-            internal = isinstance(active_input, AgentMessage)
-            await context._emit_runtime(
-                AgentEvent(
-                    AgentEventType.INTERNAL_MESSAGE_INTERRUPTED if internal else AgentEventType.STEERING_INTERRUPTED,
-                    session_id=context.config.session_id,
-                    phase=context.state.phase,
-                    internal_message=active_input if internal else None,
-                    steering_message=active_input if isinstance(active_input, UserMessage) else None,
-                )
-            )
-        for call in pending_calls:
-            result = ToolMessage(
-                tool_call_id=call.id,
-                name=call.name,
-                content="Superseded by a steering message",
-                success=False,
-            )
-            await context.append_message(result, MessageTiming.instant())
-            await context._emit_runtime(
-                AgentEvent(
-                    AgentEventType.TOOL_SKIPPED,
-                    session_id=context.config.session_id,
-                    phase=context.state.phase,
-                    tool_calls=[call],
-                    message=result,
-                )
-            )
-        await context.append_message(message, MessageTiming.instant())
-        await context._emit_runtime(
-            AgentEvent(
-                AgentEventType.STEERING_STARTED,
-                session_id=context.config.session_id,
-                phase=context.state.phase,
-                steering_message=message,
-            )
-        )
-
-    async def _notify_on_tool(self, context: AgentRunContext) -> None:
-        """Let every extension register request-scoped tools in priority order."""
-        for extension in self.extensions:
-            await extension.on_tool(context)
-
-    async def _notify_on_state(self, context: AgentRunContext) -> None:
-        """Restore history and system instructions before input conversion."""
-        for extension in self.extensions:
-            await extension.on_state(context)
-
-    async def _notify_on_message(self, context: AgentRunContext) -> None:
-        """Let extensions transform current input before append and persistence."""
-        for extension in self.extensions:
-            await extension.on_message(context)
-
-    async def _notify_before_run(self, context: AgentRunContext) -> None:
-        for extension in self.extensions:
-            await extension.before_run(context)
-
-    async def _notify_before_turn(self, context: AgentRunContext) -> None:
-        """Announce the start of one model/tool turn before its model call."""
-        for extension in self.extensions:
-            await extension.before_turn(context)
-
-    async def _notify_after_turn(self, context: AgentRunContext, result: AssistantMessage) -> None:
-        """Announce the end of one model/tool turn once its tools are settled."""
-        for extension in self.extensions:
-            await extension.after_turn(context, result)
-
-    @staticmethod
-    def _refresh_model_request(context: AgentRunContext, request: ModelRequest) -> ModelRequest:
-        """Capture current context while retaining per-call model options.
-
-        Preprocessing can replace history or tool registrations. Refresh before
-        each observer and the provider so neither sees stale pre-compaction input.
-        """
-        return replace(
-            request,
-            messages=tuple(context.state.messages),
-            tools=tuple(tool.definition for tool in context.tools.values()),
-            server_tools=tuple(context.server_tools.values()),
-        )
-
-    async def _notify_before_model(self, context: AgentRunContext, request: ModelRequest) -> None:
-        for extension in self.extensions:
-            await extension.before_model(context, self._refresh_model_request(context, request))
-
-    async def _notify_after_model(self, context: AgentRunContext, response: ModelResponse) -> None:
-        for extension in self.extensions:
-            await extension.after_model(context, response)
-
-    async def _notify_before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
-        for extension in self.extensions:
-            await extension.before_tool(context, call)
-
-    async def _notify_after_tool(
-        self,
-        context: AgentRunContext,
-        call: ToolCall,
-        result: ToolMessage,
-        error: Exception | None,
-    ) -> None:
-        for extension in self.extensions:
-            await extension.after_tool(context, call, result, error)
-
-    async def _notify_after_run(self, context: AgentRunContext, result: AssistantMessage) -> None:
-        for extension in self.extensions:
-            await extension.after_run(context, result)
-
-    async def _notify_on_success(self, context: AgentRunContext, result: AssistantMessage) -> None:
-        """Notify extensions after successful post-run processing."""
-        for extension in self.extensions:
-            await extension.on_success(context, result)
-
-    async def _notify_error(self, context: AgentRunContext, error: Exception) -> None:
-        for extension in self.extensions:
-            await extension.on_error(context, error)
+                yield event

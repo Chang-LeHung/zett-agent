@@ -18,8 +18,8 @@ documentation says, and anything else is left as the error it was.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
 
+from ..json_types import JsonValue
 from ..stop import StopInfo, StopReason
 
 __all__ = [
@@ -87,7 +87,7 @@ def refusal_from_status_error(status_code: int, body: object) -> StopInfo | None
     return None
 
 
-def refusal_from_response_error(error: Mapping[str, Any]) -> StopInfo | None:
+def refusal_from_response_error(error: Mapping[str, JsonValue]) -> StopInfo | None:
     """Return the refusal a failed OpenAI Responses stream describes, or None for a plain failure."""
     code = error.get("code")
     if code not in RESPONSES_POLICY_ERROR_CODES:
@@ -103,8 +103,8 @@ def refusal_from_response_error(error: Mapping[str, Any]) -> StopInfo | None:
 
 
 def withhold_replay_blocks(
-    blocks: Sequence[Mapping[str, Any]], is_tool_call: Callable[[Mapping[str, Any]], bool]
-) -> tuple[Mapping[str, Any], ...]:
+    blocks: Sequence[Mapping[str, JsonValue]], is_tool_call: Callable[[Mapping[str, JsonValue]], bool]
+) -> tuple[Mapping[str, JsonValue], ...]:
     """Drop the replay blocks that are client tool calls.
 
     When a step is refused or interrupted its tool calls are withheld from the message, so

@@ -1,20 +1,28 @@
-"""OpenAI Responses API request and streaming-event normalization."""
+"""OpenAI Responses API request and streaming-event normalization.
+
+Everything here works on JSON: events arrive as objects (the provider dumps the SDK's models at the
+edge), and requests leave as plain dictionaries, so this module neither imports the SDK nor trusts the
+shape of what a service sends.
+"""
 
 from __future__ import annotations
 
 import base64
 import json
 import logging
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterable, AsyncIterator, Mapping, Sequence
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
+from ..json_types import JsonValue
 from ..messages import (
+    AgentMessage,
     AnyMessage,
     AssistantMessage,
     ImageBytesSource,
     ImageContent,
     ImageUrlSource,
+    SystemMessage,
     TextContent,
     ToolCall,
     ToolMessage,
@@ -22,6 +30,7 @@ from ..messages import (
 )
 from ..model import (
     ModelEvent,
+    ModelRequest,
     ModelResponse,
     ModelUsage,
     ReasoningEffort,
@@ -35,6 +44,7 @@ from ..stop import StopInfo, StopReason, classify_stop
 from .stop_reasons import refusal_from_response_error, withhold_replay_blocks
 from .tool_arguments import tool_call_from_arguments
 from .tool_images import expand_tool_images
+from .wire import JsonObject, read_int, read_object, read_objects, read_str
 
 logger = logging.getLogger(__name__)
 
@@ -62,24 +72,19 @@ def responses_input(
     provider: str,
     model: str,
     local_search_tool: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[JsonObject]:
     """Render complete local history as stateless Responses API input items."""
-    items: list[dict[str, Any]] = []
+    items: list[JsonObject] = []
     for message in expand_tool_images(messages):
-        match message.role:
-            case "system":
-                items.append({"role": "system", "content": message.content})
-            case "agent":
-                items.append({"role": "user", "content": message.content})
-            case "user":
-                if not isinstance(message, UserMessage):
-                    raise TypeError(f"Invalid user message: {type(message)!r}")
+        match message:
+            case SystemMessage() | AgentMessage():
+                role = "system" if isinstance(message, SystemMessage) else "user"
+                items.append({"role": role, "content": message.content})
+            case UserMessage():
                 items.append({"role": "user", "content": _responses_user_content(message)})
-            case "assistant":
-                if not isinstance(message, AssistantMessage):
-                    raise TypeError(f"Invalid assistant message: {type(message)!r}")
+            case AssistantMessage():
                 if message.provider == provider and message.model == model and message.replay_blocks:
-                    items.extend(dict(block) for block in message.replay_blocks)
+                    items.extend(cast(JsonObject, dict(block)) for block in message.replay_blocks)
                     continue
                 if message.content:
                     items.append({"role": "assistant", "content": message.content})
@@ -92,19 +97,11 @@ def responses_input(
                     }
                     for call in message.tool_calls
                 )
-            case "tool":
-                if not isinstance(message, ToolMessage):
-                    raise TypeError(f"Invalid tool message: {type(message)!r}")
+            case ToolMessage():
                 if local_search_tool is not None and message.name == local_search_tool:
                     items.append(_tool_search_output(message))
                     continue
-                items.append(
-                    {
-                        "type": "function_call_output",
-                        "call_id": message.tool_call_id,
-                        "output": message.content,
-                    }
-                )
+                items.append({"type": "function_call_output", "call_id": message.tool_call_id, "output": message.text})
     return items
 
 
@@ -113,7 +110,7 @@ def local_tool_search_name(tools: Sequence[ToolDefinition]) -> str | None:
     return next((tool.name for tool in tools if tool.local_tool_search), None)
 
 
-def _tool_search_output(message: ToolMessage) -> dict[str, Any]:
+def _tool_search_output(message: ToolMessage) -> JsonObject:
     """Render one local search result as the client's ``tool_search_output``."""
     if not message.success:
         raise ValueError(f"Local tool search failed: {message.content}")
@@ -132,7 +129,7 @@ def _tool_search_output(message: ToolMessage) -> dict[str, Any]:
         "call_id": message.tool_call_id,
         "execution": "client",
         "status": "completed",
-        "tools": definitions,
+        "tools": cast("list[JsonValue]", definitions),
     }
 
 
@@ -197,6 +194,57 @@ def responses_reasoning(effort: ReasoningEffort) -> dict[str, str] | None:
             return {"effort": effort.value, "summary": "auto"}
 
 
+def responses_request(
+    request: ModelRequest,
+    *,
+    provider: str,
+    model: str,
+    temperature: float | None,
+    send_prompt_cache_key: bool,
+    extra_body: Mapping[str, JsonValue],
+) -> dict[str, object]:
+    """Build the fields of one stateless Responses request.
+
+    The request is never stored by the service (``store`` is false), so the whole history is sent
+    every time. Fields the SDK does not declare go in ``extra_body``.
+    """
+    tools = responses_tools(request.tools, request.server_tools)
+    fields: dict[str, object] = {
+        "model": model,
+        "input": responses_input(
+            request.messages,
+            provider=provider,
+            model=model,
+            local_search_tool=local_tool_search_name(request.tools),
+        ),
+        "stream": True,
+        "store": False,
+        "parallel_tool_calls": request.parallel_tool_call,
+    }
+    if tools:
+        fields["tools"] = tools
+    if temperature is not None:
+        fields["temperature"] = temperature
+    if request.tool_choice:
+        server_types = {tool.type for tool in request.server_tools}
+        fields["tool_choice"] = (
+            {"type": request.tool_choice}
+            if request.tool_choice in server_types
+            else {"type": "function", "name": request.tool_choice}
+        )
+    if (reasoning := responses_reasoning(request.reasoning_effort)) is not None:
+        fields["reasoning"] = reasoning
+        # Stateless reasoning models only hand back the opaque reasoning state that continues a
+        # chain of thought when it is requested, and the replayed reasoning items are worthless
+        # without it.
+        fields["include"] = ["reasoning.encrypted_content"]
+    if send_prompt_cache_key and request.cache_key:
+        fields["prompt_cache_key"] = request.cache_key
+    if extra_body:
+        fields["extra_body"] = dict(extra_body)
+    return fields
+
+
 class ResponsesStreamInterrupted(RuntimeError):
     """The endpoint closed a Responses stream before its terminal event.
 
@@ -208,63 +256,62 @@ class ResponsesStreamInterrupted(RuntimeError):
     """
 
 
-def _stream_error_message(event: Any) -> str:
+def _stream_error_message(event: Mapping[str, JsonValue]) -> str:
     """Render an ``error`` stream event, which carries ``code`` and ``message`` directly."""
-    code = getattr(event, "code", None)
-    message = str(getattr(event, "message", "") or "Responses API stream failed")
+    code = event.get("code")
+    message = read_str(event.get("message")) or "Responses API stream failed"
     return f"Responses API error ({code}): {message}" if code else f"Responses API error: {message}"
 
 
 async def stream_responses(
-    stream: Any,
+    stream: AsyncIterable[JsonObject],
     *,
     provider: str,
     model: str,
     local_search_tool: str | None = None,
 ) -> AsyncIterator[ModelEvent]:
-    """Convert one OpenAI-compatible Responses stream to normalized events."""
+    """Convert one OpenAI-compatible Responses stream, as JSON events, to normalized events."""
     text = ""
     reasoning = ""
     refusal_text = ""
-    terminal: Any = None
+    terminal: JsonObject | None = None
     server_calls: dict[str, ServerToolCall] = {}
     #: Output items by ``output_index``: opened by ``output_item.added``, closed by ``.done``.
     open_items: set[int] = set()
-    done_items: dict[int, dict[str, Any]] = {}
+    done_items: dict[int, JsonObject] = {}
     last_event = ""
 
     async for event in stream:
-        event_type = str(getattr(event, "type", ""))
+        event_type = read_str(event.get("type"))
         last_event = event_type or last_event
         match event_type:
             case "response.output_text.delta":
-                delta = str(getattr(event, "delta", ""))
+                delta = read_str(event.get("delta"))
                 if delta:
                     text += delta
                     yield ModelEvent.text(delta)
             case "response.reasoning_text.delta" | "response.reasoning_summary_text.delta":
-                delta = str(getattr(event, "delta", ""))
+                delta = read_str(event.get("delta"))
                 if delta:
                     reasoning += delta
                     yield ModelEvent.reasoning(delta)
             case "response.refusal.delta":
                 # A refusal is the model's answer, so it is shown like any other text, and it is
                 # also what the stop explains itself with.
-                delta = str(getattr(event, "delta", ""))
+                delta = read_str(event.get("delta"))
                 if delta:
                     text += delta
                     refusal_text += delta
                     yield ModelEvent.text(delta)
             case "response.output_item.added":
-                item = _object_mapping(getattr(event, "item", None))
-                item_type = str(item.get("type", ""))
-                open_items.add(int(getattr(event, "output_index", 0)))
+                item = read_object(event.get("item"))
+                item_type = read_str(item.get("type"))
+                item_index = read_int(event.get("output_index"))
+                open_items.add(item_index)
                 if item_type == "function_call":
-                    yield ModelEvent.tool_call(_function_call_start(item, int(getattr(event, "output_index", 0))))
+                    yield ModelEvent.tool_call(_function_call_start(item, item_index))
                 elif _is_client_tool_search(item) and local_search_tool is not None:
-                    yield ModelEvent.tool_call(
-                        _client_tool_search_start(item, int(getattr(event, "output_index", 0)), local_search_tool)
-                    )
+                    yield ModelEvent.tool_call(_client_tool_search_start(item, item_index, local_search_tool))
                 elif _is_server_tool_item(item_type):
                     call = _server_tool_call(item)
                     server_calls[call.id] = call
@@ -272,14 +319,14 @@ async def stream_responses(
             case "response.function_call_arguments.delta":
                 yield ModelEvent.tool_call(
                     ToolCallDelta(
-                        index=int(getattr(event, "output_index", 0)),
-                        arguments_delta=str(getattr(event, "delta", "")),
+                        index=read_int(event.get("output_index")),
+                        arguments_delta=read_str(event.get("delta")),
                     )
                 )
             case "response.output_item.done":
-                item = _object_mapping(getattr(event, "item", None))
-                item_type = str(item.get("type", ""))
-                item_index = int(getattr(event, "output_index", 0))
+                item = read_object(event.get("item"))
+                item_type = read_str(item.get("type"))
+                item_index = read_int(event.get("output_index"))
                 open_items.discard(item_index)
                 done_items[item_index] = item
                 if _is_server_tool_item(item_type) and not (
@@ -302,10 +349,11 @@ async def stream_responses(
                     else:
                         yield ModelEvent.server_tool_completed(result)
             case "response.completed" | "response.incomplete":
-                terminal = getattr(event, "response", None)
+                response_payload = event.get("response")
+                terminal = response_payload if isinstance(response_payload, dict) else None
             case "response.failed":
-                response = _object_mapping(getattr(event, "response", None))
-                error = _object_mapping(response.get("error"))
+                response = read_object(event.get("response"))
+                error = read_object(response.get("error"))
                 if (refusal := refusal_from_response_error(error)) is not None:
                     # A policy refused the request. It is answered as a refusal, with whatever
                     # was written before it, so the host is told why instead of seeing a crash.
@@ -317,8 +365,7 @@ async def stream_responses(
                         )
                     )
                     return
-                message = error.get("message") or "Responses API stream failed"
-                raise RuntimeError(str(message))
+                raise RuntimeError(read_str(error.get("message")) or "Responses API stream failed")
             case "error":
                 # Mid-stream failures (rate limits, overload, context overflow)
                 # arrive as a bare ``error`` event, after which the stream just
@@ -326,11 +373,8 @@ async def stream_responses(
                 # terminal response.
                 raise RuntimeError(_stream_error_message(event))
 
-    if terminal is None:
-        payload = _recover_unterminated(done_items, open_items, last_event)
-    else:
-        payload = _object_mapping(terminal)
-    output = [_object_mapping(item) for item in payload.get("output", ())]
+    payload = _recover_unterminated(done_items, open_items, last_event) if terminal is None else terminal
+    output = read_objects(payload.get("output"))
     if not text:
         text = _response_text(output)
     if not reasoning:
@@ -346,7 +390,7 @@ async def stream_responses(
     if refusal_text and stop.ok:
         # A refusal content block arrives in a response whose status is ``completed``.
         stop = StopInfo(StopReason.REFUSAL, raw=reason, category="refusal", message=refusal_text)
-    replay: tuple[Mapping[str, Any], ...] = tuple(output)
+    replay: tuple[Mapping[str, JsonValue], ...] = tuple(output)
     if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
         # The calls are withheld from the message, so the provider's record of them goes too.
         replay = withhold_replay_blocks(
@@ -364,24 +408,22 @@ async def stream_responses(
                 replay_blocks=replay,
             ),
             finish_reason=reason,
-            usage=_responses_usage(_object_mapping(payload.get("usage"))),
+            usage=_responses_usage(read_object(payload.get("usage"))),
             stop=stop,
         )
     )
 
 
-def _finish_reason(payload: Mapping[str, Any]) -> str | None:
+def _finish_reason(payload: Mapping[str, JsonValue]) -> str | None:
     """Prefer why a response is incomplete over the bare ``incomplete`` status."""
-    details = _object_mapping(payload.get("incomplete_details"))
+    details = read_object(payload.get("incomplete_details"))
     reason = details.get("reason")
     if reason:
         return str(reason)
     return str(payload["status"]) if payload.get("status") is not None else None
 
 
-def _recover_unterminated(
-    done_items: Mapping[int, Mapping[str, Any]], open_items: set[int], last_event: str
-) -> dict[str, Any]:
+def _recover_unterminated(done_items: Mapping[int, JsonObject], open_items: set[int], last_event: str) -> JsonObject:
     """Rebuild a response from finished output items when the terminal event is missing.
 
     Some gateways drop the final ``response.completed`` after forwarding every
@@ -394,7 +436,8 @@ def _recover_unterminated(
     """
     if done_items and not open_items:
         logger.warning("Responses stream ended without a terminal event; using %d finished item(s)", len(done_items))
-        return {"status": "incomplete", "output": [done_items[index] for index in sorted(done_items)]}
+        output: list[JsonValue] = [done_items[index] for index in sorted(done_items)]
+        return {"status": "incomplete", "output": output}
     detail = f"last event: {last_event or 'none'}"
     if open_items:
         detail += f"; {len(open_items)} output item(s) never finished"
@@ -404,10 +447,10 @@ def _recover_unterminated(
     )
 
 
-def _responses_user_content(message: UserMessage) -> str | list[dict[str, Any]]:
+def _responses_user_content(message: UserMessage) -> str | list[JsonValue]:
     if isinstance(message.content, str):
         return message.content
-    content: list[dict[str, Any]] = []
+    content: list[JsonValue] = []
     for part in message.content:
         match part:
             case TextContent(text=text):
@@ -426,17 +469,7 @@ def _responses_user_content(message: UserMessage) -> str | list[dict[str, Any]]:
     return content
 
 
-def _object_mapping(value: Any) -> dict[str, Any]:
-    if value is None:
-        return {}
-    if isinstance(value, Mapping):
-        return dict(value)
-    if hasattr(value, "model_dump"):
-        return value.model_dump(exclude_none=True)
-    raise TypeError(f"Responses API object did not normalize to a mapping: {value!r}")
-
-
-def _function_call_start(item: Mapping[str, Any], index: int) -> ToolCallDelta:
+def _function_call_start(item: Mapping[str, JsonValue], index: int) -> ToolCallDelta:
     return ToolCallDelta(
         index=index,
         id_delta=str(item.get("call_id") or item.get("id") or f"call_{index}"),
@@ -445,7 +478,7 @@ def _function_call_start(item: Mapping[str, Any], index: int) -> ToolCallDelta:
 
 
 def _response_tool_call(
-    item: Mapping[str, Any], *, index: int = 0, finish_reason: str | None = "completed"
+    item: Mapping[str, JsonValue], *, index: int = 0, finish_reason: str | None = "completed"
 ) -> ToolCall:
     """Decode one function call; undecodable arguments become a model-visible failure."""
     arguments = item.get("arguments") or "{}"
@@ -457,48 +490,47 @@ def _response_tool_call(
     return ToolCall(id=call_id, name=name, arguments=dict(arguments))
 
 
-def _response_text(output: Sequence[Mapping[str, Any]]) -> str:
+def _response_text(output: Sequence[Mapping[str, JsonValue]]) -> str:
     return "".join(
         str(part.get("text") or part.get("refusal") or "")
         for item in output
         if item.get("type") == "message"
-        for part in item.get("content", ())
-        if isinstance(part, Mapping) and part.get("type") in {"output_text", "refusal"}
+        for part in read_objects(item.get("content"))
+        if part.get("type") in {"output_text", "refusal"}
     )
 
 
-def _response_refusal(output: Sequence[Mapping[str, Any]]) -> str:
+def _response_refusal(output: Sequence[Mapping[str, JsonValue]]) -> str:
     """Return the text of the refusal content blocks of a response, or an empty string."""
     return "".join(
         str(part.get("refusal") or "")
         for item in output
         if item.get("type") == "message"
-        for part in item.get("content", ())
-        if isinstance(part, Mapping) and part.get("type") == "refusal"
+        for part in read_objects(item.get("content"))
+        if part.get("type") == "refusal"
     )
 
 
-def _response_reasoning(output: Sequence[Mapping[str, Any]]) -> str:
+def _response_reasoning(output: Sequence[Mapping[str, JsonValue]]) -> str:
     rendered: list[str] = []
     for item in output:
         if item.get("type") != "reasoning":
             continue
-        parts = item.get("content") or item.get("summary") or ()
-        rendered.extend(str(part.get("text", "")) for part in parts if isinstance(part, Mapping))
+        rendered.extend(str(part.get("text", "")) for part in read_objects(item.get("content") or item.get("summary")))
     return "".join(rendered)
 
 
-def _responses_usage(payload: Mapping[str, Any]) -> ModelUsage:
-    input_details = _object_mapping(payload.get("input_tokens_details"))
-    output_details = _object_mapping(payload.get("output_tokens_details"))
+def _responses_usage(payload: Mapping[str, JsonValue]) -> ModelUsage:
+    input_details = read_object(payload.get("input_tokens_details"))
+    output_details = read_object(payload.get("output_tokens_details"))
     cache_reported = any(key in input_details for key in ("cached_tokens", "cache_write_tokens"))
     return ModelUsage(
-        input_tokens=int(payload.get("input_tokens", 0) or 0),
-        output_tokens=int(payload.get("output_tokens", 0) or 0),
-        cache_read_tokens=int(input_details.get("cached_tokens", 0) or 0),
-        cache_write_tokens=int(input_details.get("cache_write_tokens", 0) or 0),
+        input_tokens=read_int(payload.get("input_tokens")),
+        output_tokens=read_int(payload.get("output_tokens")),
+        cache_read_tokens=read_int(input_details.get("cached_tokens")),
+        cache_write_tokens=read_int(input_details.get("cache_write_tokens")),
         cache_reported=cache_reported,
-        reasoning_tokens=int(output_details.get("reasoning_tokens", 0) or 0),
+        reasoning_tokens=read_int(output_details.get("reasoning_tokens")),
     )
 
 
@@ -506,12 +538,12 @@ def _is_server_tool_item(item_type: str) -> bool:
     return item_type.endswith("_call") and item_type not in {"function_call", "custom_tool_call"}
 
 
-def _is_client_tool_search(item: Mapping[str, Any]) -> bool:
+def _is_client_tool_search(item: Mapping[str, JsonValue]) -> bool:
     """Whether one provider item asks this client to run a tool search."""
     return item.get("type") == "tool_search_call" and item.get("execution") == "client"
 
 
-def _client_tool_search_start(item: Mapping[str, Any], index: int, tool_name: str) -> ToolCallDelta:
+def _client_tool_search_start(item: Mapping[str, JsonValue], index: int, tool_name: str) -> ToolCallDelta:
     """Expose one client search request as an ordinary local tool call."""
     return ToolCallDelta(
         index=index,
@@ -521,7 +553,7 @@ def _client_tool_search_start(item: Mapping[str, Any], index: int, tool_name: st
     )
 
 
-def _client_tool_search_call(item: Mapping[str, Any], tool_name: str) -> ToolCall:
+def _client_tool_search_call(item: Mapping[str, JsonValue], tool_name: str) -> ToolCall:
     """Complete one client search request as an ordinary local tool call."""
     arguments = item.get("arguments")
     return ToolCall(
@@ -532,7 +564,7 @@ def _client_tool_search_call(item: Mapping[str, Any], tool_name: str) -> ToolCal
 
 
 def _local_or_function_call(
-    item: Mapping[str, Any], local_search_tool: str | None, *, index: int = 0, finish_reason: str | None = None
+    item: Mapping[str, JsonValue], local_search_tool: str | None, *, index: int = 0, finish_reason: str | None = None
 ) -> ToolCall | None:
     """Normalize one response output item into a local tool call when it is one."""
     if item.get("type") == "function_call":
@@ -542,7 +574,7 @@ def _local_or_function_call(
     return None
 
 
-def _server_tool_call(item: Mapping[str, Any]) -> ServerToolCall:
+def _server_tool_call(item: Mapping[str, JsonValue]) -> ServerToolCall:
     item_type = str(item.get("type", "server_tool_call"))
     name = str(item.get("name") or item_type.removesuffix("_call"))
     input_value = item.get("action", item.get("input"))
@@ -550,7 +582,7 @@ def _server_tool_call(item: Mapping[str, Any]) -> ServerToolCall:
     return ServerToolCall(id=str(item.get("id") or item.get("call_id")), name=name, input=input_mapping)
 
 
-def _server_tool_error(item: Mapping[str, Any]) -> str | None:
+def _server_tool_error(item: Mapping[str, JsonValue]) -> str | None:
     status = str(item.get("status", "completed"))
     if status not in {"failed", "incomplete"}:
         return None

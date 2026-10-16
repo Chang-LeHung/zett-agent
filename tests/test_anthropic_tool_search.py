@@ -26,13 +26,8 @@ from zett_agent.model import (
     RetryOptions,
     ToolDefinition,
 )
-from zett_agent.providers.anthropic import (
-    AnthropicProvider,
-    _apply_prompt_cache,
-    _search_result_blocks,
-    _to_anthropic_content_blocks,
-    _tools_to_anthropic_payload,
-)
+from zett_agent.providers.anthropic import AnthropicProvider
+from zett_agent.providers.anthropic_compatible import messages_tools, search_result_blocks, to_content_blocks
 from zett_agent.providers.base import ProviderResponseError
 from zett_agent.providers.deepseek import DeepSeekProvider
 from zett_agent.providers.google import GoogleProvider
@@ -202,14 +197,14 @@ async def test_tool_search_composes_with_description_placement():
 
 
 def test_deferred_and_search_definitions_render_as_anthropic_tools():
-    rendered = _tools_to_anthropic_payload(
+    rendered = messages_tools(
         (ToolDefinition("later", "Later", {"type": "object"}, deferred=True), search_definition())
     )
 
     assert rendered[0]["defer_loading"] is True and "defer_loading" not in rendered[1]
     assert rendered[1]["name"] == "tool_search"
     with pytest.raises(ValueError, match="Only one local tool search"):
-        _tools_to_anthropic_payload((search_definition(), search_definition()))
+        messages_tools((search_definition(), search_definition()))
 
 
 def test_deferred_tools_are_declared_normally_when_nothing_can_load_them():
@@ -218,11 +213,11 @@ def test_deferred_tools_are_declared_normally_when_nothing_can_load_them():
 
     later = ToolDefinition("later", "Later", {"type": "object"}, deferred=True)
 
-    assert "defer_loading" not in _tools_to_anthropic_payload((later,))[0]
+    assert "defer_loading" not in messages_tools((later,))[0]
     hosted = (ServerToolDefinition(type="tool_search_tool_bm25_20251119", configuration={"name": "tool_search"}),)
-    assert _tools_to_anthropic_payload((later,), hosted)[0]["defer_loading"] is True
+    assert messages_tools((later,), hosted)[0]["defer_loading"] is True
     unrelated = (ServerToolDefinition(type="web_search_20250305", configuration={"name": "web_search"}),)
-    assert "defer_loading" not in _tools_to_anthropic_payload((later,), unrelated)[0]
+    assert "defer_loading" not in messages_tools((later,), unrelated)[0]
 
 
 async def test_a_deferred_tool_without_tool_search_still_reaches_the_model_on_anthropic():
@@ -243,11 +238,13 @@ def test_cache_marker_skips_deferred_tools_and_tolerates_having_only_deferred_on
     body: dict[str, Any] = {"messages": []}
     tools = [{"name": "a"}, {"name": "b", "defer_loading": True}]
 
-    _apply_prompt_cache(body, tools)
+    provider = object.__new__(AnthropicProvider)
+    provider.prompt_cache = True
+    provider.mark_cache(body, tools)
     assert tools[0]["cache_control"] == {"type": "ephemeral"} and "cache_control" not in tools[1]
 
     only_deferred = [{"name": "b", "defer_loading": True}]
-    _apply_prompt_cache({"messages": []}, only_deferred)
+    provider.mark_cache({"messages": []}, only_deferred)
     assert "cache_control" not in only_deferred[0]
 
 
@@ -258,7 +255,7 @@ def test_search_results_become_tool_references_in_order():
         content=json.dumps([{"name": "b", "type": "function"}, {"name": "a", "type": "function"}]),
     )
 
-    assert _search_result_blocks(message) == [
+    assert search_result_blocks(message) == [
         {"type": "tool_reference", "tool_name": "b"},
         {"type": "tool_reference", "tool_name": "a"},
     ]
@@ -267,21 +264,21 @@ def test_search_results_become_tool_references_in_order():
 def test_an_empty_search_is_reported_as_text_because_empty_references_are_invalid():
     message = ToolMessage(tool_call_id="t1", name="tool_search", content="[]")
 
-    assert _search_result_blocks(message) == [{"type": "text", "text": "No matching tools found."}]
+    assert search_result_blocks(message) == [{"type": "text", "text": "No matching tools found."}]
 
 
 @pytest.mark.parametrize("content", ["not json", "{}", "42", '[{"type": "function"}]', '["a"]'])
 def test_a_malformed_search_result_is_a_provider_error(content):
     with pytest.raises(ProviderResponseError):
-        _search_result_blocks(ToolMessage(tool_call_id="t1", name="tool_search", content=content))
+        search_result_blocks(ToolMessage(tool_call_id="t1", name="tool_search", content=content))
 
 
 def test_only_the_search_tools_own_result_is_converted_and_failures_stay_errors():
     ordinary = ToolMessage(tool_call_id="t1", name="echo", content='[{"name": "x"}]')
     failed = ToolMessage(tool_call_id="t2", name="tool_search", content="boom", success=False)
 
-    assert _to_anthropic_content_blocks(ordinary, search_tool="tool_search")[0]["content"] == '[{"name": "x"}]'
-    block = _to_anthropic_content_blocks(failed, search_tool="tool_search")[0]
+    assert to_content_blocks(ordinary, search_tool="tool_search")[0]["content"] == '[{"name": "x"}]'
+    block = to_content_blocks(failed, search_tool="tool_search")[0]
     assert block["content"] == "boom" and block["is_error"] is True
 
 

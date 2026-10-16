@@ -1,76 +1,41 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
-import ssl
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from functools import wraps
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from .._compat import aclosing_stream
 from .._compat import timeout as async_timeout
 from ..exceptions import AgentError
-from ..messages import (
-    AnyMessage,
-    AssistantMessage,
-    ImageBytesSource,
-    ImageContent,
-    ImageDetail,
-    ImageUrlSource,
-    Message,
-    SystemMessage,
-    TextContent,
-    ToolCall,
-    ToolMessage,
-    UserMessage,
-)
+from ..json_types import JsonValue
+from ..messages import ToolCall
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
     DEFAULT_TIMEOUT_OPTIONS,
     ModelEvent,
     ModelRequest,
-    ModelResponse,
     ModelUsage,
     ReasoningEffort,
     RetryOptions,
-    ServerToolDefinition,
     TimeoutOptions,
     ToolCallDelta,
     ToolDefinition,
-    validate_response,
     validate_retry,
-    validate_timeout,
 )
 
 if TYPE_CHECKING:
     import httpx
-    from openai.types.chat import (
-        ChatCompletionContentPartImageParam,
-        ChatCompletionContentPartParam,
-        ChatCompletionToolParam,
-    )
-    from openai.types.shared_params import FunctionDefinition
 
-#: The OpenAI SDK is imported where this adapter needs it -- client construction
-#: and request failures -- because importing it alone costs a few hundred
-#: milliseconds. Payload rendering therefore uses plain dictionaries that still
-#: type-check against the SDK's TypedDicts.
-from ..stop import StopInfo, StopReason, classify_stop
+from ..stop import StopInfo
 from ..sync_runtime import SyncMethodsMixin
 from .http_errors import HttpFailure, failure_message, read_failure
-from .responses import (
-    ResponsesStreamInterrupted,
-    local_tool_search_name,
-    responses_input,
-    responses_reasoning,
-    responses_tools,
-    stream_responses,
-)
-from .stop_reasons import refusal_from_status_error
-from .tool_arguments import ToolArgumentsError, decode_tool_arguments, tool_call_from_arguments
-from .tool_images import expand_tool_images
+from .responses import ResponsesStreamInterrupted
+from .tool_arguments import tool_call_from_arguments
+
+T = TypeVar("T")
 
 
 class ProviderError(AgentError):
@@ -173,7 +138,24 @@ def http_error(status: int, failure: HttpFailure, message: str) -> ProviderHTTPE
     )
 
 
-async def require_event_stream(stream: Any, provider: str) -> None:
+class SDKStream(Protocol):
+    """What a provider SDK's streaming reply exposes: the HTTP response it is reading, and a way to close it.
+
+    Both the OpenAI and the Anthropic SDK return an object of this shape. A stream built by hand
+    (a test double, a custom client) may have no response, which is why it can be None.
+    """
+
+    @property
+    def response(self) -> httpx.Response | None:
+        """The HTTP response being read, or None when the stream is not backed by one."""
+        ...
+
+    async def close(self) -> None:
+        """Release the connection."""
+        ...
+
+
+async def require_event_stream(stream: SDKStream, provider: str) -> None:
     """Fail clearly when a streaming request was answered with a web page or JSON.
 
     A reverse proxy's error page, a captive portal, or a gateway that does not support streaming
@@ -239,11 +221,11 @@ def httpx_timeout(options: TimeoutOptions) -> httpx.Timeout:
 
 
 async def guard_idle(
-    stream: Any,
+    stream: AsyncIterable[T],
     options: TimeoutOptions,
     *,
     first: float | None = None,
-) -> AsyncIterator[Any]:
+) -> AsyncIterator[T]:
     """Yield what ``stream`` yields, giving up when it goes silent for longer than allowed.
 
     Every wait for the next item is limited by ``options.idle``. A stream whose request is only
@@ -322,7 +304,7 @@ def validate_extra_query(value: Mapping[str, str] | None) -> dict[str, str]:
     return query
 
 
-def validate_extra_body(value: Mapping[str, Any] | None) -> dict[str, Any]:
+def validate_extra_body(value: Mapping[str, JsonValue] | None) -> dict[str, JsonValue]:
     """Copy extra JSON body fields merged into every request body.
 
     The fields are applied last, so they can add a vendor option the adapter
@@ -341,7 +323,7 @@ def validate_extra_body(value: Mapping[str, Any] | None) -> dict[str, Any]:
     return dict(value)
 
 
-def _reasoning_effort_to_budget(effort: ReasoningEffort) -> int:
+def reasoning_effort_to_budget(effort: ReasoningEffort) -> int:
     """Map provider-neutral effort to a token budget used by some vendors."""
     match effort:
         case ReasoningEffort.OFF:
@@ -360,162 +342,14 @@ def _reasoning_effort_to_budget(effort: ReasoningEffort) -> int:
             return 32768
 
 
-def _to_model_data(payload: Any) -> Mapping[str, Any]:
-    if isinstance(payload, dict):
-        return payload
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump(exclude_none=True)
-    if hasattr(payload, "dict"):
-        return payload.dict()
-    if isinstance(payload, Message):
-        data = asdict(payload)
-        # The provider SDK may include extra fields that are not part of the public message schema.
-        data.pop("attributes", None)
-        data.pop("persist", None)
-        data.pop("include_in_messages", None)
-        return {"role": payload.role, **data}
-    normalized = json.loads(json.dumps(payload, default=str))
-    if not isinstance(normalized, dict):
-        raise ProviderResponseError(f"Provider SDK value did not normalize to an object: {payload!r}")
-    return normalized
-
-
-def _normalize_image_source(
-    part: ImageUrlSource | ImageBytesSource, detail: ImageDetail = ImageDetail.AUTO
-) -> ChatCompletionContentPartImageParam:
-    """Normalize a typed image source into an OpenAI-compatible content block."""
-    match part:
-        case ImageUrlSource(url=url):
-            return {"type": "image_url", "image_url": {"url": url, "detail": detail.value}}
-        case ImageBytesSource(data=data, media_type=media_type):
-            encoded = base64.b64encode(data).decode("ascii")
-            return {
-                "type": "image_url",
-                "image_url": {"url": f"data:{media_type};base64,{encoded}", "detail": detail.value},
-            }
-        case _:
-            raise ProviderResponseError(f"Unsupported image source type: {part!r}")
-
-
-#: One chat message as this adapter sends it to an OpenAI-compatible endpoint. The SDK's own
-#: ``ChatCompletionMessageParam`` is the strict OpenAI schema, and what is sent here is wider: other
-#: providers take extra keys (DeepSeek's ``reasoning_content``) and multimodal tool results.
-ChatMessagePayload = dict[str, Any]
-
-
-def _message_to_openai_payload(message: AnyMessage) -> ChatMessagePayload:
-    role = message.role
-    match role:
-        case "agent":
-            return {"role": "user", "content": message.content}
-        case "system":
-            if not isinstance(message, SystemMessage):
-                raise ProviderResponseError(f"Invalid system message data type: {type(message)!r}")
-            return {"role": "system", "content": message.content}
-        case "user":
-            if not isinstance(message, UserMessage):
-                raise ProviderResponseError(f"Invalid user message data type: {type(message)!r}")
-            content = message.content
-            match content:
-                case str() as text:
-                    return {"role": "user", "content": text}
-                case []:
-                    return {"role": "user", "content": ""}
-                case list():
-                    parts: list[ChatCompletionContentPartParam] = []
-                    for part in content:
-                        match part:
-                            case TextContent(text=text):
-                                parts.append({"type": "text", "text": text})
-                            case ImageContent(source=source, detail=detail):
-                                parts.append(_normalize_image_source(source, detail))
-                            case _:
-                                raise ProviderResponseError(f"Unsupported user content part: {part!r}")
-                    return {"role": "user", "content": parts}
-                case _:
-                    raise ProviderResponseError(f"Unsupported user content type: {type(content)!r}")
-        case "assistant":
-            if not isinstance(message, AssistantMessage):
-                raise ProviderResponseError(f"Invalid assistant message data type: {type(message)!r}")
-            payload: ChatMessagePayload = {"role": "assistant", "content": message.content}
-            if message.tool_calls:
-                payload["tool_calls"] = [
-                    {
-                        "id": call.id,
-                        "type": "function",
-                        "function": {
-                            "name": call.name,
-                            "arguments": json.dumps(dict(call.arguments), ensure_ascii=False),
-                        },
-                    }
-                    for call in message.tool_calls
-                ]
-            return payload
-        case "tool":
-            if not isinstance(message, ToolMessage):
-                raise ProviderResponseError(f"Invalid tool message data type: {type(message)!r}")
-            return {"role": "tool", "tool_call_id": message.tool_call_id, "content": message.content}
-        case _:
-            raise ProviderResponseError(f"Unsupported role in message conversion: {role}")
-
-
-def _replay_reasoning_content(
-    source_messages: Sequence[AnyMessage],
-    payload_messages: Sequence[ChatMessagePayload],
-    *,
-    provider_name: str,
-) -> list[ChatMessagePayload]:
-    """Replay same-provider reasoning on OpenAI-compatible assistant history.
-
-    Reasoning-aware providers, including DeepSeek thinking mode, require the
-    assistant ``reasoning_content`` to be sent back on later requests. It is
-    model context that cannot be reconstructed from the final answer or tool
-    calls. Messages without provider metadata remain compatible with history
-    created before provider attribution was stored.
-
-    See https://api-docs.deepseek.com/zh-cn/guides/thinking_mode.
-    """
-    rendered = [dict(payload) for payload in payload_messages]
-    for source, target in zip(source_messages, rendered, strict=True):
-        if not isinstance(source, AssistantMessage) or source.reasoning is None:
-            continue
-        if source.provider is not None and source.provider != provider_name:
-            continue
-        target["reasoning_content"] = source.reasoning
-    return rendered
-
-
-def _tools_to_openai_payload(tools: Sequence[ToolDefinition]) -> list[ChatCompletionToolParam]:
-    reject_local_tool_search("Chat Completions", tools)
-    rendered: list[ChatCompletionToolParam] = []
-    for tool in tools:
-        function: FunctionDefinition = {
-            "name": tool.name,
-            "description": tool.description,
-            "parameters": dict(tool.parameters),
-        }
-        rendered.append(
-            {
-                "type": "function",
-                "function": function,
-            }
-        )
-    return rendered
-
-
 def reject_local_tool_search(protocol: str, tools: Sequence[ToolDefinition]) -> None:
     """Fail when a protocol cannot serve tools that stay out of the request."""
     if any(tool.local_tool_search for tool in tools):
         raise ValueError(f"{protocol} cannot answer client-side tool search; use the Responses API")
 
 
-def _server_tools_to_payload(tools: Sequence[ServerToolDefinition]) -> list[Mapping[str, Any]]:
-    """Render opaque server tools without treating them as local functions."""
-    return [{"type": tool.type, **dict(tool.configuration)} for tool in tools]
-
-
 @dataclass
-class _ToolCallAccumulator:
+class ToolCallAccumulator:
     """Temporary state for accumulating fragmented provider tool-call payloads."""
 
     index: int
@@ -529,8 +363,8 @@ class _ToolCallAccumulator:
         self.argument_buffer += delta.arguments_delta
 
 
-def _parse_tool_calls(
-    streams: Mapping[int, _ToolCallAccumulator], finish_reason: str | None = None
+def parse_tool_calls(
+    streams: Mapping[int, ToolCallAccumulator], finish_reason: str | None = None
 ) -> tuple[ToolCall, ...]:
     """Finish accumulated calls; undecodable arguments become model-visible failures."""
     calls: list[ToolCall] = []
@@ -548,19 +382,6 @@ def _parse_tool_calls(
     return tuple(calls)
 
 
-def _parse_tool_arguments(payload: str, *, index: int) -> dict[str, Any]:
-    """Decode one argument object, raising ProviderResponseError when it is unusable.
-
-    See :func:`~zett_agent.providers.tool_arguments.decode_tool_arguments` for
-    the repair rules. Adapters that can keep going after a bad call use
-    :func:`~zett_agent.providers.tool_arguments.tool_call_from_arguments`.
-    """
-    try:
-        return decode_tool_arguments(payload, index=index)
-    except ToolArgumentsError as error:
-        raise ProviderResponseError(str(error)) from error
-
-
 #: Cache counters accepted from OpenAI-compatible payloads. Gateways regularly
 #: relay one protocol's payload through another, so the same number appears
 #: under several spellings; every one of them is read.
@@ -569,14 +390,28 @@ _CACHE_WRITE_KEYS = ("cache_write_tokens", "cache_creation_input_tokens", "cache
 _CACHE_DETAIL_KEYS = ("prompt_tokens_details", "input_tokens_details")
 
 
-def _cache_counters(payload: Mapping[str, Any]) -> tuple[int, int, bool]:
+def _count(value: JsonValue | None) -> int:
+    """Read a token count that a service may spell as an integer, a float, or a numeric string."""
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
+
+
+def _cache_counters(payload: Mapping[str, JsonValue]) -> tuple[int, int, bool]:
     """Read cache counters from a usage mapping in any compatible spelling.
 
     Nested detail objects are applied after the top level so a detailed payload
     wins over a flattened copy of itself, matching the OpenAI schema where
     ``prompt_tokens_details`` is authoritative.
     """
-    sources: list[Mapping[str, Any]] = [payload]
+    sources: list[Mapping[str, JsonValue]] = [payload]
     sources.extend(details for key in _CACHE_DETAIL_KEYS if isinstance(details := payload.get(key), Mapping))
     read_tokens = 0
     write_tokens = 0
@@ -584,16 +419,16 @@ def _cache_counters(payload: Mapping[str, Any]) -> tuple[int, int, bool]:
     for source in sources:
         for key in _CACHE_READ_KEYS:
             if key in source:
-                read_tokens = int(source[key] or 0)
+                read_tokens = _count(source[key])
                 reported = True
         for key in _CACHE_WRITE_KEYS:
             if key in source:
-                write_tokens = int(source[key] or 0)
+                write_tokens = _count(source[key])
                 reported = True
     return read_tokens, write_tokens, reported
 
 
-def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:
+def usage_from_mapping(payload: Mapping[str, JsonValue]) -> ModelUsage:
     """Normalize token usage returned by OpenAI-compatible chat APIs.
 
     This helper is shared by :class:`OpenAIProvider` and
@@ -646,11 +481,11 @@ def _usage_from_mapping(payload: Mapping[str, Any]) -> ModelUsage:
     for details_key in ("completion_tokens_details", "output_tokens_details"):
         details = payload.get(details_key)
         if isinstance(details, Mapping):
-            reasoning_tokens = int(details.get("reasoning_tokens", reasoning_tokens) or 0)
+            reasoning_tokens = _count(details.get("reasoning_tokens", reasoning_tokens))
 
     return ModelUsage(
-        input_tokens=int(input_tokens or 0),
-        output_tokens=int(output_tokens or 0),
+        input_tokens=_count(input_tokens),
+        output_tokens=_count(output_tokens),
         cache_read_tokens=cache_read_tokens,
         cache_write_tokens=cache_write_tokens,
         cache_reported=cache_reported,
@@ -681,7 +516,7 @@ class RetryingProvider(SyncMethodsMixin):
     #: Chat Completions, Google, and Ollama on the withhold-and-search path.
     native_deferred_tools: bool = False
 
-    async def _first_byte(self, opening: Any) -> Any:
+    async def _first_byte(self, opening: Awaitable[T]) -> T:
         """Await ``opening`` (the call that returns once the response headers are in) with its limit.
 
         Raises:
@@ -787,7 +622,7 @@ def retry_model_stream(
     return retrying_stream
 
 
-def _empty_stream_message(provider: str, stream: Any) -> str:
+def empty_stream_message(provider: str, stream: SDKStream) -> str:
     """Say that a response that looked like a stream contained nothing, and what it did say."""
     http = getattr(stream, "response", None)
     status = getattr(http, "status_code", None)
@@ -796,368 +631,3 @@ def _empty_stream_message(provider: str, stream: Any) -> str:
         f"{provider} ended the stream without sending any data (HTTP {status}, {content_type}). "
         "A proxy or gateway in front of the API may have cut the response off, or the endpoint does not stream."
     )
-
-
-def _stream_error_body(error: BaseException) -> dict[str, Any]:
-    """Return the ``code``, ``message`` and ``type`` of an error the SDK raised from a stream."""
-    body = getattr(error, "body", None)
-    kept = {key: body[key] for key in ("code", "message", "type") if key in body} if isinstance(body, Mapping) else {}
-    if "message" not in kept and (message := getattr(error, "message", None)):
-        kept["message"] = str(message)
-    return kept
-
-
-def _stream_error_message(error: BaseException) -> str:
-    """Return one line that says what a stream failed with."""
-    body = _stream_error_body(error)
-    return str(body.get("message") or error)
-
-
-def _chat_stop(
-    finish_reason: str | None,
-    *,
-    has_tool_calls: bool,
-    refusal_text: str,
-    stream_error: Mapping[str, Any],
-    native_finish_reason: str | None,
-) -> StopInfo:
-    """Build the stop of one Chat Completions stream from everything it said about its end.
-
-    The ``finish_reason`` is the base. A model that wrote a refusal (OpenAI's ``refusal``
-    field) finished with ``stop``, so the refusal text, not the reason, decides that it was
-    declined. A chunk-level ``error`` means the stream failed even if it names no reason, so
-    it makes the stop an interruption unless the reason already says something stronger.
-    """
-    detail: dict[str, Any] = {}
-    if native_finish_reason is not None and native_finish_reason != finish_reason:
-        detail["native_finish_reason"] = native_finish_reason
-    if stream_error:
-        detail["error"] = {key: stream_error[key] for key in ("code", "message", "type") if key in stream_error}
-    raw = finish_reason
-    if raw is None and stream_error:
-        raw = "error"
-    stop = classify_stop(raw, has_tool_calls=has_tool_calls, detail=detail)
-    if refusal_text and stop.ok:
-        return StopInfo(
-            StopReason.REFUSAL,
-            raw=raw,
-            category="refusal",
-            message=refusal_text,
-            detail=stop.detail,
-        )
-    if refusal_text and stop.message is None:
-        return StopInfo(stop.reason, raw=stop.raw, category=stop.category, message=refusal_text, detail=stop.detail)
-    if stream_error and stop.message is None:
-        message = stream_error.get("message")
-        if message:
-            return StopInfo(stop.reason, raw=stop.raw, category=stop.category, message=str(message), detail=stop.detail)
-    return stop
-
-
-class _OpenAIStyleProvider(RetryingProvider):
-    """Shared implementation for providers exposing OpenAI-style streaming chunks."""
-
-    provider_name: str = "openai"
-
-    def __init__(
-        self,
-        *,
-        model: str,
-        api_key: str,
-        base_url: str,
-        transport: httpx.AsyncBaseTransport | None = None,
-        temperature: float | None = None,
-        response: bool = False,
-        retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
-        send_prompt_cache_key: bool = True,
-        extra_headers: Mapping[str, str] | None = None,
-        extra_query: Mapping[str, str] | None = None,
-        extra_body: Mapping[str, Any] | None = None,
-        timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
-    ) -> None:
-        # HTTP clients and the trust store are only needed once a provider is
-        # constructed, so importing them here keeps module import cheap.
-        import httpx
-        import truststore
-
-        validate_retry(retry)
-        validate_timeout(timeout)
-        validate_response(response)
-        self.retry = retry
-        self.timeout = timeout
-        self.send_prompt_cache_key = send_prompt_cache_key
-        self.extra_headers = validate_extra_headers(extra_headers)
-        self.extra_query = validate_extra_query(extra_query)
-        self.extra_body = validate_extra_body(extra_body)
-        if not api_key:
-            raise ValueError("api_key is required")
-        self.model = model
-        self.temperature = temperature
-        self.response = response
-        self._http_client = httpx.AsyncClient(
-            transport=transport,
-            verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
-            trust_env=True,
-        )
-        from openai import AsyncOpenAI
-
-        self._client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            http_client=self._http_client,
-            max_retries=0,
-            timeout=httpx_timeout(timeout),
-            default_headers=self.extra_headers or None,
-            default_query=self.extra_query or None,
-        )
-
-    async def _request(self, request: ModelRequest) -> Any:
-        if self.response:
-            return await self._request_response(request)
-        source_messages = expand_tool_images(request.messages)
-        messages = _replay_reasoning_content(
-            source_messages,
-            [_message_to_openai_payload(message) for message in source_messages],
-            provider_name=self.provider_name,
-        )
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "tools": [
-                *_tools_to_openai_payload(request.tools),
-                *_server_tools_to_payload(request.server_tools),
-            ],
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
-        payload.update(self._provider_specific_request_fields(request))
-        if not request.tools and not request.server_tools:
-            payload.pop("tools")
-        if self.temperature is not None:
-            payload["temperature"] = self.temperature
-        if request.tool_choice:
-            payload["tool_choice"] = {"type": "function", "function": {"name": request.tool_choice}}
-        if self.send_prompt_cache_key and request.cache_key:
-            payload["prompt_cache_key"] = request.cache_key
-        extra_body = {**self._provider_specific_request_extra_fields(request), **self.extra_body}
-        if extra_body:
-            payload["extra_body"] = extra_body
-        from openai import APIStatusError
-
-        try:
-            return await self._first_byte(self._client.chat.completions.create(**payload))
-        except APIStatusError as error:
-            status_code = error.status_code
-            refusal = refusal_from_status_error(status_code, error.body)
-            if refusal is not None:
-                raise ProviderRefusalError(refusal) from error
-            status, failure, message = describe_status_error(self.provider_name, error)
-            if status == 401:
-                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
-            raise http_error(status, failure, message) from error
-
-    async def _request_response(self, request: ModelRequest) -> Any:
-        """Open a stateless Responses API stream for OpenAI or DeepSeek."""
-        tools = responses_tools(request.tools, request.server_tools)
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "input": responses_input(
-                request.messages,
-                provider=self.provider_name,
-                model=self.model,
-                local_search_tool=local_tool_search_name(request.tools),
-            ),
-            "stream": True,
-            "store": False,
-            "parallel_tool_calls": request.parallel_tool_call,
-        }
-        if tools:
-            payload["tools"] = tools
-        if self.temperature is not None:
-            payload["temperature"] = self.temperature
-        if request.tool_choice:
-            server_types = {tool.type for tool in request.server_tools}
-            payload["tool_choice"] = (
-                {"type": request.tool_choice}
-                if request.tool_choice in server_types
-                else {"type": "function", "name": request.tool_choice}
-            )
-        reasoning = responses_reasoning(request.reasoning_effort)
-        if reasoning is not None:
-            payload["reasoning"] = reasoning
-            # Stateless reasoning models only hand back the opaque reasoning
-            # state that continues a chain of thought when it is requested, and
-            # the replayed reasoning items are worthless without it.
-            payload["include"] = ["reasoning.encrypted_content"]
-        if self.send_prompt_cache_key and request.cache_key:
-            payload["prompt_cache_key"] = request.cache_key
-        if self.extra_body:
-            payload["extra_body"] = dict(self.extra_body)
-        from openai import APIStatusError
-
-        try:
-            return await self._first_byte(self._client.responses.create(**payload))
-        except APIStatusError as error:
-            refusal = refusal_from_status_error(error.status_code, error.body)
-            if refusal is not None:
-                raise ProviderRefusalError(refusal) from error
-            status, failure, message = describe_status_error(self.provider_name, error)
-            if status == 401:
-                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
-            raise http_error(status, failure, message) from error
-
-    def _provider_specific_request_fields(self, request: ModelRequest) -> dict[str, Any]:
-        return (
-            {}
-            if request.reasoning_effort == ReasoningEffort.OFF
-            else {"reasoning_effort": request.reasoning_effort.value}
-        )
-
-    async def aclose(self) -> None:
-        """Close the SDK's owned HTTP connection pool."""
-        await self._client.close()
-
-    def _provider_specific_request_extra_fields(self, request: ModelRequest) -> dict[str, Any]:
-        return {}
-
-    @retry_model_stream
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        local_search_tool = local_tool_search_name(request.tools)
-        from openai import APIConnectionError, APITimeoutError
-        from openai import APIError as OpenAIError
-
-        try:
-            response = await self._request(request)
-        except ProviderRefusalError as refusal:
-            # The request was refused before any output. It is answered as a refusal, not
-            # raised, so the conversation goes on and the host is told why.
-            yield ModelEvent.completed(
-                ModelResponse(
-                    AssistantMessage(content="", provider=self.provider_name, model=self.model),
-                    finish_reason=refusal.stop.raw,
-                    stop=refusal.stop,
-                )
-            )
-            return
-        await require_event_stream(response, self.provider_name)
-        if self.response:
-            try:
-                async for event in stream_responses(
-                    guard_idle(response, self.timeout),
-                    provider=self.provider_name,
-                    model=self.model,
-                    local_search_tool=local_search_tool,
-                ):
-                    yield event
-            except (RuntimeError, TypeError, ValueError, json.JSONDecodeError) as error:
-                raise ProviderResponseError(str(error)) from error
-            finally:
-                await response.close()
-            return
-
-        text = ""
-        reasoning = ""
-        streams: dict[int, _ToolCallAccumulator] = {}
-        finish_reason = None
-        refusal_text = ""
-        stream_error: Mapping[str, Any] = {}
-        native_finish_reason: str | None = None
-        usage = ModelUsage()
-
-        chunks = 0
-        try:
-            async for chunk in guard_idle(response, self.timeout):
-                if chunk is None:
-                    continue
-                chunks += 1
-                match getattr(chunk, "usage", None):
-                    case None:
-                        pass
-                    case usage_payload:
-                        raw = _to_model_data(usage_payload)
-                        usage = _usage_from_mapping(raw)
-
-                choices = getattr(chunk, "choices", None)
-                if not choices:
-                    continue
-                if isinstance(native := getattr(choices[0], "native_finish_reason", None), str):
-                    native_finish_reason = native
-                delta = getattr(choices[0], "delta", None)
-                if delta is None:
-                    if getattr(choices[0], "finish_reason", None):
-                        finish_reason = choices[0].finish_reason
-                    continue
-
-                refusal_fragment = getattr(delta, "refusal", None)
-                if isinstance(refusal_fragment, str) and refusal_fragment:
-                    # A refusal is the model's answer to the user, so it is shown like any
-                    # other text, and it is also what the stop explains itself with.
-                    refusal_text += refusal_fragment
-                    text += refusal_fragment
-                    yield ModelEvent.text(refusal_fragment)
-
-                content = getattr(delta, "content", None)
-                if isinstance(content, str) and content:
-                    text += content
-                    yield ModelEvent.text(content)
-
-                reasoning_fragment = getattr(delta, "reasoning_content", None)
-                if isinstance(reasoning_fragment, str) and reasoning_fragment:
-                    reasoning += reasoning_fragment
-                    yield ModelEvent.reasoning(reasoning_fragment)
-
-                for call in getattr(delta, "tool_calls", ()) or ():
-                    call_payload = ToolCallDelta(
-                        index=int(getattr(call, "index", 0)),
-                        id_delta=getattr(call, "id", "") or "",
-                        name_delta=getattr(getattr(call, "function", None), "name", "") or "",
-                        arguments_delta=getattr(getattr(call, "function", None), "arguments", "") or "",
-                    )
-                    stream = streams.setdefault(call_payload.index, _ToolCallAccumulator(index=call_payload.index))
-                    stream.append(call_payload)
-                    yield ModelEvent.tool_call(call_payload)
-
-                match getattr(choices[0], "finish_reason", None):
-                    case str(reason):
-                        finish_reason = reason
-                    case _:
-                        pass
-        except OpenAIError as error:
-            # A gateway reports a failure inside a 200 stream as a chunk with a top-level
-            # ``error`` (OpenRouter does, with ``finish_reason: "error"``), and the SDK turns
-            # that chunk into this exception before the loop above sees it. Before any output
-            # it is raised as a typed error, so a transient failure is retried; after output
-            # the response ends here as an interruption and keeps what was written.
-            if isinstance(error, (APIConnectionError, APITimeoutError)):
-                raise  # a dropped or timed-out connection is not an error the provider reported
-            if not (text or reasoning or streams):
-                raise ProviderResponseError(_stream_error_message(error)) from error
-            stream_error = _stream_error_body(error)
-        finally:
-            await response.close()
-
-        if not chunks:
-            raise ProviderResponseError(_empty_stream_message(self.provider_name, response))
-
-        tool_calls = _parse_tool_calls(streams, finish_reason)
-        response_message = AssistantMessage(
-            content=text,
-            reasoning=reasoning or None,
-            tool_calls=tool_calls,
-            provider=self.provider_name,
-            model=self.model,
-        )
-        yield ModelEvent.completed(
-            ModelResponse(
-                message=response_message,
-                finish_reason=finish_reason,
-                usage=usage,
-                stop=_chat_stop(
-                    finish_reason,
-                    has_tool_calls=bool(tool_calls),
-                    refusal_text=refusal_text,
-                    stream_error=stream_error,
-                    native_finish_reason=native_finish_reason,
-                ),
-            )
-        )

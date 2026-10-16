@@ -41,15 +41,13 @@ from zett_agent.model import (
 from zett_agent.providers.anthropic import AnthropicProvider
 from zett_agent.providers.base import (
     ProviderAuthError,
-    _message_to_openai_payload,
-    _normalize_image_source,
-    _tools_to_openai_payload,
-    _usage_from_mapping,
+    usage_from_mapping,
 )
 from zett_agent.providers.deepseek import DeepSeekProvider
 from zett_agent.providers.google import GoogleProvider
 from zett_agent.providers.ollama import OllamaProvider, _tools_to_ollama_payload
 from zett_agent.providers.openai import OpenAIProvider
+from zett_agent.providers.openai_compatible import chat_image, chat_message, chat_tools
 
 
 def _sse_body(events: list[dict[str, Any]]) -> bytes:
@@ -92,7 +90,7 @@ def _request_with_text_and_tools() -> ModelRequest:
 
 
 def test_normalize_image_source_for_url() -> None:
-    payload = _normalize_image_source(ImageUrlSource(url="https://example.com/cat.png"))
+    payload = chat_image(ImageUrlSource(url="https://example.com/cat.png"))
     assert payload == {
         "type": "image_url",
         "image_url": {
@@ -103,7 +101,7 @@ def test_normalize_image_source_for_url() -> None:
 
 
 def test_normalize_image_source_for_bytes() -> None:
-    payload = _normalize_image_source(ImageBytesSource(data=b"\x89PNG", media_type="image/png"))
+    payload = chat_image(ImageBytesSource(data=b"\x89PNG", media_type="image/png"))
     assert payload["type"] == "image_url"
     assert payload["image_url"]["url"].startswith("data:image/png;base64")
 
@@ -305,7 +303,7 @@ def test_message_to_openai_payload_supports_text_and_image_parts() -> None:
     message = UserMessage(
         content=[TextContent(text="hello"), ImageContent(source=ImageUrlSource(url="https://example.com/a.png"))]
     )
-    payload = _message_to_openai_payload(message)
+    payload = chat_message(message)
     assert payload == {
         "role": "user",
         "content": [
@@ -317,7 +315,7 @@ def test_message_to_openai_payload_supports_text_and_image_parts() -> None:
 
 def test_message_to_openai_payload_supports_image_bytes_parts() -> None:
     message = UserMessage(content=[ImageContent(source=ImageBytesSource(data=b"\x01\x02", media_type="image/jpeg"))])
-    payload = _message_to_openai_payload(message)
+    payload = chat_message(message)
     assert payload["role"] == "user"
     block = payload["content"][0]
     assert block["type"] == "image_url"
@@ -325,7 +323,7 @@ def test_message_to_openai_payload_supports_image_bytes_parts() -> None:
 
 
 def test_usage_from_mapping_normalizes_openai_token_details() -> None:
-    usage = _usage_from_mapping(
+    usage = usage_from_mapping(
         {
             "prompt_tokens": 120,
             "completion_tokens": 45,
@@ -367,7 +365,7 @@ def test_model_usage_separates_an_unreported_cache_from_a_miss() -> None:
 
 
 def test_usage_from_mapping_normalizes_deepseek_cache_counters() -> None:
-    usage = _usage_from_mapping(
+    usage = usage_from_mapping(
         {
             "prompt_tokens": 120,
             "completion_tokens": 45,
@@ -387,7 +385,7 @@ def test_usage_from_mapping_normalizes_deepseek_cache_counters() -> None:
 
 
 def test_usage_from_mapping_accepts_relayed_cache_shapes() -> None:
-    responses_shaped = _usage_from_mapping(
+    responses_shaped = usage_from_mapping(
         {
             "prompt_tokens": 1000,
             "completion_tokens": 10,
@@ -399,7 +397,7 @@ def test_usage_from_mapping_accepts_relayed_cache_shapes() -> None:
     assert responses_shaped.cache_reported is True
     assert responses_shaped.cache_hit_rate == pytest.approx(0.9)
 
-    anthropic_shaped = _usage_from_mapping(
+    anthropic_shaped = usage_from_mapping(
         {
             "input_tokens": 1000,
             "output_tokens": 10,
@@ -414,7 +412,7 @@ def test_usage_from_mapping_accepts_relayed_cache_shapes() -> None:
 
 
 def test_usage_from_mapping_marks_a_cache_silent_gateway_as_unknown() -> None:
-    usage = _usage_from_mapping({"prompt_tokens": 4040, "completion_tokens": 13, "total_tokens": 4053})
+    usage = usage_from_mapping({"prompt_tokens": 4040, "completion_tokens": 13, "total_tokens": 4053})
 
     assert usage.input_tokens == 4040
     assert usage.cache_read_tokens == 0
@@ -423,7 +421,7 @@ def test_usage_from_mapping_marks_a_cache_silent_gateway_as_unknown() -> None:
 
 
 def test_chat_completion_tools_ignore_deferred_loading_marker() -> None:
-    rendered = _tools_to_openai_payload(
+    rendered = chat_tools(
         (ToolDefinition("later", "Deferred only on Responses API", {"type": "object"}, deferred=True),)
     )
     assert rendered == [
@@ -442,7 +440,7 @@ def test_chat_ollama_and_google_reject_a_local_tool_search_tool() -> None:
     search = ToolDefinition("find_tools", "Find tools", {"type": "object"}, local_tool_search=True)
 
     with pytest.raises(ValueError, match="client-side tool search"):
-        _tools_to_openai_payload((search,))
+        chat_tools((search,))
     with pytest.raises(ValueError, match="client-side tool search"):
         _tools_to_ollama_payload((search,))
     with pytest.raises(ValueError, match="client-side tool search"):

@@ -42,8 +42,8 @@ from zett_agent.messages import (
     ToolMessage,
 )
 from zett_agent.model import ModelEvent, ModelRequest, ModelResponse, RetryOptions
-from zett_agent.providers.base import _tools_to_openai_payload
 from zett_agent.providers.openai import OpenAIProvider
+from zett_agent.providers.openai_compatible import chat_tools
 from zett_agent.providers.responses import responses_tools
 from zett_agent.tools.base import _SYNC_TOOL_RUNNER, ToolExecutionMode, current_tool_call_id, tool
 
@@ -803,7 +803,7 @@ def test_protocols_expose_what_they_support_without_losing_inspection_capability
     deferred = {registered.name for registered in management if registered.deferred}
     assert deferred == (inspection if mode is InspectionToolExposure.DEFERRED else set())
     rendered = responses_tools(definitions, ())
-    chat = _tools_to_openai_payload(definitions)
+    chat = chat_tools(definitions)
     # Chat Completions and every other non-Responses protocol ignore the flag.
     assert [item["function"]["name"] for item in chat] == [item.name for item in definitions]
     assert {item["name"] for item in rendered if "name" in item} == names

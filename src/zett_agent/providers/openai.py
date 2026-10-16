@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from ..json_types import JsonValue
 from ..model import DEFAULT_RETRY_OPTIONS, DEFAULT_TIMEOUT_OPTIONS, ModelRequest, RetryOptions, TimeoutOptions
-from .base import _OpenAIStyleProvider
+from .openai_compatible import OpenAICompatibleProvider
+from .wire import JsonObject
 
 if TYPE_CHECKING:
     import httpx
 
 
-class OpenAIProvider(_OpenAIStyleProvider):
+class OpenAIProvider(OpenAICompatibleProvider):
     """Map OpenAI-compatible chat streams to provider-neutral model events.
 
     Args:
@@ -85,7 +87,7 @@ class OpenAIProvider(_OpenAIStyleProvider):
         send_prompt_cache_key: bool = True,
         extra_headers: Mapping[str, str] | None = None,
         extra_query: Mapping[str, str] | None = None,
-        extra_body: Mapping[str, Any] | None = None,
+        extra_body: Mapping[str, JsonValue] | None = None,
         timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
     ) -> None:
         super().__init__(
@@ -104,9 +106,6 @@ class OpenAIProvider(_OpenAIStyleProvider):
         )
         self.provider_name = "openai"
 
-    def _provider_specific_request_fields(self, request: ModelRequest) -> dict[str, Any]:
+    def request_fields(self, request: ModelRequest) -> JsonObject:
         """Map the provider-neutral parallel preference to OpenAI's API."""
-        return {
-            **super()._provider_specific_request_fields(request),
-            "parallel_tool_calls": request.parallel_tool_call,
-        }
+        return {**super().request_fields(request), "parallel_tool_calls": request.parallel_tool_call}

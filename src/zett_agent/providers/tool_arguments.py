@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 from json import JSONDecodeError
-from typing import Any
+from typing import cast
 
+from ..json_types import JsonValue
 from ..messages import ToolCall
 
 #: Finish reasons that mean the model ran into an output limit.
@@ -16,7 +17,7 @@ class ToolArgumentsError(ValueError):
     """Raised when accumulated tool arguments are not a complete JSON object."""
 
 
-def decode_tool_arguments(payload: str, *, index: int) -> dict[str, Any]:
+def decode_tool_arguments(payload: str, *, index: int) -> dict[str, JsonValue]:
     """Decode one accumulated tool argument object from a provider stream.
 
     Some OpenAI-compatible providers, including DeepSeek, occasionally expose
@@ -48,7 +49,7 @@ def decode_tool_arguments(payload: str, *, index: int) -> dict[str, Any]:
             ) from error
     if not isinstance(parsed, dict):
         raise ToolArgumentsError(f"Tool-call arguments for index {index} must be a JSON object")
-    return parsed
+    return cast("dict[str, JsonValue]", parsed)
 
 
 def invalid_arguments_message(name: str, detail: str, finish_reason: str | None) -> str:

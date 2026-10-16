@@ -779,6 +779,7 @@ async def test_a_normal_google_answer_is_a_normal_stop(gemini):
 async def test_a_dropped_connection_after_some_output_is_not_mistaken_for_a_reported_error():
     """The SDK's connection and timeout errors are APIErrors too, but the provider said nothing."""
     import openai
+    from openai.types.chat import ChatCompletionChunk
 
     class Dropping:
         response = None
@@ -787,27 +788,15 @@ async def test_a_dropped_connection_after_some_output_is_not_mistaken_for_a_repo
             return self._chunks()
 
         async def _chunks(self):
-            yield type(
-                "Chunk",
-                (),
+            yield ChatCompletionChunk.model_validate(
                 {
-                    "usage": None,
-                    "choices": [
-                        type(
-                            "C",
-                            (),
-                            {
-                                "delta": type(
-                                    "D",
-                                    (),
-                                    {"content": "par", "refusal": None, "reasoning_content": None, "tool_calls": None},
-                                )(),
-                                "finish_reason": None,
-                            },
-                        )()
-                    ],
-                },
-            )()
+                    "id": "c1",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "m",
+                    "choices": [{"index": 0, "delta": {"content": "par"}, "finish_reason": None}],
+                }
+            )
             raise openai.APIConnectionError(request=httpx.Request("POST", "http://x"))
 
         async def close(self):
@@ -820,7 +809,7 @@ async def test_a_dropped_connection_after_some_output_is_not_mistaken_for_a_repo
     async def request(_):
         return Dropping()
 
-    provider._request = request  # type: ignore[method-assign]
+    provider._open_chat = request  # type: ignore[method-assign]
     try:
         with pytest.raises(openai.APIConnectionError):
             await collect(provider)

@@ -19,28 +19,26 @@ from zett_agent.model import (
     ModelRequest,
     ReasoningEffort,
 )
-from zett_agent.providers.anthropic import _to_anthropic_content_blocks
-from zett_agent.providers.base import (
-    _message_to_openai_payload,
-    _usage_from_mapping,
-)
+from zett_agent.providers.anthropic_compatible import to_content_blocks
+from zett_agent.providers.base import usage_from_mapping
 from zett_agent.providers.deepseek import DeepSeekProvider
 from zett_agent.providers.ollama import OllamaProvider
 from zett_agent.providers.openai import OpenAIProvider
+from zett_agent.providers.openai_compatible import chat_message
 
 
 def test_tool_arguments_are_serializable_in_both_protocols() -> None:
     message = AssistantMessage(tool_calls=(ToolCall("call-1", "add", {"left": 2}),))
-    openai = _message_to_openai_payload(message)
-    anthropic = _to_anthropic_content_blocks(message)
+    openai = chat_message(message)
+    anthropic = to_content_blocks(message)
     assert json.loads(openai["tool_calls"][0]["function"]["arguments"]) == {"left": 2}
     assert json.loads(json.dumps(anthropic))[0]["input"] == {"left": 2}
 
 
 def test_model_messages_have_no_extension_context_fields_to_send_to_providers() -> None:
     message = UserMessage(content="Visible content")
-    assert _message_to_openai_payload(message) == {"role": "user", "content": "Visible content"}
-    assert _to_anthropic_content_blocks(message) == [{"type": "text", "text": "Visible content"}]
+    assert chat_message(message) == {"role": "user", "content": "Visible content"}
+    assert to_content_blocks(message) == [{"type": "text", "text": "Visible content"}]
     assert not hasattr(message, "metadata")
     assert not hasattr(message, "tags")
 
@@ -54,16 +52,16 @@ def test_anthropic_signed_thinking_and_redacted_blocks_round_trip() -> None:
     message = AssistantMessage(
         tool_calls=(ToolCall("call-1", "add"),), provider="anthropic", model="claude", replay_blocks=blocks
     )
-    assert _to_anthropic_content_blocks(message, model="claude") == list(blocks)
-    assert _to_anthropic_content_blocks(message, model="other")[0]["type"] == "tool_use"
+    assert to_content_blocks(message, model="claude") == list(blocks)
+    assert to_content_blocks(message, model="other")[0]["type"] == "tool_use"
     result = ToolMessage(content="failed", tool_call_id="call-1", name="add", success=False)
-    assert _to_anthropic_content_blocks(result)[0]["is_error"] is True
+    assert to_content_blocks(result)[0]["is_error"] is True
 
 
 def test_image_detail_and_deepseek_cache_usage_survive_normalization() -> None:
     message = UserMessage(content=[ImageContent(ImageUrlSource("https://example.com/a.png"), ImageDetail.HIGH)])
-    assert _message_to_openai_payload(message)["content"][0]["image_url"]["detail"] == "high"
-    usage = _usage_from_mapping({"prompt_tokens": 100, "prompt_cache_hit_tokens": 80, "completion_tokens": 10})
+    assert chat_message(message)["content"][0]["image_url"]["detail"] == "high"
+    usage = usage_from_mapping({"prompt_tokens": 100, "prompt_cache_hit_tokens": 80, "completion_tokens": 10})
     assert usage.cache_read_tokens == 80
     assert usage.total_tokens == 110
 

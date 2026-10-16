@@ -325,7 +325,6 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "SandboxResult",
         "SandboxedCommand",
     ),
-    "zett_agent.sandbox.bubblewrap": ("BubblewrapSandbox", "build_bubblewrap_arguments"),
     "zett_agent.sandbox.errors": (
         "SandboxClosedError",
         "SandboxCommandError",
@@ -334,6 +333,8 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "SandboxUnavailableError",
     ),
     "zett_agent.sandbox.factory": ("SandboxBackend", "SandboxWarning", "create_sandbox", "default_backend"),
+    "zett_agent.sandbox.linux": ("LinuxSandbox", "build_bubblewrap_arguments"),
+    "zett_agent.sandbox.macos": ("SEATBELT_EXECUTABLE", "MacOSSandbox", "build_seatbelt_profile"),
     "zett_agent.sandbox.passthrough": ("PassthroughSandbox",),
     "zett_agent.sandbox.policy": (
         "DEFAULT_INHERITED_ENVIRONMENT",
@@ -371,7 +372,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "watchdog_available",
     ),
     "zett_agent.sandbox.session": ("SandboxSession", "parse_size"),
-    "zett_agent.sandbox.seatbelt": ("SEATBELT_EXECUTABLE", "SeatbeltSandbox", "build_seatbelt_profile"),
+    "zett_agent.sandbox.windows": ("WindowsSandbox",),
     "zett_agent.resume": ("ResumeKind", "ResumePoint", "classify_resume"),
     "zett_agent.stop": ("StopInfo", "StopReason", "classify_stop"),
     "zett_agent.storage": ("SQLiteSessionStorage",),

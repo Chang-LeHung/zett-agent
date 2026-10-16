@@ -7,12 +7,13 @@ import warnings
 
 from .._compat import StrEnum
 from .base import Sandbox
-from .bubblewrap import BubblewrapSandbox
 from .errors import SandboxPolicyError, SandboxUnavailableError
+from .linux import LinuxSandbox
+from .macos import MacOSSandbox
 from .passthrough import PassthroughSandbox
 from .policy import SandboxPolicy
 from .resources import MemoryStrategy
-from .seatbelt import SeatbeltSandbox
+from .windows import WindowsSandbox
 
 __all__ = ["SandboxBackend", "SandboxWarning", "create_sandbox", "default_backend"]
 
@@ -20,13 +21,16 @@ __all__ = ["SandboxBackend", "SandboxWarning", "create_sandbox", "default_backen
 class SandboxBackend(StrEnum):
     """Which sandbox implementation to use."""
 
-    #: Pick the one this platform has: Seatbelt on macOS, bubblewrap on Linux.
+    #: Pick the one for this platform.
     AUTO = "auto"
-    #: Seatbelt (macOS).
-    SEATBELT = "seatbelt"
-    #: bubblewrap (Linux).
-    BUBBLEWRAP = "bubblewrap"
-    #: No isolation; see :class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`.
+    #: :class:`~zett_agent.sandbox.macos.MacOSSandbox`, built on Seatbelt.
+    MACOS = "macos"
+    #: :class:`~zett_agent.sandbox.linux.LinuxSandbox`, built on bubblewrap.
+    LINUX = "linux"
+    #: :class:`~zett_agent.sandbox.windows.WindowsSandbox`; no isolation.
+    WINDOWS = "windows"
+    #: No isolation, on a platform that has no sandbox of its own; see
+    #: :class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`.
     PASSTHROUGH = "passthrough"
 
 
@@ -34,16 +38,21 @@ class SandboxWarning(UserWarning):
     """A sandbox was requested and this platform has none, so commands run unisolated."""
 
 
+_UNISOLATED = frozenset({SandboxBackend.WINDOWS, SandboxBackend.PASSTHROUGH})
+
+
 def default_backend() -> SandboxBackend:
     """Return the backend this platform uses when asked for ``AUTO``.
 
-    Windows and every other platform report PASSTHROUGH, because no backend
-    exists for them.
+    Windows reports WINDOWS, which does not isolate. Any other platform reports
+    PASSTHROUGH, because no backend exists for it.
     """
     if sys.platform == "darwin":
-        return SandboxBackend.SEATBELT
+        return SandboxBackend.MACOS
     if sys.platform.startswith("linux"):
-        return SandboxBackend.BUBBLEWRAP
+        return SandboxBackend.LINUX
+    if sys.platform == "win32":
+        return SandboxBackend.WINDOWS
     return SandboxBackend.PASSTHROUGH
 
 
@@ -59,9 +68,10 @@ def create_sandbox(
     A backend that exists but cannot run (bubblewrap missing, namespaces
     forbidden) raises :class:`SandboxUnavailableError`: the command is never run
     unsandboxed because of a problem the caller can fix. The one case that
-    degrades is a platform with no backend at all, where ``AUTO`` returns a
-    :class:`PassthroughSandbox` and emits a :class:`SandboxWarning`. Pass
-    ``require_isolation=True`` to make that case an error too.
+    degrades is a platform with nothing to isolate with: ``AUTO`` returns a
+    :class:`~zett_agent.sandbox.windows.WindowsSandbox` on Windows, or a
+    :class:`PassthroughSandbox` elsewhere, and emits a :class:`SandboxWarning`.
+    Pass ``require_isolation=True`` to make that case an error too.
 
     Args:
         policy: The boundary to enforce. Defaults to a read-only policy.
@@ -90,7 +100,7 @@ def create_sandbox(
         raise SandboxPolicyError(f"unknown sandbox backend: {backend!r}") from None
     if chosen is SandboxBackend.AUTO:
         chosen = default_backend()
-        if chosen is SandboxBackend.PASSTHROUGH:
+        if chosen in _UNISOLATED:
             if require_isolation:
                 raise SandboxUnavailableError(
                     f"No sandbox backend exists for platform {sys.platform!r}, and isolation was required."
@@ -100,11 +110,12 @@ def create_sandbox(
                 SandboxWarning,
                 stacklevel=2,
             )
-    if chosen is SandboxBackend.PASSTHROUGH and require_isolation:
-        raise SandboxUnavailableError("The passthrough sandbox does not isolate, and isolation was required.")
+    if chosen in _UNISOLATED and require_isolation:
+        raise SandboxUnavailableError(f"The {chosen.value} sandbox does not isolate, and isolation was required.")
     implementations: dict[SandboxBackend, type[Sandbox]] = {
-        SandboxBackend.SEATBELT: SeatbeltSandbox,
-        SandboxBackend.BUBBLEWRAP: BubblewrapSandbox,
+        SandboxBackend.MACOS: MacOSSandbox,
+        SandboxBackend.LINUX: LinuxSandbox,
+        SandboxBackend.WINDOWS: WindowsSandbox,
         SandboxBackend.PASSTHROUGH: PassthroughSandbox,
     }
     sandbox = implementations[chosen](policy, memory_strategy=memory_strategy)

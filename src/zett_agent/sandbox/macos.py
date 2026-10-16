@@ -1,4 +1,4 @@
-"""macOS sandbox built on Seatbelt, the kernel facility behind ``sandbox-exec``."""
+"""The macOS sandbox, built on Seatbelt, the kernel facility behind ``sandbox-exec``."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from .errors import SandboxUnavailableError
 from .policy import NetworkMode, ResolvedPolicy, SandboxPolicy, resolve_policy
 from .resources import MemoryStrategy
 
-__all__ = ["SEATBELT_EXECUTABLE", "SeatbeltSandbox", "build_seatbelt_profile"]
+__all__ = ["SEATBELT_EXECUTABLE", "MacOSSandbox", "build_seatbelt_profile"]
 
 SEATBELT_EXECUTABLE: Final = "/usr/bin/sandbox-exec"
 
@@ -119,8 +119,12 @@ def build_seatbelt_profile(
     return "\n".join(lines) + "\n", params
 
 
-class SeatbeltSandbox(Sandbox):
-    """Confine commands with a Seatbelt profile (macOS).
+class MacOSSandbox(Sandbox):
+    """Confine commands on macOS with a Seatbelt profile.
+
+    The platform class is the stable name; Seatbelt is how it is implemented.
+    ``sandbox-exec`` runs each command under a profile that
+    :func:`build_seatbelt_profile` renders from the policy.
 
     The kernel enforces the profile on the process and every process it starts.
     Reads are open except the paths the policy hides; writes work only in the
@@ -132,7 +136,7 @@ class SeatbeltSandbox(Sandbox):
     Examples:
         Use it directly when you know you are on macOS::
 
-            sandbox = SeatbeltSandbox(SandboxPolicy.workspace_write("/work/project"))
+            sandbox = MacOSSandbox(SandboxPolicy.workspace_write("/work/project"))
             result = await sandbox.run("make test", cwd="/work/project")
 
     .. note::
@@ -145,7 +149,7 @@ class SeatbeltSandbox(Sandbox):
         message that says so.
     """
 
-    name = "seatbelt"
+    name = "macos"
     isolated = True
 
     def __init__(
@@ -160,8 +164,8 @@ class SeatbeltSandbox(Sandbox):
             return
         if not os.access(SEATBELT_EXECUTABLE, os.X_OK):
             raise SandboxUnavailableError(
-                f"{SEATBELT_EXECUTABLE} was not found. The Seatbelt sandbox needs macOS; "
-                "other systems use BubblewrapSandbox."
+                f"{SEATBELT_EXECUTABLE} was not found. MacOSSandbox needs macOS; "
+                "Linux uses LinuxSandbox and Windows uses WindowsSandbox."
             )
         try:
             probe = subprocess.run(

@@ -501,7 +501,7 @@ def resolve_policy(policy: SandboxPolicy, *, home: Path | None = None) -> Resolv
             raise SandboxPolicyError(f"writable path does not exist or cannot be resolved: {path}") from error
         if resolved == Path(resolved.anchor):
             raise SandboxPolicyError(
-                "refusing to make the filesystem root writable; use PassthroughSandbox to run without isolation"
+                "refusing to make the filesystem root writable; use WindowsSandbox or PassthroughSandbox to run without isolation"
             )
         writable.append(resolved)
 

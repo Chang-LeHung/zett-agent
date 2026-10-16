@@ -21,6 +21,7 @@ from zett_agent.sandbox import resources as resources_module
 from zett_agent.sandbox.base import SandboxResult
 from zett_agent.sandbox.errors import SandboxPolicyError
 from zett_agent.sandbox.factory import create_sandbox
+from zett_agent.sandbox.macos import MacOSSandbox
 from zett_agent.sandbox.passthrough import PassthroughSandbox
 from zett_agent.sandbox.policy import MINIMUM_MEMORY_BYTES, ResourceLimits, SandboxPolicy
 from zett_agent.sandbox.resources import (
@@ -40,7 +41,6 @@ from zett_agent.sandbox.resources import (
     rlimit_support,
     user_task_count,
 )
-from zett_agent.sandbox.seatbelt import SeatbeltSandbox
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="needs a POSIX kernel")
 darwin_only = pytest.mark.skipif(sys.platform != "darwin", reason="macOS")
@@ -892,7 +892,7 @@ def test_the_sandbox_reports_the_same_mechanisms_through_the_factory(tmp_path):
 
 @darwin_only
 def test_macos_has_no_kernel_memory_limit_and_says_so():
-    report = SeatbeltSandbox(SandboxPolicy(limits=ResourceLimits(memory_bytes=64 * 1024**2))).capabilities()
+    report = MacOSSandbox(SandboxPolicy(limits=ResourceLimits(memory_bytes=64 * 1024**2))).capabilities()
 
     assert report.memory == "watchdog"
     assert any("overshot" in warning for warning in report.warnings)

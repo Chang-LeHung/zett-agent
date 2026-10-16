@@ -125,10 +125,10 @@ class SandboxSession:
         env: Environment variables every command receives, in addition to the
             allowlisted host ones.
         timeout: Seconds each command may run before it is killed; None for no limit.
-        backend: ``"auto"`` for this platform's sandbox, or ``"seatbelt"``,
-            ``"bubblewrap"`` or ``"passthrough"`` to force one.
+        backend: ``"auto"`` for this platform's sandbox, or ``"macos"``,
+            ``"linux"``, ``"windows"`` or ``"passthrough"`` to force one.
         require_isolation: Raise rather than run unisolated on a platform with no
-            sandbox (Windows).
+            isolating sandbox (Windows).
         memory_strategy: How to enforce ``memory``; see
             :class:`~zett_agent.sandbox.resources.MemoryStrategy`.
 

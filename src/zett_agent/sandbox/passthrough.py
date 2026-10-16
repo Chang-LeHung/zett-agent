@@ -1,4 +1,4 @@
-"""The backend that runs commands as they are, for platforms with no sandbox."""
+"""The backend that runs commands as they are, for platforms with no sandbox of their own."""
 
 from __future__ import annotations
 
@@ -20,8 +20,10 @@ class PassthroughSandbox(Sandbox):
     platform, with :attr:`~Sandbox.isolated` telling the truth about the boundary.
 
     It is what :func:`~zett_agent.sandbox.factory.create_sandbox` returns on a
-    platform with no backend, which is Windows today, and it warns when it does.
-    It is never chosen in place of a backend that exists but cannot run.
+    platform that is neither macOS, Linux nor Windows, and it warns when it does.
+    :class:`~zett_agent.sandbox.windows.WindowsSandbox` is this class under the
+    name of the platform that needs it most. It is never chosen in place of a
+    backend that exists but cannot run.
 
     Examples:
         Run with no isolation, deliberately::

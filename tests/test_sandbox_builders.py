@@ -1,4 +1,4 @@
-"""The Seatbelt profile and the bubblewrap command line, rendered without running either."""
+"""The macOS Seatbelt profile and the Linux bubblewrap command line, rendered without running either."""
 
 import subprocess
 import sys
@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from zett_agent.sandbox import bubblewrap, seatbelt
-from zett_agent.sandbox.bubblewrap import BubblewrapSandbox, build_bubblewrap_arguments
+from zett_agent.sandbox import linux, macos
 from zett_agent.sandbox.errors import SandboxUnavailableError
+from zett_agent.sandbox.linux import LinuxSandbox, build_bubblewrap_arguments
+from zett_agent.sandbox.macos import SEATBELT_EXECUTABLE, MacOSSandbox, build_seatbelt_profile
 from zett_agent.sandbox.policy import NetworkMode, ResolvedPolicy, SandboxPolicy
-from zett_agent.sandbox.seatbelt import SEATBELT_EXECUTABLE, SeatbeltSandbox, build_seatbelt_profile
 
 
 def resolved(**fields) -> ResolvedPolicy:
@@ -70,11 +70,11 @@ def test_the_network_is_closed_unless_the_policy_opens_it():
     assert "(allow network*)" in opened and "com.apple.dnssd.service" in opened
 
 
-def test_seatbelt_wrap_passes_every_path_as_a_parameter(tmp_path, monkeypatch):
+def test_macos_wrap_passes_every_path_as_a_parameter(tmp_path, monkeypatch):
     work = tmp_path / "work"
     work.mkdir()
-    monkeypatch.setattr(seatbelt, "_user_temp_directory", lambda: tmp_path / "tmpdir")
-    sandbox = SeatbeltSandbox(SandboxPolicy.workspace_write(work, protect_defaults=False))
+    monkeypatch.setattr(macos, "_user_temp_directory", lambda: tmp_path / "tmpdir")
+    sandbox = MacOSSandbox(SandboxPolicy.workspace_write(work, protect_defaults=False))
 
     command = sandbox._wrap(("echo", "hi"), work, {"PATH": "/bin"})
 
@@ -87,7 +87,7 @@ def test_seatbelt_wrap_passes_every_path_as_a_parameter(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS reports the per-user temporary directory")
 def test_macos_reports_the_user_temp_directory():
-    directory = seatbelt._user_temp_directory()
+    directory = macos._user_temp_directory()
 
     assert directory is not None and directory.is_absolute() and directory.is_dir()
 
@@ -100,56 +100,56 @@ def test_the_user_temp_directory_is_absent_when_libc_cannot_report_one(monkeypat
         def confstr(self, name, buffer, size):
             return self.result
 
-    monkeypatch.setattr(seatbelt.ctypes, "CDLL", lambda name: Libc(0))
-    assert seatbelt._user_temp_directory() is None
+    monkeypatch.setattr(macos.ctypes, "CDLL", lambda name: Libc(0))
+    assert macos._user_temp_directory() is None
 
     def broken(name):
         raise OSError(name)
 
-    monkeypatch.setattr(seatbelt.ctypes, "CDLL", broken)
-    assert seatbelt._user_temp_directory() is None
+    monkeypatch.setattr(macos.ctypes, "CDLL", broken)
+    assert macos._user_temp_directory() is None
 
 
 def completed(returncode=0, stderr=""):
     return subprocess.CompletedProcess([], returncode, "", stderr)
 
 
-def test_seatbelt_check_reports_a_missing_launcher(monkeypatch):
-    monkeypatch.setattr(seatbelt.os, "access", lambda path, mode: False)
+def test_macos_check_reports_a_missing_launcher(monkeypatch):
+    monkeypatch.setattr(macos.os, "access", lambda path, mode: False)
 
     with pytest.raises(SandboxUnavailableError, match="needs macOS"):
-        SeatbeltSandbox().check()
+        MacOSSandbox().check()
 
 
-def test_seatbelt_check_explains_a_nested_sandbox_and_remembers_success(monkeypatch):
+def test_macos_check_explains_a_nested_sandbox_and_remembers_success(monkeypatch):
     calls = []
-    monkeypatch.setattr(seatbelt.os, "access", lambda path, mode: True)
+    monkeypatch.setattr(macos.os, "access", lambda path, mode: True)
 
     def run(arguments, **kwargs):
         calls.append(arguments)
         return completed(1, "sandbox_apply: Operation not permitted")
 
-    monkeypatch.setattr(seatbelt.subprocess, "run", run)
+    monkeypatch.setattr(macos.subprocess, "run", run)
     with pytest.raises(SandboxUnavailableError, match="already inside a sandbox"):
-        SeatbeltSandbox().check()
+        MacOSSandbox().check()
 
-    monkeypatch.setattr(seatbelt.subprocess, "run", lambda *a, **k: calls.append(a) or completed(0))
-    sandbox = SeatbeltSandbox()
+    monkeypatch.setattr(macos.subprocess, "run", lambda *a, **k: calls.append(a) or completed(0))
+    sandbox = MacOSSandbox()
     sandbox.check()
     sandbox.check()
     assert len(calls) == 2  # the failing probe, then one successful probe that is not repeated
 
 
-def test_seatbelt_check_reports_a_launcher_that_cannot_start(monkeypatch):
-    monkeypatch.setattr(seatbelt.os, "access", lambda path, mode: True)
+def test_macos_check_reports_a_launcher_that_cannot_start(monkeypatch):
+    monkeypatch.setattr(macos.os, "access", lambda path, mode: True)
 
     def run(*args, **kwargs):
         raise OSError("exec format error")
 
-    monkeypatch.setattr(seatbelt.subprocess, "run", run)
+    monkeypatch.setattr(macos.subprocess, "run", run)
 
     with pytest.raises(SandboxUnavailableError, match="could not be started"):
-        SeatbeltSandbox().check()
+        MacOSSandbox().check()
 
 
 # ---------------------------------------------------------------- bubblewrap
@@ -264,10 +264,10 @@ def test_the_sandbox_temp_directory_always_wins_over_a_host_tmpdir(tmp_path):
     assert arguments[index + 1] == "/tmp"
 
 
-def test_bubblewrap_wrap_builds_a_launchable_command(tmp_path):
+def test_linux_wrap_builds_a_launchable_command(tmp_path):
     work = tmp_path / "work"
     work.mkdir()
-    sandbox = BubblewrapSandbox(SandboxPolicy.workspace_write(work, protect_defaults=False))
+    sandbox = LinuxSandbox(SandboxPolicy.workspace_write(work, protect_defaults=False))
     sandbox._executable = "/usr/bin/bwrap"
 
     command = sandbox._wrap(("echo", "hi"), work, {"PATH": "/bin"})
@@ -276,56 +276,56 @@ def test_bubblewrap_wrap_builds_a_launchable_command(tmp_path):
     assert command.cwd == work and command.env["PATH"] == "/bin" and command.env["TMPDIR"] == "/tmp"
 
 
-def test_bubblewrap_check_needs_linux(monkeypatch):
-    monkeypatch.setattr(bubblewrap.sys, "platform", "darwin")
+def test_linux_check_needs_linux(monkeypatch):
+    monkeypatch.setattr(linux.sys, "platform", "darwin")
 
     with pytest.raises(SandboxUnavailableError, match="needs Linux"):
-        BubblewrapSandbox().check()
+        LinuxSandbox().check()
 
 
-def test_bubblewrap_check_reports_a_missing_binary(monkeypatch):
-    monkeypatch.setattr(bubblewrap.sys, "platform", "linux")
-    monkeypatch.setattr(bubblewrap.shutil, "which", lambda name: None)
+def test_linux_check_reports_a_missing_binary(monkeypatch):
+    monkeypatch.setattr(linux.sys, "platform", "linux")
+    monkeypatch.setattr(linux.shutil, "which", lambda name: None)
 
     with pytest.raises(SandboxUnavailableError, match="apt install bubblewrap"):
-        BubblewrapSandbox().check()
+        LinuxSandbox().check()
 
 
-def test_bubblewrap_check_names_the_usual_causes_when_the_probe_fails(monkeypatch):
-    monkeypatch.setattr(bubblewrap.sys, "platform", "linux")
-    monkeypatch.setattr(bubblewrap.shutil, "which", lambda name: "/usr/bin/bwrap")
-    monkeypatch.setattr(bubblewrap.os, "access", lambda path, mode: True)
+def test_linux_check_names_the_usual_causes_when_the_probe_fails(monkeypatch):
+    monkeypatch.setattr(linux.sys, "platform", "linux")
+    monkeypatch.setattr(linux.shutil, "which", lambda name: "/usr/bin/bwrap")
+    monkeypatch.setattr(linux.os, "access", lambda path, mode: True)
     monkeypatch.setattr(
-        bubblewrap.subprocess, "run", lambda *a, **k: completed(1, "bwrap: setting up uid map: Permission denied")
+        linux.subprocess, "run", lambda *a, **k: completed(1, "bwrap: setting up uid map: Permission denied")
     )
 
     with pytest.raises(SandboxUnavailableError) as raised:
-        BubblewrapSandbox().check()
+        LinuxSandbox().check()
 
     message = str(raised.value)
     assert "uid map" in message and "apparmor_restrict_unprivileged_userns" in message
     assert "Docker" in message and "WSL1" in message
 
 
-def test_bubblewrap_check_reports_a_binary_that_cannot_start(monkeypatch):
-    monkeypatch.setattr(bubblewrap.sys, "platform", "linux")
-    monkeypatch.setattr(bubblewrap.os, "access", lambda path, mode: True)
+def test_linux_check_reports_a_binary_that_cannot_start(monkeypatch):
+    monkeypatch.setattr(linux.sys, "platform", "linux")
+    monkeypatch.setattr(linux.os, "access", lambda path, mode: True)
 
     def run(*args, **kwargs):
         raise OSError("bad interpreter")
 
-    monkeypatch.setattr(bubblewrap.subprocess, "run", run)
+    monkeypatch.setattr(linux.subprocess, "run", run)
 
     with pytest.raises(SandboxUnavailableError, match="could not be started"):
-        BubblewrapSandbox(bwrap_path="/opt/bwrap").check()
+        LinuxSandbox(bwrap_path="/opt/bwrap").check()
 
 
-def test_bubblewrap_check_accepts_a_working_binary_and_probes_once(monkeypatch):
+def test_linux_check_accepts_a_working_binary_and_probes_once(monkeypatch):
     probes = []
-    monkeypatch.setattr(bubblewrap.sys, "platform", "linux")
-    monkeypatch.setattr(bubblewrap.os, "access", lambda path, mode: True)
-    monkeypatch.setattr(bubblewrap.subprocess, "run", lambda arguments, **k: probes.append(arguments) or completed(0))
-    sandbox = BubblewrapSandbox(bwrap_path="/opt/bwrap")
+    monkeypatch.setattr(linux.sys, "platform", "linux")
+    monkeypatch.setattr(linux.os, "access", lambda path, mode: True)
+    monkeypatch.setattr(linux.subprocess, "run", lambda arguments, **k: probes.append(arguments) or completed(0))
+    sandbox = LinuxSandbox(bwrap_path="/opt/bwrap")
 
     sandbox.check()
     sandbox.check()

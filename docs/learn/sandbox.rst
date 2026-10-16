@@ -320,31 +320,39 @@ What each platform provides
 
 .. list-table::
    :header-rows: 1
-   :widths: 18 30 52
+   :widths: 12 24 22 42
 
    * - Platform
-     - Backend
+     - Class
+     - Built on
      - Notes
    * - macOS
-     - :class:`~zett_agent.sandbox.seatbelt.SeatbeltSandbox`
-     - Built in; nothing to install. Uses ``sandbox-exec``, which Apple has deprecated but ships.
+     - :class:`~zett_agent.sandbox.macos.MacOSSandbox`
+     - Seatbelt (``sandbox-exec``)
+     - Built in; nothing to install. Apple has deprecated ``sandbox-exec`` but ships it.
    * - Linux
-     - :class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`
+     - :class:`~zett_agent.sandbox.linux.LinuxSandbox`
+     - bubblewrap (``bwrap``)
      - Install ``bubblewrap``. Needs unprivileged user namespaces.
    * - Windows
-     - :class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`
+     - :class:`~zett_agent.sandbox.windows.WindowsSandbox`
+     - nothing
      - No isolation and no resource limits: Windows has neither rlimits nor cgroups. The interface is the same, ``isolated`` says ``False``, and every limit asked for is reported as unenforced.
 
-:func:`~zett_agent.sandbox.factory.create_sandbox` picks the platform's own.
+:func:`~zett_agent.sandbox.factory.create_sandbox` picks the platform's own. Any
+other platform gets a :class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`,
+which is what ``WindowsSandbox`` extends: the same behavior under no platform's
+name.
 
 .. important::
 
    A backend that exists but cannot run raises
    :class:`~zett_agent.sandbox.errors.SandboxUnavailableError` with what to
    install or change. The sandbox layer never answers that by running the command
-   unsandboxed. The one case that degrades is a platform with no backend at all:
-   ``create_sandbox`` returns a ``PassthroughSandbox`` and emits a
-   ``SandboxWarning``. Pass ``require_isolation=True`` to make that an error too.
+   unsandboxed. The one case that degrades is a platform with nothing to isolate
+   with: ``create_sandbox`` returns a ``WindowsSandbox`` (or a
+   ``PassthroughSandbox``) and emits a ``SandboxWarning``. Pass
+   ``require_isolation=True`` to make that an error too.
 
 Spawn it yourself
 ----------------------------------------

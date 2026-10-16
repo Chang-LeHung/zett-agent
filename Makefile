@@ -5,13 +5,14 @@ UV ?= uv
 # Where `make docs` writes the site. Override it to build beside a running `make docs-live`.
 DOCS_OUT ?= docs/_build/html
 
-.PHONY: help install lint typecheck test build check docs docs-en docs-zh docs-pot docs-serve docs-live docs-check docs-examples docs-ui-check
+.PHONY: help install lint typecheck static test build check docs docs-en docs-zh docs-pot docs-serve docs-live docs-check docs-examples docs-ui-check
 
 help:
 	@echo "Available targets:"
 	@echo "  make install    Sync the zett-agent environment from uv.lock"
 	@echo "  make lint       Check formatting and linting with Ruff"
 	@echo "  make typecheck  Type-check the package, examples and documentation examples with mypy"
+	@echo "  make static     Run static_check: the repository rules Ruff and mypy cannot express"
 	@echo "  make test       Run the test suite with the coverage gate"
 	@echo "  make build      Build the sdist and wheel into dist/"
 	@echo "  make check      Run lint, type check, tests with coverage, and documentation checks"
@@ -27,11 +28,14 @@ install:
 	$(UV) sync
 
 lint:
-	$(UV) run ruff format --check src tests examples
-	$(UV) run ruff check src tests examples
+	$(UV) run ruff format --check src tests examples static_check
+	$(UV) run ruff check src tests examples static_check
 
 typecheck:
 	$(UV) run mypy
+
+static:
+	$(UV) run python -m static_check
 
 test:
 	$(UV) run pytest --cov --cov-report=term-missing
@@ -39,7 +43,7 @@ test:
 build:
 	$(UV) build
 
-check: lint typecheck test docs-check
+check: lint typecheck static test docs-check
 
 docs: docs-en docs-zh
 

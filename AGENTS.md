@@ -38,7 +38,15 @@
   `examples` and `docs/_examples`, so a program the documentation shows must
   type-check too. Prefer narrowing a type to `# type: ignore`; an ignore needs a
   reason beside it, and an unused one fails the check.
-- Run `make check` (Ruff, mypy, pytest with the 95% coverage gate, and the
+- `make static` runs `static_check/`, the rules Ruff and mypy cannot express:
+  a type alias is declared with `TypeAlias` or `TypeAliasType` (SC001), provider
+  modules do not use `Any` (SC002), and a module does not import another
+  module's underscore name (SC003). SC002 and SC003 have a baseline in
+  `static_check/baseline.json` that may only shrink: a new violation fails, and
+  so does an entry that is no longer needed. Fix the code, then run
+  `uv run python -m static_check --update-baseline`. A line can opt out with
+  `# static-check: ignore[SC00x] reason`.
+- Run `make check` (Ruff, mypy, static_check, pytest with the 95% coverage gate, and the
   documentation checks) before handing work over.
 - Tests must never write into the checkout or into user data. Use temporary
   directories and in-memory databases.

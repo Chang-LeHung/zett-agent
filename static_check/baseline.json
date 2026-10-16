@@ -1,0 +1,40 @@
+{
+  "SC002": {
+    "src/zett_agent/providers/anthropic.py": 23,
+    "src/zett_agent/providers/base.py": 27,
+    "src/zett_agent/providers/deepseek.py": 3,
+    "src/zett_agent/providers/google.py": 7,
+    "src/zett_agent/providers/ollama.py": 3,
+    "src/zett_agent/providers/openai.py": 2,
+    "src/zett_agent/providers/responses.py": 27,
+    "src/zett_agent/providers/stop_reasons.py": 4,
+    "src/zett_agent/providers/tool_arguments.py": 1
+  },
+  "SC003": {
+    "src/zett_agent/_agent/tool_runner.py: from ..tools.base import _bind_tool_call": 1,
+    "src/zett_agent/_agent/tool_runner.py: from ..tools.base import _reset_tool_call": 1,
+    "src/zett_agent/_sqlite_storage.py: from .storage import _DEFAULT_SESSION_TYPE": 1,
+    "src/zett_agent/extensions/sqlite.py: from ..storage import _DEFAULT_SESSION_TYPE": 1,
+    "src/zett_agent/jit_harness/python.py: from .snapshot import _ENTRYPOINT_FILE": 1,
+    "src/zett_agent/jit_harness/python.py: from .snapshot import _validate_name": 1,
+    "src/zett_agent/jit_harness/runtime.py: from ..tools.base import _SYNC_TOOL_RUNNER": 1,
+    "src/zett_agent/jit_harness/runtime.py: from ..tools.base import _bind_tool_call": 1,
+    "src/zett_agent/jit_harness/runtime.py: from ..tools.base import _reset_tool_call": 1,
+    "src/zett_agent/jit_harness/runtime.py: from .python import _load_python_tool": 1,
+    "src/zett_agent/jit_harness/runtime.py: from .snapshot import _ENTRYPOINT_FILE": 1,
+    "src/zett_agent/jit_harness/runtime.py: from .snapshot import _MANAGEMENT_NAMES": 1,
+    "src/zett_agent/jit_harness/runtime.py: from .snapshot import _validate_file_path": 1,
+    "src/zett_agent/jit_harness/runtime.py: from .snapshot import _validate_name": 1,
+    "src/zett_agent/providers/anthropic.py: from .base import _ToolCallAccumulator": 1,
+    "src/zett_agent/providers/anthropic.py: from .base import _empty_stream_message": 1,
+    "src/zett_agent/providers/anthropic.py: from .base import _parse_tool_calls": 1,
+    "src/zett_agent/providers/anthropic.py: from .base import _reasoning_effort_to_budget": 1,
+    "src/zett_agent/providers/anthropic.py: from .base import _to_model_data": 1,
+    "src/zett_agent/providers/deepseek.py: from .base import _OpenAIStyleProvider": 1,
+    "src/zett_agent/providers/google.py: from .base import _reasoning_effort_to_budget": 1,
+    "src/zett_agent/providers/openai.py: from .base import _OpenAIStyleProvider": 1,
+    "src/zett_agent/sandbox/session.py: from .policy import _as_paths": 1,
+    "src/zett_agent/sync.py: from .sync_runtime import _callback_loop": 1,
+    "src/zett_agent/sync.py: from .sync_runtime import _worker": 1
+  }
+}

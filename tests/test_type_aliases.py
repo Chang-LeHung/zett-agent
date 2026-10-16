@@ -42,6 +42,7 @@ ALIASES = {
     "jit_harness.results": ("ToolStatus",),
     "json_types": ("JsonValue",),
     "messages": ("ImageSource", "UserContentPart", "UserContent", "AnyMessage"),
+    "providers.base": ("ChatMessagePayload",),
     "tools.base": ("ToolResult",),
     "tools.coding": ("FilePath", "StartLine", "LineCount", "TimeoutSeconds", "MaxResults"),
 }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypeAlias
 
 import pytest
 from pydantic import BaseModel, Field, create_model
@@ -37,7 +37,7 @@ class Dog(BaseModel):
     kind: Literal["dog"]
 
 
-Pet = Annotated[Cat | Dog, Field(discriminator="kind")]
+Pet: TypeAlias = Annotated[Cat | Dog, Field(discriminator="kind")]
 
 
 class Shelter(BaseModel):

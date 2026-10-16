@@ -88,6 +88,8 @@ docs-test = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The repository root, so tests can import `static_check`, which is tooling and not part of the package.
+pythonpath = ["."]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
@@ -101,7 +103,7 @@ show_missing = true
 [tool.ruff]
 line-length = 120
 target-version = "py310"
-src = ["src", "tests", "examples"]
+src = ["src", "tests", "examples", "static_check"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -118,7 +120,37 @@ line-ending = "lf"
 # Checked: the package and the programs users copy from. The tests are not (yet): they use untyped
 # doubles on purpose. Run `make typecheck`.
 [tool.mypy]
-files = ["src/zett_agent", "examples", "docs/_examples"]
+files = ["src/zett_agent", "examples", "docs/_examples", "static_check"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
+
+# The tooling that checks the repository is held to the strictest setting. `strict = true` is a global-only
+# flag, so this lists what it stands for.
+[[tool.mypy.overrides]]
+module = ["static_check", "static_check.*"]
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true
+extra_checks = true
+
+# Provider modules are typed in full. Every def is annotated; the modules below also forbid `Any`. A module
+# joins the second list when its last `Any` goes, and `static_check` (rule SC002) holds the rest to a baseline
+# that can only shrink.
+[[tool.mypy.overrides]]
+module = "zett_agent.providers.*"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+module = ["zett_agent.providers.http_errors", "zett_agent.providers.tool_images"]
+disallow_any_explicit = true
+disallow_any_generics = true
+warn_return_any = true

@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from .._compat import aclosing_stream
+from .._compat import TypeAliasType, aclosing_stream
 from .._compat import timeout as async_timeout
 from ..exceptions import AgentError
 from ..messages import (
@@ -400,7 +400,7 @@ def _normalize_image_source(
 #: One chat message as this adapter sends it to an OpenAI-compatible endpoint. The SDK's own
 #: ``ChatCompletionMessageParam`` is the strict OpenAI schema, and what is sent here is wider: other
 #: providers take extra keys (DeepSeek's ``reasoning_content``) and multimodal tool results.
-ChatMessagePayload = dict[str, Any]
+ChatMessagePayload = TypeAliasType("ChatMessagePayload", dict[str, Any])
 
 
 def _message_to_openai_payload(message: AnyMessage) -> ChatMessagePayload:

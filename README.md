@@ -304,7 +304,7 @@ uv run pytest
 uv run ruff check src tests examples
 make docs-live         # preview the manual with live reload at http://127.0.0.1:8000
 make docs-serve        # build once, then serve the static HTML
-make check             # lint, tests with coverage, and documentation checks
+make check             # lint, type check, static checks, tests with coverage, and documentation checks
 ```
 
 `make docs-live` rebuilds on every edit under `docs/` or `src/`, and reloads the

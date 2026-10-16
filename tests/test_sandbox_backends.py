@@ -35,13 +35,13 @@ def usable(backend: SandboxBackend) -> str | None:
     return None
 
 
-BACKENDS = [SandboxBackend.SEATBELT, SandboxBackend.BUBBLEWRAP]
+BACKENDS = [SandboxBackend.MACOS, SandboxBackend.LINUX]
 UNUSABLE = {backend: usable(backend) for backend in BACKENDS}
 
 
 def test_the_platforms_own_backend_is_present_when_ci_requires_one():
     own = default_backend()
-    if not REQUIRED or own is SandboxBackend.PASSTHROUGH:
+    if not REQUIRED or own not in BACKENDS:
         pytest.skip("no isolating backend is required on this machine")
     assert UNUSABLE[own] is None, f"ZETT_REQUIRE_SANDBOX=1 but {own.value} is unavailable: {UNUSABLE[own]}"
 

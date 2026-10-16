@@ -12,12 +12,13 @@ import pytest
 
 from zett_agent.sandbox import base, factory
 from zett_agent.sandbox.base import Sandbox, SandboxResult
-from zett_agent.sandbox.bubblewrap import BubblewrapSandbox
 from zett_agent.sandbox.errors import SandboxError, SandboxPolicyError, SandboxUnavailableError
 from zett_agent.sandbox.factory import SandboxBackend, SandboxWarning, create_sandbox, default_backend
+from zett_agent.sandbox.linux import LinuxSandbox
+from zett_agent.sandbox.macos import MacOSSandbox
 from zett_agent.sandbox.passthrough import PassthroughSandbox
 from zett_agent.sandbox.policy import SandboxPolicy
-from zett_agent.sandbox.seatbelt import SeatbeltSandbox
+from zett_agent.sandbox.windows import WindowsSandbox
 
 posix = pytest.mark.skipif(os.name != "posix", reason="needs a POSIX shell")
 
@@ -333,10 +334,10 @@ def test_the_base_class_cannot_be_instantiated_without_a_backend():
 @pytest.mark.parametrize(
     ("platform", "expected"),
     [
-        ("darwin", SandboxBackend.SEATBELT),
-        ("linux", SandboxBackend.BUBBLEWRAP),
-        ("linux2", SandboxBackend.BUBBLEWRAP),
-        ("win32", SandboxBackend.PASSTHROUGH),
+        ("darwin", SandboxBackend.MACOS),
+        ("linux", SandboxBackend.LINUX),
+        ("linux2", SandboxBackend.LINUX),
+        ("win32", SandboxBackend.WINDOWS),
         ("freebsd14", SandboxBackend.PASSTHROUGH),
     ],
 )
@@ -346,36 +347,44 @@ def test_each_platform_picks_its_own_backend(monkeypatch, platform, expected):
     assert default_backend() is expected
 
 
-def test_a_platform_without_a_backend_degrades_loudly(monkeypatch):
-    monkeypatch.setattr(factory.sys, "platform", "win32")
+@pytest.mark.parametrize(("platform", "expected"), [("win32", WindowsSandbox), ("freebsd14", PassthroughSandbox)])
+def test_a_platform_without_isolation_degrades_loudly(monkeypatch, platform, expected):
+    monkeypatch.setattr(factory.sys, "platform", platform)
 
     with pytest.warns(SandboxWarning, match="without isolation"):
         sandbox = create_sandbox(SandboxPolicy.read_only())
 
-    assert isinstance(sandbox, PassthroughSandbox) and sandbox.isolated is False
+    assert type(sandbox) is expected and sandbox.isolated is False
 
 
-def test_requiring_isolation_turns_that_degradation_into_an_error(monkeypatch):
-    monkeypatch.setattr(factory.sys, "platform", "win32")
+@pytest.mark.parametrize("platform", ["win32", "freebsd14"])
+def test_requiring_isolation_turns_that_degradation_into_an_error(monkeypatch, platform):
+    monkeypatch.setattr(factory.sys, "platform", platform)
 
     with pytest.raises(SandboxUnavailableError, match="No sandbox backend exists"):
         create_sandbox(require_isolation=True)
     with pytest.raises(SandboxUnavailableError, match="does not isolate"):
+        create_sandbox(backend="windows", require_isolation=True)
+    with pytest.raises(SandboxUnavailableError, match="does not isolate"):
         create_sandbox(backend="passthrough", require_isolation=True)
 
 
-def test_asking_for_passthrough_explicitly_does_not_warn():
+@pytest.mark.parametrize(
+    ("backend", "expected"),
+    [(SandboxBackend.PASSTHROUGH, PassthroughSandbox), (SandboxBackend.WINDOWS, WindowsSandbox)],
+)
+def test_asking_for_an_unisolated_backend_explicitly_does_not_warn(backend, expected):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        sandbox = create_sandbox(backend=SandboxBackend.PASSTHROUGH)
+        sandbox = create_sandbox(backend=backend)
 
-    assert isinstance(sandbox, PassthroughSandbox)
+    assert type(sandbox) is expected
 
 
 def test_a_backend_that_exists_but_cannot_run_is_never_replaced_by_passthrough(monkeypatch):
     monkeypatch.setattr(factory.sys, "platform", "linux")
-    monkeypatch.setattr("zett_agent.sandbox.bubblewrap.shutil.which", lambda name: None)
-    monkeypatch.setattr("zett_agent.sandbox.bubblewrap.sys.platform", "linux")
+    monkeypatch.setattr("zett_agent.sandbox.linux.shutil.which", lambda name: None)
+    monkeypatch.setattr("zett_agent.sandbox.linux.sys.platform", "linux")
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -384,12 +393,12 @@ def test_a_backend_that_exists_but_cannot_run_is_never_replaced_by_passthrough(m
 
 
 def test_forcing_a_backend_runs_its_availability_check(monkeypatch):
-    monkeypatch.setattr("zett_agent.sandbox.seatbelt.SEATBELT_EXECUTABLE", "/definitely/missing/sandbox-exec")
+    monkeypatch.setattr("zett_agent.sandbox.macos.SEATBELT_EXECUTABLE", "/definitely/missing/sandbox-exec")
 
     with pytest.raises(SandboxUnavailableError):
-        create_sandbox(backend=SandboxBackend.SEATBELT)
+        create_sandbox(backend=SandboxBackend.MACOS)
     with pytest.raises(SandboxUnavailableError):
-        create_sandbox(backend="bubblewrap") if sys.platform == "darwin" else BubblewrapSandbox().check() or (
+        create_sandbox(backend="linux") if sys.platform == "darwin" else LinuxSandbox().check() or (
             _ for _ in ()
         ).throw(SandboxUnavailableError("n/a"))
 
@@ -400,6 +409,7 @@ def test_an_unknown_backend_is_a_policy_error():
 
 
 def test_the_classes_report_their_names_and_isolation():
-    assert (SeatbeltSandbox.name, SeatbeltSandbox.isolated) == ("seatbelt", True)
-    assert (BubblewrapSandbox.name, BubblewrapSandbox.isolated) == ("bubblewrap", True)
+    assert (MacOSSandbox.name, MacOSSandbox.isolated) == ("macos", True)
+    assert (LinuxSandbox.name, LinuxSandbox.isolated) == ("linux", True)
+    assert (WindowsSandbox.name, WindowsSandbox.isolated) == ("windows", False)
     assert (PassthroughSandbox.name, PassthroughSandbox.isolated) == ("passthrough", False)

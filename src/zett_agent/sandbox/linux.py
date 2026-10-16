@@ -1,4 +1,4 @@
-"""Linux sandbox built on bubblewrap, which composes namespaces and bind mounts."""
+"""The Linux sandbox, built on bubblewrap, which composes namespaces and bind mounts."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .errors import SandboxUnavailableError
 from .policy import NetworkMode, ResolvedPolicy, SandboxPolicy, resolve_policy
 from .resources import MemoryStrategy
 
-__all__ = ["BubblewrapSandbox", "build_bubblewrap_arguments"]
+__all__ = ["LinuxSandbox", "build_bubblewrap_arguments"]
 
 #: The directory a sandboxed process uses for temporary files. It is a private
 #: tmpfs, so nothing written there outlives the run or is seen by the host.
@@ -95,8 +95,12 @@ def build_bubblewrap_arguments(
     return args, warnings
 
 
-class BubblewrapSandbox(Sandbox):
-    """Confine commands with bubblewrap namespaces and read-only mounts (Linux).
+class LinuxSandbox(Sandbox):
+    """Confine commands on Linux with bubblewrap namespaces and read-only mounts.
+
+    The platform class is the stable name; bubblewrap is how it is implemented.
+    :func:`build_bubblewrap_arguments` renders the policy as a ``bwrap`` command
+    line and each command runs behind it.
 
     The root filesystem is read-only; only the policy's writable paths and a
     private ``/tmp`` accept writes; the unwritable and protected paths are bound
@@ -107,7 +111,7 @@ class BubblewrapSandbox(Sandbox):
     Examples:
         Use it directly on Linux::
 
-            sandbox = BubblewrapSandbox(SandboxPolicy.workspace_write("/work/project"))
+            sandbox = LinuxSandbox(SandboxPolicy.workspace_write("/work/project"))
             result = await sandbox.run(["python3", "build.py"], cwd="/work/project")
 
     .. note::
@@ -122,7 +126,7 @@ class BubblewrapSandbox(Sandbox):
         exist yet cannot be masked, so it is only protected once it exists.
     """
 
-    name = "bubblewrap"
+    name = "linux"
     isolated = True
 
     def __init__(
@@ -142,7 +146,7 @@ class BubblewrapSandbox(Sandbox):
             return
         if not sys.platform.startswith("linux"):
             raise SandboxUnavailableError(
-                "BubblewrapSandbox needs Linux. macOS uses SeatbeltSandbox; Windows has no sandbox backend yet."
+                "LinuxSandbox needs Linux. macOS uses MacOSSandbox; Windows uses WindowsSandbox, which does not isolate."
             )
         executable = self._bwrap_path or shutil.which("bwrap")
         if executable is None or not os.access(executable, os.X_OK):

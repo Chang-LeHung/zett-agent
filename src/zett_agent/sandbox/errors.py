@@ -20,8 +20,9 @@ class SandboxUnavailableError(SandboxError):
 
     The message says why and, where a fix exists, what to install or change.
     The sandbox layer never answers this by running the command unsandboxed:
-    the caller chooses :class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`
-    explicitly, or fixes the machine.
+    the caller chooses a sandbox that does not isolate, such as
+    :class:`~zett_agent.sandbox.windows.WindowsSandbox`, explicitly, or fixes the
+    machine.
     """
 
 

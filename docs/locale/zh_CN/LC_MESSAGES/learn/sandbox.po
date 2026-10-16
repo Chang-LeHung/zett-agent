@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 22:07+0800\n"
+"POT-Creation-Date: 2026-10-17 02:01+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
@@ -317,11 +317,11 @@ msgstr "限制是一种请求，而不是承诺。内核能做到什么取决于
 msgid "Limit"
 msgstr "限制项"
 
-#: ../../learn/sandbox.rst:211 ../../learn/sandbox.rst:328
+#: ../../learn/sandbox.rst:211 ../../learn/sandbox.rst:329
 msgid "macOS"
 msgstr "macOS"
 
-#: ../../learn/sandbox.rst:212 ../../learn/sandbox.rst:331
+#: ../../learn/sandbox.rst:212 ../../learn/sandbox.rst:333
 msgid "Linux"
 msgstr "Linux"
 
@@ -467,146 +467,162 @@ msgid "Platform"
 msgstr "平台"
 
 #: ../../learn/sandbox.rst:326
-msgid "Backend"
-msgstr "后端"
+msgid "Class"
+msgstr "类"
 
 #: ../../learn/sandbox.rst:327
+msgid "Built on"
+msgstr "底层实现"
+
+#: ../../learn/sandbox.rst:328
 msgid "Notes"
 msgstr "说明"
 
-#: ../../learn/sandbox.rst:329
-msgid ":class:`~zett_agent.sandbox.seatbelt.SeatbeltSandbox`"
-msgstr ":class:`~zett_agent.sandbox.seatbelt.SeatbeltSandbox`"
-
 #: ../../learn/sandbox.rst:330
-msgid "Built in; nothing to install. Uses ``sandbox-exec``, which Apple has deprecated but ships."
-msgstr "系统自带，无需安装。使用 ``sandbox-exec``，Apple 已将其弃用，但仍随系统提供。"
+msgid ":class:`~zett_agent.sandbox.macos.MacOSSandbox`"
+msgstr ":class:`~zett_agent.sandbox.macos.MacOSSandbox`"
+
+#: ../../learn/sandbox.rst:331
+msgid "Seatbelt (``sandbox-exec``)"
+msgstr "Seatbelt（\\ ``sandbox-exec``\\ ）"
 
 #: ../../learn/sandbox.rst:332
-msgid ":class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`"
-msgstr ":class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`"
+msgid "Built in; nothing to install. Apple has deprecated ``sandbox-exec`` but ships it."
+msgstr "系统自带，无需安装。Apple 已弃用 ``sandbox-exec``，但仍随系统提供。"
 
-#: ../../learn/sandbox.rst:333
+#: ../../learn/sandbox.rst:334
+msgid ":class:`~zett_agent.sandbox.linux.LinuxSandbox`"
+msgstr ":class:`~zett_agent.sandbox.linux.LinuxSandbox`"
+
+#: ../../learn/sandbox.rst:335
+msgid "bubblewrap (``bwrap``)"
+msgstr "bubblewrap（\\ ``bwrap``\\ ）"
+
+#: ../../learn/sandbox.rst:336
 msgid "Install ``bubblewrap``. Needs unprivileged user namespaces."
 msgstr "需要安装 ``bubblewrap``，并要求支持非特权用户命名空间。"
 
-#: ../../learn/sandbox.rst:334
+#: ../../learn/sandbox.rst:337
 msgid "Windows"
 msgstr "Windows"
 
-#: ../../learn/sandbox.rst:335
-msgid ":class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`"
-msgstr ":class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`"
+#: ../../learn/sandbox.rst:338
+msgid ":class:`~zett_agent.sandbox.windows.WindowsSandbox`"
+msgstr ":class:`~zett_agent.sandbox.windows.WindowsSandbox`"
 
-#: ../../learn/sandbox.rst:336
+#: ../../learn/sandbox.rst:339
+msgid "nothing"
+msgstr "无"
+
+#: ../../learn/sandbox.rst:340
 msgid "No isolation and no resource limits: Windows has neither rlimits nor cgroups. The interface is the same, ``isolated`` says ``False``, and every limit asked for is reported as unenforced."
 msgstr "没有隔离，也没有资源限制：Windows 既没有 rlimit 也没有 cgroup。接口保持一致，``isolated`` 为 ``False``，每一项被要求的限制都会报告为未执行。"
 
-#: ../../learn/sandbox.rst:338
-msgid ":func:`~zett_agent.sandbox.factory.create_sandbox` picks the platform's own."
-msgstr ":func:`~zett_agent.sandbox.factory.create_sandbox` 会选择该平台自己的后端。"
-
 #: ../../learn/sandbox.rst:342
-msgid "A backend that exists but cannot run raises :class:`~zett_agent.sandbox.errors.SandboxUnavailableError` with what to install or change. The sandbox layer never answers that by running the command unsandboxed. The one case that degrades is a platform with no backend at all: ``create_sandbox`` returns a ``PassthroughSandbox`` and emits a ``SandboxWarning``. Pass ``require_isolation=True`` to make that an error too."
-msgstr "存在但无法运行的后端会抛出 :class:`~zett_agent.sandbox.errors.SandboxUnavailableError`，并说明需要安装或更改什么。沙箱层绝不会因此退而在没有沙箱的情况下运行命令。唯一会降级的情况是平台根本没有后端：``create_sandbox`` 会返回 ``PassthroughSandbox`` 并发出 ``SandboxWarning``\\ 。传入 ``require_isolation=True`` 可以让这种情况也变成错误。"
+msgid ":func:`~zett_agent.sandbox.factory.create_sandbox` picks the platform's own. Any other platform gets a :class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`, which is what ``WindowsSandbox`` extends: the same behavior under no platform's name."
+msgstr ":func:`~zett_agent.sandbox.factory.create_sandbox` 会选择该平台自己的沙箱。其他平台则得到 :class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`，\\ ``WindowsSandbox`` 就是扩展自它：行为相同，只是不带任何平台的名字。"
 
-#: ../../learn/sandbox.rst:350
+#: ../../learn/sandbox.rst:349
+msgid "A backend that exists but cannot run raises :class:`~zett_agent.sandbox.errors.SandboxUnavailableError` with what to install or change. The sandbox layer never answers that by running the command unsandboxed. The one case that degrades is a platform with nothing to isolate with: ``create_sandbox`` returns a ``WindowsSandbox`` (or a ``PassthroughSandbox``) and emits a ``SandboxWarning``. Pass ``require_isolation=True`` to make that an error too."
+msgstr "存在但无法运行的后端会抛出 :class:`~zett_agent.sandbox.errors.SandboxUnavailableError`，并说明需要安装或更改什么。沙箱层绝不会因此退而在没有沙箱的情况下运行命令。唯一会降级的情况是平台没有任何可用于隔离的手段：``create_sandbox`` 会返回 ``WindowsSandbox``\\ （或 ``PassthroughSandbox``）并发出 ``SandboxWarning``\\ 。传入 ``require_isolation=True`` 可以让这种情况也变成错误。"
+
+#: ../../learn/sandbox.rst:358
 msgid "Spawn it yourself"
 msgstr "自己启动进程"
 
-#: ../../learn/sandbox.rst:352
+#: ../../learn/sandbox.rst:360
 msgid "``run`` is built on ``wrap``, which rewrites a command to run inside the sandbox and returns it without running anything. A host that manages its own processes, for streaming output or a pty, spawns the result itself:"
 msgstr "``run`` 建立在 ``wrap`` 之上，它会把命令改写成在沙箱内运行的形式并返回，但不会运行任何东西。自己管理进程的宿主（例如要流式输出或使用 pty）可以自行启动这个结果："
 
-#: ../../learn/sandbox.rst:363
+#: ../../learn/sandbox.rst:371
 msgid "Start it in its own process group so the whole tree can be stopped."
 msgstr "请让它在自己的进程组中启动，这样才能停止整棵进程树。"
 
-#: ../../learn/sandbox.rst:366
+#: ../../learn/sandbox.rst:374
 msgid "What ``run`` adds around the process"
 msgstr "``run`` 在进程之外增加了什么"
 
-#: ../../learn/sandbox.rst:368
+#: ../../learn/sandbox.rst:376
 msgid "Every backend shares this, so code behaves the same except in what it can confine:"
 msgstr "所有后端共用这部分，因此除了能限制的内容不同之外，代码的行为是一致的："
 
-#: ../../learn/sandbox.rst:370
+#: ../../learn/sandbox.rst:378
 msgid "A time limit (60 seconds by default, ``None`` for none). When it passes, the process group and its descendants are killed."
 msgstr "时间限制（默认 60 秒，``None`` 表示不限制）。超时后进程组及其后代进程会被杀死。"
 
-#: ../../learn/sandbox.rst:372
+#: ../../learn/sandbox.rst:380
 msgid "A cap on the output kept from each stream (1 MiB by default). The rest is read and discarded, so a process that prints forever can neither fill memory nor block on a full pipe."
 msgstr "每个输出流保留的字节数上限（默认 1 MiB）。超出的部分会被读取并丢弃，因此无休止打印的进程既不会占满内存，也不会因管道写满而阻塞。"
 
-#: ../../learn/sandbox.rst:375
+#: ../../learn/sandbox.rst:383
 msgid "A command that finishes does not leave helpers in its process group behind. They are stopped with it, and a child that still holds the output pipe cannot keep a finished run waiting."
 msgstr "命令结束后，它进程组里的辅助进程不会被遗留。它们会随之停止，仍然占用输出管道的子进程也不能让已经结束的运行继续等待。"
 
-#: ../../learn/sandbox.rst:378
+#: ../../learn/sandbox.rst:386
 msgid "Cancelling the awaiting task stops the process group and its descendants before the cancellation propagates."
 msgstr "取消正在等待的任务时，会先停止进程组及其后代进程，再传播取消。"
 
-#: ../../learn/sandbox.rst:382
+#: ../../learn/sandbox.rst:390
 msgid "Processes that detach"
 msgstr "脱离的进程"
 
-#: ../../learn/sandbox.rst:384
+#: ../../learn/sandbox.rst:392
 msgid "A child that starts a session of its own (``setsid``, or ``start_new_session`` in Python) leaves its parent's process group. While its parent is alive it is still found through the process tree, so a timeout, a cancellation or closing the session stops it. If the parent has already exited, nothing links the child to the command any more, and **on macOS it keeps running after the run and after the session closes**. On Linux the sandbox runs in its own PID namespace, so the kernel ends every process in it when the sandbox ends and this case does not arise."
 msgstr "开启了自己会话的子进程（``setsid``，或 Python 里的 ``start_new_session``）会离开父进程的进程组。只要父进程还活着，仍然可以通过进程树找到它，所以超时、取消或关闭会话都能停止它。如果父进程已经退出，就没有任何东西把这个子进程与命令关联起来了，**在 macOS 上它会在运行结束、会话关闭之后继续运行**\\ 。在 Linux 上，沙箱运行在自己的 PID 命名空间里，沙箱结束时内核会终结其中的所有进程，因此不会出现这种情况。"
 
-#: ../../learn/sandbox.rst:393
+#: ../../learn/sandbox.rst:401
 msgid "What it does not do"
 msgstr "它不做什么"
 
-#: ../../learn/sandbox.rst:395
+#: ../../learn/sandbox.rst:403
 msgid "Be clear about these before relying on it:"
 msgstr "依赖它之前，请先弄清楚这些："
 
-#: ../../learn/sandbox.rst:397
+#: ../../learn/sandbox.rst:405
 msgid "**No filtering by host.** The network is all or nothing. Allowing named domains needs a proxy, which this does not include."
 msgstr "**不按主机过滤。** 网络要么全开要么全关。只允许指定域名需要代理，这里不包含代理。"
 
-#: ../../learn/sandbox.rst:399
+#: ../../learn/sandbox.rst:407
 msgid "**No seccomp on Linux.** With the network open the process shares the host network namespace and can reach local services there. Closing it (the default) isolates them."
 msgstr "**Linux 上没有 seccomp。** 网络开放时，进程共享宿主的网络命名空间，可以访问那里的本地服务。关闭网络（默认）则会把它们隔离开。"
 
-#: ../../learn/sandbox.rst:402
+#: ../../learn/sandbox.rst:410
 msgid "**No total disk quota and no bandwidth limit**, as above."
 msgstr "**没有磁盘总量配额，也没有带宽限制**，理由同上。"
 
-#: ../../learn/sandbox.rst:403
+#: ../../learn/sandbox.rst:411
 msgid "**macOS network and sockets.** ``NetworkMode.FULL`` opens everything, including local services. ``NONE`` closes it all."
 msgstr "**macOS 的网络和套接字。** ``NetworkMode.FULL`` 会全部开放，包括本地服务。\\ ``NONE`` 则全部关闭。"
 
-#: ../../learn/sandbox.rst:405
+#: ../../learn/sandbox.rst:413
 msgid "**A protected path that does not exist yet.** macOS protects it from creation. On Linux a path can only be protected once it exists."
 msgstr "**尚不存在的受保护路径。** macOS 会阻止它被创建。在 Linux 上，路径只有存在之后才能被保护。"
 
-#: ../../learn/sandbox.rst:407
+#: ../../learn/sandbox.rst:415
 msgid "**Denials are silent.** A blocked operation shows up as the command's own \"Operation not permitted\". The sandbox does not report violations."
 msgstr "**拒绝是无声的。** 被阻止的操作表现为命令自己的 \"Operation not permitted\" 错误。沙箱不会报告违规。"
 
-#: ../../learn/sandbox.rst:409
+#: ../../learn/sandbox.rst:417
 msgid "**Nesting.** A process already inside a Seatbelt sandbox cannot start another; ``check`` says so."
 msgstr "**嵌套。** 已经处于 Seatbelt 沙箱内的进程无法再启动另一个；``check`` 会说明这一点。"
 
-#: ../../learn/sandbox.rst:411
+#: ../../learn/sandbox.rst:419
 msgid "**Windows.** No isolation at all."
 msgstr "**Windows。** 完全没有隔离。"
 
-#: ../../learn/sandbox.rst:412
+#: ../../learn/sandbox.rst:420
 msgid "**Not a defense against a kernel or sandbox vulnerability,** or against a process that misuses the access you did allow."
 msgstr "**无法防御内核或沙箱本身的漏洞，** 也无法防止进程滥用你确实允许的访问权限。"
 
-#: ../../learn/sandbox.rst:415
+#: ../../learn/sandbox.rst:423
 msgid "On Linux the working directory must be visible inside the sandbox. ``/tmp`` is a private tmpfs there, so a directory under ``/tmp`` is visible only if it is, or is inside, a writable path."
 msgstr "在 Linux 上，工作目录必须在沙箱内可见。那里的 ``/tmp`` 是私有的 tmpfs，所以 ``/tmp`` 下的目录只有在它本身是可写路径、或位于可写路径之内时才可见。"
 
-#: ../../learn/sandbox.rst:419
+#: ../../learn/sandbox.rst:427
 msgid "Next: :doc:`tools` for the shell tool this protects, or :doc:`../extending/built-ins` for the approval extension."
 msgstr "下一步：参阅 :doc:`tools` 了解它所保护的 shell 工具，或参阅 :doc:`../extending/built-ins` 了解审批扩展。"
 
-#: ../../learn/sandbox.rst:422
+#: ../../learn/sandbox.rst:430
 msgid "Related API: :class:`~zett_agent.sandbox.session.SandboxSession`, :class:`~zett_agent.sandbox.base.Sandbox`, :class:`~zett_agent.sandbox.policy.SandboxPolicy`, :class:`~zett_agent.sandbox.policy.ResourceLimits`, :class:`~zett_agent.sandbox.resources.ResourceReport`, :class:`~zett_agent.sandbox.resources.MemoryStrategy`, :func:`~zett_agent.sandbox.factory.create_sandbox`."
 msgstr "相关 API：:class:`~zett_agent.sandbox.session.SandboxSession`、:class:`~zett_agent.sandbox.base.Sandbox`、:class:`~zett_agent.sandbox.policy.SandboxPolicy`、:class:`~zett_agent.sandbox.policy.ResourceLimits`、:class:`~zett_agent.sandbox.resources.ResourceReport`、:class:`~zett_agent.sandbox.resources.MemoryStrategy`、:func:`~zett_agent.sandbox.factory.create_sandbox`\\ 。"
 
@@ -624,4 +640,16 @@ msgstr "相关 API：:class:`~zett_agent.sandbox.session.SandboxSession`、:clas
 
 #~ msgid "POSIX limit (``RLIMIT_NPROC``), counted per user, threads included."
 #~ msgstr "POSIX 限制（``RLIMIT_NPROC``），按用户计数，包含线程。"
+
+#~ msgid "Backend"
+#~ msgstr "后端"
+
+#~ msgid ":class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`"
+#~ msgstr ":class:`~zett_agent.sandbox.bubblewrap.BubblewrapSandbox`"
+
+#~ msgid ":class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`"
+#~ msgstr ":class:`~zett_agent.sandbox.passthrough.PassthroughSandbox`"
+
+#~ msgid ":func:`~zett_agent.sandbox.factory.create_sandbox` picks the platform's own."
+#~ msgstr ":func:`~zett_agent.sandbox.factory.create_sandbox` 会选择该平台自己的后端。"
 

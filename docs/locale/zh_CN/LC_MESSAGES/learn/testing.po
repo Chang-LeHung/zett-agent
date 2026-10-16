@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"POT-Creation-Date: 2026-10-17 01:14+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -21,7 +21,11 @@ msgid "Test your agent"
 msgstr "测试你的智能体"
 
 #: ../../learn/testing.rst:4
-msgid "Use deterministic models to test runtime behavior and a small set of opt-in live evaluations to test model quality. They answer different questions: \"Did my tool, routing, and cleanup work?\" does not require a network request; \"Does this model reliably solve the task?\" does."
+msgid ""
+"Use deterministic models to test runtime behavior and a small set of opt-"
+"in live evaluations to test model quality. They answer different "
+"questions: \"Did my tool, routing, and cleanup work?\" does not require a"
+" network request; \"Does this model reliably solve the task?\" does."
 msgstr "用确定性的模型测试运行时行为，再用少量按需启用的在线评估测试模型质量。它们回答的是不同的问题：“我的工具、路由和清理是否正常工作？”不需要网络请求；“这个模型能否可靠地解决任务？”则需要。"
 
 #: ../../learn/testing.rst:10
@@ -29,32 +33,63 @@ msgid "Test tools as Python operations"
 msgstr "把工具当作 Python 操作来测试"
 
 #: ../../learn/testing.rst:12
-msgid "Decoration returns an ``AgentTool``, so call it with an argument mapping. This exercises validation and the handler without asking a model to select it:"
+msgid ""
+"Decoration returns an ``AgentTool``, so call it with an argument mapping."
+" This exercises validation and the handler without asking a model to "
+"select it:"
 msgstr "装饰器会返回一个 ``AgentTool``，因此可以用参数映射来调用它。这样无需让模型选择它，就能检验校验和处理函数："
 
 #: ../../learn/testing.rst:32
-msgid "Install ``pytest`` and ``pytest-asyncio`` in your test environment. Direct tool calls propagate exceptions; inside an agent run, ordinary tool exceptions become unsuccessful results. Test both boundaries for important integrations."
-msgstr "在测试环境中安装 ``pytest`` 和 ``pytest-asyncio``\\ 。直接调用工具会向外传播异常；而在智能体运行内部，普通的工具异常会变成失败的工具结果。对重要的集成，请同时测试这两种边界情况。"
+msgid ""
+"Install ``pytest`` and ``pytest-asyncio`` in your test environment. "
+"Direct tool calls propagate exceptions; inside an agent run, ordinary "
+"tool exceptions become unsuccessful results. Test both boundaries for "
+"important integrations."
+msgstr ""
+"在测试环境中安装 ``pytest`` 和 ``pytest-asyncio``\\ "
+"。直接调用工具会向外传播异常；而在智能体运行内部，普通的工具异常会变成失败的工具结果。对重要的集成，请同时测试这两种边界情况。"
 
 #: ../../learn/testing.rst:37
 msgid "Script the model's decisions"
 msgstr "用脚本预设模型的决策"
 
 #: ../../learn/testing.rst:39
-msgid "Implement the public :class:`~zett_agent.model.AgentModel` protocol to choose exactly what the model returns in a test. There is no special mock-agent API: the real runtime still restores history, validates tools, dispatches events, and cleans up."
-msgstr "实现公开的 :class:`~zett_agent.model.AgentModel` 协议，就能在测试中精确决定模型返回什么。这里没有专门的 mock 智能体 API：真实的运行时仍会恢复历史记录、校验工具、分发事件并进行清理。"
+msgid ""
+"Implement the public :class:`~zett_agent.model.AgentModel` protocol to "
+"choose exactly what the model returns in a test. There is no special "
+"mock-agent API: the real runtime still restores history, validates tools,"
+" dispatches events, and cleans up."
+msgstr ""
+"实现公开的 :class:`~zett_agent.model.AgentModel` 协议，就能在测试中精确决定模型返回什么。这里没有专门的 "
+"mock 智能体 API：真实的运行时仍会恢复历史记录、校验工具、分发事件并进行清理。"
 
 #: ../../learn/testing.rst:48
-msgid "This adapter first asks for ``add``, then answers using the returned tool result. Its imports, tool, dispatcher, and assertions are in :download:`streaming_tools.py <../_examples/streaming_tools.py>`. Successful adapters must return a terminal ``ModelResponse`` containing the complete message. Text deltas alone do not constitute a final answer. See :doc:`../extending/model-adapter` for stream invariants."
-msgstr "这个适配器先请求 ``add``，然后使用返回的工具结果作答。它的导入、工具、分发器和断言都在 :download:`streaming_tools.py <../_examples/streaming_tools.py>` 中。成功的适配器必须返回一个包含完整消息的终止 ``ModelResponse``\\ 。仅有文本增量并不构成最终答案。关于流的约束条件，参见 :doc:`../extending/model-adapter`\\ 。"
+msgid ""
+"This adapter first asks for ``add``, then answers using the returned tool"
+" result. Its imports, tool, dispatcher, and assertions are in "
+":download:`streaming_tools.py <../_examples/streaming_tools.py>`. "
+"Successful adapters must return a terminal ``ModelResponse`` containing "
+"the complete message. Text deltas alone do not constitute a final answer."
+" See :doc:`../extending/model-adapter` for stream invariants."
+msgstr ""
+"这个适配器先请求 ``add``，然后使用返回的工具结果作答。它的导入、工具、分发器和断言都在 "
+":download:`streaming_tools.py <../_examples/streaming_tools.py>` "
+"中。成功的适配器必须返回一个包含完整消息的终止 ``ModelResponse``\\ 。仅有文本增量并不构成最终答案。关于流的约束条件，参见 "
+":doc:`../extending/model-adapter`\\ 。"
 
 #: ../../learn/testing.rst:56
 msgid "Assert behavior, not incidental timing"
 msgstr "断言行为，而非偶然的时序"
 
 #: ../../learn/testing.rst:58
-msgid "For a tool-calling workflow, verify the request includes the expected tool, the handler receives the right arguments, the model receives its result, and the client returns the expected answer. For concurrent tools, correlate by tool-call ID rather than assuming completion order."
-msgstr "对于工具调用工作流，请验证请求中包含预期的工具、处理函数收到正确的参数、模型收到其结果，以及客户端返回预期的答案。对于并发工具，应通过工具调用 ID 进行关联，而不是假设完成顺序。"
+msgid ""
+"For a tool-calling workflow, verify the request includes the expected "
+"tool, the handler receives the right arguments, the model receives its "
+"result, and the client returns the expected answer. For concurrent tools,"
+" correlate by tool-call ID rather than assuming completion order."
+msgstr ""
+"对于工具调用工作流，请验证请求中包含预期的工具、处理函数收到正确的参数、模型收到其结果，以及客户端返回预期的答案。对于并发工具，应通过工具调用 "
+"ID 进行关联，而不是假设完成顺序。"
 
 #: ../../learn/testing.rst:63
 msgid "Extend the same test to cover:"
@@ -81,38 +116,116 @@ msgid "Budget exhaustion and a provider stream that fails after partial output."
 msgstr "预算耗尽，以及提供商流在部分输出之后失败。"
 
 #: ../../learn/testing.rst:71
-msgid "Use events, queues, or explicit test barriers to synchronize concurrency. Avoid timing-dependent sleeps. The examples in :doc:`../examples/index` include assertions for many of these boundaries."
-msgstr "使用事件、队列或显式的测试屏障来同步并发。避免依赖时序的 sleep。许多这类边界都在 :doc:`../examples/index` 的示例中包含断言。"
+msgid ""
+"Use events, queues, or explicit test barriers to synchronize concurrency."
+" Avoid timing-dependent sleeps. The examples in :doc:`../examples/index` "
+"include assertions for many of these boundaries."
+msgstr ""
+"使用事件、队列或显式的测试屏障来同步并发。避免依赖时序的 sleep。许多这类边界都在 :doc:`../examples/index` "
+"的示例中包含断言。"
 
 #: ../../learn/testing.rst:76
 msgid "Test a real adapter without a real endpoint"
 msgstr "在没有真实端点的情况下测试真实适配器"
 
 #: ../../learn/testing.rst:78
-msgid "Inject ``httpx.MockTransport`` to test a built-in provider's request encoding and streamed response handling:"
+msgid ""
+"Inject ``httpx.MockTransport`` to test a built-in provider's request "
+"encoding and streamed response handling:"
 msgstr "注入 ``httpx.MockTransport``，即可测试内置提供商的请求编码和流式响应处理："
 
 #: ../../learn/testing.rst:84
-msgid "This program uses the actual OpenAI adapter with a local canned SSE response. It asserts the request path and user message, so no credential or network access is required. Run ``uv run python docs/_examples/provider_mock.py`` from a checkout:"
-msgstr "这个程序使用真实的 OpenAI 适配器，搭配本地预设的 SSE 响应。它会断言请求路径和用户消息，因此不需要凭据或网络访问。在检出目录中运行 ``uv run python docs/_examples/provider_mock.py``："
+msgid ""
+"This program uses the actual OpenAI adapter with a local canned SSE "
+"response. It asserts the request path and user message, so no credential "
+"or network access is required. Run ``uv run python "
+"docs/_examples/provider_mock.py`` from a checkout:"
+msgstr ""
+"这个程序使用真实的 OpenAI 适配器，搭配本地预设的 SSE 响应。它会断言请求路径和用户消息，因此不需要凭据或网络访问。在检出目录中运行 "
+"``uv run python docs/_examples/provider_mock.py``："
 
 #: ../../learn/testing.rst:93
-msgid ":download:`Download provider_mock.py <../_examples/provider_mock.py>`. Other providers expose the same ``transport`` injection point, but their wire formats differ. A passing mock test proves your protocol fixture works, not that a live endpoint supports every requested model feature."
-msgstr ":download:`下载 provider_mock.py <../_examples/provider_mock.py>`\\ 。其他提供商暴露相同的 ``transport`` 注入点，但它们的传输格式不同。通过的 mock 测试只能证明你的协议夹具可用，而不能证明线上端点支持所请求的每一项模型特性。"
+msgid ""
+":download:`Download provider_mock.py <../_examples/provider_mock.py>`. "
+"Other providers expose the same ``transport`` injection point, but their "
+"wire formats differ. A passing mock test proves your protocol fixture "
+"works, not that a live endpoint supports every requested model feature."
+msgstr ""
+":download:`下载 provider_mock.py <../_examples/provider_mock.py>`\\ "
+"。其他提供商暴露相同的 ``transport`` 注入点，但它们的传输格式不同。通过的 mock "
+"测试只能证明你的协议夹具可用，而不能证明线上端点支持所请求的每一项模型特性。"
 
 #: ../../learn/testing.rst:99
+msgid "Opt into checks against a real endpoint"
+msgstr "对真实端点做选择性检查"
+
+#: ../../learn/testing.rst:101
+msgid ""
+"``tests/test_live_gateway.py`` runs the built-in adapters against a "
+"service that speaks both protocols: the OpenAI Responses API at "
+"``/responses`` and the Anthropic Messages API at ``/v1/messages``. It "
+"covers what a fixture cannot: that a real service accepts what an adapter"
+" sends, and that the adapter reads what comes back, including provider-"
+"hosted tools, tool search on both the client and the server, and computer"
+" use."
+msgstr ""
+"``tests/test_live_gateway.py`` 让内置适配器去面对一个同时支持两种协议的服务："
+"位于 ``/responses`` 的 OpenAI Responses API 和位于 ``/v1/messages`` 的 Anthropic Messages API。"
+"它覆盖了固定响应无法覆盖的部分：真实服务确实接受适配器发出的内容，而适配器也读得懂返回的内容，"
+"包括厂商托管的工具、客户端与服务端两侧的工具搜索，以及 computer use。"
+
+#: ../../learn/testing.rst:108
+msgid ""
+"The checks skip unless two variables are set, so the default run stays "
+"offline. Name the model for each protocol you want to exercise:"
+msgstr ""
+"除非设置了这两个变量，否则这些检查会被跳过，因此默认的测试运行完全不联网。"
+"请为你想验证的每种协议指定模型："
+
+#: ../../learn/testing.rst:120
+msgid ""
+"``ZETT_AGENT_GATEWAY_TOKEN`` supplies the credential (``test`` by "
+"default) and ``ZETT_AGENT_GATEWAY_TIMEOUT`` the per-request limit in "
+"seconds (180 by default). A service that refuses a hosted tool type is "
+"expected, so that check skips rather than fails; a stream that ends "
+"without a terminal response never skips, because that is the adapter's "
+"bug to catch."
+msgstr ""
+"``ZETT_AGENT_GATEWAY_TOKEN`` 提供凭据（默认为 ``test``），"
+"``ZETT_AGENT_GATEWAY_TIMEOUT`` 提供每次请求的秒数上限（默认为 180）。"
+"服务拒绝某个托管工具类型是正常的，因此这种检查会跳过而不是失败；"
+"而流在没有终态响应的情况下结束永远不会跳过，因为那是适配器自己要抓的 bug。"
+
+#: ../../learn/testing.rst:127
 msgid "Keep tests safe and reproducible"
 msgstr "让测试安全且可复现"
 
-#: ../../learn/testing.rst:101
-msgid "Use temporary directories for files and SQLite databases. Never let a test construct a default user-data store or discover personal MCP/skill files. Pass explicit paths, explicit server lists, and explicit skill roots. Keep credentials absent from offline tests and opt into live calls separately."
-msgstr "文件和 SQLite 数据库请使用临时目录。绝不要让测试构造默认的用户数据存储，或发现个人的 MCP/技能文件。请传入显式的路径、显式的服务器列表和显式的技能根目录。离线测试中不要出现凭据，并单独选择启用在线调用。"
+#: ../../learn/testing.rst:129
+msgid ""
+"Use temporary directories for files and SQLite databases. Never let a "
+"test construct a default user-data store or discover personal MCP/skill "
+"files. Pass explicit paths, explicit server lists, and explicit skill "
+"roots. Keep credentials absent from offline tests and opt into live calls"
+" separately."
+msgstr ""
+"文件和 SQLite 数据库请使用临时目录。绝不要让测试构造默认的用户数据存储，或发现个人的 "
+"MCP/技能文件。请传入显式的路径、显式的服务器列表和显式的技能根目录。离线测试中不要出现凭据，并单独选择启用在线调用。"
 
-#: ../../learn/testing.rst:106
-msgid "The downloadable documentation programs are exercised by ``make docs-examples`` with network connections disabled and temporary working directories. ``make check`` additionally checks formatting, the runtime coverage gate, and a warning-free isolated documentation build."
-msgstr "可下载的文档程序由 ``make docs-examples`` 在禁用网络连接并使用临时工作目录的情况下运行。\\ ``make check`` 还会额外检查格式、运行时覆盖率门槛，以及一次无警告的隔离文档构建。"
+#: ../../learn/testing.rst:134
+msgid ""
+"The downloadable documentation programs are exercised by ``make docs-"
+"examples`` with network connections disabled and temporary working "
+"directories. ``make check`` additionally checks formatting, the runtime "
+"coverage gate, and a warning-free isolated documentation build."
+msgstr ""
+"可下载的文档程序由 ``make docs-examples`` 在禁用网络连接并使用临时工作目录的情况下运行。\\ ``make check``"
+" 还会额外检查格式、运行时覆盖率门槛，以及一次无警告的隔离文档构建。"
 
-#: ../../learn/testing.rst:111
-msgid "Next: :doc:`application` for production boundaries, or :doc:`../examples/cancellation` for a complete cleanup test."
-msgstr "下一步：关于生产环境边界，参见 :doc:`application`，关于完整的清理测试，参见 :doc:`../examples/cancellation`\\ 。"
+#: ../../learn/testing.rst:139
+msgid ""
+"Next: :doc:`application` for production boundaries, or "
+":doc:`../examples/cancellation` for a complete cleanup test."
+msgstr ""
+"下一步：关于生产环境边界，参见 :doc:`application`，关于完整的清理测试，参见 "
+":doc:`../examples/cancellation`\\ 。"
 

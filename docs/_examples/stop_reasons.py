@@ -44,8 +44,10 @@ async def main() -> None:
     heard = []
     async for event in agent.stream("Clean up the project"):
         if event.type is AgentEventType.MODEL_STOPPED:
+            assert event.stop is not None
             heard.append(event.stop.describe())
         if event.type is AgentEventType.RUN_COMPLETED:
+            assert isinstance(event.message, AssistantMessage)
             message = event.message
 
     # The run completed, and the message says it was not an answer.

@@ -297,7 +297,7 @@ class AnthropicProvider(RetryingProvider):
         :doc:`/concepts/context` explains replay during tool round trips.
     """
 
-    #: See :attr:`zett_agent.model.AgentModel.native_deferred_tools`. The Messages
+    #: See :attr:`zett_agent.model.NativeDeferredToolsModel.native_deferred_tools`. The Messages
     #: API accepts ``defer_loading`` tools and loads one when a ``tool_reference``
     #: names it, so every deferred definition travels with the request.
     native_deferred_tools: bool = True

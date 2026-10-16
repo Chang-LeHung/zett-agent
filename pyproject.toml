@@ -67,6 +67,7 @@ include = ["/src", "/README.md", "/LICENSE", "/pyproject.toml"]
 
 [dependency-groups]
 dev = [
+  "mypy>=1.13,<2",
   "pytest>=8,<9",
   "pytest-asyncio>=0.26,<2",
   "pytest-cov>=7,<8",
@@ -113,3 +114,11 @@ known-first-party = ["zett_agent"]
 quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
+
+# Checked: the package and the programs users copy from. The tests are not (yet): they use untyped
+# doubles on purpose. Run `make typecheck`.
+[tool.mypy]
+files = ["src/zett_agent", "examples", "docs/_examples"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true

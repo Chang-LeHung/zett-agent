@@ -28,7 +28,7 @@ class UsageObserver(AgentExtension):
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         if isinstance(event, MessageAppendedEvent) and event.usage is not None:
-            self.records.append((context.config.session_id, event))
+            self.records.append((context.session_id, event))
 
 
 class UsageModel:
@@ -51,6 +51,7 @@ async def main() -> None:
     client = await create_agent(UsageModel(), extensions=[observer])
     await client.run("Inspect usage")
     _, record = observer.records[0]
+    assert record.usage is not None
     assert record.timing.duration_ns >= 0
     assert record.timing.reasoning_duration_ns is not None
     assert record.timing.content_duration_ns is not None

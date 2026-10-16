@@ -5,15 +5,16 @@ UV ?= uv
 # Where `make docs` writes the site. Override it to build beside a running `make docs-live`.
 DOCS_OUT ?= docs/_build/html
 
-.PHONY: help install lint test build check docs docs-en docs-zh docs-pot docs-serve docs-live docs-check docs-examples docs-ui-check
+.PHONY: help install lint typecheck test build check docs docs-en docs-zh docs-pot docs-serve docs-live docs-check docs-examples docs-ui-check
 
 help:
 	@echo "Available targets:"
 	@echo "  make install    Sync the zett-agent environment from uv.lock"
 	@echo "  make lint       Check formatting and linting with Ruff"
+	@echo "  make typecheck  Type-check the package, examples and documentation examples with mypy"
 	@echo "  make test       Run the test suite with the coverage gate"
 	@echo "  make build      Build the sdist and wheel into dist/"
-	@echo "  make check      Run lint, tests with coverage, and documentation checks"
+	@echo "  make check      Run lint, type check, tests with coverage, and documentation checks"
 	@echo "  make docs       Build the HTML documentation in English and Chinese"
 	@echo "  make docs-pot   Refresh the Chinese translation catalogs from the English source"
 	@echo "  make docs-serve Build and preview the documentation at http://$(DOCS_HOST):$(DOCS_PORT)"
@@ -29,13 +30,16 @@ lint:
 	$(UV) run ruff format --check src tests examples
 	$(UV) run ruff check src tests examples
 
+typecheck:
+	$(UV) run mypy
+
 test:
 	$(UV) run pytest --cov --cov-report=term-missing
 
 build:
 	$(UV) build
 
-check: lint test docs-check
+check: lint typecheck test docs-check
 
 docs: docs-en docs-zh
 

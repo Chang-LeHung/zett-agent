@@ -29,11 +29,11 @@ class ParentModel:
             message = AssistantMessage(tool_calls=(call,))
         elif len(results) == 1:
             # The task is running; ask for its report and wait up to ten seconds.
-            task_id = json.loads(results[0].content)["task_id"]
+            task_id = json.loads(results[0].text)["task_id"]
             call = ToolCall("output-1", "task_output", {"task_id": task_id, "wait_seconds": 10})
             message = AssistantMessage(tool_calls=(call,))
         else:
-            report = json.loads(results[-1].content)["content"]
+            report = json.loads(results[-1].text)["content"]
             message = AssistantMessage(content=f"Background report: {report}")
         yield ModelEvent.completed(ModelResponse(message))
 

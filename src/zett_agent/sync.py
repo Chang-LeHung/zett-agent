@@ -14,7 +14,7 @@ from .extensions.base import AgentExtension
 from .extensions.external import ExternalEvent
 from .json_types import JsonValue
 from .messages import AssistantMessage, UserMessage
-from .model import AgentModel, ModelEvent, ModelRequest, ReasoningEffort
+from .model import AgentModel, ModelEvent, ModelRequest, ReasoningEffort, RetryOptions
 from .resume import ResumePoint
 from .sync_runtime import SyncMethodsMixin, SyncObject, SyncRuntime, SyncStream, _callback_loop, _worker
 from .tools.base import AgentTool
@@ -44,6 +44,8 @@ class SyncModelAdapter(SyncMethodsMixin):
 
     def __init__(self, model: Any) -> None:
         self.model = model
+        # The wrapped model owns its retry policy; a blocking model that declares none has no retries.
+        self.retry: RetryOptions = getattr(model, "retry", RetryOptions(max_retries=0))
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         """Translate one blocking iterator into the existing async model protocol."""

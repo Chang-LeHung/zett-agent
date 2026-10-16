@@ -50,6 +50,7 @@ def main() -> None:
                 with agent.stream("Remember this") as events:
                     for event in events:
                         if event.type is AgentEventType.RUN_COMPLETED:
+                            assert event.message is not None
                             assert event.message.content == "Turn 2: Remember this"
             # Storage is asynchronous; a plain function reaches it through the sync view.
             with history.storage.sync() as database:

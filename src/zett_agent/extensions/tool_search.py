@@ -340,13 +340,13 @@ class ToolSearchExtension(AgentExtension):
 
         A Responses endpoint learns a deferred definition only from the search
         result, so it never receives the definition up front. An adapter that
-        declares ``AgentModel.native_deferred_tools`` (Anthropic) must instead declare every
+        declares ``NativeDeferredToolsModel.native_deferred_tools`` (Anthropic) must instead declare every
         deferred tool with ``defer_loading`` so a search result can refer to it
         by name; its guidelines then ride in the description, because no
         system prompt carries them.
         """
-        # AgentModel declares the flag; getattr only covers a custom adapter
-        # written before the field existed, which then behaves as False.
+        # The flag is optional (NativeDeferredToolsModel declares it), so an adapter
+        # that does not set it behaves as False.
         if getattr(context.model, "native_deferred_tools", False):
             outgoing = replace(request, tools=tuple(self._declared(context, tool) for tool in request.tools))
         else:

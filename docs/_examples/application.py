@@ -49,7 +49,8 @@ async def main() -> None:
     else:
         raise AssertionError("The waiting request should time out")
     assert model.closed.is_set() and not client.agent.is_conflict("timeout")
-    assert client.agent.get_state("timeout").phase == AgentPhase.CANCELLED
+    state = client.agent.get_state("timeout")
+    assert state is not None and state.phase == AgentPhase.CANCELLED
     # Cancellation releases the session; it does not remove the recorded input.
     assert (await client.run("retry", config=AgentRunConfig(session_id="timeout"))).content == "retry2"
     print("Timeout cleaned up; session reused.")

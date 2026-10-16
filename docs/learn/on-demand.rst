@@ -166,8 +166,8 @@ is registered, its ``snippets`` and ``guidelines`` switches decide what the
 description carries, whatever its ``placement``; without it, a deferred tool
 carries its guidelines only.
 
-The difference is one field of the :class:`~zett_agent.model.AgentModel`
-protocol, ``native_deferred_tools``. It is ``True`` on ``AnthropicProvider`` and
+The difference is one optional field, ``native_deferred_tools``, declared by
+:class:`~zett_agent.model.NativeDeferredToolsModel`. It is ``True`` on ``AnthropicProvider`` and
 ``False`` on every other built-in adapter. A custom adapter sets it to ``True``
 when its protocol can load a deferred tool by reference.
 

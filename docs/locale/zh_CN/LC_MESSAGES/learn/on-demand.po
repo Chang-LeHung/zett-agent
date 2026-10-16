@@ -141,8 +141,8 @@ msgid "A deferred tool is skipped by :class:`~zett_agent.extensions.tool_guideli
 msgstr ":class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` 会跳过延迟加载的工具，所以它的描述是模型读到相关指引的唯一地方。注册了该扩展时，描述里带哪些内容由它的 ``snippets`` 和 ``guidelines`` 开关决定，与 ``placement`` 无关；没有该扩展时，延迟加载的工具只带它的 guidelines。"
 
 #: ../../learn/on-demand.rst:169
-msgid "The difference is one field of the :class:`~zett_agent.model.AgentModel` protocol, ``native_deferred_tools``. It is ``True`` on ``AnthropicProvider`` and ``False`` on every other built-in adapter. A custom adapter sets it to ``True`` when its protocol can load a deferred tool by reference."
-msgstr "区别在于 :class:`~zett_agent.model.AgentModel` 协议中的一个字段 ``native_deferred_tools``\\ 。它在 ``AnthropicProvider`` 上为 ``True``，在其他所有内置适配器上为 ``False``\\ 。自定义适配器的协议能够按引用加载延迟加载的工具时，就把它设为 ``True``\\ 。"
+msgid "The difference is one optional field, ``native_deferred_tools``, declared by :class:`~zett_agent.model.NativeDeferredToolsModel`. It is ``True`` on ``AnthropicProvider`` and ``False`` on every other built-in adapter. A custom adapter sets it to ``True`` when its protocol can load a deferred tool by reference."
+msgstr "区别在于一个可选字段 ``native_deferred_tools``\\ ，它由 :class:`~zett_agent.model.NativeDeferredToolsModel` 声明。它在 ``AnthropicProvider`` 上为 ``True``，在其他所有内置适配器上为 ``False``\\ 。自定义适配器的协议能够按引用加载延迟加载的工具时，就把它设为 ``True``\\ 。"
 
 #: ../../learn/on-demand.rst:175
 msgid "Tell the model what it can search for"

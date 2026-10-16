@@ -432,7 +432,7 @@ def _object_mapping(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
     if hasattr(value, "model_dump"):
-        return value.model_dump(exclude_none=True)  # type: ignore[no-any-return]
+        return value.model_dump(exclude_none=True)
     raise TypeError(f"Responses API object did not normalize to a mapping: {value!r}")
 
 

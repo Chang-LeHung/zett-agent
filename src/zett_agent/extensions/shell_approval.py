@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol
 
 from .._compat import StrEnum, TypeAliasType
 from ..agent import AgentRunContext
@@ -69,7 +69,7 @@ class ShellApprovalResponse:
         remember = payload.get("remember", False)
         if not isinstance(remember, bool):
             raise ValueError("Shell approval 'remember' must be a boolean")
-        return cls(decision=cast('Literal["execute", "abort"]', decision), remember=remember)
+        return cls(decision=decision, remember=remember)
 
 
 class ShellCommandAborted(RuntimeError):

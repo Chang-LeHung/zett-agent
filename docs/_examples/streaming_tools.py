@@ -64,6 +64,7 @@ class ConsoleEvents(AgentEventDispatcher):
         print(f"Tool: {call.name} {call.arguments}")
 
     async def on_tool_completed_event(self, event: AgentEvent) -> None:
+        assert event.message is not None
         print(f"Result: {event.message.content}")
 
     async def on_text_delta_event(self, event: AgentEvent) -> None:

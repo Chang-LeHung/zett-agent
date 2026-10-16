@@ -11,11 +11,10 @@ from ..exceptions import AgentIterationLimitError
 from ..messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage, UserMessage
 from ..model import ReasoningEffort
 from ..stop import StopReason
+from .contract import AgentContract, mixin_api
 
 if TYPE_CHECKING:
     from ..agent import AgentRunContext
-    from ..extensions.internal_message import InternalMessageExtension
-    from ..extensions.steering import SteeringExtension
 
 #: The event that reports what became of an input that was being worked on, by whether the input
 #: was steering from the user (first) or an internal message from an extension (second).
@@ -41,15 +40,10 @@ class _LoopState:
     continuing: bool = False
 
 
-class TurnLoopMixin:
+class TurnLoopMixin(AgentContract):
     """Drive a request: one model call, then its tools or its answer, until the request ends."""
 
-    max_iterations: int
-    max_internal_messages: int
-    max_pause_continuations: int
-    _internal_message_extension: InternalMessageExtension
-    _steering_extension: SteeringExtension
-
+    @mixin_api
     async def _run_loop(
         self,
         context: AgentRunContext,
@@ -175,6 +169,7 @@ class TurnLoopMixin:
             **fields,
         )
 
+    @mixin_api
     async def _start_steering(
         self,
         context: AgentRunContext,

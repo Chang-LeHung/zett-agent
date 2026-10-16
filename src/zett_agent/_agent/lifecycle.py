@@ -9,26 +9,23 @@ copy.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Coroutine, Mapping
-from contextlib import aclosing, asynccontextmanager
+from collections.abc import AsyncGenerator, AsyncIterator, Coroutine, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import replace
-from threading import RLock
 from typing import TYPE_CHECKING, Any
 
-from .._compat import add_note
+from .._compat import aclosing_stream, add_note
 from ..events import AgentEvent, AgentEventType
 from ..exceptions import AgentProtocolError
 from ..ids import new_uuid7
 from ..json_types import JsonValue, json_object
 from ..messages import AssistantMessage, SystemMessage, UserMessage
 from ..model import AgentModel, ReasoningEffort
+from .contract import AgentContract, mixin_api
 from .recovery import CANCELLED_TOOL_RESULT, INTERRUPTED_TOOL_RESULT
 
 if TYPE_CHECKING:
-    from ..agent import AgentRunConfig, AgentRunContext, AgentState
-    from ..extensions.internal_message import InternalMessageExtension
-    from ..extensions.steering import SteeringExtension
-    from ..tools.base import AgentTool
+    from ..agent import AgentRunConfig, AgentRunContext
 
 
 async def final_answer(events: AsyncIterator[AgentEvent]) -> AssistantMessage:
@@ -38,7 +35,7 @@ async def final_answer(events: AsyncIterator[AgentEvent]) -> AssistantMessage:
         AgentProtocolError: If the events end without a ``RUN_COMPLETED`` carrying an answer.
     """
     result: AssistantMessage | None = None
-    async with aclosing(events) as stream:
+    async with aclosing_stream(events) as stream:
         async for event in stream:
             if event.type == AgentEventType.RUN_COMPLETED and isinstance(event.message, AssistantMessage):
                 result = event.message
@@ -47,28 +44,16 @@ async def final_answer(events: AsyncIterator[AgentEvent]) -> AssistantMessage:
     return result
 
 
-class RequestLifecycleMixin:
+class RequestLifecycleMixin(AgentContract):
     """Create, run, and release the request-scoped context of one pass over a session.
 
-    The attributes below belong to :class:`~zett_agent.agent.Agent`, and the hooks, recovery and turn
-    methods this calls belong to the sibling mixins it is composed with.
+    The hooks, recovery and turn methods this calls belong to the sibling mixins it is composed with;
+    :class:`~zett_agent._agent.contract.AgentContract` declares them for the type checker.
     """
-
-    model: AgentModel | None
-    tools: dict[str, AgentTool]
-    system_prompt: str
-    reasoning_effort: ReasoningEffort
-    parallel_tool_call: bool
-    state: AgentState
-    _states: dict[str, AgentState]
-    _active_configs: dict[str, AgentRunConfig]
-    _sessions_lock: RLock
-    _initialized_config: AgentRunConfig | None
-    _internal_message_extension: InternalMessageExtension
-    _steering_extension: SteeringExtension
 
     # ------------------------------------------------------------------ the context
 
+    @mixin_api
     def _resolve_run_options(
         self, reasoning_effort: ReasoningEffort | None, parallel_tool_call: bool | None
     ) -> tuple[ReasoningEffort, bool]:
@@ -79,9 +64,9 @@ class RequestLifecycleMixin:
             raise ValueError("parallel_tool_call must be a boolean")
         return effort, allow_parallel
 
-    def _resolve_config(self, config: AgentRunConfig | None) -> AgentRunConfig:
+    @staticmethod
+    def _resolve_config(config: AgentRunConfig) -> AgentRunConfig:
         """Fill in the session and request identity a request needs, generating what is missing."""
-        config = config or self._initialized_config
         session_id = config.session_id or new_uuid7()
         if config.parent_session_id == session_id:
             raise ValueError("parent_session_id must differ from session_id")
@@ -90,6 +75,7 @@ class RequestLifecycleMixin:
             config = replace(config, request_id=new_uuid7())
         return config
 
+    @mixin_api
     def _prepare_request_context(
         self,
         config: AgentRunConfig | None,
@@ -103,11 +89,12 @@ class RequestLifecycleMixin:
         ``input_message`` is ``None`` for a pass that takes no new input, such as a compaction
         pass, a resume, or a read-only look at the session.
         """
-        if self._initialized_config is None:
+        initialized = self._initialized_config
+        if initialized is None:
             raise AgentProtocolError(
                 "Agent is not initialized; await agent.initialize(config=...) or Agent.create(...)"
             )
-        config = self._resolve_config(config)
+        config = self._resolve_config(config or initialized)
         resolved_model = model if model is not None else self.model
         if resolved_model is None:
             raise AgentProtocolError("This request requires a model because the Agent has no default model")
@@ -148,14 +135,14 @@ class RequestLifecycleMixin:
 
     def _claim_session(self, context: AgentRunContext) -> None:
         """Make this request the one that owns its session, or refuse if another does."""
-        config, state = context.config, context.state
+        session_id, state = context.session_id, context.state
         with self._sessions_lock:
-            previous = self._states.get(config.session_id)
-            if self.is_conflict(config.session_id):
+            previous = self._states.get(session_id)
+            if self.is_conflict(session_id):
                 phase = previous.phase.value if previous is not None else "active"
                 raise AgentProtocolError(f"Agent cannot start a new request while its current phase is {phase!r}")
-            self._active_configs[config.session_id] = config
-            self._states[config.session_id] = state
+            self._active_configs[session_id] = context.config
+            self._states[session_id] = state
             self.state = state
 
     def _release_request(self, context: AgentRunContext) -> None:
@@ -165,16 +152,18 @@ class RequestLifecycleMixin:
         for extension in self.extensions:
             extension._request_finished(context)
         with self._sessions_lock:
-            self._active_configs.pop(context.config.session_id, None)
+            self._active_configs.pop(context.session_id, None)
 
     # ------------------------------------------------------------------ loading history
 
+    @mixin_api
     async def _restore_context(self, context: AgentRunContext) -> None:
         """Begin loading: let the extensions register tools, then restore the session's history."""
         await self._start_context_loading(context)
         await self._broadcast("on_tool", context)
         await self._broadcast("on_state", context)
 
+    @mixin_api
     async def _settle_context(self, context: AgentRunContext) -> None:
         """Finish loading: publish what the setup hooks added, in the order a request writes it."""
         await context.flush_message_events()
@@ -202,8 +191,9 @@ class RequestLifecycleMixin:
 
     # ------------------------------------------------------------------ running and ending
 
+    @mixin_api
     @asynccontextmanager
-    async def _request_scope(self, context: AgentRunContext, *, via_queue: bool = False) -> AsyncIterator[None]:
+    async def _request_scope(self, context: AgentRunContext, *, via_queue: bool = False) -> AsyncGenerator[None]:
         """Run one pass, and however it ends, report it and release its session.
 
         A cancellation closes interrupted tool calls and publishes the cancellation, then propagates.
@@ -228,6 +218,7 @@ class RequestLifecycleMixin:
             self._release_request(context)
             await context.event_queue.close()
 
+    @mixin_api
     async def _run_request(
         self,
         context: AgentRunContext,
@@ -244,6 +235,7 @@ class RequestLifecycleMixin:
                 await self._open_request(context)
             await self._run_loop(context, reasoning_effort, parallel_tool_call)
 
+    @mixin_api
     async def _run_compaction(self, context: AgentRunContext) -> None:
         """Restore one session's history, then let every extension compact it."""
         async with self._request_scope(context, via_queue=True):
@@ -287,6 +279,7 @@ class RequestLifecycleMixin:
 
     # ------------------------------------------------------------------ handing events out
 
+    @mixin_api
     async def _pump_events(
         self,
         context: AgentRunContext,

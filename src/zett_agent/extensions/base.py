@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import aclosing
 from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING
 
-from .._compat import TypeAliasType
+from .._compat import TypeAliasType, aclosing_stream
 from ..tools.base import ToolResult
 
 if TYPE_CHECKING:
@@ -57,7 +56,7 @@ class MiddlewareHook:
         Pass ``request`` (or a dataclass replacement) to ``call_next``. The
         default closes the inner stream so cancellation reaches the provider.
         """
-        async with aclosing(call_next(request)) as events:
+        async with aclosing_stream(call_next(request)) as events:
             async for event in events:
                 yield event
 
@@ -136,7 +135,7 @@ class AgentRunHooksMixin:
             Usage::
 
                 async def on_success(self, context, result):
-                    await save_answer(context.config.session_id, result.content)
+                    await save_answer(context.session_id, result.content)
         """
 
     async def on_error(self, context: AgentRunContext, error: Exception) -> None:

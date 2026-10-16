@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from contextlib import aclosing
 from dataclasses import replace
 
-from .._compat import StrEnum
+from .._compat import StrEnum, aclosing_stream
 from ..agent import AgentRunContext
 from ..messages import SystemMessage
 from ..model import ModelEvent, ModelRequest, ToolDefinition
@@ -103,7 +102,7 @@ class ToolGuidelinesExtension(AgentExtension):
             request = replace(
                 request, tools=tuple(self._described(context, definition) for definition in request.tools)
             )
-        async with aclosing(call_next(request)) as events:
+        async with aclosing_stream(call_next(request)) as events:
             async for event in events:
                 yield event
 

@@ -6,6 +6,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeGuard
 
 from ..agent import AgentRunContext
 from ..messages import SystemMessage
@@ -94,10 +95,10 @@ class SkillFileParser:
             return value.strip("\"'")
         return None
 
-    def _valid_name(self, value: str | None) -> bool:
+    def _valid_name(self, value: str | None) -> TypeGuard[str]:
         return bool(value and len(value) <= self._MAX_NAME_LENGTH and self._NAME_PATTERN.fullmatch(value))
 
-    def _valid_description(self, value: str | None) -> bool:
+    def _valid_description(self, value: str | None) -> TypeGuard[str]:
         return bool(value and value.strip() and len(value) <= self._MAX_DESCRIPTION_LENGTH)
 
 

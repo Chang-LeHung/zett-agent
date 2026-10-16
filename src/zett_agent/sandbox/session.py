@@ -26,7 +26,7 @@ from ..sync_runtime import SyncRuntime
 from .base import DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_SECONDS, Sandbox, SandboxResult
 from .errors import SandboxClosedError, SandboxCommandError, SandboxError, SandboxPolicyError
 from .factory import SandboxBackend, create_sandbox
-from .policy import NetworkMode, ResourceLimits, SandboxPolicy
+from .policy import NetworkMode, ResourceLimits, SandboxPolicy, _as_paths
 from .resources import MemoryStrategy, ResourceReport
 
 __all__ = ["SandboxSession", "parse_size"]
@@ -284,9 +284,9 @@ class SandboxSession:
                     if not workspace.is_dir():
                         raise SandboxPolicyError(f"workspace is not a directory: {workspace}")
                 policy = SandboxPolicy(
-                    writable_paths=(workspace, scratch, *self._writable),
-                    denied_write_paths=self._deny_write,
-                    denied_read_paths=self._deny_read,
+                    writable_paths=(workspace, scratch, *_as_paths(self._writable, "writable_paths")),
+                    denied_write_paths=_as_paths(self._deny_write, "denied_write_paths"),
+                    denied_read_paths=_as_paths(self._deny_read, "denied_read_paths"),
                     network=self._network,
                     limits=self._limits,
                 )

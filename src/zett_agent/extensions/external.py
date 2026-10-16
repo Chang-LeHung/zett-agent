@@ -128,7 +128,7 @@ class ExternalEventExtension(AgentExtension):
                 async with self._wait_for_external_event(context, call.id):
                     await context.emit(AgentEvent(
                         AgentEventType.CUSTOM,
-                        session_id=context.config.session_id,
+                        session_id=context.session_id,
                         name="confirmation_requested",
                         payload={"tool_call_id": call.id, "question": "Proceed?"},
                     ))
@@ -201,7 +201,7 @@ class ExternalEventExtension(AgentExtension):
             if response_event_name not in response_names:
                 raise ValueError(f"Unsupported response event name: {response_event_name!r}")
             response_names = frozenset((response_event_name,))
-        key = (context.config.session_id, correlation_id)
+        key = (context.session_id, correlation_id)
         pending = _PendingExternalEvent(context, asyncio.get_running_loop().create_future(), response_names)
         with self._pending_lock:
             if key in self._pending:

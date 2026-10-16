@@ -154,7 +154,10 @@ class PhaseState(Protocol):
 class PhaseContext(Protocol):
     """Context operations required to transition and publish a phase."""
 
-    state: PhaseState
+    # Read-only: a transition changes ``state.phase``, never which state the context holds. A plain
+    # attribute would be invariant, so a context with a richer state class could not satisfy it.
+    @property
+    def state(self) -> PhaseState: ...
 
     async def publish(self, event: ExtensionEvent) -> None:
         """Publish one extension event."""
@@ -386,7 +389,10 @@ class ModelOutputTracker:
         )
 
     @staticmethod
-    def _span(started, completed) -> tuple[datetime | None, datetime | None, int | None]:
+    def _span(
+        started: ContentStartedEvent | ReasoningStartedEvent | None,
+        completed: ContentCompletedEvent | ReasoningCompletedEvent | None,
+    ) -> tuple[datetime | None, datetime | None, int | None]:
         if started is None or completed is None:
             return None, None, None
         return started.occurred_at, completed.occurred_at, max(0, completed.monotonic_ns - started.monotonic_ns)

@@ -42,7 +42,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 from .._compat import StrEnum
 from .errors import SandboxPolicyError
@@ -285,7 +285,7 @@ def plan_rlimits(
     for name in fields:
         attribute, _ = _RLIMIT_FIELDS[name]
         resource_id = getattr(_resource, attribute, None) if _resource is not None else None
-        if resource_id is None or name not in kernel:
+        if _resource is None or resource_id is None or name not in kernel:
             warnings.append(f"{name} cannot be limited on {sys.platform}: this kernel does not support {attribute}")
             continue
         requested = 0 if name == "core_dumps" else getattr(limits, name)
@@ -316,6 +316,8 @@ def apply_rlimits(steps: tuple[RlimitStep, ...]) -> None:
     :meth:`~zett_agent.sandbox.base.Sandbox.capabilities` already told the caller
     what this machine can do.
     """
+    if _resource is None:  # pragma: no cover - there is no plan without the module
+        return
     for step in steps:
         try:
             _resource.setrlimit(step.resource, (step.soft, step.hard))
@@ -640,7 +642,7 @@ def plan_resources(
     kernel = rlimit_support()
     planned, warnings = plan_rlimits(limits, supported=kernel)
     steps = {step.name: step for step in planned}
-    mechanisms = dict.fromkeys(
+    mechanisms: dict[str, str] = dict.fromkeys(
         ("memory", "cpu_seconds", "cpu_percent", "processes", "file_size_bytes", "open_files", "core_dumps"), "none"
     )
     if "core_dumps" in steps:
@@ -712,7 +714,8 @@ def plan_resources(
         [step for step in used_rlimits if step.name not in handle.applied] if handle is not None else used_rlimits
     )
     return ResourcePlan(
-        report=ResourceReport(**mechanisms, warnings=tuple(dict.fromkeys(notes))),
+        # ``mechanisms`` holds exactly the per-limit fields of ``ResourceReport``, one string each.
+        report=ResourceReport(**cast("dict[str, Any]", mechanisms), warnings=tuple(dict.fromkeys(notes))),
         rlimits=tuple(used_rlimits),
         cgroup=handle if create_cgroup else None,
         watchdog=mechanisms["memory"] == "watchdog",

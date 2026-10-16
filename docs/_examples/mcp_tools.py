@@ -1,7 +1,7 @@
 """Exercise MCP registration, structured results, and cleanup with an in-memory client."""
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 
 from mcp_types import CallToolResult, ListToolsResult, Tool
@@ -50,7 +50,7 @@ async def main() -> None:
     local = LocalMcpClient()
 
     @asynccontextmanager
-    async def connect(server: McpServer) -> AsyncIterator[McpClient]:
+    async def connect(server: McpServer) -> AsyncGenerator[McpClient]:
         assert server.name == "demo"
         try:
             yield local

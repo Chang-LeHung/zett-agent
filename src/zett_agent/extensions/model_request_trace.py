@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from contextlib import aclosing
 from copy import deepcopy
 from typing import Literal, TypedDict, cast
 
+from .._compat import aclosing_stream
 from ..agent import AgentRunContext
 from ..json_types import JsonValue
 from ..model import ModelEvent, ModelEventType, ModelRequest, ServerToolDefinition, ToolDefinition
@@ -84,7 +84,7 @@ class ModelRequestTraceExtension(AgentExtension):
     ) -> AsyncIterator[ModelEvent]:
         """Attach one immutable request snapshot to the completed response."""
         snapshot = model_request_trace(request)
-        async with aclosing(call_next(request)) as events:
+        async with aclosing_stream(call_next(request)) as events:
             async for event in events:
                 if event.type is ModelEventType.RESPONSE and event.response is not None:
                     event.response.message.attributes[MODEL_REQUEST_TRACE_ATTRIBUTE] = deepcopy(snapshot)

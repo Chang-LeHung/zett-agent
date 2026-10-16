@@ -6,7 +6,18 @@ import ssl
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from ..messages import AssistantMessage, ImageBytesSource, ImageContent, ImageUrlSource, ToolCall
+from .._compat import aclose_stream
+from ..messages import (
+    AgentMessage,
+    AssistantMessage,
+    ImageBytesSource,
+    ImageContent,
+    ImageUrlSource,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
     ModelEvent,
@@ -150,12 +161,12 @@ class OllamaProvider(RetryingProvider):
             raise ProviderResponseError(f"Ollama does not support provider-hosted server tools: {requested}")
         messages: list[dict[str, Any]] = []
         for message in expand_tool_images(request.messages):
-            match message.role:
-                case "agent":
+            match message:
+                case AgentMessage():
                     messages.append({"role": "user", "content": message.content})
-                case "system":
+                case SystemMessage():
                     messages.append({"role": "system", "content": message.content})
-                case "user":
+                case UserMessage():
                     payload: dict[str, Any] = {"role": "user", "content": message.text}
                     images: list[str] = []
                     for part in message.parts:
@@ -169,7 +180,7 @@ class OllamaProvider(RetryingProvider):
                     if images:
                         payload["images"] = images
                     messages.append(payload)
-                case "assistant":
+                case AssistantMessage():
                     payload = {"role": "assistant", "content": message.content}
                     if message.tool_calls:
                         payload["tool_calls"] = [
@@ -179,7 +190,7 @@ class OllamaProvider(RetryingProvider):
                     if message.reasoning:
                         payload["thinking"] = message.reasoning
                     messages.append(payload)
-                case "tool":
+                case ToolMessage():
                     messages.append(
                         {
                             "role": "tool",
@@ -247,12 +258,12 @@ class OllamaProvider(RetryingProvider):
             status = int(getattr(error, "status_code", 0) or 0)
             raw = getattr(error, "error", None)
             failure = read_failure(content_type=None, text=raw if isinstance(raw, str) else json.dumps(raw), parsed=raw)
-            message = failure_message("ollama", status, failure)
+            description = failure_message("ollama", status, failure)
             if status in (401, 403):
-                raise ProviderAuthError(f"Provider rejected API credential. {message}") from error
-            raise http_error(status, failure, message) from error
+                raise ProviderAuthError(f"Provider rejected API credential. {description}") from error
+            raise http_error(status, failure, description) from error
         finally:
-            await stream.aclose()
+            await aclose_stream(stream)
         if not done:
             raise ProviderResponseError("Ollama stream ended without a terminal response")
         yield ModelEvent.completed(

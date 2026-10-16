@@ -114,16 +114,16 @@ class TodoWriteExtension(AgentExtension):
 
     async def after_run(self, context: AgentRunContext, result: AssistantMessage) -> None:
         """Release todo state after a successful request finishes."""
-        self.clear(context.config.session_id)
+        self.clear(context.session_id)
 
     async def on_error(self, context: AgentRunContext, error: Exception) -> None:
         """Release todo state when a request terminates with an error."""
-        self.clear(context.config.session_id)
+        self.clear(context.session_id)
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Release todo state when cancellation terminates a request."""
         if isinstance(event, RunCancelledEvent):
-            self.clear(context.config.session_id)
+            self.clear(context.session_id)
 
     def todos(self, session_id: str) -> TodoWriteResult | None:
         """Return the latest validated list for one session, if it has one."""
@@ -162,7 +162,7 @@ class TodoWriteExtension(AgentExtension):
                 - Complete at most one task per call; then the next pending task becomes in_progress.
                 - Mark a task completed only after the work is done; finish with every task completed.
             """
-            return self._write(context.config.session_id, tuple(todos))
+            return self._write(context.session_id, tuple(todos))
 
         return todo_write
 

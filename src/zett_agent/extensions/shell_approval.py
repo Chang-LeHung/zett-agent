@@ -32,6 +32,7 @@ class ShellApprovalStorage(Protocol):
 
     async def get_session_mode(self, session_id: str) -> ShellApprovalMode:
         """Return the persisted approval policy for one session."""
+        ...
 
     async def set_session_mode(self, session_id: str, mode: ShellApprovalMode) -> None:
         """Persist the approval policy for one session."""
@@ -41,6 +42,7 @@ class ShellApprovalStorage(Protocol):
 
     async def is_allowed(self, session_id: str, command: str) -> bool:
         """Return whether one session permits execution of one exact command."""
+        ...
 
     async def allow_command(self, command: str) -> None:
         """Persist one command in the allowlist."""
@@ -133,7 +135,7 @@ class ShellApprovalExtension(ExternalEventExtension):
         if not isinstance(command, str) or not command.strip():
             return await call_next()
         command = command.strip()
-        if self.storage is not None and await self.storage.is_allowed(context.config.session_id, command):
+        if self.storage is not None and await self.storage.is_allowed(context.session_id, command):
             return await call_next()
 
         timeout_seconds = call.arguments.get("timeout_seconds", 30)
@@ -142,7 +144,7 @@ class ShellApprovalExtension(ExternalEventExtension):
         async with self._wait_for_external_event(context, call.id):
             await context.emit(
                 ShellApprovalRequestedEvent(
-                    context.config.session_id,
+                    context.session_id,
                     call,
                     command=command,
                     timeout_seconds=timeout_seconds,

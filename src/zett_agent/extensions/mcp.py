@@ -12,7 +12,7 @@ from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from .._compat import TypeAliasType
 from ..agent import AgentRunContext
@@ -22,7 +22,7 @@ from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
 
 if TYPE_CHECKING:
-    from mcp_types import CallToolResult, ListToolsResult, Tool
+    from mcp_types import CallToolResult, ListToolsResult, TextContent, Tool
 
 DEFAULT_MCP_CONFIG_PATH = Path("~/.zett/mcp.json")
 DEFAULT_MCP_SERVER_KEYS = ("servers", "mcpServers")
@@ -755,7 +755,7 @@ async def _authenticated_http_client(server: McpHttpServer) -> AsyncGenerator[Mc
 
 
 def _mcp_result_text(result: CallToolResult) -> str:
-    return "\n".join(part.text for part in result.content if getattr(part, "type", None) == "text")
+    return "\n".join(cast("TextContent", part).text for part in result.content if getattr(part, "type", None) == "text")
 
 
 def _validate_server_name(name: str) -> None:

@@ -12,7 +12,7 @@ from contextvars import ContextVar
 from functools import wraps
 from queue import Queue
 from threading import Event, Lock, Thread, get_ident
-from typing import Any, Generic, ParamSpec, TypeVar, overload
+from typing import Any, Generic, ParamSpec, TypeVar, cast, overload
 
 from ._compat import BaseExceptionGroup, Self, owned_event_loop
 
@@ -100,7 +100,13 @@ class SyncRuntime(AbstractContextManager):
                 coroutine.close()
                 raise
 
-    def call(self, function: Callable[_P, _T | Awaitable[_T]], /, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    @overload
+    def call(self, function: Callable[_P, Awaitable[_T]], /, *args: _P.args, **kwargs: _P.kwargs) -> _T: ...
+
+    @overload
+    def call(self, function: Callable[_P, _T], /, *args: _P.args, **kwargs: _P.kwargs) -> _T: ...
+
+    def call(self, function: Callable[_P, Any], /, *args: _P.args, **kwargs: _P.kwargs) -> Any:
         """Invoke a callable on the owned loop and wait for its final value.
 
         Accept a callable and its arguments, not an already-created coroutine.
@@ -113,7 +119,7 @@ class SyncRuntime(AbstractContextManager):
         asyncio.to_thread when that operation must run outside the loop.
         """
 
-        async def invoke() -> _T:
+        async def invoke() -> Any:
             result = function(*args, **kwargs)
             return await result if inspect.isawaitable(result) else result
 
@@ -405,7 +411,9 @@ class SyncObject(AbstractContextManager, Generic[_T]):
         setattr(self.wrapped, name, value)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        return self._invoke(self.wrapped, *args, **kwargs)
+        # Wrapping something calls it, so it is callable whenever this is reached; ``_T`` itself is unbounded.
+        function = cast("Callable[..., Any]", self.wrapped)
+        return self._invoke(function, *args, **kwargs)
 
     def __enter__(self) -> Self:
         self.runtime.__enter__()

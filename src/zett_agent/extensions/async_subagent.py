@@ -220,7 +220,7 @@ class AsyncSubAgentExtension(SubAgentExtension):
         """Add one notice per finished task the model has not been told about."""
         if not self.notify_parent:
             return
-        for task in self.tasks(context.config.session_id):
+        for task in self.tasks(context.session_id):
             if task.finished and not task.notified:
                 task.notified = True
                 notice = self.completion_notice(task)
@@ -259,7 +259,7 @@ class AsyncSubAgentExtension(SubAgentExtension):
         Raises:
             ValueError: If the session already runs ``max_concurrent`` tasks.
         """
-        session_id = context.config.session_id
+        session_id = context.session_id
         running = sum(not task.finished for task in self.tasks(session_id))
         if running >= self.max_concurrent:
             raise ValueError(
@@ -319,7 +319,7 @@ class AsyncSubAgentExtension(SubAgentExtension):
         Override to drop a tool, add one, or replace one, calling
         ``super().build_tools(...)`` for the rest.
         """
-        session_id = context.config.session_id
+        session_id = context.session_id
         return (
             self._start_tool(context, subagents),
             self._list_tool(session_id),

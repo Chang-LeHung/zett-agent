@@ -8,12 +8,11 @@ import math
 import re
 from collections import Counter
 from collections.abc import AsyncIterator, Sequence
-from contextlib import aclosing
 from dataclasses import replace
 from typing import Any, Literal, Protocol, TypedDict
 from weakref import WeakKeyDictionary
 
-from .._compat import StrEnum
+from .._compat import StrEnum, aclosing_stream
 from ..agent import AgentRunContext
 from ..messages import SystemMessage
 from ..model import ModelEvent, ModelRequest, ToolDefinition
@@ -353,7 +352,7 @@ class ToolSearchExtension(AgentExtension):
         else:
             outgoing = replace(request, tools=tuple(tool for tool in request.tools if not tool.deferred))
         outgoing = replace(outgoing, tools=tuple(self._with_catalog(context, tool) for tool in outgoing.tools))
-        async with aclosing(call_next(outgoing)) as events:
+        async with aclosing_stream(call_next(outgoing)) as events:
             async for event in events:
                 yield event
 
@@ -432,7 +431,7 @@ class ToolSearchExtension(AgentExtension):
     async def _clear_sent(self, context: AgentRunContext) -> None:
         """Forget every definition recorded for the request's session."""
         self._run_sent.pop(context, None)
-        session_id = context.config.session_id
+        session_id = context.session_id
         self._session_sent.pop(session_id, None)
         if self._storage is not None:
             await self._storage.delete(self._storage_key(session_id))
@@ -444,7 +443,7 @@ class ToolSearchExtension(AgentExtension):
         filter, and write happen under one lock; otherwise two calls that
         overlap would both hand out the same definition.
         """
-        session_id = context.config.session_id
+        session_id = context.session_id
         async with self._lock:
             sent = set(self._run_sent.get(context, ()))
             sent |= await self._load_sent(session_id)

@@ -65,7 +65,7 @@ class GoalEvaluation(BaseModel):
 class _GoalRun:
     """Request-local goal command and continuation count."""
 
-    armed_key: tuple[str, str | None]
+    armed_key: tuple[str | None, str | None]
     goal: str | None = None
     raw_content: UserContent | None = None
     continuation_count: int = 0
@@ -163,7 +163,7 @@ class GoalExtension(AgentExtension):
         self.max_iterations = max_iterations
         self.max_decision_retries = max_decision_retries
         self._runs: dict[AgentRunContext, _GoalRun] = {}
-        self._armed_requests: set[tuple[str, str | None]] = set()
+        self._armed_requests: set[tuple[str | None, str | None]] = set()
         self._armed_lock = Lock()
 
     def accept(self, config: AgentRunConfig | None, event: ExternalEvent) -> bool:
@@ -183,7 +183,7 @@ class GoalExtension(AgentExtension):
     async def on_message(self, context: AgentRunContext) -> None:
         """Consume a matching external selection and inject the Goal Mode prompt."""
         message = context.input_message
-        session_id = context.config.session_id
+        session_id = context.session_id
         request_id = context.config.request_id
         exact_key = (session_id, request_id)
         wildcard_key = (session_id, None)
@@ -337,7 +337,7 @@ class GoalExtension(AgentExtension):
             definition.model,
             config=AgentRunConfig(
                 session_id=new_uuid7(),
-                parent_session_id=context.config.session_id,
+                parent_session_id=context.session_id,
             ),
             system_prompt=definition.system_prompt,
             tools=(*definition.tools, report_goal_evaluation),

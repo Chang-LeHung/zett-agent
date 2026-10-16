@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from contextlib import aclosing
 from dataclasses import replace
 from importlib.resources import files
 from threading import RLock
 from typing import Literal
 
+from .._compat import aclosing_stream
 from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType, AgentPhase
 from ..extensions.base import AgentExtension, ModelRequestNext, ToolCallNext
@@ -203,7 +203,7 @@ class JITHarnessExtension(AgentExtension):
 
     async def on_tool(self, context: AgentRunContext) -> None:
         """Rebind current base tools, mount wrappers, and remove unloaded tools."""
-        session_id = context.config.session_id
+        session_id = context.session_id
         with self._lock:
             harness = self._sessions.get(session_id)
             if harness is None:
@@ -220,11 +220,11 @@ class JITHarnessExtension(AgentExtension):
 
     async def on_state(self, context: AgentRunContext) -> None:
         """Adopt tools registered by later setup hooks before context loading."""
-        self.get_harness(context.config.session_id).sync_tools(context)
+        self.get_harness(context.session_id).sync_tools(context)
 
     async def on_tool_call(self, context: AgentRunContext, call: ToolCall, call_next: ToolCallNext) -> ToolResult:
         """Adopt late before-tool registrations before handler middleware runs."""
-        self.get_harness(context.config.session_id).sync_tools(context)
+        self.get_harness(context.session_id).sync_tools(context)
         return await call_next()
 
     async def before_tool(self, context: AgentRunContext, call: ToolCall) -> None:
@@ -236,7 +236,7 @@ class JITHarnessExtension(AgentExtension):
         """
         origin = self._observed_origin(context, call.name)
         if origin is not None:
-            await context.emit(JITToolStartedEvent(context.config.session_id, call, origin))
+            await context.emit(JITToolStartedEvent(context.session_id, call, origin))
 
     async def after_tool(
         self,
@@ -250,7 +250,7 @@ class JITHarnessExtension(AgentExtension):
         if origin is not None:
             await context.emit(
                 JITToolCompletedEvent(
-                    context.config.session_id,
+                    context.session_id,
                     call,
                     origin,
                     success=result.success,
@@ -260,7 +260,7 @@ class JITHarnessExtension(AgentExtension):
 
     def _observed_origin(self, context: AgentRunContext, name: str) -> ToolOrigin | None:
         with self._lock:
-            harness = self._sessions.get(context.config.session_id)
+            harness = self._sessions.get(context.session_id)
         if harness is None:
             return None
         origin = harness.origin(name)
@@ -483,7 +483,7 @@ class JITHarnessExtension(AgentExtension):
         self, context: AgentRunContext, request: ModelRequest, call_next: ModelRequestNext
     ) -> AsyncIterator[ModelEvent]:
         """Render current guidance afresh, without persisting stale definitions."""
-        harness = self.get_harness(context.config.session_id)
+        harness = self.get_harness(context.session_id)
         harness.sync_tools(context)
         # Preserve a caller's request-level tool subset; synchronization must
         # never re-expose capabilities filtered by another policy middleware.
@@ -515,7 +515,7 @@ class JITHarnessExtension(AgentExtension):
                 attributes={_GUIDANCE_KEY: True},
             )
             filtered = replace(request, messages=(instructions, *messages))
-        async with aclosing(call_next(filtered)) as events:
+        async with aclosing_stream(call_next(filtered)) as events:
             async for event in events:
                 yield event
 
@@ -562,7 +562,7 @@ class JITHarnessExtension(AgentExtension):
 
     def _release(self, context: AgentRunContext) -> None:
         with self._lock:
-            if (harness := self._sessions.get(context.config.session_id)) is not None:
+            if (harness := self._sessions.get(context.session_id)) is not None:
                 harness.detach(context)
 
     def _request_finished(self, context: AgentRunContext) -> None:

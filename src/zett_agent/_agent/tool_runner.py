@@ -19,11 +19,11 @@ from ..tools.base import (
     _reset_tool_call,
 )
 from ..tools.invocation import invoke_tool
+from .contract import AgentContract, mixin_api
 
 if TYPE_CHECKING:
     from ..agent import AgentRunContext
     from ..extensions.events import MessageTiming
-    from ..extensions.steering import SteeringExtension
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,11 +36,10 @@ class _ToolInvocation:
     timing: MessageTiming
 
 
-class ToolRunnerMixin:
+class ToolRunnerMixin(AgentContract):
     """Execute one batch of tool calls and append their results to the context."""
 
-    _steering_extension: SteeringExtension
-
+    @mixin_api
     async def _execute_tools(
         self,
         context: AgentRunContext,

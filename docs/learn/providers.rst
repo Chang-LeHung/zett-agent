@@ -26,6 +26,24 @@ touch the rest of your code.
    * - :class:`~zett_agent.providers.deepseek.DeepSeekProvider`
      - DeepSeek Chat Completions or Responses
      - Model name and API key
+   * - :class:`~zett_agent.providers.openrouter.OpenRouterProvider`
+     - OpenRouter, one endpoint for many models
+     - Model slug and API key
+   * - :class:`~zett_agent.providers.kimi.KimiProvider`
+     - Kimi (Moonshot AI) Chat Completions
+     - Model name and API key
+   * - :class:`~zett_agent.providers.glm.GLMProvider`
+     - GLM (Z.ai) Chat Completions
+     - Model name and API key
+   * - :class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`
+     - Any service that speaks Chat Completions, with no vendor assumptions
+     - Model name, API key, and ``base_url``
+   * - :class:`~zett_agent.providers.deepseek.DeepSeekAnthropicProvider`, :class:`~zett_agent.providers.kimi.KimiAnthropicProvider`, :class:`~zett_agent.providers.glm.GLMAnthropicProvider`
+     - The same three services over the Anthropic Messages protocol
+     - Model name and API key
+   * - :class:`~zett_agent.providers.anthropic_compatible.AnthropicCompatibleProvider`
+     - Any service that speaks the Messages protocol, with no vendor assumptions
+     - Model name, API key, and ``base_url``
    * - :class:`~zett_agent.providers.ollama.OllamaProvider`
      - A running Ollama server
      - Installed model (and server URL if not localhost)
@@ -109,6 +127,58 @@ examples.
       Uses Chat Completions by default. ``response=True`` selects a
       Responses-compatible endpoint when your service supports it.
 
+   .. tab-item:: OpenRouter
+
+      .. code-block:: python
+
+         import os
+         from zett_agent.providers.openrouter import OpenRouterProvider
+
+         model = OpenRouterProvider(
+             model=os.environ["OPENROUTER_MODEL"],
+             api_key=os.environ["OPENROUTER_API_KEY"],
+             site_url="https://example.com",
+             app_name="My agent",
+         )
+
+      ``site_url`` and ``app_name`` are optional and identify your app to
+      OpenRouter. Reasoning that a model returns in a form that cannot be shown
+      as text is kept and sent back unchanged, which models that sign or encrypt
+      their reasoning need across a tool call.
+
+   .. tab-item:: Kimi
+
+      .. code-block:: python
+
+         import os
+         from zett_agent.providers.kimi import KimiProvider
+
+         model = KimiProvider(
+             model=os.environ["KIMI_MODEL"],
+             api_key=os.environ["MOONSHOT_API_KEY"],
+         )
+
+      The default endpoint is ``https://api.moonshot.ai/v1``. An account on the
+      China platform passes ``base_url="https://api.moonshot.cn/v1"``; keys do
+      not work across the two.
+
+   .. tab-item:: GLM
+
+      .. code-block:: python
+
+         import os
+         from zett_agent.providers.glm import GLMProvider
+
+         model = GLMProvider(
+             model=os.environ["GLM_MODEL"],
+             api_key=os.environ["ZAI_API_KEY"],
+         )
+
+      The default endpoint is ``https://api.z.ai/api/paas/v4``. An account on the
+      China platform passes
+      ``base_url="https://open.bigmodel.cn/api/paas/v4"``. ``tool_stream=True``
+      streams a tool call's arguments as they are written.
+
    .. tab-item:: Ollama
 
       .. code-block:: python
@@ -171,6 +241,100 @@ gateways reject optional fields such as ``prompt_cache_key`` or particular
 reasoning levels; configure only supported options and test your combination.
 The adapter does not auto-detect model capabilities from an endpoint URL.
 
+:class:`~zett_agent.providers.openai.OpenAIProvider` speaks OpenAI's own dialect:
+it sends ``parallel_tool_calls`` and a top-level ``reasoning_effort``. A gateway
+that rejects either can use
+:class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`
+instead, which sends only the ``reasoning_effort`` and takes the same
+``base_url``.
+
+Write a provider for another compatible service
+------------------------------------------------
+
+Most services that speak Chat Completions bend it in a few places: the field
+that carries reasoning, how thinking is switched on and off, an identifying
+header. Each is a method that
+:class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`
+calls, so a provider for one more service is a subclass that overrides only the
+places where the service differs:
+
+.. code-block:: python
+
+   from zett_agent.model import ModelRequest, ReasoningEffort
+   from zett_agent.providers.openai_compatible import JsonObject, OpenAICompatibleProvider
+
+   class AcmeProvider(OpenAICompatibleProvider):
+       provider_name = "acme"
+       reasoning_keys = ("thinking_text",)
+
+       def __init__(self, model: str, api_key: str) -> None:
+           super().__init__(model=model, api_key=api_key, base_url="https://api.acme.example/v1")
+
+       def vendor_headers(self) -> dict[str, str]:
+           return {"X-Acme-Client": "zett"}
+
+       def request_fields(self, request: ModelRequest) -> JsonObject:
+           on = request.reasoning_effort != ReasoningEffort.OFF
+           return {"thinking": {"type": "enabled" if on else "disabled"}}
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Method
+     - Override it when
+   * - ``vendor_headers``
+     - The service wants headers on every request.
+   * - ``request_fields``
+     - The service spells the reasoning level, or takes other options, in the request body.
+   * - ``replay_reasoning``
+     - An earlier assistant turn must be sent back in a form of the service's own.
+   * - ``read_delta`` and ``reasoning_keys``
+     - A streamed delta carries reasoning, or other data, under names the plain protocol does not use.
+   * - ``merge_replay``
+     - Opaque blocks arrive in pieces that must be put together before they are sent back.
+   * - ``read_usage``
+     - The token counts use names that the default reader does not know.
+   * - ``chat_stop``
+     - The service has finish reasons of its own.
+   * - ``status_error``
+     - The service explains an HTTP failure in a body of its own.
+
+A method that is not overridden does what the plain protocol does, so a provider
+stays as small as the ways its service differs. The built-in OpenRouter, Kimi and
+GLM providers are written this way.
+
+The Messages protocol works the same way through
+:class:`~zett_agent.providers.anthropic_compatible.AnthropicCompatibleProvider`,
+which :class:`~zett_agent.providers.anthropic.AnthropicProvider` and the
+Messages providers for DeepSeek, Kimi and GLM are built on. Its hooks are the
+places where services differ most, and the plain Anthropic behavior is what a
+hook does when it is not overridden:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Method
+     - Override it when
+   * - ``vendor_headers``
+     - The service wants headers on every request.
+   * - ``request_fields``
+     - The service takes the reasoning level in a field of its own, or rejects the token budget Anthropic uses.
+   * - ``mark_cache``
+     - The service ignores the cache markers Anthropic needs, or reads them somewhere else.
+   * - ``start_usage`` and ``finish_usage``
+     - The token counts carry more than Anthropic's, such as reasoning tokens.
+   * - ``message_stop``
+     - The service has stop reasons of its own.
+   * - ``status_error``
+     - The service explains an HTTP failure in a body of its own.
+
+Two class attributes cover the rest: ``bearer_auth = True`` also sends the key as
+``Authorization: Bearer``, for a service that takes only that, and
+``native_deferred_tools`` stays ``False`` unless the service itself loads a
+tool when a ``tool_reference`` names it, which only Anthropic does.
+
 Send extra headers, query parameters, or body fields
 ---------------------------------------------------------
 
@@ -228,7 +392,9 @@ Set a provider-neutral level on the run instead of vendor-specific options:
 The current Responses adapter maps ``XHIGH``, ``MAX``, and ``ULTRA`` to
 ``high``. Budget-based adapters also group the highest levels. OpenAI Chat
 Completions forwards named levels, so a model that rejects one can still
-raise an endpoint error. The runtime does not negotiate supported levels.
+raise an endpoint error. OpenRouter sends the level as ``reasoning.effort``;
+Kimi and GLM send the three levels they know (``low``, ``high``, ``max``) and
+only to the models that take them. The runtime does not negotiate supported levels.
 
 ``OFF`` is not a universal guarantee of zero reasoning: OpenAI adapters omit
 explicit effort configuration, while some other adapters disable thinking.

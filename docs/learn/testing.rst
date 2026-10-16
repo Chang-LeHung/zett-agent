@@ -95,6 +95,34 @@ Other providers expose the same ``transport`` injection point, but their wire
 formats differ. A passing mock test proves your protocol fixture works, not
 that a live endpoint supports every requested model feature.
 
+Opt into checks against a real endpoint
+------------------------------------------------------------
+
+``tests/test_live_gateway.py`` runs the built-in adapters against a service
+that speaks both protocols: the OpenAI Responses API at ``/responses`` and the
+Anthropic Messages API at ``/v1/messages``. It covers what a fixture cannot:
+that a real service accepts what an adapter sends, and that the adapter reads
+what comes back, including provider-hosted tools, tool search on both the
+client and the server, and computer use.
+
+The checks skip unless two variables are set, so the default run stays
+offline. Name the model for each protocol you want to exercise:
+
+.. code-block:: text
+
+   ZETT_AGENT_LIVE_TESTS=1 \
+   ZETT_AGENT_GATEWAY_URL=http://127.0.0.1:8787 \
+   ZETT_AGENT_GATEWAY_RESPONSES_MODEL=gpt-5.6-sol \
+   ZETT_AGENT_GATEWAY_MESSAGES_MODEL='claude-sonnet-5[1m]' \
+   ZETT_AGENT_GATEWAY_SEARCH_MODEL=kimi-k3 \
+   uv run pytest tests/test_live_gateway.py
+
+``ZETT_AGENT_GATEWAY_TOKEN`` supplies the credential (``test`` by default) and
+``ZETT_AGENT_GATEWAY_TIMEOUT`` the per-request limit in seconds (180 by
+default). A service that refuses a hosted tool type is expected, so that check
+skips rather than fails; a stream that ends without a terminal response never
+skips, because that is the adapter's bug to catch.
+
 Keep tests safe and reproducible
 ------------------------------------------------------------
 

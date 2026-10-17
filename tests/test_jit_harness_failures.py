@@ -1,17 +1,20 @@
-"""Failure paths: creation, invocation, long chains, and recovery afterwards."""
+"""Failure paths: loading, invocation, long chains, and recovery afterwards."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import sys
+from pathlib import Path
 from textwrap import dedent
 from types import ModuleType
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
 from pydantic_core import PydanticSerializationError
 
+from jit_support import HEADER, put_tool, seed_repo, write_module
 from zett_agent.agent import Agent, AgentRunConfig, AgentRunContext, AgentState
 from zett_agent.jit_harness import JITHarness, JITHarnessExtension
 from zett_agent.jit_harness.enums import ToolCallStatus
@@ -32,15 +35,15 @@ def link_source(name: str, dependency: str | None = None) -> str:
 
 
 def build_chain(harness: JITHarness, length: int, *, leaf: str | None = None) -> None:
-    """Register ``link0`` .. ``linkN`` where each link composes the next one."""
-    for index in reversed(range(length)):
+    """Write ``link0`` .. ``linkN`` where each link composes the next one, then load them."""
+    for index in range(length):
         is_leaf = index + 1 == length
-        harness.create_tool(
-            leaf
-            if is_leaf and leaf is not None
-            else link_source(f"link{index}", f"link{index + 1}" if not is_leaf else None),
-            entrypoint=f"link{index}",
-        )
+        if is_leaf and leaf is not None:
+            source = leaf
+        else:
+            source = link_source(f"link{index}", None if is_leaf else f"link{index + 1}")
+        write_module(harness, f"link{index}", source)
+    harness.load_repo()
 
 
 FAILING_LEAF = dedent('''\
@@ -57,22 +60,22 @@ OPAQUE_SOURCE = dedent('''\
         return object()
 ''')
 
-CREATION_FAILURES = [
-    ("syntax", "def broken(", "broken", SyntaxError),
-    ("module raise", 'raise RuntimeError("import blew up")\n' + link_source("ok"), "ok", RuntimeError),
-    ("missing import", "import absent_module_for_test\n" + link_source("ok"), "ok", ModuleNotFoundError),
-    ("exit during load", "import sys\nsys.exit(4)\n" + link_source("ok"), "ok", SystemExit),
-    ("missing entrypoint", link_source("ok"), "absent", ValueError),
-    ("not a tool", "ok = 1", "ok", ValueError),
-    ("deferred tool", link_source("ok").replace("@tool(", "@tool(deferred=True, "), "ok", ValueError),
-    ("search tool", link_source("ok").replace("@tool(", "@tool(local_tool_search=True, "), "ok", ValueError),
-    ("missing annotation", link_source("ok").replace("() -> int:", "(value) -> int:"), "ok", ValueError),
-    (
-        "no guideline",
-        link_source("ok").replace('guidelines="Use as one link in a composed chain."', ""),
-        "ok",
-        ValueError,
-    ),
+DEFERRED_SOURCE = link_source("ok").replace("@tool(", "@tool(deferred=True, ")
+SEARCH_SOURCE = link_source("ok").replace("@tool(", "@tool(local_tool_search=True, ")
+UNANNOTATED_SOURCE = link_source("ok").replace("() -> int:", "(value) -> int:")
+GUIDELESS_SOURCE = link_source("ok").replace('guidelines="Use as one link in a composed chain."', "")
+
+#: A module body that must fail the whole load, with the error the caller sees.
+#: ``load_repo`` raises ``ValueError`` for everything except an interrupted process.
+LOAD_FAILURES = [
+    ("syntax", "def broken(", ValueError, "SyntaxError"),
+    ("module raise", 'raise RuntimeError("import blew up")\n', ValueError, "RuntimeError: import blew up"),
+    ("missing import", "import absent_module_for_test\n", ValueError, "ModuleNotFoundError"),
+    ("exit during load", "import sys\nsys.exit(4)\n", SystemExit, None),
+    ("deferred tool", DEFERRED_SOURCE, ValueError, "non-deferred"),
+    ("search tool", SEARCH_SOURCE, ValueError, "non-deferred"),
+    ("missing annotation", UNANNOTATED_SOURCE, ValueError, "Missing annotation"),
+    ("no guideline", GUIDELESS_SOURCE, ValueError, "non-empty guideline"),
 ]
 
 
@@ -80,6 +83,13 @@ CREATION_FAILURES = [
 async def add(left: int, right: int) -> int:
     """Add two integers."""
     return left + right
+
+
+@tool(guidelines="Write one file for the test.")
+def put(path: str, content: str) -> str:
+    """Write a file."""
+    Path(path).write_text(content, encoding="utf-8")
+    return "ok"
 
 
 class ScriptModel:
@@ -106,34 +116,66 @@ def statuses(harness, name) -> list[ToolCallStatus]:
     return [call.status for call in harness.profile(name).calls]
 
 
-async def test_creation_failure_leaves_the_harness_clean_and_usable():
-    for label, source, entrypoint, error in CREATION_FAILURES:
-        harness = JITHarness(tools=[add])
-        before = harness.snapshot().to_json()
-        modules = set(sys.modules)
-        with pytest.raises(error):
-            harness.create_tool(source, entrypoint=entrypoint)
+def jit_modules():
+    return [name for name in sys.modules if name.startswith("zett_jit_")]
 
-        assert harness.snapshot().to_json() == before, label  # Nothing was registered.
-        assert not {name for name in set(sys.modules) - modules if name.startswith("zett_jit_")}, label
-        assert [item["name"] for item in harness.list_tools()] == ["add"], label
-        # A wedged compiler or half-written registry would break later operations.
-        harness.create_tool(link_source("recovered"), entrypoint="recovered")
+
+def jit_finders():
+    return [finder for finder in sys.meta_path if type(finder).__name__ == "RepoFinder"]
+
+
+@pytest.fixture(autouse=True)
+def no_residue():
+    """Every test must leave the interpreter's import state as it found it."""
+    before = (set(jit_modules()), len(jit_finders()))
+    yield
+    assert (set(jit_modules()), len(jit_finders())) == before
+
+
+@pytest.fixture
+def make_harness(tmp_path):
+    """Create harnesses in their own directories and close every one afterwards."""
+    created: list[JITHarness] = []
+
+    def create(name: str = "session", **options: Any) -> JITHarness:
+        harness = JITHarness(tmp_path / f"{name}-{len(created)}", **options)
+        created.append(harness)
+        return harness
+
+    yield create
+    for harness in created:
+        harness.close()
+
+
+async def test_failed_load_leaves_the_harness_clean_and_usable(make_harness):
+    for label, source, error, message in LOAD_FAILURES:
+        harness = make_harness(label, tools=[add])
+        write_module(harness, "bad", source)
+        with pytest.raises(error, match=message):
+            harness.load_repo()
+
+        assert [item["name"] for item in harness.list_tools()] == ["add"], label  # Nothing was registered.
+        assert not jit_modules(), label  # A failed attempt leaves no imported module behind.
+        # A wedged importer or half-written registry would break later operations.
+        write_module(harness, "bad", link_source("recovered"))
+        harness.load_repo()
         assert await harness.call_tool("recovered") == 1, label
         assert harness.profile("recovered").calls[0].status is ToolCallStatus.COMPLETED, label
+        harness.close()
 
 
-async def test_creation_failure_leaves_an_existing_tool_updatable_and_callable():
-    for label, source, entrypoint, error in CREATION_FAILURES:
-        harness = JITHarness()
-        harness.create_tool(link_source("target"), entrypoint="target")
-        before = harness.snapshot().to_json()
-        with pytest.raises(error):
-            harness.create_tool(source, entrypoint=entrypoint)
-        with pytest.raises(error):
-            harness.update_tool("target", source, entrypoint=entrypoint)
+async def test_failed_load_leaves_an_existing_tool_updatable_and_callable(make_harness):
+    for label, source, error, message in LOAD_FAILURES:
+        harness = make_harness(label)
+        put_tool(harness, link_source("target"), "target")
+        bad = write_module(harness, "bad", source)
+        with pytest.raises(error, match=message):
+            harness.load_repo()
+        bad.unlink()  # The next attempt fails on the target module itself.
+        with pytest.raises(error, match=message):
+            put_tool(harness, source, "target")
 
-        assert harness.snapshot().to_json() == before, label
+        assert [item["name"] for item in harness.list_tools()] == ["target"], label
         assert await harness.call_tool("target") == 1, label
         harness.unload_tool("target")
         harness.load_tool("target")
@@ -141,14 +183,15 @@ async def test_creation_failure_leaves_an_existing_tool_updatable_and_callable()
         # Direct API failures are not dispatches, so the LRU cache stays empty and
         # no failure is blamed on the tool that survived.
         assert harness.tool_errors(limit=10).errors == (), label
+        harness.close()
 
 
-async def test_module_side_effects_survive_a_failed_creation_but_registration_does_not(monkeypatch):
-    state = ModuleType("zett_jit_failure_state")
+async def test_module_side_effects_survive_a_failed_load_but_registration_does_not(monkeypatch, make_harness):
+    state = ModuleType("jit_failure_state")
     state.ran = []
     monkeypatch.setitem(sys.modules, state.__name__, state)
     source = dedent('''\
-        import zett_jit_failure_state as state
+        import jit_failure_state as state
         state.ran.append("imported")
         raise RuntimeError("failed after the side effect")
 
@@ -157,16 +200,15 @@ async def test_module_side_effects_survive_a_failed_creation_but_registration_do
             """Never registered."""
             return 1
     ''')
-    harness = JITHarness()
-    with pytest.raises(RuntimeError, match="failed after the side effect"):
-        harness.create_tool(source, entrypoint="unreachable")
+    harness = make_harness()
+    with pytest.raises(ValueError, match="failed after the side effect"):
+        put_tool(harness, source, "unreachable")
     assert state.ran == ["imported"]  # Documented: module side effects are not rolled back.
     assert harness.list_tools() == []
-    assert harness.snapshot().tools == ()
 
 
-async def test_handler_failure_records_every_layer_and_keeps_the_original_error():
-    harness = JITHarness()
+async def test_handler_failure_records_every_layer_and_keeps_the_original_error(make_harness):
+    harness = make_harness()
     build_chain(harness, 3, leaf=FAILING_LEAF)
     with pytest.raises(ValueError, match="leaf exploded"):
         await harness.call_tool("link0")
@@ -189,8 +231,8 @@ async def test_handler_failure_records_every_layer_and_keeps_the_original_error(
     assert not harness._nested_tasks
 
 
-async def test_depth_limit_stops_a_long_chain_and_names_the_rejected_link():
-    harness = JITHarness(max_call_depth=2)
+async def test_depth_limit_stops_a_long_chain_and_names_the_rejected_link(make_harness):
+    harness = make_harness(max_call_depth=2)
     build_chain(harness, 4)
     with pytest.raises(RuntimeError, match="depth exceeded 2"):
         await harness.call_tool("link0")
@@ -207,12 +249,12 @@ async def test_depth_limit_stops_a_long_chain_and_names_the_rejected_link():
         ToolCallStatus.FAILED,
         ToolCallStatus.REJECTED,
     ]
-    harness.create_tool(link_source("shallow"), entrypoint="shallow")
+    put_tool(harness, link_source("shallow"), "shallow")
     assert await harness.call_tool("shallow") == 1  # Depth is per call chain, not per harness.
 
 
-async def test_long_chain_succeeds_at_the_exact_depth_boundary():
-    harness = JITHarness(max_call_depth=8)
+async def test_long_chain_succeeds_at_the_exact_depth_boundary(make_harness):
+    harness = make_harness(max_call_depth=8)
     build_chain(harness, 8)
     assert await harness.call_tool("link0") == 1
     assert statuses(harness, "link0") == [ToolCallStatus.COMPLETED]
@@ -221,8 +263,8 @@ async def test_long_chain_succeeds_at_the_exact_depth_boundary():
     assert not harness._nested_tasks
 
 
-async def test_chain_one_link_past_the_bound_fails_at_that_link_only():
-    harness = JITHarness(max_call_depth=7)
+async def test_chain_one_link_past_the_bound_fails_at_that_link_only(make_harness):
+    harness = make_harness(max_call_depth=7)
     build_chain(harness, 8)
     with pytest.raises(RuntimeError, match="depth exceeded 7"):
         await harness.call_tool("link0")
@@ -232,10 +274,11 @@ async def test_chain_one_link_past_the_bound_fails_at_that_link_only():
     assert await harness.call_tool("link7") == 1  # The leaf itself is fine.
 
 
-async def test_a_middle_link_can_catch_the_leaf_failure_and_finish():
-    harness = JITHarness()
-    harness.create_tool(FAILING_LEAF.replace("link2", "leaf"), entrypoint="leaf")
-    harness.create_tool(
+async def test_a_middle_link_can_catch_the_leaf_failure_and_finish(make_harness):
+    harness = make_harness()
+    put_tool(harness, FAILING_LEAF.replace("link2", "leaf"), "leaf")
+    put_tool(
+        harness,
         dedent('''\
             @tool(guidelines="Use as one link in a composed chain.")
             async def recovery() -> int:
@@ -246,7 +289,7 @@ async def test_a_middle_link_can_catch_the_leaf_failure_and_finish():
                     return 7
                 raise AssertionError("the leaf must fail")
         '''),
-        entrypoint="recovery",
+        "recovery",
     )
     assert await harness.call_tool("recovery") == 7
     assert statuses(harness, "recovery") == [ToolCallStatus.COMPLETED]
@@ -254,16 +297,17 @@ async def test_a_middle_link_can_catch_the_leaf_failure_and_finish():
     assert [error.tool_name for error in harness.tool_errors(limit=5).errors] == ["leaf"]
 
 
-async def test_cancelling_a_long_chain_marks_every_running_link_cancelled(monkeypatch):
+async def test_cancelling_a_long_chain_marks_every_running_link_cancelled(monkeypatch, make_harness):
     # JIT modules only see their own globals, so test state arrives as a module.
-    state = ModuleType("zett_jit_cancel_state")
+    state = ModuleType("jit_cancel_state")
     state.entered = asyncio.Event()
     state.release = asyncio.Event()
     monkeypatch.setitem(sys.modules, state.__name__, state)
-    harness = JITHarness()
-    harness.create_tool(
+    harness = make_harness()
+    put_tool(
+        harness,
         dedent('''\
-            import zett_jit_cancel_state as state
+            import jit_cancel_state as state
 
             @tool(guidelines="Use as one link in a composed chain.")
             async def leaf() -> int:
@@ -272,10 +316,10 @@ async def test_cancelling_a_long_chain_marks_every_running_link_cancelled(monkey
                 await state.release.wait()
                 return 1
         '''),
-        entrypoint="leaf",
+        "leaf",
     )
-    harness.create_tool(link_source("middle", "leaf"), entrypoint="middle")
-    harness.create_tool(link_source("top", "middle"), entrypoint="top")
+    put_tool(harness, link_source("middle", "leaf"), "middle")
+    put_tool(harness, link_source("top", "middle"), "top")
     running = asyncio.create_task(harness.call_tool("top"))
     try:
         await asyncio.wait_for(state.entered.wait(), timeout=2)
@@ -293,7 +337,7 @@ async def test_cancelling_a_long_chain_marks_every_running_link_cancelled(monkey
         await asyncio.gather(running, return_exceptions=True)
 
 
-async def test_nested_validation_failure_stops_the_dependency_before_its_body_runs():
+async def test_nested_validation_failure_stops_the_dependency_before_its_body_runs(make_harness):
     ran = []
 
     @tool(guidelines="Record that the body ran.")
@@ -302,15 +346,16 @@ async def test_nested_validation_failure_stops_the_dependency_before_its_body_ru
         ran.append(value)
         return value
 
-    harness = JITHarness(tools=[record])
-    harness.create_tool(
+    harness = make_harness(tools=[record])
+    put_tool(
+        harness,
         dedent('''\
             @tool(guidelines="Forward the raw argument to the dependency.")
             async def forward(value: str) -> int:
                 """Forward the raw argument."""
                 return await harness.call_tool("record", value=value)
         '''),
-        entrypoint="forward",
+        "forward",
     )
     with pytest.raises(ValidationError):
         await harness.call_tool("forward", value="not-an-int")
@@ -320,10 +365,10 @@ async def test_nested_validation_failure_stops_the_dependency_before_its_body_ru
     assert statuses(harness, "forward") == [ToolCallStatus.FAILED]
 
 
-async def test_unserializable_nested_result_fails_the_caller_without_corrupting_state():
-    harness = JITHarness()
-    harness.create_tool(OPAQUE_SOURCE, entrypoint="opaque")
-    harness.create_tool(link_source("parent", "opaque"), entrypoint="parent")
+async def test_unserializable_nested_result_fails_the_caller_without_corrupting_state(make_harness):
+    harness = make_harness()
+    put_tool(harness, OPAQUE_SOURCE, "opaque")
+    put_tool(harness, link_source("parent", "opaque"), "parent")
     ctx = AgentRunContext(AgentRunConfig("serialize", request_id="request"), AgentState(), {}, ())
     harness.attach(ctx)
     try:
@@ -336,26 +381,24 @@ async def test_unserializable_nested_result_fails_the_caller_without_corrupting_
         assert harness.profile("parent").calls[0].error_type == "PydanticSerializationError"
         assert [error.tool_name for error in harness.tool_errors(limit=5).errors] == ["parent"]
         assert not harness._nested_tasks
-        harness.create_tool(link_source("later"), entrypoint="later")
+        put_tool(harness, link_source("later"), "later")
         assert await ctx.tools["later"]({}) == 1
     finally:
         harness.detach(ctx)
 
 
-async def test_unserializable_result_without_a_request_reaches_the_caller_raw():
-    harness = JITHarness()
-    harness.create_tool(OPAQUE_SOURCE, entrypoint="opaque")
+async def test_unserializable_result_without_a_request_reaches_the_caller_raw(make_harness):
+    harness = make_harness()
+    put_tool(harness, OPAQUE_SOURCE, "opaque")
     # Without a bound request there is no ToolMessage to build, so nothing
     # serializes the result and the raw object travels back to the caller.
     assert await harness.call_tool("opaque") is not None
     assert statuses(harness, "opaque") == [ToolCallStatus.COMPLETED]
 
 
-async def test_model_call_returning_an_unserializable_value_becomes_a_failed_tool_message():
-    jit = JITHarnessExtension()
-    template = JITHarness()
-    template.create_tool(OPAQUE_SOURCE, entrypoint="opaque")
-    jit = JITHarnessExtension(template.snapshot())
+async def test_model_call_returning_an_unserializable_value_becomes_a_failed_tool_message(tmp_path):
+    seed_repo(tmp_path, "unserializable", {"opaque": OPAQUE_SOURCE})
+    jit = JITHarnessExtension(tmp_path)
     model = ScriptModel((ToolCall("bad", "opaque", {}),))
     agent = await Agent.create(model, extensions=[jit])
     await agent.run("go", config=AgentRunConfig("unserializable"))
@@ -366,20 +409,22 @@ async def test_model_call_returning_an_unserializable_value_becomes_a_failed_too
     # The harness boundary is the handler returning, so its record stays completed;
     # the failure happens afterwards when the runtime builds the ToolMessage.
     assert statuses(jit.get_harness("unserializable"), "opaque") == [ToolCallStatus.COMPLETED]
+    jit.forget_session("unserializable")
 
 
-async def test_base_exception_from_a_handler_propagates_and_leaves_the_harness_reusable():
-    harness = JITHarness()
-    harness.create_tool(
+async def test_base_exception_from_a_handler_propagates_and_leaves_the_harness_reusable(make_harness):
+    harness = make_harness()
+    put_tool(
+        harness,
         dedent('''\
             @tool(guidelines="Interrupt the current call.")
             async def interrupt() -> int:
                 """Raise a BaseException the runtime does not convert."""
                 raise KeyboardInterrupt("stopped by the operator")
         '''),
-        entrypoint="interrupt",
+        "interrupt",
     )
-    harness.create_tool(link_source("afterwards"), entrypoint="afterwards")
+    put_tool(harness, link_source("afterwards"), "afterwards")
     with pytest.raises(KeyboardInterrupt, match="stopped by the operator"):
         await harness.call_tool("interrupt")
     assert statuses(harness, "interrupt") == [ToolCallStatus.FAILED]
@@ -388,8 +433,10 @@ async def test_base_exception_from_a_handler_propagates_and_leaves_the_harness_r
     assert not harness._nested_tasks
 
 
-async def test_model_sees_a_failed_management_call_and_can_retry_it():
-    jit = JITHarnessExtension()
+async def test_model_sees_a_failed_management_call_and_can_retry_it(tmp_path):
+    jit = JITHarnessExtension(tmp_path)
+    directory = seed_repo(tmp_path, "retry", {"broken": "def broken("})
+    repaired = HEADER + link_source("okay")
 
     class Model:
         retry = RetryOptions(max_retries=0)
@@ -401,8 +448,9 @@ async def test_model_sees_a_failed_management_call_and_can_retry_it():
             index = len(self.requests)
             self.requests.append(request)
             batches = (
-                (ToolCall("bad", "create_tool", {"source": "invalid !", "entrypoint": "broken"}),),
-                (ToolCall("good", "create_tool", {"source": link_source("okay"), "entrypoint": "okay"}),),
+                (ToolCall("bad", "repo_load", {}),),
+                (ToolCall("fix", "put", {"path": str(directory / "broken.py"), "content": repaired}),),
+                (ToolCall("good", "repo_load", {}),),
                 (ToolCall("run", "okay", {}),),
             )
             message = (
@@ -413,30 +461,30 @@ async def test_model_sees_a_failed_management_call_and_can_retry_it():
             yield ModelEvent.completed(ModelResponse(message))
 
     model = Model()
-    agent = await Agent.create(model, extensions=[jit])
+    agent = await Agent.create(model, tools=[put], extensions=[jit])
     assert (await agent.run("go", config=AgentRunConfig("retry"))).content == "done"
     results = [message for message in model.requests[-1].messages if isinstance(message, ToolMessage)]
     assert [(result.tool_call_id, result.success) for result in results] == [
         ("bad", False),
+        ("fix", True),
         ("good", True),
         ("run", True),
     ]
-    assert "syntax" in results[0].content.lower()
-    assert json.loads(results[1].content)["status"] == "loaded"
+    assert "broken.py:2: def broken(" in results[0].content and "SyntaxError" in results[0].content
+    assert json.loads(results[2].content)["status"] == "loaded"
 
     harness = jit.get_harness("retry")
     assert [(error.tool_name, error.error_type) for error in harness.tool_errors(limit=5).errors] == [
-        ("create_tool", "SyntaxError")
+        ("repo_load", "ValueError")
     ]
     assert harness.profile("okay").calls[0].status is ToolCallStatus.COMPLETED
+    jit.forget_session("retry")
 
 
-async def test_model_sees_a_failed_dynamic_call_and_the_tool_can_be_repaired():
-    jit = JITHarnessExtension()
-    template = JITHarness()
-    template.create_tool(FAILING_LEAF.replace("link2", "flaky"), entrypoint="flaky")
-    jit = JITHarnessExtension(template.snapshot())
-    repaired = link_source("flaky")
+async def test_model_sees_a_failed_dynamic_call_and_the_tool_can_be_repaired(tmp_path):
+    jit = JITHarnessExtension(tmp_path)
+    directory = seed_repo(tmp_path, "repair", {"flaky": FAILING_LEAF.replace("link2", "flaky")})
+    repaired = HEADER + link_source("flaky")
 
     class Model:
         retry = RetryOptions(max_retries=0)
@@ -449,7 +497,8 @@ async def test_model_sees_a_failed_dynamic_call_and_the_tool_can_be_repaired():
             self.requests.append(request)
             batches = (
                 (ToolCall("first", "flaky", {}),),
-                (ToolCall("repair", "update_tool", {"name": "flaky", "source": repaired, "entrypoint": "flaky"}),),
+                (ToolCall("repair", "put", {"path": str(directory / "flaky.py"), "content": repaired}),),
+                (ToolCall("reload", "repo_load", {}),),
                 (ToolCall("second", "flaky", {}),),
             )
             message = (
@@ -460,12 +509,13 @@ async def test_model_sees_a_failed_dynamic_call_and_the_tool_can_be_repaired():
             yield ModelEvent.completed(ModelResponse(message))
 
     model = Model()
-    agent = await Agent.create(model, extensions=[jit])
+    agent = await Agent.create(model, tools=[put], extensions=[jit])
     assert (await agent.run("go", config=AgentRunConfig("repair"))).content == "repaired"
     results = [message for message in model.requests[-1].messages if isinstance(message, ToolMessage)]
     assert [(result.tool_call_id, result.success) for result in results] == [
         ("first", False),
         ("repair", True),
+        ("reload", True),
         ("second", True),
     ]
     assert "leaf exploded" in results[0].content
@@ -475,3 +525,4 @@ async def test_model_sees_a_failed_dynamic_call_and_the_tool_can_be_repaired():
         ("flaky", "ValueError")
     ]
     assert statuses(harness, "flaky") == [ToolCallStatus.FAILED, ToolCallStatus.COMPLETED]
+    jit.forget_session("repair")

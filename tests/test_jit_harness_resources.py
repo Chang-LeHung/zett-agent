@@ -10,15 +10,20 @@ from pathlib import Path
 
 import pytest
 
-from zett_agent.jit_harness import InspectionToolExposure, JITHarness, JITHarnessExtension
-from zett_agent.jit_harness.extension import _INSPECTION_INSTRUCTIONS, _INSTRUCTIONS
+from zett_agent.jit_harness import JITHarness, JITHarnessExtension
+from zett_agent.jit_harness.extension import _INSTRUCTIONS
+from zett_agent.jit_harness.repo import MANAGEMENT_NAMES
 
 ROOT = Path(__file__).resolve().parents[1] / "src"
-RESOURCES = (
-    "zett_agent/jit_harness/instructions.md",
-    "zett_agent/jit_harness/inspection.md",
-)
-INSPECTION_TOOLS = (
+RESOURCES = ("zett_agent/jit_harness/instructions.md",)
+#: Tool names the repository API removed or made Python-only; the prompt may not advertise them.
+REMOVED_TOOLS = (
+    "create_tool",
+    "update_tool",
+    "unload_tool",
+    "load_tool",
+    "list_tools",
+    "inspect_tool",
     "read_tool_source",
     "read_tool_schema",
     "inspect_tool_stats",
@@ -27,59 +32,60 @@ INSPECTION_TOOLS = (
 )
 #: Identifiers the core prompt must teach, so the model can use what it is offered.
 CORE_CODES = (
-    "list_tools",
-    "inspect_tool",
-    "create_tool",
-    "update_tool",
-    "unload_tool",
-    "load_tool",
+    "repo_create(repo=name)",
+    "repo_load",
+    "repo_unload",
     "@tool",
-    "tool",
-    "ToolExecutionMode",
+    "Guidelines:",
+    "__init__.py",
     "harness",
     "def",
     "async def",
     "await harness.call_tool(name, **arguments)",
     "harness.call_tool_sync(name, **arguments)",
+    "workflows/<name>.md",
+    "description",
+    "SKILL",
 )
 
 
 def test_jit_instructions_are_loaded_from_the_markdown_package_resources():
     root = files("zett_agent.jit_harness")
     assert _INSTRUCTIONS == root.joinpath("instructions.md").read_text(encoding="utf-8")
-    assert _INSPECTION_INSTRUCTIONS == root.joinpath("inspection.md").read_text(encoding="utf-8")
     assert _INSTRUCTIONS.startswith("# JIT tools and reusable workflows\n")
     assert "fewest total tokens and shortest end-to-end" in _INSTRUCTIONS
     assert "trusted, not sandboxed" in _INSTRUCTIONS
     assert "substantial time, tokens" in _INSTRUCTIONS
-    assert "untrusted diagnostic data" in _INSPECTION_INSTRUCTIONS
-    assert "8000-character JSON budget" in _INSPECTION_INSTRUCTIONS
-    assert "`SKILL`" in _INSTRUCTIONS and 'kind="text"' in _INSTRUCTIONS
-    for markdown in (_INSTRUCTIONS, _INSPECTION_INSTRUCTIONS):
-        assert markdown.endswith("\n")
+    assert "`SKILL`" in _INSTRUCTIONS
+    assert _INSTRUCTIONS.endswith("\n")
 
 
-@pytest.mark.parametrize(
-    ("mode", "inspection_offered"),
-    [
-        (InspectionToolExposure.DEFERRED, True),
-        (InspectionToolExposure.ALWAYS, True),
-        (InspectionToolExposure.HIDDEN, False),
-    ],
-)
-def test_guidance_names_exactly_the_tools_the_session_offers(mode, inspection_offered):
+def test_guidance_names_exactly_the_tools_the_session_offers(tmp_path):
     """The prompt never advertises a tool the model cannot call."""
-    extension = JITHarnessExtension(inspection_tools=mode)
-    offered = {registered.name for registered in extension._management_tools(JITHarness())}
-    prompt = extension._guidance("")
+    harness = JITHarness(tmp_path)
+    extension = JITHarnessExtension(tmp_path)
+    offered = {registered.name for registered in extension._management_tools(harness)}
+    assert offered == MANAGEMENT_NAMES
+    prompt = extension._guidance(harness, "")
     for name in offered:
         assert f"`{name}`" in prompt, name
     for code in CORE_CODES:
         assert f"`{code}`" in prompt
-    for name in INSPECTION_TOOLS:
-        assert (f"`{name}`" in prompt) is inspection_offered, name
-    assert ("search for one by name" in prompt) is (mode is InspectionToolExposure.DEFERRED)
-    assert ("ask the application instead" in prompt) is (mode is InspectionToolExposure.HIDDEN)
+    for name in REMOVED_TOOLS:
+        assert f"`{name}`" not in prompt, name
+
+
+def test_guidance_keeps_the_stable_instruction_prefix_first(tmp_path):
+    """Repository line, then tool guidance; the cacheable instructions come first."""
+    harness = JITHarness(tmp_path)
+    extension = JITHarnessExtension(tmp_path)
+    assert extension._guidance(harness, "") == _INSTRUCTIONS
+    created = harness.create_repo("repo")
+    guidance = "Prefer `repo_load` after every edit."
+    prompt = extension._guidance(harness, guidance)
+    assert prompt.startswith(_INSTRUCTIONS)
+    assert f"Your repository is `repo` at `{created['path']}`." in prompt
+    assert prompt.endswith("\n" + guidance)
 
 
 @pytest.mark.parametrize("include_resources", [True, False])
@@ -101,8 +107,7 @@ def test_jit_instructions_load_from_zipped_package_without_a_source_checkout(tmp
         "assert extension.__file__.startswith(sys.argv[1])\n"
         "root = files('zett_agent.jit_harness')\n"
         "core = root.joinpath('instructions.md').read_text(encoding='utf-8')\n"
-        "inspection = root.joinpath('inspection.md').read_text(encoding='utf-8')\n"
-        "assert extension._INSTRUCTIONS == core and extension._INSPECTION_INSTRUCTIONS == inspection\n"
+        "assert extension._INSTRUCTIONS == core\n"
         "assert core.startswith('# JIT tools and reusable workflows\\n')\n"
         "print('Packaged instructions loaded')\n"
     )

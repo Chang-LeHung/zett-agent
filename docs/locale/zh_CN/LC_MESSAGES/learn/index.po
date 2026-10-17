@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 23:02+0800\n"
+"POT-Creation-Date: 2026-10-17 12:03+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -213,8 +213,8 @@ msgid "JIT Python tools"
 msgstr "JIT Python 工具"
 
 #: ../../learn/index.rst:90
-msgid "Let a trusted model compose, evolve, and save a toolbox for reuse."
-msgstr "让受信任的模型编写、演进并保存一个可复用的工具箱。"
+msgid "Let a trusted model keep tools and workflows in a repository on disk."
+msgstr "让受信任的模型把工具和工作流保存在磁盘上的仓库里。"
 
 #: ../../learn/index.rst:96
 msgid "Run shell commands and agent-written programs inside an operating-system boundary."
@@ -279,4 +279,3 @@ msgstr "在没有网络访问的情况下检查工具和真实的模型提供商
 #: ../../learn/index.rst:143
 msgid "Something unexpected? :doc:`troubleshooting` covers missing history, tool registration, endpoint compatibility, project guidance, and stuck approvals. If you need behavior the built-ins do not provide, follow :doc:`the extension tutorial <../extending/first-extension>`."
 msgstr "遇到意外情况？:doc:`troubleshooting` 覆盖了历史记录缺失、工具注册、端点兼容性、项目指引和审批卡住等问题。如果需要内置功能没有提供的行为，请阅读 :doc:`扩展教程 <../extending/first-extension>`\\ 。"
-

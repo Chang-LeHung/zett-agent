@@ -1,4 +1,4 @@
-"""Shared output budgets and exact fragments for source and workflow readers."""
+"""Shared output budgets and exact fragments for workflow readers."""
 
 from __future__ import annotations
 
@@ -7,9 +7,6 @@ from hashlib import sha256
 from typing import Any
 
 from .results import ToolTextPage
-
-#: The entry point module of a Python tool package, as the model addresses it.
-ENTRYPOINT_FILE = "__init__.py"
 
 MAX_RESPONSE_CHARS = 8000
 
@@ -24,11 +21,9 @@ def fits_response(value: Any) -> bool:
     return len(json.dumps(value, ensure_ascii=False)) <= MAX_RESPONSE_CHARS - 4
 
 
-def validate_page_bounds(offset: int, limit: int) -> None:
+def validate_offset(offset: int) -> None:
     if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
         raise ValueError("offset must be a nonnegative integer")
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
-        raise ValueError("limit must be between 1 and 100")
 
 
 def validate_text_bounds(max_chars: int) -> None:
@@ -36,13 +31,13 @@ def validate_text_bounds(max_chars: int) -> None:
         raise ValueError("max_chars must be between 1 and 4000")
 
 
-def text_page(name: str, content: str, offset: int, max_chars: int, path: str | None = None) -> ToolTextPage:
+def text_page(name: str, content: str, offset: int, max_chars: int, path: str) -> ToolTextPage:
     """Return an exact fragment whose serialized JSON fits the response budget."""
-    validate_page_bounds(offset, 1)
+    validate_offset(offset)
     validate_text_bounds(max_chars)
     page: ToolTextPage = {
         "name": name,
-        "path": path or ENTRYPOINT_FILE,
+        "path": path,
         "content": "",
         "total_chars": len(content),
         "next_offset": None,

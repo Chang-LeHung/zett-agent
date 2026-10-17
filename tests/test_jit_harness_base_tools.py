@@ -3,21 +3,40 @@
 from __future__ import annotations
 
 import asyncio
-import json
+import sys
 from dataclasses import replace
 from textwrap import dedent
 
 import pytest
 
+from jit_support import put_tool, seed_repo
 from zett_agent.agent import Agent, AgentRunConfig, AgentRunContext, AgentState
 from zett_agent.extensions.base import AgentExtension
 from zett_agent.extensions.memory import InMemoryMessageAccumulator
 from zett_agent.extensions.plan_mode import PlanModeExtension
-from zett_agent.jit_harness import JITHarness, JITHarnessExtension, JITHarnessSnapshot, ToolOrigin
+from zett_agent.jit_harness import JITHarness, JITHarnessExtension, ToolOrigin
+from zett_agent.jit_harness.repo import MANAGEMENT_NAMES
 from zett_agent.jit_harness.runtime import _BINDING, _CALL_STACK, _PROFILE_CALL
 from zett_agent.messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage
 from zett_agent.model import ModelEvent, ModelRequest, ModelResponse, RetryOptions
 from zett_agent.tools.base import _SYNC_TOOL_RUNNER, AgentTool, tool
+
+
+def jit_modules():
+    return [name for name in sys.modules if name.startswith("zett_jit_")]
+
+
+def jit_finders():
+    return [finder for finder in sys.meta_path if type(finder).__name__ == "RepoFinder"]
+
+
+@pytest.fixture(autouse=True)
+def no_residue():
+    """Every test must leave the interpreter's import state as it found it."""
+    before = (set(jit_modules()), len(jit_finders()))
+    yield
+    assert (set(jit_modules()), len(jit_finders())) == before
+
 
 SOURCE = dedent('''\
     @tool(guidelines="Compose the application's addition tool.")
@@ -26,6 +45,14 @@ SOURCE = dedent('''\
         return await harness.call_tool("add", left=value, right=value)
 ''')
 SYNC_SOURCE = SOURCE.replace("async def", "def").replace("await harness.call_tool", "harness.call_tool_sync")
+LIFECYCLE_SOURCE = dedent('''\
+    @tool(guidelines="Switch the application's addition tool for the test.")
+    async def base_lifecycle(action: str) -> str:
+        """Unload or load the application's add tool, as the test directs."""
+        if action == "unload":
+            return harness.unload_tool("add")["status"]
+        return harness.load_tool("add")["status"]
+''')
 
 
 @tool(guidelines="Use for exact integer addition.")
@@ -70,17 +97,16 @@ def assert_unbound():
 
 @pytest.mark.parametrize("factory", [JITHarness, JITHarnessExtension])
 @pytest.mark.parametrize("value", [None, 0, 1, "true"])
-def test_base_management_requires_an_explicit_boolean(factory, value):
+def test_base_management_requires_an_explicit_boolean(tmp_path, factory, value):
     with pytest.raises(ValueError, match="manage_base_tools must be a boolean"):
-        factory(manage_base_tools=value)
+        factory(tmp_path, manage_base_tools=value)
 
 
 @pytest.mark.parametrize("managed", [False, True])
 @pytest.mark.parametrize("source", [SOURCE, SYNC_SOURCE], ids=["async-parent", "sync-parent"])
-async def test_direct_and_composed_base_calls_follow_option_while_dynamic_calls_stay_managed(managed, source):
-    initial = JITHarness()
-    initial.create_tool(source, entrypoint="twice")
-    jit = JITHarnessExtension(initial.snapshot(), manage_base_tools=managed)
+async def test_direct_and_composed_base_calls_follow_option_while_dynamic_calls_stay_managed(tmp_path, managed, source):
+    seed_repo(tmp_path, "base-tools", {"twice": source})  # Adopted by the session's first request.
+    jit = JITHarnessExtension(tmp_path, manage_base_tools=managed)
     ctx = context(add, extensions=(jit,))
     await jit.on_tool(ctx)
     harness = jit.get_harness("base-tools")
@@ -92,24 +118,21 @@ async def test_direct_and_composed_base_calls_follow_option_while_dynamic_calls_
         assert harness.profile_stats("add").call_count == (2 if managed else 0)
         assert harness.profile_stats("twice").call_count == 1
         assert harness.origin("add") is ToolOrigin.BASE
-        assert harness.definition("add")["parameters"] == add.parameters
-        assert harness.definition("add").get("source") is None
         assert not harness._nested_tasks
         assert_unbound()
 
-        before = harness.snapshot()
+        # Base tools are not model-facing; the Python API is their only control.
         if managed:
-            assert await ctx.tools["unload_tool"]({"name": "add"}) == {"name": "add", "status": "unloaded"}
+            assert harness.unload_tool("add") == {"name": "add", "status": "unloaded"}
             assert "add" not in ctx.tools
             with pytest.raises(ValueError, match="unloaded"):
                 await ctx.tools["twice"]({"value": 21})
             assert harness.profile_stats("add").rejected_count == 1
-            assert await ctx.tools["load_tool"]({"name": "add"}) == {"name": "add", "status": "loaded"}
+            assert harness.load_tool("add") == {"name": "add", "status": "loaded"}
         else:
-            for operation in ("unload_tool", "load_tool"):
+            for operation in (harness.unload_tool, harness.load_tool):
                 with pytest.raises(ValueError, match="Base tool management is disabled"):
-                    await ctx.tools[operation]({"name": "add"})
-                assert harness.snapshot() == before
+                    operation("add")
                 assert ctx.tools["add"].handler is add.handler
             assert harness.profile_stats("add").call_count == 0
 
@@ -118,17 +141,17 @@ async def test_direct_and_composed_base_calls_follow_option_while_dynamic_calls_
         assert "twice" not in ctx.tools
         assert harness.load_tool("twice")["status"] == "loaded"
         assert await ctx.tools["twice"]({"value": 21}) == 42
-        assert harness.snapshot() == before
         assert_unbound()
     finally:
         jit._request_finished(ctx)
+        jit.forget_session("base-tools")
     assert not harness.active and not harness._wrapper_handlers
 
 
 @pytest.mark.parametrize("managed", [False, True])
-async def test_standalone_harness_applies_option_without_extension(managed):
-    harness = JITHarness(tools=[add], manage_base_tools=managed)
-    harness.create_tool(SYNC_SOURCE, entrypoint="twice")
+async def test_standalone_harness_applies_option_without_extension(tmp_path, managed):
+    harness = JITHarness(tmp_path, tools=[add], manage_base_tools=managed)
+    put_tool(harness, SYNC_SOURCE, "twice")
     assert await harness.call_tool("add", left=1, right=2) == 3
     assert await harness.call_tool("twice", value=21) == 42
     assert harness.profile_stats("add").call_count == (2 if managed else 0)
@@ -137,11 +160,12 @@ async def test_standalone_harness_applies_option_without_extension(managed):
         with pytest.raises(ValueError, match="disabled"):
             harness.unload_tool("add")
     assert_unbound()
+    harness.close()
 
 
 @pytest.mark.parametrize("registration", ["constructor", "early-extension", "late-extension", "before-model"])
 @pytest.mark.parametrize("managed", [False, True])
-async def test_real_model_call_profiles_and_unloads_every_base_registration_route(registration, managed):
+async def test_real_model_call_profiles_and_unloads_every_base_registration_route(tmp_path, registration, managed):
     class Register(AgentExtension):
         priority = 950_000 if registration in ("late-extension", "before-model") else 100
 
@@ -156,15 +180,15 @@ async def test_real_model_call_profiles_and_unloads_every_base_registration_rout
                 ctx.tools.pop("add", None)
                 ctx.register_tool(add)
 
+    seed_repo(tmp_path, "routes", {"base_lifecycle": LIFECYCLE_SOURCE})
     model = ScriptModel(
         ToolCall("base", "add", {"left": 21, "right": 21}),
-        ToolCall("stats", "inspect_tool_stats", {"name": "add"}),
-        ToolCall("unload", "unload_tool", {"name": "add"}),
+        ToolCall("unload", "base_lifecycle", {"action": "unload"}),
         ToolCall("stale", "add", {"left": 1, "right": 1}),
-        ToolCall("load", "load_tool", {"name": "add"}),
+        ToolCall("load", "base_lifecycle", {"action": "load"}),
         ToolCall("again", "add", {"left": 2, "right": 2}),
     )
-    jit = JITHarnessExtension(manage_base_tools=managed)
+    jit = JITHarnessExtension(tmp_path, manage_base_tools=managed)
     extensions = [jit] if registration == "constructor" else [Register(), jit]
     agent = await Agent.create(model, tools=[add] if registration == "constructor" else [], extensions=extensions)
     assert (await agent.run("exercise base lifecycle", config=AgentRunConfig("routes"))).content == "done"
@@ -172,22 +196,23 @@ async def test_real_model_call_profiles_and_unloads_every_base_registration_rout
         message.tool_call_id: message for message in model.requests[-1].messages if isinstance(message, ToolMessage)
     }
     assert results["base"].content == "42"
-    assert json.loads(results["stats"].content)["call_count"] == (1 if managed else 0)
     assert results["unload"].success is managed
     assert results["stale"].success is not managed
     assert results["load"].success is managed
     assert results["again"].content == "4" and results["again"].success
-    assert ("add" in {entry.name for entry in model.requests[3].tools}) is not managed
+    # The request that carries the stale call no longer offers the unloaded base tool.
+    assert ("add" in {entry.name for entry in model.requests[2].tools}) is not managed
     if not managed:
         assert "disabled" in results["unload"].content
     harness = jit.get_harness("routes")
     assert harness.profile_stats("add").completed_count == (2 if managed else 0)
     assert not harness.active
     assert_unbound()
+    jit.forget_session("routes")
 
 
 @pytest.mark.parametrize("managed", [False, True])
-async def test_base_replaced_after_before_tool_runs_current_implementation_with_correct_profile(managed):
+async def test_base_replaced_after_before_tool_runs_current_implementation_with_correct_profile(tmp_path, managed):
     executed = []
 
     @tool(guidelines="Use the replacement implementation only.")
@@ -204,7 +229,7 @@ async def test_base_replaced_after_before_tool_runs_current_implementation_with_
                 ctx.tools["add"] = replace(replacement, name="add")
 
     model = ScriptModel(ToolCall("base", "add", {"left": 1, "right": 2}))
-    jit = JITHarnessExtension(manage_base_tools=managed)
+    jit = JITHarnessExtension(tmp_path, manage_base_tools=managed)
     agent = await Agent.create(model, tools=[add], extensions=[jit, ReplaceAfterJIT()])
     await agent.run("replace", config=AgentRunConfig("replace"))
     result = next(message for message in model.requests[-1].messages if isinstance(message, ToolMessage))
@@ -213,8 +238,8 @@ async def test_base_replaced_after_before_tool_runs_current_implementation_with_
     assert_unbound()
 
 
-async def test_sync_is_idempotent_and_does_not_re_adopt_wrappers_or_restore_removed_tools():
-    harness = JITHarness(tools=[add])
+async def test_sync_is_idempotent_and_does_not_re_adopt_wrappers_or_restore_removed_tools(tmp_path):
+    harness = JITHarness(tmp_path, tools=[add])
     ctx = context(add)
     harness.attach(ctx)
     original = ctx.tools["add"]
@@ -251,12 +276,11 @@ async def test_sync_is_idempotent_and_does_not_re_adopt_wrappers_or_restore_remo
 
 
 @pytest.mark.parametrize("invalid", ["key-mismatch", "dynamic-collision", "search", "reserved-name"])
-async def test_sync_rejects_invalid_late_registration_without_half_adopting_earlier_entries(invalid):
-    harness = JITHarness()
-    harness.create_tool(SOURCE, entrypoint="twice")
+async def test_sync_rejects_invalid_late_registration_without_half_adopting_earlier_entries(tmp_path, invalid):
+    harness = JITHarness(tmp_path)
+    put_tool(harness, SOURCE, "twice")
     ctx = context()
     harness.attach(ctx)
-    before = harness.snapshot()
     try:
         ctx.tools["good"] = replace(add, name="good")
         if invalid == "key-mismatch":
@@ -266,19 +290,21 @@ async def test_sync_rejects_invalid_late_registration_without_half_adopting_earl
         elif invalid == "search":
             ctx.tools["search"] = replace(add, name="search", local_tool_search=True)
         else:
-            ctx.tools["create_tool"] = replace(add, name="create_tool")
+            ctx.tools["repo_create"] = replace(add, name="repo_create")
         with pytest.raises(ValueError):
             harness.sync_tools(ctx)
-        assert harness.snapshot() == before
         assert harness.origin("good") is ToolOrigin.UNKNOWN
     finally:
         harness.detach(ctx)
+        harness.close()
 
 
 @pytest.mark.parametrize("managed", [False, True])
-async def test_plan_mode_replacements_are_wrapped_only_when_enabled_without_re_exposing_control_tools(managed):
+async def test_plan_mode_replacements_are_wrapped_only_when_enabled_without_re_exposing_control_tools(
+    tmp_path, managed
+):
     plan_mode = PlanModeExtension()
-    jit = JITHarnessExtension(manage_base_tools=managed)
+    jit = JITHarnessExtension(tmp_path, manage_base_tools=managed)
     # Plan Mode replaces registrations in a higher-priority before_model hook.
     ctx = context(session="plan")
     await jit.on_tool(ctx)
@@ -296,8 +322,9 @@ async def test_plan_mode_replacements_are_wrapped_only_when_enabled_without_re_e
 
     try:
         assert [event async for event in jit.on_model_request(ctx, request, capture)]
-        assert "create_tool" not in ctx.tools
-        assert "create_tool" not in {entry.name for entry in captured[0].tools}
+        offered = {entry.name for entry in captured[0].tools}
+        assert MANAGEMENT_NAMES.isdisjoint(ctx.tools)
+        assert MANAGEMENT_NAMES.isdisjoint(offered)
         assert (ctx.tools["glob"].handler is raw.handler) is not managed
         assert jit.get_harness("plan").origin("glob") is ToolOrigin.BASE
         assert ctx.tools["exit_plan_mode"] is not original.get("exit_plan_mode")
@@ -310,16 +337,16 @@ async def test_plan_mode_replacements_are_wrapped_only_when_enabled_without_re_e
             )
             assert [event async for event in jit.on_model_request(ctx, refreshed, capture)]
             assert "glob" not in ctx.tools and "glob" not in {entry.name for entry in captured[-1].tools}
-            assert "create_tool" not in ctx.tools
+            assert MANAGEMENT_NAMES.isdisjoint(ctx.tools)
     finally:
         plan_mode._active_sessions.discard("plan")
         jit._request_finished(ctx)
 
 
 @pytest.mark.parametrize("managed", [False, True])
-async def test_base_deferral_survives_harness_wrapping(managed):
+async def test_base_deferral_survives_harness_wrapping(tmp_path, managed):
     """Provider deferral is a base-tool property; management must not clear it."""
-    jit = JITHarnessExtension(manage_base_tools=managed)
+    jit = JITHarnessExtension(tmp_path, manage_base_tools=managed)
     ctx = context(replace(add, name="deferred_add", deferred=True))
     await jit.on_tool(ctx)
     try:
@@ -330,9 +357,9 @@ async def test_base_deferral_survives_harness_wrapping(managed):
         jit._request_finished(ctx)
 
 
-async def test_request_definitions_owned_by_other_extensions_are_preserved():
+async def test_request_definitions_owned_by_other_extensions_are_preserved(tmp_path):
     """Only harness-owned names are filtered; foreign request definitions stay."""
-    jit = JITHarnessExtension()
+    jit = JITHarnessExtension(tmp_path)
     ctx = context(add)
     await jit.on_tool(ctx)
     captured = []
@@ -346,7 +373,7 @@ async def test_request_definitions_owned_by_other_extensions_are_preserved():
         request = ModelRequest(messages=(), tools=(*registered, replace(add, name="foreign").definition))
         assert [event async for event in jit.on_model_request(ctx, request, capture)]
         offered = {entry.name for entry in captured[0].tools}
-        assert "foreign" in offered and {"add", "create_tool"} <= offered
+        assert "foreign" in offered and {"add", "repo_create", "repo_load", "repo_unload"} <= offered
         # A harness-owned name the request dropped is not re-exposed.
         dropped = ModelRequest(messages=(), tools=tuple(item for item in request.tools if item.name != "add"))
         assert [event async for event in jit.on_model_request(ctx, dropped, capture)]
@@ -357,7 +384,7 @@ async def test_request_definitions_owned_by_other_extensions_are_preserved():
 
 
 @pytest.mark.parametrize("managed", [False, True])
-async def test_base_failure_and_cancellation_record_only_when_managed(managed):
+async def test_base_failure_and_cancellation_record_only_when_managed(tmp_path, managed):
     entered, release = asyncio.Event(), asyncio.Event()
 
     @tool(guidelines="Return, raise, or wait as directed by the test.")
@@ -370,7 +397,7 @@ async def test_base_failure_and_cancellation_record_only_when_managed(managed):
             await release.wait()
         return 42
 
-    harness = JITHarness(tools=[sample], manage_base_tools=managed)
+    harness = JITHarness(tmp_path, tools=[sample], manage_base_tools=managed)
     with pytest.raises(ValueError, match="base failed"):
         await harness.call_tool("sample", kind="failure")
     running = asyncio.create_task(harness.call_tool("sample", kind="wait"))
@@ -392,30 +419,10 @@ async def test_base_failure_and_cancellation_record_only_when_managed(managed):
         await asyncio.gather(running, return_exceptions=True)
 
 
-async def test_disabled_mode_preserves_snapshot_unload_marks_without_applying_them_to_base_tools():
-    template = JITHarness(tools=[add])
-    template.create_tool(SOURCE, entrypoint="twice")
-    template.unload_tool("add")
-    template.unload_tool("twice")
-    snapshot = JITHarnessSnapshot.from_json(template.snapshot().to_json())
-    protected = JITHarness(snapshot, tools=[add], manage_base_tools=False)
-    assert protected.describe("add")["status"] == "loaded"
-    assert protected.describe("twice")["status"] == "unloaded"
-    assert await protected.call_tool("add", left=1, right=2) == 3
-    protected.load_tool("twice")
-    assert await protected.call_tool("twice", value=21) == 42
-    assert protected.profile_stats("add").call_count == 0
-    assert protected.snapshot().unloaded_tools == ("add",)
-    assert "manage_base_tools" not in protected.snapshot().to_json()
-    managed = JITHarness(protected.snapshot(), tools=[add])
-    with pytest.raises(ValueError, match="unloaded"):
-        await managed.call_tool("twice", value=21)
-    managed.load_tool("add")
-    assert await managed.call_tool("twice", value=21) == 42
-
-
-async def test_same_session_retains_unload_state_other_session_remains_independent_and_raw_tools_are_not_mutated():
-    jit = JITHarnessExtension()
+async def test_same_session_retains_unload_state_other_session_remains_independent_and_raw_tools_are_not_mutated(
+    tmp_path,
+):
+    jit = JITHarnessExtension(tmp_path)
     history = InMemoryMessageAccumulator()
     agent = await Agent.create(ScriptModel(), tools=[add], extensions=[history, jit])
     await agent.run("one", config=AgentRunConfig("one"))
@@ -430,14 +437,14 @@ async def test_same_session_retains_unload_state_other_session_remains_independe
     assert "add" not in {entry.name for entry in one_model.requests[0].tools}
     assert "add" in {entry.name for entry in two_model.requests[0].tools}
     assert jit.get_harness("two").profile_stats("add").completed_count == 1
-    assert first.snapshot().unloaded_tools == ("add",)
+    assert first.describe("add")["status"] == "unloaded"
     assert not first.active and not jit.get_harness("two").active
     assert await add({"left": 1, "right": 2}) == 3  # The application callable was not changed.
 
 
 @pytest.mark.parametrize("managed", [False, True])
-async def test_later_request_middleware_tool_subset_is_not_expanded(managed):
-    jit = JITHarnessExtension(manage_base_tools=managed)
+async def test_later_request_middleware_tool_subset_is_not_expanded(tmp_path, managed):
+    jit = JITHarnessExtension(tmp_path, manage_base_tools=managed)
     ctx = context(add)
     await jit.on_tool(ctx)
     captured = []
@@ -454,14 +461,13 @@ async def test_later_request_middleware_tool_subset_is_not_expanded(managed):
         assert [event async for event in jit.on_model_request(ctx, request, capture)]
         assert "add" not in {entry.name for entry in captured[0].tools}
         text = "\n".join(message.content for message in captured[0].messages if isinstance(message, SystemMessage))
-        assert ("Base tool management is enabled" in text) is managed
-        assert ("Base tool management is disabled" in text) is not managed
+        assert "## The repository" in text
         assert "## add" not in text
     finally:
         jit._request_finished(ctx)
 
 
-async def test_unhashable_custom_base_handler_is_accepted_by_registry_sync():
+async def test_unhashable_custom_base_handler_is_accepted_by_registry_sync(tmp_path):
     class Handler:
         __hash__ = None
 
@@ -469,7 +475,7 @@ async def test_unhashable_custom_base_handler_is_accepted_by_registry_sync():
             return 42
 
     raw = AgentTool("custom", "Return a value.", {}, Handler(), guidelines=("Use a custom handler.",))
-    harness = JITHarness()
+    harness = JITHarness(tmp_path)
     ctx = context()
     harness.attach(ctx)
     try:

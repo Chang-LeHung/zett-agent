@@ -87,7 +87,7 @@ every extension from the start.
       :link: jit-harness
       :link-type: doc
 
-      Let a trusted model compose, evolve, and save a toolbox for reuse.
+      Let a trusted model keep tools and workflows in a repository on disk.
 
    .. grid-item-card:: Sandbox
       :link: sandbox

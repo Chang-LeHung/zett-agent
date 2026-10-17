@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import gc
 import json
+import sys
 import weakref
 from dataclasses import replace
+from pathlib import Path
 from textwrap import dedent
 
 import pytest
 from pydantic import ValidationError
 
+from jit_support import HEADER, put_tool, seed_repo, write_module
 from zett_agent.agent import Agent, AgentRunConfig, AgentRunContext, AgentState
 from zett_agent.jit_harness import JITHarness, JITHarnessExtension, ToolCallStatus, ToolErrorRecord, ToolErrorReport
 from zett_agent.messages import AssistantMessage, ToolCall, ToolMessage
@@ -37,12 +40,35 @@ async def fail_with(harness, message, name="fail", kind="value"):
         await harness.call_tool(name, message=message, kind=kind)
 
 
+@tool(guidelines="Write one file for the test.")
+def put(path: str, content: str) -> str:
+    """Write a file."""
+    Path(path).write_text(content, encoding="utf-8")
+    return "ok"
+
+
 def context(session="errors"):
     return AgentRunContext(AgentRunConfig(session, request_id=f"{session}-request"), AgentState(), {})
 
 
-async def test_lru_deduplicates_refreshes_on_reoccurrence_and_evicts_least_recent_error():
-    harness = JITHarness(tools=[fail], error_capacity=2)
+def jit_modules():
+    return [name for name in sys.modules if name.startswith("zett_jit_")]
+
+
+def jit_finders():
+    return [finder for finder in sys.meta_path if type(finder).__name__ == "RepoFinder"]
+
+
+@pytest.fixture(autouse=True)
+def no_residue():
+    """Every test must leave the interpreter's import state as it found it."""
+    before = (set(jit_modules()), len(jit_finders()))
+    yield
+    assert (set(jit_modules()), len(jit_finders())) == before
+
+
+async def test_lru_deduplicates_refreshes_on_reoccurrence_and_evicts_least_recent_error(tmp_path):
+    harness = JITHarness(tmp_path, tools=[fail], error_capacity=2)
     await fail_with(harness, "A")
     first = harness.tool_errors().errors[0]
     await fail_with(harness, "B")
@@ -85,9 +111,9 @@ def test_error_records_only_accept_the_two_failure_statuses_as_an_enum():
         ToolErrorRecord.model_validate({**payload, "status": "unknown"})
 
 
-async def test_reads_never_refresh_lru_and_same_text_does_not_merge_tools_or_error_types():
+async def test_reads_never_refresh_lru_and_same_text_does_not_merge_tools_or_error_types(tmp_path):
     other = replace(fail, name="other")
-    harness = JITHarness(tools=[fail, other], error_capacity=3)
+    harness = JITHarness(tmp_path, tools=[fail, other], error_capacity=3)
     await fail_with(harness, "same")
     await fail_with(harness, "same", name="other")
     await fail_with(harness, "same", kind="type")
@@ -105,8 +131,8 @@ async def test_reads_never_refresh_lru_and_same_text_does_not_merge_tools_or_err
     )
 
 
-async def test_messages_are_character_bounded_and_full_text_not_prefix_controls_deduplication():
-    harness = JITHarness(tools=[fail], error_capacity=2, error_message_chars=3)
+async def test_messages_are_character_bounded_and_full_text_not_prefix_controls_deduplication(tmp_path):
+    harness = JITHarness(tmp_path, tools=[fail], error_capacity=2, error_message_chars=3)
     await fail_with(harness, "中文🙂A")
     await fail_with(harness, "中文🙂B")
     errors = harness.tool_errors().errors
@@ -119,8 +145,8 @@ async def test_messages_are_character_bounded_and_full_text_not_prefix_controls_
 
 
 @pytest.mark.parametrize("message", ["", "中文", "x" * 4000])
-async def test_empty_and_at_limit_messages_not_marked_truncated(message):
-    harness = JITHarness(tools=[fail])
+async def test_empty_and_at_limit_messages_not_marked_truncated(tmp_path, message):
+    harness = JITHarness(tmp_path, tools=[fail])
     await fail_with(harness, message)
     error = harness.tool_errors().errors[0]
     assert error.message == message
@@ -130,22 +156,22 @@ async def test_empty_and_at_limit_messages_not_marked_truncated(message):
 @pytest.mark.parametrize("factory", [JITHarness, JITHarnessExtension])
 @pytest.mark.parametrize("option", ["error_capacity", "error_message_chars"])
 @pytest.mark.parametrize("value", [0, -1, True, 1.5, "2"])
-def test_error_config_is_validated_before_source_activation_or_first_session(factory, option, value):
+def test_error_config_is_validated_at_construction_before_any_session(tmp_path, factory, option, value):
     with pytest.raises(ValueError, match="positive integers"):
-        factory(**{option: value})
+        factory(tmp_path, **{option: value})
 
 
 @pytest.mark.parametrize(
     ("offset", "limit"),
     [(-1, 1), (0, 0), (0, 1001), (True, 1), (0, True), (0.5, 1), (0, 1.5)],
 )
-def test_error_pagination_rejects_invalid_bounds(offset, limit):
+def test_error_pagination_rejects_invalid_bounds(tmp_path, offset, limit):
     with pytest.raises(ValueError, match="Error offset"):
-        JITHarness().tool_errors(offset=offset, limit=limit)
+        JITHarness(tmp_path).tool_errors(offset=offset, limit=limit)
 
 
-async def test_filter_pagination_immutable_export_and_empty_report_are_read_only():
-    harness = JITHarness(tools=[fail], error_capacity=5)
+async def test_filter_pagination_immutable_export_and_empty_report_are_read_only(tmp_path):
+    harness = JITHarness(tmp_path, tools=[fail], error_capacity=5)
     assert harness.tool_errors().errors == ()
     for message in ("A", "B", "C", "D", "E"):
         await fail_with(harness, message)
@@ -166,7 +192,7 @@ async def test_filter_pagination_immutable_export_and_empty_report_are_read_only
 
 
 @pytest.mark.parametrize("synchronous", [False, True])
-async def test_nested_failure_preserves_context_and_parent_can_catch_then_continue(synchronous):
+async def test_nested_failure_preserves_context_and_parent_can_catch_then_continue(tmp_path, synchronous):
     header = "def" if synchronous else "async def"
     invoke = "harness.call_tool_sync" if synchronous else "await harness.call_tool"
     source = f'''\
@@ -179,9 +205,8 @@ async def test_nested_failure_preserves_context_and_parent_can_catch_then_contin
         return "recovered"
     raise AssertionError("dependency should fail")
 '''
-    initial = JITHarness()
-    initial.create_tool(source, entrypoint="parent")
-    jit = JITHarnessExtension(initial.snapshot(), error_capacity=1)
+    seed_repo(tmp_path, "errors", {"parent": source})
+    jit = JITHarnessExtension(tmp_path, error_capacity=1)
     ctx = context()
     ctx.register_tool(fail)
     await jit.on_tool(ctx)
@@ -195,16 +220,17 @@ async def test_nested_failure_preserves_context_and_parent_can_catch_then_contin
         assert not harness._nested_tasks
     finally:
         jit._request_finished(ctx)
+        jit.forget_session("errors")
 
 
-async def test_errors_survive_updates_and_unload_but_never_serialize_with_executable_snapshot():
-    harness = JITHarness(error_capacity=2)
-    harness.create_tool(SOURCE, entrypoint="value")
+async def test_errors_survive_a_reload_and_unload_but_never_reach_the_profile(tmp_path):
+    harness = JITHarness(tmp_path, error_capacity=2)
+    put_tool(harness, SOURCE, "value")
     with pytest.raises(ValueError):
         await harness.call_tool("value")
     original = harness.tool_errors().errors[0]
     changed = SOURCE.replace('raise ValueError("missing normalization")', "return 42")
-    harness.update_tool("value", changed, entrypoint="value")
+    put_tool(harness, changed, "value")
     assert await harness.call_tool("value") == 42
     assert harness.tool_errors().errors == (original,)  # Successful repair does not refresh or delete evidence.
     harness.unload_tool("value")
@@ -212,18 +238,15 @@ async def test_errors_survive_updates_and_unload_but_never_serialize_with_execut
         await harness.call_tool("value")
     error = harness.tool_errors().errors[0]
     assert error.status == "rejected" and error.last_call_id != original.last_call_id
-    snapshot = harness.snapshot()
-    restored = JITHarness(snapshot, error_capacity=1)
-    assert restored.tool_errors().errors == ()
-    assert "occurrences" not in snapshot.to_json()
     assert all(
         error.message is None or error.message not in harness.profile().model_dump_json()
         for error in harness.tool_errors().errors
     )
+    harness.close()
 
 
-async def test_one_hundred_distinct_errors_stay_within_global_capacity_and_character_limit():
-    harness = JITHarness(tools=[fail], error_capacity=4, error_message_chars=8)
+async def test_one_hundred_distinct_errors_stay_within_global_capacity_and_character_limit(tmp_path):
+    harness = JITHarness(tmp_path, tools=[fail], error_capacity=4, error_message_chars=8)
     for index in range(100):
         await fail_with(harness, f"failure-{index:03}")
         assert harness.tool_errors().retained_errors <= 4
@@ -234,8 +257,8 @@ async def test_one_hundred_distinct_errors_stay_within_global_capacity_and_chara
     assert harness.profile("fail").stats[0].failed_count == 100
 
 
-async def test_parallel_duplicates_are_atomic_and_completion_recency_controls_lru():
-    harness = JITHarness(tools=[fail], error_capacity=2)
+async def test_parallel_duplicates_are_atomic_and_completion_recency_controls_lru(tmp_path):
+    harness = JITHarness(tmp_path, tools=[fail], error_capacity=2)
 
     async def attempt():
         await fail_with(harness, "duplicate")
@@ -252,7 +275,7 @@ async def test_parallel_duplicates_are_atomic_and_completion_recency_controls_lr
         await release.wait()
         raise ValueError("late completion")
 
-    second = JITHarness(tools=[fail, delayed], error_capacity=2)
+    second = JITHarness(tmp_path, tools=[fail, delayed], error_capacity=2)
     running = asyncio.create_task(second.call_tool("delayed"))
     try:
         await asyncio.wait_for(entered.wait(), 2)
@@ -269,7 +292,7 @@ async def test_parallel_duplicates_are_atomic_and_completion_recency_controls_lr
         await asyncio.gather(running, return_exceptions=True)
 
 
-async def test_cancelled_dispatches_and_broken_message_formatting_remain_safe():
+async def test_cancelled_dispatches_and_broken_message_formatting_remain_safe(tmp_path):
     entered = asyncio.Event()
 
     @tool(guidelines="Wait for cancellation.")
@@ -278,7 +301,7 @@ async def test_cancelled_dispatches_and_broken_message_formatting_remain_safe():
         entered.set()
         await asyncio.Event().wait()
 
-    harness = JITHarness(tools=[wait])
+    harness = JITHarness(tmp_path, tools=[wait])
     running = asyncio.create_task(harness.call_tool("wait"))
     try:
         await asyncio.wait_for(entered.wait(), 2)
@@ -300,7 +323,7 @@ async def test_cancelled_dispatches_and_broken_message_formatting_remain_safe():
         """Do not let diagnostics mask this exception."""
         raise Broken()
 
-    harness = JITHarness(tools=[broken])
+    harness = JITHarness(tmp_path, tools=[broken])
     for _ in range(2):
         with pytest.raises(Broken):
             await harness.call_tool("broken")
@@ -309,7 +332,7 @@ async def test_cancelled_dispatches_and_broken_message_formatting_remain_safe():
     assert error.occurrences == 2 and error.error_type == "Broken"
 
 
-async def test_cache_does_not_retain_exception_objects_or_traceback_frames():
+async def test_cache_does_not_retain_exception_objects_or_traceback_frames(tmp_path):
     references = []
 
     class TemporaryError(Exception):
@@ -322,7 +345,7 @@ async def test_cache_does_not_retain_exception_objects_or_traceback_frames():
         references.append(weakref.ref(error))
         raise error
 
-    harness = JITHarness(tools=[transient])
+    harness = JITHarness(tmp_path, tools=[transient])
 
     async def invoke():
         try:
@@ -336,10 +359,9 @@ async def test_cache_does_not_retain_exception_objects_or_traceback_frames():
     assert harness.tool_errors().errors[0].message == "temporary"
 
 
-async def test_model_queries_errors_and_explicitly_repairs_source_without_autonomous_retry():
-    initial = JITHarness()
-    initial.create_tool(SOURCE, entrypoint="value")
-    jit = JITHarnessExtension(initial.snapshot(), error_capacity=3, error_message_chars=100)
+async def test_model_diagnoses_a_failure_and_repairs_the_repository_without_autonomous_retry(tmp_path):
+    jit = JITHarnessExtension(tmp_path, error_capacity=3, error_message_chars=100)
+    directory = seed_repo(tmp_path, "one", {"value": SOURCE})
     steps = []
     repaired = SOURCE.replace('raise ValueError("missing normalization")', "return 42")
 
@@ -349,25 +371,20 @@ async def test_model_queries_errors_and_explicitly_repairs_source_without_autono
         async def stream(self, request):
             index = len(steps)
             offered = {definition.name for definition in request.tools}
-            assert "inspect_tool_errors" in offered
-            assert "untrusted diagnostic data" in request.messages[0].content
+            assert {"repo_create", "repo_load", "repo_unload", "put", "value"} <= offered
+            assert "inspect_tool_errors" not in offered and "update_tool" not in offered
+            assert "repo_load" in request.messages[0].content
             if index == 0:
                 message = AssistantMessage(tool_calls=(ToolCall("bad", "value", {}),))
             elif index == 1:
                 assert isinstance(request.messages[-1], ToolMessage) and not request.messages[-1].success
-                message = AssistantMessage(tool_calls=(ToolCall("errors", "inspect_tool_errors", {"name": "value"}),))
+                assert request.messages[-1].content == "missing normalization"
+                repair = {"path": str(directory / "value.py"), "content": HEADER + repaired}
+                message = AssistantMessage(tool_calls=(ToolCall("repair", "put", repair),))
             elif index == 2:
-                report = json.loads(request.messages[-1].content)
-                assert "capacity" not in report and report["total_matches"] == 1
-                assert report["errors"][0]["message"] == "missing normalization"
-                assert report["errors"][0]["last_call_id"] == "bad"
-                assert report["errors"][0]["occurrences"] == 1
-                message = AssistantMessage(
-                    tool_calls=(
-                        ToolCall("repair", "update_tool", {"name": "value", "source": repaired, "entrypoint": "value"}),
-                    )
-                )
+                message = AssistantMessage(tool_calls=(ToolCall("load", "repo_load", {}),))
             elif index == 3:
+                assert json.loads(request.messages[-1].content)["status"] == "loaded"
                 message = AssistantMessage(tool_calls=(ToolCall("good", "value", {}),))
             else:
                 assert request.messages[-1].content == "42"
@@ -375,44 +392,52 @@ async def test_model_queries_errors_and_explicitly_repairs_source_without_autono
             steps.append(request)
             yield ModelEvent.completed(ModelResponse(message))
 
-    agent = await Agent.create(Model(), extensions=[jit])
-    assert (await agent.run("inspect then repair", config=AgentRunConfig("one"))).content == "fixed"
+    agent = await Agent.create(Model(), tools=[put], extensions=[jit])
+    assert (await agent.run("repair the failed tool", config=AgentRunConfig("one"))).content == "fixed"
     harness = jit.get_harness("one")
     assert harness.profile("value").stats[0].call_count == 2
+    assert harness.profile("value").stats[0].failed_count == 1  # One failure, no hidden retry.
     assert harness.tool_errors().errors[0].occurrences == 1
-    assert harness.inspect_tool("value")["source"] == repaired
+    assert (directory / "value.py").read_text() == HEADER + repaired
+    jit.forget_session("one")
     ctx = context("two")
     await jit.on_tool(ctx)
     try:
         assert jit.get_harness("two").tool_errors().errors == ()
-        assert jit.get_harness("two").inspect_tool("value")["source"] == SOURCE
+        assert jit.get_harness("two").repo is None  # A new session starts without a repository.
     finally:
         jit._request_finished(ctx)
+        jit.forget_session("two")
 
 
-async def test_management_tool_creation_failure_is_visible_in_recent_errors():
-    jit = JITHarnessExtension()
+async def test_management_tool_load_failure_is_visible_in_recent_errors(tmp_path):
+    jit = JITHarnessExtension(tmp_path)
     ctx = context()
     await jit.on_tool(ctx)
     try:
-        with pytest.raises(SyntaxError):
-            await ctx.tools["create_tool"]({"source": "invalid python !", "entrypoint": "bad"})
-        report = await ctx.tools["inspect_tool_errors"]({})
-        assert report["errors"][0]["tool_name"] == "create_tool"
-        assert report["errors"][0]["error_type"] == "SyntaxError"
-        assert jit.get_harness("errors").snapshot().tools == ()
+        harness = jit.get_harness("errors")
+        write_module(harness, "bad", "invalid python !\n", header=False)
+        with pytest.raises(ValueError, match="SyntaxError"):
+            await ctx.tools["repo_load"]({})
+        report = harness.tool_errors()
+        assert report.errors[0].tool_name == "repo_load"
+        assert report.errors[0].error_type == "ValueError"
+        assert harness.list_tools() == []  # The failed load registered nothing.
     finally:
         jit._request_finished(ctx)
+        jit.forget_session("errors")
 
 
-async def test_error_query_wrappers_cannot_read_new_request_through_old_references():
-    jit = JITHarnessExtension()
+async def test_management_wrappers_cannot_act_on_a_new_request_through_old_references(tmp_path):
+    jit = JITHarnessExtension(tmp_path)
     first = context()
     await jit.on_tool(first)
-    old = first.tools["inspect_tool_errors"]
-    with pytest.raises(SyntaxError):
-        await first.tools["create_tool"]({"source": "invalid !", "entrypoint": "bad"})
-    before = jit.get_harness("errors").tool_errors()
+    harness = jit.get_harness("errors")
+    old = first.tools["repo_load"]
+    write_module(harness, "bad", "invalid !\n", header=False)
+    with pytest.raises(ValueError, match="SyntaxError"):
+        await old({})
+    before = harness.tool_errors()
     jit._request_finished(first)
     with pytest.raises(RuntimeError, match="closed"):
         await old({})
@@ -421,29 +446,34 @@ async def test_error_query_wrappers_cannot_read_new_request_through_old_referenc
     try:
         with pytest.raises(RuntimeError, match="closed"):
             await old({})
-        assert jit.get_harness("errors").tool_errors() == before
-        assert (await second.tools["inspect_tool_errors"]({}))["errors"][0]["error_type"] == "SyntaxError"
-        current = second.tools.pop("inspect_tool_errors")
+        assert harness.tool_errors() == before
+        with pytest.raises(ValueError, match="SyntaxError"):
+            await second.tools["repo_load"]({})
+        current = second.tools.pop("repo_load")
         with pytest.raises(ValueError, match="not registered"):
             await current({})
-        assert jit.get_harness("errors").tool_errors().errors[0].tool_name == "inspect_tool_errors"
+        assert harness.tool_errors().errors[0].tool_name == "repo_load"
     finally:
         jit._request_finished(second)
+        jit.forget_session("errors")
 
 
-async def test_source_update_failure_retains_old_implementation_and_latest_diagnostic():
-    initial = JITHarness()
-    initial.create_tool(SOURCE.replace('raise ValueError("missing normalization")', "return 42"), entrypoint="value")
-    jit = JITHarnessExtension(initial.snapshot(), error_capacity=2)
+async def test_reload_failure_retains_old_implementation_and_latest_diagnostic(tmp_path):
+    working = SOURCE.replace('raise ValueError("missing normalization")', "return 42")
+    seed_repo(tmp_path, "errors", {"value": working})
+    jit = JITHarnessExtension(tmp_path, error_capacity=2)
     ctx = context()
     await jit.on_tool(ctx)
+    harness = jit.get_harness("errors")
     try:
-        with pytest.raises(SyntaxError):
-            await ctx.tools["update_tool"]({"name": "value", "source": "invalid !", "entrypoint": "value"})
+        write_module(harness, "value", "invalid !\n", header=False)
+        with pytest.raises(ValueError, match="SyntaxError"):
+            await ctx.tools["repo_load"]({})
         assert await ctx.tools["value"]({}) == 42
-        report = await ctx.tools["inspect_tool_errors"]({"name": "update_tool", "offset": 0, "limit": 1})
-        assert report["errors"][0]["error_type"] == "SyntaxError"
-        assert "invalid" in report["errors"][0]["message"]
-        assert jit.get_harness("errors").tool_errors("value").errors == ()
+        report = harness.tool_errors("repo_load", limit=1)
+        assert report.errors[0].error_type == "ValueError"
+        assert "invalid" in report.errors[0].message
+        assert harness.tool_errors("value").errors == ()
     finally:
         jit._request_finished(ctx)
+        jit.forget_session("errors")

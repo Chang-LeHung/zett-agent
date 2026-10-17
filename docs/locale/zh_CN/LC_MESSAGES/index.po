@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 21:43+0800\n"
+"POT-Creation-Date: 2026-10-17 12:03+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -33,8 +33,8 @@ msgid "Agents that forge **the tools they need.**"
 msgstr "能自己锻造\\ **所需工具**\\ 的智能体。"
 
 #: ../../index.rst:31
-msgid "Zett Agent is a small Python runtime for tool-calling agents. Its JIT harness lets a model write, reuse, and inspect its own tools in the middle of a run, so a long task stops paying for the same exploration twice."
-msgstr "Zett Agent 是一个用于工具调用智能体的小型 Python 运行时。它的 JIT harness 让模型在一次运行途中编写、复用和检查自己的工具，因此长任务不必为同样的探索反复付出代价。"
+msgid "Zett Agent is a small Python runtime for tool-calling agents. Its JIT harness lets a model write and reuse its own tools in the middle of a run, so a long task stops paying for the same exploration twice."
+msgstr "Zett Agent 是一个用于工具调用智能体的小型 Python 运行时。它的 JIT harness 让模型在一次运行途中编写并复用自己的工具，因此长任务不必为同样的探索反复付出代价。"
 
 #: ../../index.rst:36
 msgid "Bring your own model and ordinary Python functions. Add skills, persistence, and delegation when you need them."
@@ -97,8 +97,8 @@ msgid "**Forge**"
 msgstr "**锻造**"
 
 #: ../../index.rst:124
-msgid "``create_tool`` registers a Python tool or a Markdown procedure the model just wrote. A Python tool can span several files that import each other."
-msgstr "``create_tool``\\ 注册模型刚刚编写的 Python 工具或 Markdown 过程。一个 Python 工具可以横跨多个相互导入的文件。"
+msgid "The model writes a Python tool or a Markdown procedure into its repository on disk, and ``repo_load`` registers it. A tool can span several files that import each other."
+msgstr "模型把 Python 工具或 Markdown 过程写进自己磁盘上的仓库，再由 ``repo_load`` 注册它。一个工具可以横跨多个相互导入的文件。"
 
 #: ../../index.rst:130
 msgid "**Reuse and compose**"
@@ -109,16 +109,16 @@ msgid "Tools call each other through ``harness.call_tool``. One outer call can d
 msgstr "工具之间通过 ``harness.call_tool`` 相互调用。一次外层调用可以驱动一串嵌套调用，而这些调用的结果从不进入上下文。"
 
 #: ../../index.rst:137
-msgid "**Inspect and unload**"
-msgstr "**检查与卸载**"
+msgid "**Keep and unload**"
+msgstr "**保留与卸载**"
 
 #: ../../index.rst:139
-msgid "Source, profiles, and recent errors stay inspectable. Unload what the task no longer needs, and carry the toolbox to the next session in a snapshot."
-msgstr "源码、性能分析结果和最近的错误都始终可查。卸载任务不再需要的部分，并用快照把工具箱带到下一个会话。"
+msgid "The repository is ordinary files, so the next session finds its tools again. Unload what the task no longer needs; profiles and recent errors stay readable by your application."
+msgstr "仓库就是普通文件，所以下一个会话还能找到自己的工具。卸载任务不再需要的内容；性能分析和近期错误仍可由你的应用读取。"
 
 #: ../../index.rst:143
-msgid ":doc:`Read the JIT harness guide <learn/jit-harness>` for the control loop, what the model sees, and the trust boundary."
-msgstr ":doc:`阅读 JIT harness 指南 <learn/jit-harness>`，了解控制循环、模型看到的内容以及信任边界。"
+msgid ":doc:`Read the JIT harness guide <learn/jit-harness>` for the three tools the model sees, reloading, and the trust boundary."
+msgstr ":doc:`阅读 JIT harness 指南 <learn/jit-harness>`，了解模型看到的三个工具、重新加载以及信任边界。"
 
 #: ../../index.rst:147
 msgid "Everything you need. Only when you need it."
@@ -231,7 +231,3 @@ msgstr "答案"
 #: ../../index.rst:235
 msgid "History, approvals, and context management extend that same loop. You choose what to enable; your application keeps control of its UI and resources. See :doc:`how it works <concepts/architecture>` when you want the mental model."
 msgstr "历史记录、审批和上下文管理都是在这同一个循环上扩展出来的。启用哪些由你决定，你的应用始终掌控自己的 UI 和资源。想建立整体认知时，可以看\\ :doc:`工作原理 <concepts/architecture>`\\ 。"
-
-#~ msgid "Meet the JIT harness"
-#~ msgstr "认识 JIT harness"
-

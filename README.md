@@ -173,46 +173,47 @@ permissions.
 
 ## Evolve a toolbox during a session
 
-Opt in to `JITHarnessExtension` to let a model create Python tools or reusable
-Markdown workflows, compose existing tools, improve its capabilities, and unload
-or reload them. Both
-Responses and Chat Completions are supported on function-calling models.
+Opt in to `JITHarnessExtension` to let a model keep its own tools and reusable
+Markdown workflows in a repository: a Python package in a directory on disk.
+The model writes it with the file tools it already has, calls `repo_load`, and
+the harness imports the package and registers every `@tool` and workflow in it.
+Both Responses and Chat Completions are supported on function-calling models.
 
 ```python
+from pathlib import Path
+
 from zett_agent.agent import AgentRunConfig
 from zett_agent.extensions.memory import InMemoryMessageAccumulator
 from zett_agent.jit_harness import JITHarnessExtension
 
-jit = JITHarnessExtension()
+jit = JITHarnessExtension(Path.home() / ".myapp" / "jit_harness")
 client = await create_agent(
     model,
     config=AgentRunConfig(session_id="tool-builder"),
-    tools=[add],
+    tools=[add, write_file],
     extensions=[InMemoryMessageAccumulator(), jit],
 )
 await client.run("Create and use a reusable tool that adds an integer to itself.")
-jit.get_harness("tool-builder").save("harness.json")
 ```
 
-Use this inside an async function with a configured model. Each session evolves
-independently; saving is explicit. A tool can be a small package of modules, and
-its code can call other loaded tools directly, so one model call can loop over
-dozens of tool calls while only the final result enters the conversation.
-Snapshots retain source and unload state,
-not conversation history or live application resources. Session-local profiling
-records call counts, latency, and input/output character sizes; the model can
-inspect these measurements and LRU-bounded recent errors before creating or
-improving tools. Inspection tools are deferred by default, so an endpoint that
-supports deferred loading fetches them on demand while every other protocol
-receives them normally; `inspection_tools` can also hide them or send them up
-front. **Generated Python is
-trusted code with your process's privileges, not sandboxed code.** Read
+Use this inside an async function with a configured model. The model sees only
+three tools, `repo_create`, `repo_load` and `repo_unload`. Each session's
+repository lives in `<root>/<session id>/`, so it survives the process and a
+resumed session finds its tools again; the files are the saved state. Tool code
+can call other loaded tools directly through `harness`, so one model call can
+loop over dozens of tool calls while only the final result enters the
+conversation. A failed reload keeps the previous version and reports the file and
+line. Session-local profiling records call counts, latency, and input/output
+character sizes, and LRU-bounded recent errors, for your application to read.
+**Generated Python is trusted code with your process's privileges, not sandboxed
+code.** Read
 [JIT capabilities](https://chang-lehung.github.io/zett-agent/learn/jit-harness.html)
 for composition, loading, and a complete offline example.
 
-When exploration is expensive, a text tool can retain the verified path, its
-applicability, pitfalls, and checks for later tasks. Workflows load on demand;
-reading one does not execute its steps or inject its entire body into every prompt.
+When exploration is expensive, a workflow in `workflows/<name>.md` can retain the
+verified path, its applicability, pitfalls, and checks for later tasks. Workflows
+load on demand; reading one does not execute its steps or inject its entire body
+into every prompt.
 
 ## Keep and restore conversations
 

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 09:58+0800\n"
+"POT-Creation-Date: 2026-10-17 12:03+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -249,12 +249,12 @@ msgid "JITHarnessExtension"
 msgstr "JITHarnessExtension"
 
 #: ../../extending/built-ins.rst:68
-msgid "Let a model create, compose, update, unload, and reload Python tools."
-msgstr "让模型创建、组合、更新、卸载和重新加载 Python 工具。"
+msgid "Let a model keep Python tools and Markdown workflows in a repository on disk, and load, reload, and unload them."
+msgstr "让模型把 Python 工具和 Markdown 工作流保存在磁盘上的仓库里，并加载、重新加载和卸载它们。"
 
 #: ../../extending/built-ins.rst:69
-msgid "Trusted code, not a sandbox; deferred inspection tools keep context small; see :doc:`../learn/jit-harness`."
-msgstr "属于受信任的代码，而不是沙箱；延迟加载的检查工具能让上下文保持较小；参见\\ :doc:`../learn/jit-harness`\\ 。"
+msgid "Trusted code, not a sandbox; three tools keep context small; see :doc:`../learn/jit-harness`."
+msgstr "属于受信任的代码，而不是沙箱；只有三个工具，能让上下文保持较小；参见\\ :doc:`../learn/jit-harness`\\ 。"
 
 #: ../../extending/built-ins.rst:70
 msgid "McpExtension"
@@ -291,4 +291,3 @@ msgstr "工具方面可以从\\ :doc:`../examples/streaming-tools`\\ 开始，�
 #: ../../extending/built-ins.rst:86
 msgid "For complete setup guides, see :doc:`../learn/project-instructions` for AGENTS.md, :doc:`../learn/on-demand` for skills and deferred tools, and :doc:`../learn/mcp` for remote tool servers. Browse :doc:`../_generated/group-extensions` for exact configuration options and event payloads."
 msgstr "完整的配置指南：AGENTS.md 参见\\ :doc:`../learn/project-instructions`，技能和延迟加载的工具参见\\ :doc:`../learn/on-demand`，远程工具服务器参见\\ :doc:`../learn/mcp`\\ 。想了解确切的配置选项和事件载荷，请浏览\\ :doc:`../_generated/group-extensions`\\ 。"
-

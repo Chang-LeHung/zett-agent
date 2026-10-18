@@ -11,6 +11,7 @@ one class turns it into a pile of ``if provider == ...``. This module splits the
         |  hooks (all optional, all public)
         |    vendor_headers()        headers the service wants on every request
         |    request_fields()        body fields for this request (thinking, reasoning, ...)
+        |    responses_fields()      body fields that refine a Responses request
         |    replay_reasoning()      what to send back of an earlier assistant turn
         |    read_delta()            what one streamed delta says
         |    merge_replay()          how streamed opaque blocks are assembled
@@ -322,6 +323,7 @@ class OpenAICompatibleProvider(RetryingProvider):
 
     * :meth:`vendor_headers` -- headers sent on every request.
     * :meth:`request_fields` -- JSON fields of one request.
+    * :meth:`responses_fields` -- JSON fields that refine a Responses request.
     * :meth:`replay_reasoning` -- the vendor extension of an earlier assistant message.
     * :meth:`read_delta` -- one streamed delta.
     * :meth:`merge_replay` -- how streamed opaque blocks are put together.
@@ -410,6 +412,16 @@ class OpenAICompatibleProvider(RetryingProvider):
         if request.reasoning_effort == ReasoningEffort.OFF:
             return {}
         return {"reasoning_effort": request.reasoning_effort.value}
+
+    def responses_fields(self, request: ModelRequest) -> JsonObject:
+        """Return the JSON fields this service takes for a Responses request, beyond the standard ones.
+
+        The standard ones (``model``, ``input``, ``tools``, ``temperature``, ``tool_choice``,
+        ``reasoning``, ``include``) are set by the provider. They are merged into the request body
+        after those fields, so a provider can replace one, such as the ``reasoning`` object. A
+        field given in ``extra_body`` replaces one returned here.
+        """
+        return {}
 
     def replay_reasoning(self, message: AssistantMessage, payload: ChatMessagePayload) -> None:
         """Add what this service needs of an earlier assistant turn to its rendered ``payload``.
@@ -540,7 +552,7 @@ class OpenAICompatibleProvider(RetryingProvider):
             model=self.model,
             temperature=self.temperature,
             send_prompt_cache_key=self.send_prompt_cache_key,
-            extra_body=self.extra_body,
+            extra_body={**self.responses_fields(request), **self.extra_body},
         )
         create = cast("Callable[..., Awaitable[AsyncStream[ResponseStreamEvent]]]", self._client.responses.create)
         try:

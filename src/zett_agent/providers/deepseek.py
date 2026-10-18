@@ -119,6 +119,16 @@ class DeepSeekProvider(OpenAICompatibleProvider):
             fields["reasoning_effort"] = _v4_effort(request.reasoning_effort)
         return fields
 
+    def responses_fields(self, request: ModelRequest) -> JsonObject:
+        """Spell DeepSeek's Responses reasoning object, whose ``none`` is the only off switch.
+
+        Thinking is on by default on this endpoint, so leaving ``reasoning`` out does not disable
+        it the way the Chat Completions ``thinking`` field does.
+        """
+        if request.reasoning_effort == ReasoningEffort.OFF:
+            return {"reasoning": {"effort": "none"}}
+        return {"reasoning": {"effort": _v4_effort(request.reasoning_effort)}}
+
 
 def _v4_effort(effort: ReasoningEffort) -> str:
     """Map a provider-neutral level onto the three the V4 models know."""

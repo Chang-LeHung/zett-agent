@@ -26,8 +26,10 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
+import re
 import ssl
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, cast
 
@@ -192,8 +194,34 @@ def image_block(source: ImageUrlSource | ImageBytesSource) -> JsonObject:
             raise ProviderResponseError(f"Unsupported image content source: {source!r}")
 
 
+logger = logging.getLogger(__name__)
+
+#: How many refused thinking blocks a provider remembers.
+_STALE_LIMIT = 512
+#: What the 400 for a thinking block says when the history before it changed. A tampered signature
+#: is a different failure, without this sentence, and dropping blocks does not cure it.
+_BOUND_ELSEWHERE = re.compile(r"bound to a different conversation", re.IGNORECASE)
+
+
+def _thinking_key(block: Mapping[str, object]) -> str | None:
+    """Return what identifies a signed thinking block: its signature, or the data of a redacted one."""
+    match block.get("type"):
+        case "thinking":
+            key = block.get("signature")
+        case "redacted_thinking":
+            key = block.get("data")
+        case _:
+            return None
+    return key if isinstance(key, str) and key else None
+
+
 def to_content_blocks(
-    message: AnyMessage, *, provider: str = "anthropic", model: str | None = None, search_tool: str | None = None
+    message: AnyMessage,
+    *,
+    provider: str = "anthropic",
+    model: str | None = None,
+    search_tool: str | None = None,
+    stale: Collection[str] = (),
 ) -> list[JsonObject]:
     """Convert a message into Messages content blocks.
 
@@ -204,6 +232,7 @@ def to_content_blocks(
         model: The model about to receive the message.
         search_tool: Name of the local tool search tool, whose result becomes ``tool_reference``
             blocks; None when the endpoint cannot load deferred tools.
+        stale: Signatures of thinking blocks the service refused. They are left out of a replay.
     """
     blocks: list[JsonObject] = []
     match message:
@@ -220,7 +249,11 @@ def to_content_blocks(
             return blocks
         case AssistantMessage():
             if message.provider == provider and message.model == model and message.replay_blocks:
-                return [cast(JsonObject, dict(block)) for block in message.replay_blocks]
+                return [
+                    cast(JsonObject, dict(block))
+                    for block in message.replay_blocks
+                    if _thinking_key(block) not in stale
+                ]
             if message.content:
                 blocks.append({"type": "text", "text": message.content})
             for call in message.tool_calls:
@@ -339,6 +372,13 @@ class AnthropicCompatibleProvider(RetryingProvider):
     * :meth:`message_stop` -- why the response ended.
     * :meth:`status_error` -- what an HTTP failure means.
 
+    Claude 5.x binds a signed thinking block to the system prompt, the tools, and the messages before
+    it. When one of them changed, for instance because compaction replaced older turns with a
+    summary, the service refuses the block with ``400 ... bound to a different conversation``.
+    The provider then drops the signed blocks of that request, sends it once more, and no longer
+    replays them, which is Anthropic's documented fallback. The model loses its earlier reasoning
+    from then on, so each occurrence is logged as a warning.
+
     Args:
         model: Model identifier the endpoint accepts.
         api_key: API credential supplied by the application.
@@ -398,6 +438,8 @@ class AnthropicCompatibleProvider(RetryingProvider):
         self.timeout = timeout
         self.prompt_cache = prompt_cache
         self.model = model
+        #: Signatures of thinking blocks the service refused, oldest first. See :meth:`_forget_thinking`.
+        self._stale_thinking: dict[str, None] = {}
         self._http_client = httpx.AsyncClient(
             transport=transport,
             verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
@@ -527,6 +569,7 @@ class AnthropicCompatibleProvider(RetryingProvider):
                 provider=self.provider_name,
                 model=self.model,
                 search_tool=search_tool if isinstance(message, ToolMessage) else None,
+                stale=self._stale_thinking,
             )
             if blocks:
                 messages.append({"role": role, "content": cast("list[JsonValue]", blocks)})
@@ -557,21 +600,76 @@ class AnthropicCompatibleProvider(RetryingProvider):
         self.mark_cache(body, client_tools)
         return body
 
+    def _forget_thinking(self, error: AnthropicError, body: JsonObject) -> bool:
+        """Remember the signed thinking blocks of ``body`` when the service refused them.
+
+        The newer Claude models bind a thinking block to everything sent before it: the system
+        prompt, the tools, and the earlier messages. When any of that changed since the block was
+        written, for example because older turns became a summary or a tool was added, the service
+        answers ``400`` with ``The block is bound to a different conversation``. Which block failed
+        is only named by position, and a block after the first failure fails too, so every signed
+        block of the refused request is dropped, from this request and from later ones. Once a
+        block is gone it stays gone: sending it again would invalidate the blocks written since.
+
+        The change is recorded in the log, because the model loses its earlier reasoning from then on.
+
+        Returns:
+            True when blocks were newly forgotten, so the same request is worth sending again.
+        """
+        if getattr(error, "status_code", None) != 400 or not _BOUND_ELSEWHERE.search(str(error)):
+            return False
+        messages = body.get("messages")
+        found: list[str] = []
+        for message in messages if isinstance(messages, list) else []:
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+            content = message.get("content")
+            for block in content if isinstance(content, list) else []:
+                key = _thinking_key(block) if isinstance(block, dict) else None
+                if key is not None and key not in self._stale_thinking:
+                    found.append(key)
+        for key in found:
+            self._stale_thinking[key] = None
+        while len(self._stale_thinking) > _STALE_LIMIT:
+            del self._stale_thinking[next(iter(self._stale_thinking))]
+        if found:
+            logger.warning(
+                "%s refused %d signed thinking block(s) because the history before them changed; "
+                "resending without them: %s",
+                self.provider_name,
+                len(found),
+                str(error)[:300],
+            )
+        return bool(found)
+
     async def _open(self, request: ModelRequest) -> AsyncStream[RawMessageStreamEvent]:
         from anthropic import AnthropicError
 
-        body = self._body(request)
-        # Fields of the service's own go in the JSON body through ``extra_body``: the SDK rejects a
-        # keyword it does not declare, and declares only what Anthropic itself reads.
-        if extra := {**self.request_fields(request), **self.extra_body}:
-            body["extra_body"] = extra
+        body = self._request_body(request)
         # The request body is assembled as a dict, which the SDK's many typed overloads cannot match
         # (they select on literal ``stream=True``), so the call is typed by what it returns here.
         create = cast("Callable[..., Awaitable[AsyncStream[RawMessageStreamEvent]]]", self._client.messages.create)
         try:
             return await self._first_byte(create(**body))
         except AnthropicError as error:
+            if not self._forget_thinking(error, body):
+                raise self.status_error(error) from error
+        # The refused request generated nothing, so sending it again without the blocks is safe.
+        try:
+            return await self._first_byte(create(**self._request_body(request)))
+        except AnthropicError as error:
             raise self.status_error(error) from error
+
+    def _request_body(self, request: ModelRequest) -> JsonObject:
+        """Build the body of one request, with the service's own fields in ``extra_body``.
+
+        Fields of the service's own go in the JSON body through ``extra_body``: the SDK rejects a
+        keyword it does not declare, and declares only what Anthropic itself reads.
+        """
+        body = self._body(request)
+        if extra := {**self.request_fields(request), **self.extra_body}:
+            body["extra_body"] = extra
+        return body
 
     # -- the stream -------------------------------------------------------------------------------
 

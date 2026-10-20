@@ -8,9 +8,9 @@ summary of them that a model reads to decide what to keep, fix, or build.
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal
 
-from .._compat import TypeAliasType
+from .._compat import TypeAliasType, TypedDict
 from .enums import ToolOrigin
 from .repo import TextKind
 

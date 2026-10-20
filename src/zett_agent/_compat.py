@@ -109,9 +109,13 @@ def aclosing_stream(stream: AsyncIterator[_T]) -> AbstractAsyncContextManager[As
 
 
 if sys.version_info >= (3, 12):  # pragma: no cover - selected by the interpreter
-    from typing import TypeAliasType
+    from typing import TypeAliasType, TypedDict
 else:  # pragma: no cover - selected by the interpreter
-    from typing_extensions import TypeAliasType
+    from typing_extensions import TypeAliasType, TypedDict
+
+# ``TypedDict`` is re-exported for another reason: pydantic reads ``typing.TypedDict``
+# only from 3.12 on and refuses an older one, so a result type that an application
+# validates with a ``TypeAdapter`` needs this one.
 
 
 def __getattr__(name: str) -> object:
@@ -145,6 +149,7 @@ __all__ = [
     "Self",
     "StrEnum",
     "TypeAliasType",
+    "TypedDict",
     "UTC",
     "aclose_stream",
     "aclosing_stream",

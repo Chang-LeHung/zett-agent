@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+from pathlib import Path
 from textwrap import dedent
 from threading import Event
 
 import pytest
 from pydantic import ValidationError
 
+from jit_support import HEADER, put_tool
 from zett_agent.agent import Agent, AgentRunConfig, AgentRunContext, AgentState
 from zett_agent.extensions.base import AgentExtension
 from zett_agent.jit_harness import JITHarness, JITHarnessExtension, JITHarnessProfile
 from zett_agent.jit_harness import profiling as profiling_module
 from zett_agent.jit_harness.enums import ToolCallStatus, ToolOrigin
-from zett_agent.jit_harness.pages import MAX_MEASURED_CHARS
-from zett_agent.jit_harness.profiling import ToolCallProfile, _characters, _lower_bound
+from zett_agent.jit_harness.profiling import MAX_MEASURED_CHARS, ToolCallProfile, _characters, _lower_bound
 from zett_agent.jit_harness.runtime import _PROFILE_CALL
 from zett_agent.messages import AssistantMessage, ImageBytesSource, ImageContent, TextContent, ToolCall, ToolMessage
 from zett_agent.model import ModelEvent, ModelResponse, RetryOptions
@@ -36,6 +38,48 @@ PURE_SOURCE = SOURCE.replace('await harness.call_tool("add", left=value, right=v
 async def add(left: int, right: int) -> int:
     """Add integers."""
     return left + right
+
+
+@tool(guidelines="Write one file for the test.")
+def put(path: str, content: str) -> str:
+    """Write a file."""
+    Path(path).write_text(content, encoding="utf-8")
+    return "ok"
+
+
+def jit_modules():
+    return [name for name in sys.modules if name.startswith("zett_jit_")]
+
+
+def jit_finders():
+    return [finder for finder in sys.meta_path if type(finder).__name__ == "RepoFinder"]
+
+
+@pytest.fixture(autouse=True)
+def no_residue():
+    """Every test must leave the interpreter's import state as it found it."""
+    before = (set(jit_modules()), len(jit_finders()))
+    yield
+    assert (set(jit_modules()), len(jit_finders())) == before
+
+
+@pytest.fixture
+def make_harness(tmp_path, no_residue):
+    """Give each harness its own session directory and drop its modules afterwards.
+
+    ``no_residue`` is requested so this fixture is torn down first: a loaded
+    repository keeps modules in ``sys.modules`` until ``close()``.
+    """
+    created = []
+
+    def factory(**options):
+        harness = JITHarness(tmp_path / f"session-{len(created)}", **options)
+        created.append(harness)
+        return harness
+
+    yield factory
+    for harness in created:
+        harness.close()
 
 
 def context(*tools, extensions=()):
@@ -77,9 +121,9 @@ def assert_invariants(harness):
 
 
 @pytest.mark.parametrize("source", [SOURCE, SYNC_SOURCE])
-async def test_sync_async_nested_calls_count_once_preserve_links_ids_and_json_sizes(source):
-    harness = JITHarness(tools=[add])
-    harness.create_tool(source, entrypoint="twice")
+async def test_sync_async_nested_calls_count_once_preserve_links_ids_and_json_sizes(make_harness, source):
+    harness = make_harness(tools=[add])
+    put_tool(harness, source, "twice")
     ctx = context(add)
     harness.attach(ctx)
     try:
@@ -100,10 +144,10 @@ async def test_sync_async_nested_calls_count_once_preserve_links_ids_and_json_si
         harness.detach(ctx)
 
 
-async def test_monotonic_durations_and_sample_averages_are_exact(monkeypatch):
+async def test_monotonic_durations_and_sample_averages_are_exact(monkeypatch, make_harness):
     ticks = iter((10_000_000, 14_000_000, 20_000_000, 28_000_000))
     monkeypatch.setattr("zett_agent.jit_harness.profiling.perf_counter_ns", lambda: next(ticks))
-    harness = JITHarness(tools=[add])
+    harness = make_harness(tools=[add])
     assert await harness.call_tool("add", left=1, right=1) == 2
     assert await harness.call_tool("add", left=10, right=10) == 20
     summary = stats(harness, "add")
@@ -128,13 +172,15 @@ async def test_monotonic_durations_and_sample_averages_are_exact(monkeypatch):
         (object(), None),
     ],
 )
-async def test_character_counts_are_unicode_not_bytes_or_tokens_and_unsupported_values_stay_unknown(value, size):
+async def test_character_counts_are_unicode_not_bytes_or_tokens_and_unsupported_values_stay_unknown(
+    make_harness, value, size
+):
     @tool(guidelines="Return a profiling sample without changing it.")
     async def result():
         """Return different Python result representations."""
         return value
 
-    harness = JITHarness(tools=[result])
+    harness = make_harness(tools=[result])
     assert await harness.call_tool("result") is value
     assert harness.profile().calls[0].input_chars == 2
     assert harness.profile().calls[0].output_chars == size
@@ -162,15 +208,15 @@ def test_measurement_stops_at_the_budget_without_serializing_large_payloads(monk
 
 
 @pytest.mark.parametrize("value", [0, -1, True, "3", None])
-def test_call_capacity_must_be_a_positive_integer(value):
+def test_call_capacity_must_be_a_positive_integer(tmp_path, value):
     with pytest.raises(ValueError, match="Call capacity must be a positive integer"):
-        JITHarness(call_capacity=value)
+        JITHarness(tmp_path, call_capacity=value)
     with pytest.raises(ValueError, match="Call capacity must be a positive integer"):
-        JITHarnessExtension(call_capacity=value)
+        JITHarnessExtension(tmp_path, call_capacity=value)
 
 
-async def test_retained_call_records_are_bounded_while_aggregates_stay_complete():
-    harness = JITHarness(tools=[add], call_capacity=3)
+async def test_retained_call_records_are_bounded_while_aggregates_stay_complete(make_harness):
+    harness = make_harness(tools=[add], call_capacity=3)
     for value in range(6):
         assert await harness.call_tool("add", left=value, right=value) == value * 2
     report = harness.profile()
@@ -187,13 +233,13 @@ async def test_retained_call_records_are_bounded_while_aggregates_stay_complete(
     assert_invariants(harness)
 
 
-async def test_unknown_input_size_and_secret_payloads_do_not_break_or_leak_into_profile():
+async def test_unknown_input_size_and_secret_payloads_do_not_break_or_leak_into_profile(make_harness):
     @tool(guidelines="Accept arbitrary local objects.")
     async def local(value: object):
         """Return a private string."""
         return "TOP_SECRET_PAYLOAD"
 
-    harness = JITHarness(tools=[local])
+    harness = make_harness(tools=[local])
     await harness.call_tool("local", value=object())
     await harness.call_tool("local", value="PASSWORD_NEVER_LOG")
     report = harness.profile()
@@ -206,9 +252,9 @@ async def test_unknown_input_size_and_secret_payloads_do_not_break_or_leak_into_
     assert_invariants(harness)
 
 
-async def test_failures_rejections_and_validation_errors_have_separate_counts_and_cleanup():
-    harness = JITHarness(tools=[add])
-    harness.create_tool(SOURCE, entrypoint="twice")
+async def test_failures_rejections_and_validation_errors_have_separate_counts_and_cleanup(make_harness):
+    harness = make_harness(tools=[add])
+    put_tool(harness, SOURCE, "twice")
     with pytest.raises(ValidationError):
         await harness.call_tool("twice", value="bad")
     harness.unload_tool("add")
@@ -225,12 +271,12 @@ async def test_failures_rejections_and_validation_errors_have_separate_counts_an
     assert_invariants(harness)
 
 
-async def test_profile_keeps_unload_history_and_no_snapshot_runtime_data():
-    harness = JITHarness()
-    harness.create_tool(PURE_SOURCE, entrypoint="twice")
+async def test_profile_keeps_update_and_unload_history(make_harness):
+    harness = make_harness()
+    put_tool(harness, PURE_SOURCE, "twice")
     await harness.call_tool("twice", value=1)
     changed = PURE_SOURCE.replace("value * 2", "value * 3")
-    harness.update_tool("twice", changed, entrypoint="twice")
+    put_tool(harness, changed, "twice")
     await harness.call_tool("twice", value=1)
     harness.unload_tool("twice")
     with pytest.raises(ValueError):
@@ -245,15 +291,11 @@ async def test_profile_keeps_unload_history_and_no_snapshot_runtime_data():
         ToolCallStatus.COMPLETED,
     ]
     assert stats(harness, "twice").call_count == 4
-    restored = JITHarness(harness.snapshot())
-    assert restored.profile().calls == () and restored.profile().stats == ()
-    assert restored.profile_stats("twice").call_count == 0
-    assert "profiling" not in restored.list_tools()[0]
-    assert "profiling" not in harness.snapshot().to_json()
+    assert "profiling" not in harness.list_tools()[0]
     assert_invariants(harness)
 
 
-async def test_parallel_completion_order_and_cancellation_balance_totals():
+async def test_parallel_completion_order_and_cancellation_balance_totals(make_harness):
     entered, release = asyncio.Event(), asyncio.Event()
     count = 0
 
@@ -267,7 +309,7 @@ async def test_parallel_completion_order_and_cancellation_balance_totals():
         await release.wait()
         return value
 
-    harness = JITHarness(tools=[wait])
+    harness = make_harness(tools=[wait])
     first = asyncio.create_task(harness.call_tool("wait", value=1))
     second = asyncio.create_task(harness.call_tool("wait", value=2))
     try:
@@ -293,13 +335,13 @@ async def test_parallel_completion_order_and_cancellation_balance_totals():
 
 
 @pytest.mark.parametrize(("offset", "limit"), [(-1, 1), (0, 0), (0, 1001)])
-def test_pagination_invalid_bounds_rejected(offset, limit):
+def test_pagination_invalid_bounds_rejected(tmp_path, offset, limit):
     with pytest.raises(ValueError, match="Profiling"):
-        JITHarness().profile(offset=offset, limit=limit)
+        JITHarness(tmp_path).profile(offset=offset, limit=limit)
 
 
 def test_tool_origin_is_an_enum_with_stable_json_values():
-    assert [member.value for member in ToolOrigin] == ["base", "python", "text", "management", "unknown"]
+    assert [member.value for member in ToolOrigin] == ["base", "python", "management", "unknown"]
     assert ToolCallProfile.model_fields["origin"].annotation is ToolOrigin
     assert ToolCallProfile.model_fields["status"].annotation is ToolCallStatus
     # String comparison and JSON export keep the pre-enum contract.
@@ -332,7 +374,7 @@ def test_tool_call_status_is_an_enum_with_stable_json_values():
         )
 
 
-async def test_tool_call_status_classifies_every_dispatch_outcome():
+async def test_tool_call_status_classifies_every_dispatch_outcome(make_harness):
     entered, release = asyncio.Event(), asyncio.Event()
 
     @tool(guidelines="Produce each profiling outcome for a controlled test.")
@@ -345,17 +387,18 @@ async def test_tool_call_status_classifies_every_dispatch_outcome():
             await release.wait()
         return 7
 
-    harness = JITHarness(tools=[outcome], max_call_depth=1)
+    harness = make_harness(tools=[outcome], max_call_depth=1)
     assert await harness.call_tool("outcome", kind="completed") == 7
     with pytest.raises(ValueError, match="handler failed"):
         await harness.call_tool("outcome", kind="failed")
     with pytest.raises(ValidationError):
         await harness.call_tool("outcome", wrong="argument")
-    harness.create_tool(
+    put_tool(
+        harness,
         '@tool(guidelines="Compose a rejected dependency.")\nasync def nested() -> int:\n'
         '    """Call another tool past the depth limit."""\n'
         '    return await harness.call_tool("outcome", kind="completed")\n',
-        entrypoint="nested",
+        "nested",
     )
     with pytest.raises(RuntimeError, match="depth exceeded"):
         await harness.call_tool("nested")
@@ -398,22 +441,22 @@ async def test_tool_call_status_classifies_every_dispatch_outcome():
     assert_invariants(harness)
 
 
-async def test_tool_origin_classifies_base_python_and_management_dispatch():
-    jit = JITHarnessExtension()
+async def test_tool_origin_classifies_base_python_and_management_dispatch(tmp_path):
+    jit = JITHarnessExtension(tmp_path)
     ctx = context(add)
     await jit.on_tool(ctx)
     try:
         harness = jit.get_harness("profile")
         assert await ctx.tools["add"]({"left": 1, "right": 1}) == 2
-        harness.create_tool(PURE_SOURCE, entrypoint="twice")
+        put_tool(harness, PURE_SOURCE, "twice")
         twice = ctx.tools["twice"]
         assert await twice({"value": 2}) == 4
-        await ctx.tools["list_tools"]({})
+        await ctx.tools["repo_load"]({})
         report = harness.profile(limit=100)
         assert {call.tool_name: call.origin for call in report.calls} == {
             "add": ToolOrigin.BASE,
             "twice": ToolOrigin.PYTHON,
-            "list_tools": ToolOrigin.MANAGEMENT,
+            "repo_load": ToolOrigin.MANAGEMENT,
         }
         assert all(isinstance(call.origin, ToolOrigin) for call in report.calls)
         assert {call["origin"] for call in report.model_dump(mode="json")["calls"]} == {
@@ -430,13 +473,14 @@ async def test_tool_origin_classifies_base_python_and_management_dispatch():
         assert_invariants(harness)
     finally:
         jit._request_finished(ctx)
+        jit.forget_session("profile")
 
 
-async def test_inspect_tool_reports_aggregates_and_profile_paginates_losslessly():
-    harness = JITHarness(tools=[add])
+async def test_describe_reports_a_compact_catalog_and_profile_paginates_losslessly(make_harness):
+    harness = make_harness(tools=[add])
     for value in range(7):
         await harness.call_tool("add", left=value, right=1)
-    info = harness.inspect_tool("add")
+    info = harness.describe("add")
     assert "profiling" not in info and "calls" not in info and "source" not in info
     assert harness.profile_stats("add").call_count == 7
     assert set(info) == {
@@ -444,8 +488,6 @@ async def test_inspect_tool_reports_aggregates_and_profile_paginates_losslessly(
         "origin",
         "status",
         "description",
-        "parameters",
-        "guidelines",
     }
     offset = 0
     seen = []
@@ -463,33 +505,33 @@ async def test_inspect_tool_reports_aggregates_and_profile_paginates_losslessly(
     assert_invariants(harness)
 
 
-async def test_model_reads_profile_to_create_composed_tool_and_second_session_starts_fresh():
-    jit = JITHarnessExtension()
+async def test_model_creates_a_composed_tool_in_its_repository_and_second_session_starts_fresh(tmp_path):
+    jit = JITHarnessExtension(tmp_path)
+    target = jit.session_directory("one") / "kit"
+    write = ToolCall("write", "put", {"path": str(target / "twice.py"), "content": HEADER + SOURCE})
     observed = []
 
     class Model:
         retry = RetryOptions(max_retries=0)
 
         async def stream(self, request):
-            if not observed:
+            index = len(observed)
+            if index == 0:
                 message = AssistantMessage(tool_calls=(ToolCall("base", "add", {"left": 21, "right": 21}),))
-            elif len(observed) == 1:
-                message = AssistantMessage(tool_calls=(ToolCall("inspect", "inspect_tool_stats", {"name": "add"}),))
-            elif len(observed) == 2:
-                info = json.loads(request.messages[-1].content)
-                assert info["call_count"] == 1 and "calls" not in info and "source" not in info
-                assert "profiling" in request.messages[0].content
-                message = AssistantMessage(
-                    tool_calls=(ToolCall("create", "create_tool", {"source": SOURCE, "entrypoint": "twice"}),)
-                )
-            elif len(observed) == 3:
+            elif index == 1:
+                message = AssistantMessage(tool_calls=(ToolCall("create", "repo_create", {"repo": "kit"}),))
+            elif index == 2:
+                message = AssistantMessage(tool_calls=(write,))
+            elif index == 3:
+                message = AssistantMessage(tool_calls=(ToolCall("load", "repo_load", {}),))
+            elif index == 4:
                 message = AssistantMessage(tool_calls=(ToolCall("outer", "twice", {"value": 21}),))
             else:
                 message = AssistantMessage(content="done")
             observed.append(request)
             yield ModelEvent.completed(ModelResponse(message))
 
-    agent = await Agent.create(Model(), tools=[add], extensions=[jit])
+    agent = await Agent.create(Model(), tools=[add, put], extensions=[jit])
     await agent.run("profile then compose", config=AgentRunConfig("one", request_id="r1"))
     harness = jit.get_harness("one")
     assert stats(harness, "add").call_count == 2
@@ -498,14 +540,16 @@ async def test_model_reads_profile_to_create_composed_tool_and_second_session_st
     assert next(call for call in records if call.tool_name == "twice").call_id == "outer"
     child = next(call for call in records if call.caller_tool_name == "twice")
     assert child.tool_name == "add"
-    assert len([message for message in observed[-1].messages if isinstance(message, ToolMessage)]) == 4
+    assert len([message for message in observed[-1].messages if isinstance(message, ToolMessage)]) == 5
     await agent.run("new session", config=AgentRunConfig("two"))
     assert jit.get_harness("two").profile().calls == ()
     assert stats(harness, "add").call_count == 2
     assert_invariants(harness)
+    jit.forget_session("one")
+    jit.forget_session("two")
 
 
-async def test_middleware_short_circuit_not_counted_and_raw_output_size_excludes_result_hooks():
+async def test_middleware_short_circuit_not_counted_and_raw_output_size_excludes_result_hooks(make_harness):
     class Hooks(AgentExtension):
         skip = True
 
@@ -519,8 +563,8 @@ async def test_middleware_short_circuit_not_counted_and_raw_output_size_excludes
                 result.content = "transformed output"
 
     hooks = Hooks()
-    harness = JITHarness(tools=[add])
-    harness.create_tool(SOURCE, entrypoint="twice")
+    harness = make_harness(tools=[add])
+    put_tool(harness, SOURCE, "twice")
     ctx = context(add, extensions=(hooks,))
     harness.attach(ctx)
     try:
@@ -540,10 +584,10 @@ def test_failed_character_measurements_never_raise():
     assert _characters({"value": float("nan")}) == len('{"value":null}')
 
 
-async def test_sync_worker_cancellation_finishes_profile_once_and_never_leaks_into_next_request():
+async def test_sync_worker_cancellation_finishes_profile_once_and_never_leaks_into_next_request(make_harness):
     entered, release, finished = Event(), Event(), Event()
     errors = []
-    harness = JITHarness()
+    harness = make_harness()
 
     @tool(guidelines="Wait for a controlled synchronous cancellation.")
     def blocked() -> None:
@@ -588,7 +632,7 @@ async def test_sync_worker_cancellation_finishes_profile_once_and_never_leaks_in
         harness.detach(second)
 
 
-async def test_inflight_update_and_unload_error_is_execution_failure_not_rejection():
+async def test_inflight_update_and_unload_error_is_execution_failure_not_rejection(make_harness):
     entered, release = asyncio.Event(), asyncio.Event()
 
     @tool(guidelines="Hold one old implementation in flight.")
@@ -597,13 +641,13 @@ async def test_inflight_update_and_unload_error_is_execution_failure_not_rejecti
         entered.set()
         await release.wait()
 
-    harness = JITHarness(tools=[gate])
+    harness = make_harness(tools=[gate])
     old = PURE_SOURCE.replace("return value * 2", 'await harness.call_tool("gate")\n    return value * 2')
-    harness.create_tool(old, entrypoint="twice")
+    put_tool(harness, old, "twice")
     running = asyncio.create_task(harness.call_tool("twice", value=1))
     try:
         await asyncio.wait_for(entered.wait(), 2)
-        harness.update_tool("twice", PURE_SOURCE, entrypoint="twice")
+        put_tool(harness, PURE_SOURCE, "twice")
         assert await harness.call_tool("twice", value=2) == 4
         harness.unload_tool("twice")
         release.set()
@@ -614,7 +658,7 @@ async def test_inflight_update_and_unload_error_is_execution_failure_not_rejecti
         failed = PURE_SOURCE.replace(
             "return value * 2", 'harness.unload_tool("twice")\n    raise ValueError("handler failed")'
         )
-        harness.update_tool("twice", failed, entrypoint="twice")
+        put_tool(harness, failed, "twice")
         with pytest.raises(ValueError, match="handler failed"):
             await harness.call_tool("twice", value=1)
         assert harness.profile("twice").calls[-1].status == "failed"
@@ -625,13 +669,19 @@ async def test_inflight_update_and_unload_error_is_execution_failure_not_rejecti
         await asyncio.gather(running, return_exceptions=True)
 
 
-async def test_missing_policy_removed_and_depth_rejections_are_tracked_and_bad_source_is_not():
-    harness = JITHarness(tools=[add], max_call_depth=1)
-    harness.create_tool(SOURCE, entrypoint="twice")
+async def test_missing_policy_removed_and_depth_rejections_are_tracked_and_bad_source_is_not(make_harness):
+    harness = make_harness(tools=[add], max_call_depth=1)
+    put_tool(harness, SOURCE, "twice")
     with pytest.raises(RuntimeError, match="depth"):
         await harness.call_tool("twice", value=1)
     assert stats(harness, "add").rejected_count == 1
-    restored = JITHarness(harness.snapshot())
+    restored = make_harness()
+    put_tool(restored, SOURCE, "twice")
+    # A finished request leaves 'add' a known base name with no bound implementation,
+    # so the composed call is rejected as missing instead of unknown.
+    previous = context(add)
+    restored.attach(previous)
+    restored.detach(previous)
     with pytest.raises(ValueError, match="Missing base"):
         await restored.call_tool("twice", value=1)
     assert stats(restored, "add").rejected_count == 1
@@ -643,8 +693,8 @@ async def test_missing_policy_removed_and_depth_rejections_are_tracked_and_bad_s
         with pytest.raises(ValueError, match="not registered"):
             await ctx.tools["twice"]({"value": 1})
         assert stats(harness, "add").rejected_count == 2
-        with pytest.raises(SyntaxError):
-            harness.update_tool("twice", "invalid !", entrypoint="twice")
+        with pytest.raises(ValueError, match="SyntaxError"):
+            put_tool(harness, "invalid !", "twice")
         before = restored.profile()
         with pytest.raises(ValueError, match="Unknown"):
             await restored.call_tool("unknown")
@@ -655,7 +705,7 @@ async def test_missing_policy_removed_and_depth_rejections_are_tracked_and_bad_s
         harness.detach(ctx)
 
 
-async def test_handler_exception_with_broken_str_does_not_break_profiling():
+async def test_handler_exception_with_broken_str_does_not_break_profiling(make_harness):
     class Broken(ValueError):
         def __str__(self):
             raise RuntimeError("cannot format")
@@ -667,7 +717,7 @@ async def test_handler_exception_with_broken_str_does_not_break_profiling():
         """Propagate the original error unchanged."""
         raise error
 
-    harness = JITHarness(tools=[fail])
+    harness = make_harness(tools=[fail])
     with pytest.raises(Broken) as raised:
         await harness.call_tool("fail")
     assert raised.value is error

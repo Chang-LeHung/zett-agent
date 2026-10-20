@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 09:58+0800\n"
+"POT-Creation-Date: 2026-10-17 12:03+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -169,8 +169,8 @@ msgid "Skills are editable instructions, not an automatic learning system. Neith
 msgstr "技能是可编辑的指令，而不是自动学习系统。这两个扩展都不会生成工具、不会从对话中学习、不会自行修改技能文件，也不会卸载正在运行的代码。工具以你的进程权限执行。请把技能文件和搜索结果当作输入，而不是执行特权操作的授权。"
 
 #: ../../learn/on-demand.rst:221
-msgid "To create and evolve Python tools during a session, opt in to :doc:`jit-harness`. It is a separate trusted-code feature, not an implicit behavior of skill loading or deferred tool search."
-msgstr "如果想在会话过程中创建和改进 Python 工具，需要主动启用\\ :doc:`jit-harness`\\ 。它是一个独立的受信任代码功能，而不是技能加载或延迟工具搜索的隐含行为。"
+msgid "To let a model keep its own Python tools in a repository during a session, opt in to :doc:`jit-harness`. It is a separate trusted-code feature, not an implicit behavior of skill loading or deferred tool search."
+msgstr "如果想让模型在会话期间把自己的 Python 工具保存在仓库里，需要主动启用\\ :doc:`jit-harness`\\ 。它是一个独立的受信任代码功能，而不是技能加载或延迟工具搜索的隐含行为。"
 
 #: ../../learn/on-demand.rst:225
 msgid "Next: :doc:`sessions` to keep conversations, or :doc:`../extending/built-ins` to choose other capabilities."
@@ -179,7 +179,3 @@ msgstr "下一步：:doc:`sessions`\\ 用于保存对话，或者用\\ :doc:`../
 #: ../../learn/on-demand.rst:228
 msgid "Related API: :class:`~zett_agent.extensions.skill.SkillExtension`, :class:`~zett_agent.extensions.tool_search.ToolSearchExtension`."
 msgstr "相关 API：:class:`~zett_agent.extensions.skill.SkillExtension`、:class:`~zett_agent.extensions.tool_search.ToolSearchExtension`\\ 。"
-
-#~ msgid "An adapter takes part in the second row by declaring ``native_deferred_tools: bool = True`` on its class, which tells the extension that the protocol can load a deferred tool by reference and should therefore receive the definition."
-#~ msgstr "适配器只要在类上声明 ``native_deferred_tools: bool = True``\\ ，就属于第二种情况：它告诉扩展，该协议能够按引用加载延迟加载的工具，因此应当收到这些定义。"
-

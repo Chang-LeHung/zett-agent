@@ -63,19 +63,22 @@ def test_every_example_is_classified_and_valid_python():
 
 
 async def test_jit_example_lifecycle_is_repeatable_and_does_not_write_outside_destination(tmp_path):
-    from zett_agent.jit_harness import JITHarnessSnapshot
-
     example = runpy.run_path(str(EXAMPLES / "jit_harness.py"))
-    path = tmp_path / "pipeline.json"
-    await example["exercise_lifecycle"](path)
-    first = path.read_bytes()
-    await example["exercise_lifecycle"](path)
-    assert path.read_bytes() == first
-    snapshot = JITHarnessSnapshot.load(path)
-    assert snapshot.base_tools == ("add",) and snapshot.unloaded_tools == ("add", "sum_workflow")
-    assert [record.name for record in snapshot.text_tools] == ["sum_workflow"]
-    assert {record.name for record in snapshot.tools} == {"twice", "sum_doubled"}
-    assert list(tmp_path.iterdir()) == [path]
+    first, second = tmp_path / "first", tmp_path / "second"
+    await example["exercise_lifecycle"](first)
+    await example["exercise_lifecycle"](second)
+
+    def tree(root):
+        return {path.relative_to(root).as_posix(): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+
+    assert tree(first) == tree(second)
+    assert sorted(tree(first)) == [
+        "kit/__init__.py",
+        "kit/pipeline.py",
+        "kit/resources/sum_workflow.md",
+        "kit/twice.py",
+    ]
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["first", "second"]
 
 
 async def test_example_extension_isolates_concurrent_requests_and_cleans_errors():

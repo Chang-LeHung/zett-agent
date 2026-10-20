@@ -1,18 +1,18 @@
 """JSON-ready results returned by harness APIs and their management tools.
 
-These are TypedDicts rather than models because the payloads carry conditional
-keys: source, entry points, and schema may not exist for every tool. Model query
-payloads separate catalog, definitions, text fragments, statistics, calls, and
-errors; the application's ``ToolInspection`` carries structure only, while
-``JITHarness.profile`` and ``profile_stats`` own every measurement.
+These are TypedDicts rather than models because they are small answers that go
+straight into a tool message. The full measurements stay with
+``JITHarness.profile`` and ``profile_stats``; :class:`ToolStatsReport` is the short
+summary of them that a model reads to decide what to keep, fix, or build.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+from typing import Literal, TypedDict
 
 from .._compat import TypeAliasType
-from .enums import ToolCallStatus, ToolOrigin
+from .enums import ToolOrigin
+from .repo import TextKind
 
 ToolStatus = TypeAliasType("ToolStatus", Literal["loaded", "unloaded", "missing", "unavailable"])
 
@@ -21,12 +21,12 @@ class ToolMutationResult(TypedDict):
     """Minimal acknowledgement of a successful tool state change."""
 
     name: str
-    #: State after creation, update, unload, or load.
+    #: State after unload or load.
     status: ToolStatus
 
 
 class ToolCatalogEntry(TypedDict):
-    """One row of a session's tool catalog, as the model receives it."""
+    """One row of a session's tool catalog."""
 
     name: str
     #: Registry that serves the tool; see ToolOrigin.
@@ -39,105 +39,66 @@ class ToolCatalogEntry(TypedDict):
     description: str
 
 
-class ToolInspection(ToolCatalogEntry, total=False):
-    """The application's detail payload from JITHarness.inspect_tool.
+class ResourceInfo(TypedDict):
+    """One Markdown note of the repository, as far as its front matter says.
 
-    Source and definitions depend on tool availability. The model's
-    inspect_tool instead returns ToolDefinitionView without source. Measurements
-    are not repeated here; read profile() or profile_stats() for them.
+    The note is a file, not a tool: the model opens ``path`` with its file tools when
+    ``description`` says the note applies.
     """
 
-    #: Retained Python or Markdown source; only dynamic tools have it.
-    source: str
-    #: Module variable holding the entry point; only dynamic Python tools have it.
-    entrypoint: str
-    #: JSON Schema of the arguments, from the stored source or the bound tool.
-    parameters: dict[str, Any]
-    #: Model-facing guidance, from the stored source or the bound tool.
-    guidelines: list[str]
-    #: Characters per package file, entry point included; only extra files add it.
-    files: dict[str, int]
-
-
-class ToolListPage(TypedDict):
-    """A bounded model-facing catalog page, without profiling or definitions."""
-
-    tools: list[ToolCatalogEntry]
-    total_tools: int
-    next_offset: int | None
-
-
-class ToolDefinitionView(ToolCatalogEntry, total=False):
-    """Model-facing definition; large schemas are read separately in chunks."""
-
-    entrypoint: str
-    parameters: dict[str, Any]
-    #: True when the schema exceeded the response budget; use read_tool_schema.
-    parameters_omitted: bool
-    parameters_chars: int
-    #: Characters per package file, entry point included; absent for one module.
-    files: dict[str, int]
-
-
-class ToolTextPage(TypedDict):
-    """One exact source or schema fragment, without unrelated metadata."""
-
     name: str
-    #: File this fragment came from; the entry point unless path was given.
+    #: ``workflow``, ``skill``, ``instruction`` or ``memory``.
+    kind: TextKind
+    description: str
+    #: Absolute path of the file.
     path: str
-    content: str
-    total_chars: int
-    next_offset: int | None
-    #: Source hash or schema hash; compare between pages if the tool was updated.
-    content_id: str
 
 
-class ToolCallView(TypedDict):
-    """Required fields of one compact call measurement; the page names its tool."""
+class RepoResult(TypedDict):
+    """What the repository tools report back to the model."""
 
-    call_id: str
-    status: ToolCallStatus
-    duration_ms: float
-    input_chars: int | None
-    output_chars: int | None
-
-
-class ToolCallDetails(ToolCallView, total=False):
-    """Context that appears only when it carries information.
-
-    A top-level call has no composing caller, and a successful call has no error
-    type; omitting those keys keeps the model-facing page small.
-    """
-
-    #: Tool whose handler composed this call; absent at the top level.
-    caller_tool_name: str
-    #: Exception class name for failures and rejections; absent on success.
-    error_type: str
+    #: The repository's name.
+    repo: str
+    #: Absolute directory of the repository; edit its files with file tools.
+    path: str
+    #: ``created`` right after a new repository was made, ``loaded`` while its
+    #: tools are registered, and ``unloaded`` while they are hidden.
+    status: Literal["created", "loaded", "unloaded"]
+    #: Names of the Python tools the repository currently provides. Their schemas are in
+    #: the request already, so only the names are repeated here.
+    tools: list[str]
+    #: The Markdown notes under ``resources/``, by name. They are listed while the
+    #: repository is hidden too, because hiding tools does not touch files.
+    resources: list[ResourceInfo]
 
 
-class ToolCallsPage(TypedDict):
-    """A model-facing page of compact call records."""
+class ToolStatsRow(TypedDict):
+    """What one tool has done so far, in the few numbers that decide whether to keep it."""
 
     name: str
-    calls: list[ToolCallDetails]
-    total_calls: int
-    next_offset: int | None
+    #: Registry that serves the tool; see ToolOrigin.
+    origin: ToolOrigin
+    #: ``loaded`` when callable now, ``unloaded`` while hidden.
+    status: ToolStatus
+    #: Dispatch attempts, whatever their outcome.
+    calls: int
+    #: ``completed / (completed + failed)``, or None before the first finished call.
+    #: Rejected and cancelled attempts say nothing about the tool and are left out.
+    success_rate: float | None
+    failed: int
+    #: Mean wall time of an attempt in milliseconds, nested calls included.
+    avg_ms: float | None
+    #: Mean size of what a call handed back, in characters: what it costs to read. The
+    #: message of a failed call counts, since the model reads that too.
+    avg_output_chars: float | None
+    #: Most recent distinct errors as ``Type: message``, shortened. One per tool in the
+    #: overview, up to three for a tool asked for by name.
+    recent_errors: list[str]
 
 
-class ToolErrorView(TypedDict):
-    """Actionable recent error information, without cache configuration."""
+class ToolStatsReport(TypedDict):
+    """How the asked-about tools are doing, or a bounded overview when none were named."""
 
-    tool_name: str
-    error_type: str
-    message: str | None
-    occurrences: int
-    last_call_id: str
-    message_truncated: bool
-
-
-class ToolErrorsPage(TypedDict):
-    """A bounded model-facing page; full error reports remain application-side."""
-
-    errors: list[ToolErrorView]
-    total_matches: int
-    next_offset: int | None
+    tools: list[ToolStatsRow]
+    #: Tools left out of an overview to stay within the response budget; name one to see it.
+    omitted: int

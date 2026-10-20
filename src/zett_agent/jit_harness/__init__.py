@@ -1,6 +1,6 @@
-"""Session-local Python tools and Markdown workflows that evolve and persist."""
+"""Session-local tools and Markdown notes that a model keeps in a repository on disk."""
 
-from .enums import InspectionToolExposure, ToolCallStatus, ToolKind, ToolOrigin
+from .enums import ToolCallStatus, ToolOrigin
 from .errors import ToolErrorRecord, ToolErrorReport
 from .extension import (
     JIT_TOOL_COMPLETED_EVENT_NAME,
@@ -10,20 +10,17 @@ from .extension import (
     JITToolStartedEvent,
 )
 from .profiling import JITHarnessProfile, ToolCallProfile, ToolProfileStats
+from .repo import TextKind
 from .results import (
-    ToolCallDetails,
-    ToolCallsPage,
+    RepoResult,
+    ResourceInfo,
     ToolCatalogEntry,
-    ToolDefinitionView,
-    ToolErrorsPage,
-    ToolInspection,
-    ToolListPage,
     ToolMutationResult,
+    ToolStatsReport,
+    ToolStatsRow,
     ToolStatus,
-    ToolTextPage,
 )
 from .runtime import JITHarness
-from .snapshot import JITHarnessSnapshot, PythonToolSource, TextToolSource
 
 __all__ = [
     "JITHarness",
@@ -32,25 +29,18 @@ __all__ = [
     "JIT_TOOL_COMPLETED_EVENT_NAME",
     "JITToolStartedEvent",
     "JITToolCompletedEvent",
-    "JITHarnessSnapshot",
-    "PythonToolSource",
-    "TextToolSource",
     "JITHarnessProfile",
     "ToolCallProfile",
     "ToolProfileStats",
     "ToolOrigin",
-    "ToolKind",
     "ToolCallStatus",
-    "InspectionToolExposure",
     "ToolCatalogEntry",
-    "ToolInspection",
     "ToolMutationResult",
-    "ToolListPage",
-    "ToolDefinitionView",
-    "ToolTextPage",
-    "ToolCallDetails",
-    "ToolCallsPage",
-    "ToolErrorsPage",
+    "ToolStatsReport",
+    "RepoResult",
+    "ResourceInfo",
+    "TextKind",
+    "ToolStatsRow",
     "ToolStatus",
     "ToolErrorRecord",
     "ToolErrorReport",

@@ -59,7 +59,6 @@ packages = ["src/zett_agent"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/zett_agent/jit_harness/instructions.md" = "zett_agent/jit_harness/instructions.md"
-"src/zett_agent/jit_harness/inspection.md" = "zett_agent/jit_harness/inspection.md"
 
 [tool.hatch.build.targets.sdist]
 # Keep package resources alongside Python source when rebuilding a wheel.

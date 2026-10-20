@@ -346,6 +346,10 @@ def _build_agent_tool(
             return await runner(function, **values)
         return await asyncio.to_thread(function, **values)
 
+    # The handler stands in for the user's function, so it reports the module
+    # that function was defined in. Loaders use this to tell a tool a package
+    # defines from one it merely imports.
+    invoke.__module__ = getattr(function, "__module__", invoke.__module__)
     resolved_guidelines = _resolve_guidelines(documentation, guidelines)
     if not resolved_guidelines:
         raise ValueError("A tool needs at least one non-empty guideline")

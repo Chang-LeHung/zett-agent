@@ -173,46 +173,54 @@ permissions.
 
 ## Evolve a toolbox during a session
 
-Opt in to `JITHarnessExtension` to let a model create Python tools or reusable
-Markdown workflows, compose existing tools, improve its capabilities, and unload
-or reload them. Both
-Responses and Chat Completions are supported on function-calling models.
+Opt in to `JITHarnessExtension` to let a model keep its own tools and reusable
+Markdown notes in a repository: a Python package in a directory on disk.
+The model writes it with the file tools it already has and calls `repo_load`. The
+harness imports the package, registers every `@tool`, and lists the notes with
+their kind, description and path; the model opens a note itself when it applies.
+Calling `repo_load` again is harmless and imports nothing unless a Python file
+changed.
+Both Responses and Chat Completions are supported on function-calling models.
 
 ```python
+from pathlib import Path
+
 from zett_agent.agent import AgentRunConfig
 from zett_agent.extensions.memory import InMemoryMessageAccumulator
 from zett_agent.jit_harness import JITHarnessExtension
 
-jit = JITHarnessExtension()
+jit = JITHarnessExtension(Path.home() / ".myapp" / "jit_harness")
 client = await create_agent(
     model,
     config=AgentRunConfig(session_id="tool-builder"),
-    tools=[add],
+    tools=[add, write_file],
     extensions=[InMemoryMessageAccumulator(), jit],
 )
 await client.run("Create and use a reusable tool that adds an integer to itself.")
-jit.get_harness("tool-builder").save("harness.json")
 ```
 
-Use this inside an async function with a configured model. Each session evolves
-independently; saving is explicit. A tool can be a small package of modules, and
-its code can call other loaded tools directly, so one model call can loop over
-dozens of tool calls while only the final result enters the conversation.
-Snapshots retain source and unload state,
-not conversation history or live application resources. Session-local profiling
-records call counts, latency, and input/output character sizes; the model can
-inspect these measurements and LRU-bounded recent errors before creating or
-improving tools. Inspection tools are deferred by default, so an endpoint that
-supports deferred loading fetches them on demand while every other protocol
-receives them normally; `inspection_tools` can also hide them or send them up
-front. **Generated Python is
-trusted code with your process's privileges, not sandboxed code.** Read
+Use this inside an async function with a configured model. The model sees only
+four tools, `repo_create`, `repo_load`, `repo_unload` and `profile_tools`. Each session's
+repository lives in `<root>/<session id>/`, so it survives the process and a
+resumed session finds its tools again; the files are the saved state. Tool code
+can call other loaded tools directly through `harness`, so one model call can
+loop over dozens of tool calls while only the final result enters the
+conversation. A failed reload keeps the previous version and reports the file and
+line. Session-local profiling records call counts, latency, and input/output
+character sizes, and LRU-bounded recent errors. `profile_tools` gives the model a
+short summary of them for any tool, its own or the application's (success rate,
+time, output size, latest errors), so it can decide whether to fix, drop, or build
+a tool; your application reads all of it.
+**Generated Python is trusted code with your process's privileges, not sandboxed
+code.** Read
 [JIT capabilities](https://chang-lehung.github.io/zett-agent/learn/jit-harness.html)
 for composition, loading, and a complete offline example.
 
-When exploration is expensive, a text tool can retain the verified path, its
-applicability, pitfalls, and checks for later tasks. Workflows load on demand;
-reading one does not execute its steps or inject its entire body into every prompt.
+When exploration is expensive, a note in `resources/<name>.md` can retain the
+verified path, its applicability, pitfalls, and checks for later tasks. Its `kind`
+is `workflow`, `skill`, `instruction`, or `memory`. A note is a file, not a tool:
+only its short description is listed, and its body is never injected into a
+prompt.
 
 ## Keep and restore conversations
 

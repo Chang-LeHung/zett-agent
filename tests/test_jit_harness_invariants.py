@@ -6,18 +6,22 @@ import asyncio
 import itertools
 import json
 import sys
+from contextlib import suppress
+from pathlib import Path
 from textwrap import dedent
 from types import ModuleType
 
 import pytest
 from pydantic import ValidationError
 
+from jit_support import HEADER, put_tool, seed_repo, write_module
 from zett_agent.agent import Agent, AgentRunConfig, AgentRunContext, AgentState
 from zett_agent.events import AgentEventType
 from zett_agent.extensions.base import AgentExtension
 from zett_agent.extensions.memory import InMemoryMessageAccumulator
 from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
-from zett_agent.jit_harness import JITHarness, JITHarnessExtension, JITHarnessSnapshot
+from zett_agent.jit_harness import JITHarness, JITHarnessExtension
+from zett_agent.jit_harness.repo import MANAGEMENT_NAMES
 from zett_agent.jit_harness.runtime import _BINDING, _CALL_STACK
 from zett_agent.messages import AssistantMessage, SystemMessage, TextContent, ToolCall, ToolMessage
 from zett_agent.model import ModelEvent, ModelRequest, ModelResponse, RetryOptions
@@ -30,25 +34,19 @@ SOURCE = dedent('''\
         return await harness.call_tool("add", left=value, right=value)
 ''')
 PURE_SOURCE = SOURCE.replace('await harness.call_tool("add", left=value, right=value)', "value * 2")
-CONTROLS = {
-    "create_tool",
-    "update_tool",
-    "unload_tool",
-    "load_tool",
-    "list_tools",
-    "inspect_tool",
-    "inspect_tool_errors",
-    "read_tool_source",
-    "read_tool_schema",
-    "inspect_tool_stats",
-    "inspect_tool_calls",
-}
 
 
 @tool(guidelines="Use for exact integer addition.")
 async def add(left: int, right: int) -> int:
     """Add two integers without a thread or network connection."""
     return left + right
+
+
+@tool(guidelines="Write one file for the test.")
+def put(path: str, content: str) -> str:
+    """Write a file."""
+    Path(path).write_text(content, encoding="utf-8")
+    return "ok"
 
 
 def context(*tools, session="invariants", extensions=()):
@@ -61,6 +59,46 @@ def assert_unbound():
     assert _CALL_STACK.get() == ()
     assert _SYNC_TOOL_RUNNER.get() is None
     assert current_tool_call_id() is None
+
+
+def jit_modules():
+    """Every module the repository import hook has created."""
+    return [name for name in sys.modules if name.startswith("zett_jit_")]
+
+
+def jit_finders():
+    return [finder for finder in sys.meta_path if type(finder).__name__ == "RepoFinder"]
+
+
+@pytest.fixture(autouse=True)
+def no_residue():
+    """Every test must leave the interpreter's import state as it found it."""
+    before = (set(jit_modules()), len(jit_finders()))
+    yield
+    assert (set(jit_modules()), len(jit_finders())) == before
+
+
+@pytest.fixture
+def make_harness(tmp_path):
+    """Build harnesses in the test's temporary directory and close every one at the end."""
+    created: list[JITHarness] = []
+
+    def factory(directory=None, **options):
+        item = JITHarness(Path(directory) if directory is not None else tmp_path / f"harness{len(created)}", **options)
+        created.append(item)
+        return item
+
+    yield factory
+    for item in created:
+        item.close()
+
+
+def close_sessions(jit, *sessions):
+    """Drop each session's modules; a harness still serving a request is left alone."""
+    for session in sessions:
+        with suppress(KeyError):
+            if not jit.get_harness(session).active:
+                jit.forget_session(session)
 
 
 class ScriptModel:
@@ -83,21 +121,20 @@ class ScriptModel:
         yield ModelEvent.completed(ModelResponse(message))
 
 
-OPERATIONS = ("unload_twice", "load_twice", "unload_add", "load_add", "update", "invalid_update", "roundtrip")
+OPERATIONS = ("unload_twice", "load_twice", "unload_add", "load_add", "update", "invalid_update", "restart")
 
 
 @pytest.mark.parametrize("operations", itertools.product(OPERATIONS, repeat=3), ids=lambda value: "/".join(value))
-async def test_catalog_state_machine_matches_reference_after_every_transition(operations):
+async def test_catalog_state_machine_matches_reference_after_every_transition(operations, make_harness):
     """343 transition sequences; the oracle never reads private harness maps."""
-    harness = JITHarness(tools=[add])
-    harness.create_tool(SOURCE, entrypoint="twice")
+    harness = make_harness(tools=[add])
+    put_tool(harness, SOURCE, "twice")
     ctx = context(add)
     harness.attach(ctx)
     unloaded = set()
     pure = False
     try:
         for operation in operations:
-            before = harness.snapshot().to_json()
             if operation.startswith("unload_"):
                 name = operation.removeprefix("unload_")
                 harness.unload_tool(name)
@@ -107,18 +144,26 @@ async def test_catalog_state_machine_matches_reference_after_every_transition(op
                 harness.load_tool(name)
                 unloaded.discard(name)
             elif operation == "update":
-                harness.update_tool("twice", PURE_SOURCE, entrypoint="twice")
+                put_tool(harness, PURE_SOURCE, "twice")
                 pure = True
+                unloaded.discard("twice")  # A reload registers the new version loaded.
             elif operation == "invalid_update":
-                with pytest.raises(SyntaxError):
-                    harness.update_tool("twice", "bad python !", entrypoint="twice")
-                assert harness.snapshot().to_json() == before
+                write_module(harness, "twice", "bad python !")
+                with pytest.raises(ValueError):
+                    harness.load_repo()
+                # The failed load keeps the registered version; make the files loadable again.
+                write_module(harness, "twice", PURE_SOURCE if pure else SOURCE)
             else:
+                # A restart keeps only the files: a new harness adopts and loads them,
+                # and the old request's wrappers are dead.
                 old = ctx.tools.get("twice")
+                directory = harness.repo_path.parent
                 harness.detach(ctx)
-                harness = JITHarness(JITHarnessSnapshot.from_json(before), tools=[add])
+                harness.close()
                 ctx = context(add)
+                harness = make_harness(directory, tools=[add])
                 harness.attach(ctx)
+                unloaded.clear()  # Unload state belongs to a harness; files are all that persist.
                 if old is not None:
                     with pytest.raises(RuntimeError, match="closed"):
                         await old({"value": 3})
@@ -130,11 +175,6 @@ async def test_catalog_state_machine_matches_reference_after_every_transition(op
             assert {item["name"]: item["status"] for item in catalog} == {
                 name: "unloaded" if name in unloaded else "loaded" for name in expected_names
             }
-            saved = harness.snapshot()
-            assert saved.base_tools == ("add",)
-            assert saved.unloaded_tools == tuple(sorted(unloaded))
-            assert len(saved.tools) == 1 and saved.tools[0].source == (PURE_SOURCE if pure else SOURCE)
-            assert JITHarnessSnapshot.from_json(saved.to_json()).to_json() == saved.to_json()
             if "twice" not in unloaded:
                 if "add" in unloaded and not pure:
                     with pytest.raises(ValueError, match="unloaded"):
@@ -147,38 +187,41 @@ async def test_catalog_state_machine_matches_reference_after_every_transition(op
         harness.detach(ctx)
 
 
-BAD_UPDATES = (
-    ("bad python !", "twice", SyntaxError),
-    ("raise RuntimeError('module failed')\n" + PURE_SOURCE, "twice", RuntimeError),
-    ("import zett_jit_dependency_that_does_not_exist\n" + PURE_SOURCE, "twice", ModuleNotFoundError),
-    (PURE_SOURCE, "missing", ValueError),
-    (PURE_SOURCE, "bad identifier!", ValueError),
-    (PURE_SOURCE.replace("value: int", "value"), "twice", ValueError),
-    (PURE_SOURCE.replace("twice", "renamed"), "renamed", ValueError),
-    (PURE_SOURCE.replace("@tool(", "@tool(deferred=True, "), "twice", ValueError),
-    (PURE_SOURCE.replace("@tool(", "@tool(local_tool_search=True, "), "twice", ValueError),
-    (PURE_SOURCE.replace("@tool(", '@tool(name="create_tool", '), "twice", ValueError),
-    (PURE_SOURCE.replace('guidelines="Compose exact addition."', 'guidelines=""'), "twice", ValueError),
+BAD_MODULES = (
+    ("bad python !", "twice", "SyntaxError"),
+    ("raise RuntimeError('module failed')\n" + PURE_SOURCE, "twice", "RuntimeError: module failed"),
+    ("import zett_jit_dependency_that_does_not_exist\n" + PURE_SOURCE, "twice", "ModuleNotFoundError"),
+    (PURE_SOURCE, "bad identifier!", "not an importable module name"),
+    (PURE_SOURCE.replace("value: int", "value"), "twice", "Missing annotation for value"),
+    (PURE_SOURCE.replace("@tool(", "@tool(deferred=True, "), "twice", "non-deferred"),
+    (PURE_SOURCE.replace("@tool(", "@tool(local_tool_search=True, "), "twice", "non-deferred"),
+    (PURE_SOURCE.replace("@tool(", '@tool(name="repo_load", '), "twice", "reserved"),
+    (PURE_SOURCE.replace('guidelines="Compose exact addition."', 'guidelines=""'), "twice", "cannot be blank"),
 )
 
 
 @pytest.mark.parametrize("unloaded", [False, True])
-@pytest.mark.parametrize(("source", "entrypoint", "error"), BAD_UPDATES)
-async def test_every_failed_update_preserves_schema_source_registration_and_unload(unloaded, source, entrypoint, error):
-    harness = JITHarness()
-    harness.create_tool(PURE_SOURCE, entrypoint="twice")
+@pytest.mark.parametrize(("source", "module", "message"), BAD_MODULES)
+async def test_every_failed_load_preserves_registration_and_unload(
+    unloaded,
+    source,
+    module,
+    message,
+    make_harness,
+):
+    harness = make_harness()
+    put_tool(harness, PURE_SOURCE, "twice")
     ctx = context()
     harness.attach(ctx)
     wrapper = ctx.tools["twice"]
     if unloaded:
         harness.unload_tool("twice")
-    before = harness.snapshot().to_json()
     registration = dict(ctx.tools)
     modules = set(sys.modules)
+    write_module(harness, module, source)
     try:
-        with pytest.raises(error):
-            harness.update_tool("twice", source, entrypoint=entrypoint)
-        assert harness.snapshot().to_json() == before
+        with pytest.raises(ValueError, match=message):
+            harness.load_repo()
         assert ctx.tools == registration
         assert not harness._compiling
         assert not {name for name in set(sys.modules) - modules if name.startswith("zett_jit_")}
@@ -193,30 +236,28 @@ async def test_every_failed_update_preserves_schema_source_registration_and_unlo
 
 
 @pytest.mark.parametrize("name", ["", "_", "a" * 64, "1-hyphenated"])
-async def test_entrypoint_alias_and_wire_name_are_independent(name):
-    source = PURE_SOURCE.replace("@tool(", f"@tool(name={name!r}, ") + "\nentry = twice\n"
-    harness = JITHarness()
-    harness.create_tool(source, entrypoint="entry")
-    restored = JITHarness(JITHarnessSnapshot.from_json(harness.snapshot().to_json()))
+async def test_wire_name_override_is_independent_of_the_module_name(name, make_harness):
+    harness = make_harness()
+    source = PURE_SOURCE.replace("@tool(", f"@tool(name={name!r}, ")
+    put_tool(harness, source, "module_entry")
     # The existing @tool contract uses the function name for an empty override.
     wire_name = name or "twice"
-    assert restored.inspect_tool(wire_name)["entrypoint"] == "entry"
-    assert await restored.call_tool(wire_name, value=-3) == -6
+    assert await harness.call_tool(wire_name, value=-3) == -6
 
 
 @pytest.mark.parametrize("name", ["a" * 65, "space name", "中文", "newline\n", "period.name"])
-def test_wire_name_boundaries_leave_no_partial_registration(name):
-    harness = JITHarness()
-    before = harness.snapshot()
-    with pytest.raises(ValueError):
-        harness.create_tool(PURE_SOURCE.replace("@tool(", f"@tool(name={name!r}, "), entrypoint="twice")
-    assert harness.snapshot() == before
+def test_wire_name_boundaries_leave_no_partial_registration(name, make_harness):
+    harness = make_harness()
+    put_tool(harness, PURE_SOURCE.replace("@tool(", f"@tool(name={name!r}, "), "twice", reload=False)
+    with pytest.raises(ValueError, match="Tool names"):
+        harness.load_repo()
+    assert harness.list_tools() == [] and not jit_modules()
 
 
 @pytest.mark.parametrize("sync_layers", itertools.product([False, True], repeat=3))
-async def test_three_level_mixed_sync_async_composition_at_exact_depth_boundary(sync_layers):
+async def test_three_level_mixed_sync_async_composition_at_exact_depth_boundary(sync_layers, make_harness):
     """All eight thread/loop arrangements, including sync→async→sync."""
-    harness = JITHarness(max_call_depth=3)
+    harness = make_harness(max_call_depth=3)
     for index, synchronous in reversed(list(enumerate(sync_layers))):
         expression = (
             "value + 1"
@@ -229,7 +270,7 @@ async def test_three_level_mixed_sync_async_composition_at_exact_depth_boundary(
             '    """Compose the next layer."""\n'
             f"    return {expression}\n"
         )
-        harness.create_tool(source, entrypoint=f"level{index}")
+        put_tool(harness, source, f"level{index}")
     ctx = context()
     harness.attach(ctx)
     try:
@@ -244,126 +285,67 @@ async def test_three_level_mixed_sync_async_composition_at_exact_depth_boundary(
         harness.detach(ctx)
 
 
-async def test_snapshot_inspection_and_template_metadata_are_defensive_copies():
-    harness = JITHarness(tools=[add])
-    harness.create_tool(SOURCE, entrypoint="twice")
-    expected = harness.snapshot().to_json()
-    info = harness.inspect_tool("twice")
-    info["parameters"]["properties"]["value"]["type"] = "string"
-    harness.inspect_tool("add")["parameters"]["properties"].clear()
+def test_describe_and_list_tools_are_defensive_copies(make_harness):
+    harness = make_harness(tools=[add])
+    put_tool(harness, SOURCE, "twice")
+    expected = harness.list_tools()
+    for entry in (harness.describe("add"), harness.describe("twice")):
+        entry["name"] = "changed"
+        entry["status"] = "unloaded"
+        entry["description"] = "changed"
     harness.list_tools()[0]["name"] = "changed"
-    saved = harness.snapshot()
-    extension = JITHarnessExtension(saved)
-    saved.tools[0].parameters["properties"].clear()
-    assert harness.snapshot().to_json() == expected
+    assert harness.list_tools() == expected
+
+
+async def test_session_harnesses_keep_independent_registrations_and_unload_state(tmp_path):
+    jit = JITHarnessExtension(tmp_path)
+    seed_repo(tmp_path, "one", {"twice": SOURCE})
+    seed_repo(tmp_path, "two", {"twice": SOURCE})
     one, two = context(add, session="one"), context(add, session="two")
-    await extension.on_tool(one)
-    await extension.on_tool(two)
+    await jit.on_tool(one)
+    await jit.on_tool(two)
     try:
-        first, second = extension.get_harness("one"), extension.get_harness("two")
+        first, second = jit.get_harness("one"), jit.get_harness("two")
         one.tools["twice"].parameters["properties"].clear()
         assert "value" in two.tools["twice"].parameters["properties"]
         assert await one.tools["twice"]({"value": 3}) == 6
         first.unload_tool("add")
         assert await two.tools["twice"]({"value": 3}) == 6
-        assert second.snapshot().to_json() == expected
+        assert first.describe("add")["status"] == "unloaded"
+        assert second.describe("add")["status"] == "loaded"
+        assert first.describe("twice")["origin"] == "python"
+        assert second.describe("twice")["origin"] == "python"
     finally:
-        extension._request_finished(one)
-        extension._request_finished(two)
+        jit._request_finished(one)
+        jit._request_finished(two)
+        close_sessions(jit, "one", "two")
 
 
-async def test_source_order_does_not_require_dependency_order_and_only_entrypoint_is_registered():
-    harness = JITHarness(tools=[add])
-    source = SOURCE.replace("twice", "z_dependency")
-    harness.create_tool(source, entrypoint="z_dependency")
+async def test_source_order_does_not_require_dependency_order(make_harness):
+    harness = make_harness(tools=[add])
+    put_tool(harness, SOURCE.replace("twice", "z_dependency"), "z_dependency", reload=False)
     parent = PURE_SOURCE.replace("twice", "a_parent").replace(
         "value * 2", 'await harness.call_tool("z_dependency", value=value)'
     )
-    parent += '\n@tool(guidelines="Not selected.")\nasync def helper() -> int:\n    """Unused entry."""\n    return 0\n'
-    harness.create_tool(parent, entrypoint="a_parent")
-    saved = harness.snapshot()
-    assert [record.name for record in saved.tools] == ["a_parent", "z_dependency"]
-    restored = JITHarness(saved, tools=[add])
-    assert await restored.call_tool("a_parent", value=21) == 42
-    with pytest.raises(ValueError, match="Unknown tool"):
-        await restored.call_tool("helper")
-    restored.unload_tool("z_dependency")
-    assert restored.inspect_tool("a_parent")["status"] == "loaded"
+    put_tool(harness, parent, "a_parent", reload=False)
+    assert harness.load_repo()["tools"] == ["a_parent", "z_dependency"]
+    assert await harness.call_tool("a_parent", value=21) == 42
+    harness.unload_tool("z_dependency")
+    assert harness.describe("a_parent")["status"] == "loaded"
     with pytest.raises(ValueError, match="unloaded"):
-        await restored.call_tool("a_parent", value=21)
+        await harness.call_tool("a_parent", value=21)
 
 
-@pytest.mark.parametrize("failure_point", ["serialize", "fsync"])
-def test_snapshot_save_failure_before_replace_preserves_old_file_and_removes_temp(failure_point, tmp_path, monkeypatch):
-    harness = JITHarness()
-    harness.create_tool(PURE_SOURCE, entrypoint="twice")
-    path = tmp_path / "嵌套快照.json"
-    harness.save(path)
-    old = path.read_bytes()
-    harness.unload_tool("twice")
-
-    def fail(*args):
-        raise OSError("injected write failure")
-
-    if failure_point == "serialize":
-        monkeypatch.setattr(JITHarnessSnapshot, "to_json", fail)
-    else:
-        monkeypatch.setattr("zett_agent.jit_harness.snapshot.os.fsync", fail)
-    with pytest.raises(OSError, match="injected"):
-        harness.save(path)
-    assert path.read_bytes() == old
-    assert list(tmp_path.iterdir()) == [path]
-
-
-def test_snapshot_publication_exposes_only_complete_old_or_new_data(tmp_path, monkeypatch):
-    import zett_agent.jit_harness.snapshot as snapshots
-
-    path = tmp_path / "snapshot.json"
-    old = JITHarnessSnapshot()
-    old.save(path)
-    harness = JITHarness()
-    harness.create_tool(PURE_SOURCE, entrypoint="twice")
-    expected = harness.snapshot()
-    original = snapshots.os.replace
-    observed = []
-
-    def inspect_replace(source, destination):
-        assert destination == path
-        assert source.parent == path.parent  # Same-filesystem atomic replacement.
-        observed.append(JITHarnessSnapshot.load(path))
-        assert JITHarnessSnapshot.load(source) == expected
-        original(source, destination)
-        observed.append(JITHarnessSnapshot.load(path))
-
-    monkeypatch.setattr(snapshots.os, "replace", inspect_replace)
-    harness.save(path)
-    assert observed == [old, expected]
-    assert list(tmp_path.iterdir()) == [path]
-
-
-async def test_reload_regenerates_schema_instead_of_trusting_stored_descriptive_metadata():
-    harness = JITHarness()
-    harness.create_tool(PURE_SOURCE, entrypoint="twice")
-    payload = json.loads(harness.snapshot().to_json())
-    payload["tools"][0].update(
-        description="spoofed description",
-        parameters={"properties": {"wrong": {"type": "string"}}},
-        guidelines=["spoofed guidance"],
-        execution_mode="serial",
-    )
-    restored = JITHarness(JITHarnessSnapshot.from_json(json.dumps(payload)))
-    assert restored.snapshot() == harness.snapshot()
-    assert await restored.call_tool("twice", value=21) == 42
-    with pytest.raises(ValidationError):
-        await restored.call_tool("twice", wrong="21")
-
-
-async def test_module_globals_are_session_local_persist_until_reload_and_do_not_survive_snapshot(monkeypatch):
-    state = ModuleType("zett_jit_activation_test")
+async def test_module_globals_are_session_local_persist_across_requests_and_do_not_survive_a_restart(
+    monkeypatch,
+    tmp_path,
+    make_harness,
+):
+    state = ModuleType("activation_state")
     state.activations = 0
     monkeypatch.setitem(sys.modules, state.__name__, state)
     source = dedent('''\
-        import zett_jit_activation_test as state
+        import activation_state as state
         state.activations += 1
         count = 0
         @tool(guidelines="Count calls in this session.")
@@ -373,21 +355,22 @@ async def test_module_globals_are_session_local_persist_until_reload_and_do_not_
             count += 1
             return count
     ''')
-    original = JITHarness()
-    original.create_tool(source, entrypoint="counter")
+    directory = tmp_path / "local"
+    original = make_harness(directory)
+    put_tool(original, source, "counter")
     assert state.activations == 1
     assert await original.call_tool("counter") == 1
     original.unload_tool("counter")
     original.load_tool("counter")
-    assert await original.call_tool("counter") == 2
-    saved = JITHarnessSnapshot.from_json(original.snapshot().to_json())
-    assert state.activations == 1  # Serialization/deserialization never activates.
-    jit = JITHarnessExtension(saved)
+    assert await original.call_tool("counter") == 2  # Unloading keeps the imported module.
+    jit = JITHarnessExtension(tmp_path / "sessions")
+    seed_repo(tmp_path / "sessions", "one", {"counter": source})
+    seed_repo(tmp_path / "sessions", "two", {"counter": source})
     first, second = context(session="one"), context(session="two")
-    await jit.on_tool(first)
-    await jit.on_tool(second)
     try:
-        assert state.activations == 3
+        await jit.on_tool(first)
+        await jit.on_tool(second)
+        assert state.activations == 3  # Each session imports its own copy.
         assert await first.tools["counter"]({}) == 1
         assert await first.tools["counter"]({}) == 2
         assert await second.tools["counter"]({}) == 1
@@ -395,41 +378,45 @@ async def test_module_globals_are_session_local_persist_until_reload_and_do_not_
         next_request = context(session="one")
         await jit.on_tool(next_request)
         try:
-            assert state.activations == 3
+            assert state.activations == 3  # A later request reuses the session's modules.
             assert await next_request.tools["counter"]({}) == 3
         finally:
             jit._request_finished(next_request)
-        restored = JITHarness(saved)
+        # A fresh harness on the same directory imports the files again, so counters restart.
+        restored = make_harness(directory)
+        restored.create_repo("repo")
         assert state.activations == 4
         assert await restored.call_tool("counter") == 1
         assert await original.call_tool("counter") == 3
     finally:
         jit._request_finished(first)
         jit._request_finished(second)
+        close_sessions(jit, "one", "two")
 
 
-async def test_unloaded_source_activates_on_restore_but_load_does_not_reexecute_module(monkeypatch):
-    state = ModuleType("zett_jit_unloaded_activation_test")
+async def test_unload_and_load_keep_the_imported_module_but_a_changed_file_reimports(monkeypatch, make_harness):
+    state = ModuleType("unloaded_activation_state")
     state.activations = 0
     monkeypatch.setitem(sys.modules, state.__name__, state)
-    harness = JITHarness()
+    harness = make_harness()
     source = f"import {state.__name__} as state\nstate.activations += 1\n" + PURE_SOURCE
-    harness.create_tool(source, entrypoint="twice")
-    harness.unload_tool("twice")
-    saved = JITHarnessSnapshot.from_json(harness.snapshot().to_json())
+    put_tool(harness, source, "twice")
     assert state.activations == 1
-    restored = JITHarness(saved)
-    assert state.activations == 2
+    harness.unload_tool("twice")
     with pytest.raises(ValueError, match="unloaded"):
-        await restored.call_tool("twice", value=1)
-    restored.load_tool("twice")
-    restored.load_tool("twice")
-    assert state.activations == 2
-    assert await restored.call_tool("twice", value=1) == 2
+        await harness.call_tool("twice", value=1)
+    harness.load_tool("twice")
+    harness.load_tool("twice")
+    assert state.activations == 1  # Restoring a registration does not execute the module again.
+    assert await harness.call_tool("twice", value=1) == 2
+    harness.load_repo()
+    assert state.activations == 1  # Nothing changed on disk, so loading again imports nothing.
+    put_tool(harness, source + "# edited\n", "twice")
+    assert state.activations == 2  # A changed file is imported afresh.
 
 
 @pytest.mark.parametrize("arguments", [{}, {"value": "bad"}, {"value": -1}, {"value": 2, "unknown": 3}])
-async def test_nested_schema_constraints_defaults_and_extra_arguments(arguments):
+async def test_nested_schema_constraints_defaults_and_extra_arguments(arguments, make_harness):
     source = dedent('''\
         from typing import Annotated
         from pydantic import Field
@@ -442,9 +429,8 @@ async def test_nested_schema_constraints_defaults_and_extra_arguments(arguments)
             """Delegate to the constrained tool."""
             return await harness.call_tool("checked", **arguments)
     ''')
-    harness = JITHarness()
-    harness.create_tool(source, entrypoint="checked")
-    harness.create_tool(source, entrypoint="forward")
+    harness = make_harness()
+    put_tool(harness, source, "tools")
     ctx = context()
     harness.attach(ctx)
     try:
@@ -461,17 +447,16 @@ async def test_nested_schema_constraints_defaults_and_extra_arguments(arguments)
         harness.detach(ctx)
 
 
-async def test_old_wrapper_uses_replaced_parameter_validator_and_snapshot_schema():
-    harness = JITHarness()
-    harness.create_tool(PURE_SOURCE, entrypoint="twice")
+async def test_old_wrapper_uses_replaced_parameter_validator(make_harness):
+    harness = make_harness()
+    put_tool(harness, PURE_SOURCE, "twice")
     ctx = context()
     harness.attach(ctx)
     old = ctx.tools["twice"]
     changed = PURE_SOURCE.replace("value: int", "left: int, right: int").replace("value * 2", "left + right")
     try:
-        harness.update_tool("twice", changed, entrypoint="twice")
+        put_tool(harness, changed, "twice")
         assert set(ctx.tools["twice"].parameters["properties"]) == {"left", "right"}
-        assert set(harness.snapshot().tools[0].parameters["properties"]) == {"left", "right"}
         with pytest.raises(ValidationError):
             await old({"value": 21})
         assert await old({"left": 20, "right": 22}) == 42
@@ -481,7 +466,7 @@ async def test_old_wrapper_uses_replaced_parameter_validator_and_snapshot_schema
 
 
 @pytest.mark.parametrize("stage", ["before", "middleware", "after"])
-async def test_nested_hook_failures_unwind_call_id_depth_and_task_tracking(stage):
+async def test_nested_hook_failures_unwind_call_id_depth_and_task_tracking(stage, make_harness):
     failure = RuntimeError(f"{stage} hook failed")
     seen = []
 
@@ -505,8 +490,8 @@ async def test_nested_hook_failures_unwind_call_id_depth_and_task_tracking(stage
                 raise failure
 
     hooks = Hooks()
-    harness = JITHarness(tools=[add], max_call_depth=2)
-    harness.create_tool(SOURCE, entrypoint="twice")
+    harness = make_harness(tools=[add], max_call_depth=2)
+    put_tool(harness, SOURCE, "twice")
     ctx = context(add, extensions=(hooks,))
     harness.attach(ctx)
     try:
@@ -524,7 +509,7 @@ async def test_nested_hook_failures_unwind_call_id_depth_and_task_tracking(stage
 
 
 @pytest.mark.parametrize("stage", ["before", "middleware"])
-async def test_unload_during_hook_is_checked_again_before_the_handler_starts(stage):
+async def test_unload_during_hook_is_checked_again_before_the_handler_starts(stage, make_harness):
     called = []
 
     @tool(guidelines="Observe whether a removed tool ran.")
@@ -533,9 +518,9 @@ async def test_unload_during_hook_is_checked_again_before_the_handler_starts(sta
         called.append(True)
         return 42
 
-    harness = JITHarness(tools=[dependency])
+    harness = make_harness(tools=[dependency])
     source = PURE_SOURCE.replace("value * 2", 'await harness.call_tool("dependency")')
-    harness.create_tool(source, entrypoint="twice")
+    put_tool(harness, source, "twice")
 
     class Hooks(AgentExtension):
         async def before_tool(self, context, call):
@@ -553,14 +538,14 @@ async def test_unload_during_hook_is_checked_again_before_the_handler_starts(sta
         with pytest.raises(ValueError, match="unloaded"):
             await ctx.tools["twice"]({"value": 0})
         assert called == [] and "dependency" not in ctx.tools
-        assert harness.inspect_tool("twice")["status"] == "loaded"
+        assert harness.describe("twice")["status"] == "loaded"
         assert not harness._nested_tasks
         assert_unbound()
     finally:
         harness.detach(ctx)
 
 
-async def test_self_unload_can_finish_but_recursive_and_later_calls_fail():
+async def test_self_unload_can_finish_but_recursive_and_later_calls_fail(make_harness):
     source = dedent('''\
         @tool(guidelines="Unload after one successful invocation.")
         async def once() -> str:
@@ -572,8 +557,8 @@ async def test_self_unload_can_finish_but_recursive_and_later_calls_fail():
                 return str(error)
             raise AssertionError("A self-unloaded tool cannot recurse")
     ''')
-    harness = JITHarness()
-    harness.create_tool(source, entrypoint="once")
+    harness = make_harness()
+    put_tool(harness, source, "once")
     ctx = context()
     harness.attach(ctx)
     old = ctx.tools["once"]
@@ -582,7 +567,7 @@ async def test_self_unload_can_finish_but_recursive_and_later_calls_fail():
         assert "once" not in ctx.tools
         with pytest.raises(ValueError, match="unloaded"):
             await old({})
-        assert harness.snapshot().unloaded_tools == ("once",)
+        assert harness.describe("once")["status"] == "unloaded"
         harness.load_tool("once")
         assert "unloaded" in await ctx.tools["once"]({})
         assert_unbound()
@@ -590,7 +575,7 @@ async def test_self_unload_can_finish_but_recursive_and_later_calls_fail():
         harness.detach(ctx)
 
 
-async def test_parallel_fanout_has_unique_nested_ids_and_restores_each_parent_binding():
+async def test_parallel_fanout_has_unique_nested_ids_and_restores_each_parent_binding(tmp_path):
     entered, release = asyncio.Event(), asyncio.Event()
     nested_ids, completed, hooks = [], [], []
 
@@ -628,9 +613,8 @@ async def test_parallel_fanout_has_unique_nested_ids_and_restores_each_parent_bi
             assert current_tool_call_id() == parent
             return sum(results)
     ''')
-    initial = JITHarness()
-    initial.create_tool(source, entrypoint="fanout")
-    jit, history = JITHarnessExtension(initial.snapshot()), InMemoryMessageAccumulator()
+    seed_repo(tmp_path, "parallel", {"fanout": source})
+    jit, history = JITHarnessExtension(tmp_path), InMemoryMessageAccumulator()
     model = ScriptModel((ToolCall("outer-a", "fanout", {"value": 1}), ToolCall("outer-b", "fanout", {"value": 10})))
     agent = await Agent.create(model, tools=[leaf], extensions=[history, Hooks(), jit])
     running = asyncio.create_task(agent.run("fan out", config=AgentRunConfig("parallel")))
@@ -653,72 +637,70 @@ async def test_parallel_fanout_has_unique_nested_ids_and_restores_each_parent_bi
         release.set()
         running.cancel()
         await asyncio.gather(running, return_exceptions=True)
+        close_sessions(jit, "parallel")
 
 
-async def test_management_batches_respect_serial_order_and_keep_complete_outer_protocol():
+async def test_management_batches_respect_serial_order_and_keep_complete_outer_protocol(tmp_path):
+    root, session = tmp_path / "jit", "batch"
+    target = root / session / "kit"
     model = ScriptModel(
         (
-            ToolCall("create", "create_tool", {"source": PURE_SOURCE, "entrypoint": "twice"}),
-            ToolCall("duplicate", "create_tool", {"source": PURE_SOURCE, "entrypoint": "twice"}),
-            ToolCall("invalid-update", "update_tool", {"name": "twice", "source": "invalid !", "entrypoint": "twice"}),
-            ToolCall("new-tool", "twice", {"value": 21}),
+            ToolCall("create", "repo_create", {"repo": "kit"}),
+            ToolCall("duplicate", "repo_create", {"repo": "other"}),
         ),
+        (ToolCall("write", "put", {"path": str(target / "twice.py"), "content": HEADER + PURE_SOURCE}),),
+        (ToolCall("load", "repo_load", {}),),
         (
-            ToolCall("unload", "unload_tool", {"name": "twice"}),
-            ToolCall("inflight", "twice", {"value": 3}),  # Parallel call runs before serial unload.
-            ToolCall("inspect", "inspect_tool", {"name": "twice"}),
+            ToolCall("call", "twice", {"value": 21}),
+            ToolCall("unload", "repo_unload", {}),
         ),
         (
             ToolCall("stale", "twice", {"value": 3}),
-            ToolCall("load", "load_tool", {"name": "twice"}),
-            ToolCall("reloaded", "twice", {"value": 21}),
+            ToolCall("reload", "repo_load", {}),
         ),
+        (ToolCall("reloaded", "twice", {"value": 21}),),
     )
-    history, jit = InMemoryMessageAccumulator(), JITHarnessExtension()
-    agent = await Agent.create(model, extensions=[history, jit])
-    events = [event async for event in agent.stream("evolve", config=AgentRunConfig("batch"))]
-    results = [message for message in history.messages("batch") if isinstance(message, ToolMessage)]
+    history, jit = InMemoryMessageAccumulator(), JITHarnessExtension(root)
+    agent = await Agent.create(model, tools=[put], extensions=[history, jit])
+    events = [event async for event in agent.stream("evolve", config=AgentRunConfig(session))]
+    results = [message for message in history.messages(session) if isinstance(message, ToolMessage)]
     by_id = {message.tool_call_id: message for message in results}
-    assert len(results) == 10 and len(by_id) == 10
-    assert {identifier for identifier, result in by_id.items() if not result.success} == {
-        "duplicate",
-        "invalid-update",
-        "stale",
-    }
-    assert by_id["new-tool"].content == by_id["reloaded"].content == "42"
-    assert by_id["inflight"].content == "6"
-    assert json.loads(by_id["inspect"].content)["status"] == "unloaded"
-    assert [result.tool_call_id for result in results][4:7] == ["inflight", "unload", "inspect"]
+    assert len(results) == 9 and len(by_id) == 9
+    assert {identifier for identifier, result in by_id.items() if not result.success} == {"duplicate", "stale"}
+    assert by_id["call"].content == by_id["reloaded"].content == "42"
+    assert json.loads(by_id["unload"].content)["status"] == "unloaded"
+    # Parallel handlers finish before the serial management calls of the same batch.
+    assert [result.tool_call_id for result in results][4:6] == ["call", "unload"]
     for index, request in enumerate(model.requests):
-        assert ("twice" in {definition.name for definition in request.tools}) == (index in (1, 3))
+        assert ("twice" in {definition.name for definition in request.tools}) == (index in (3, 5, 6))
     terminals = [event for event in events if event.type in (AgentEventType.TOOL_COMPLETED, AgentEventType.TOOL_FAILED)]
-    assert len(terminals) == 10
+    assert len(terminals) == 9
     assert {event.tool_calls[0].id for event in terminals} == set(by_id)
-    assert jit.get_harness("batch").snapshot().tools[0].source == PURE_SOURCE
-    assert jit.get_harness("batch").snapshot().unloaded_tools == ()
+    harness = jit.get_harness(session)
+    assert harness.describe("twice")["status"] == "loaded" and harness.describe("twice")["origin"] == "python"
     assert_unbound()
+    close_sessions(jit, session)
 
 
-@pytest.mark.parametrize("name", sorted(CONTROLS))
-async def test_nested_composition_cannot_dispatch_reserved_management_functions(name):
+@pytest.mark.parametrize("name", sorted(MANAGEMENT_NAMES))
+async def test_nested_composition_cannot_dispatch_reserved_management_functions(name, tmp_path):
     source = PURE_SOURCE.replace("value * 2", f"await harness.call_tool({name!r})")
-    initial = JITHarness()
-    initial.create_tool(source, entrypoint="twice")
-    jit = JITHarnessExtension(initial.snapshot())
+    seed_repo(tmp_path, "invariants", {"twice": source})
+    jit = JITHarnessExtension(tmp_path)
     ctx = context()
     await jit.on_tool(ctx)
-    before = jit.get_harness("invariants").snapshot()
     try:
         with pytest.raises(ValueError, match="management"):
             await ctx.tools["twice"]({"value": 1})
-        assert set(ctx.tools) == CONTROLS | {"twice"}
-        assert jit.get_harness("invariants").snapshot() == before
+        assert set(ctx.tools) == MANAGEMENT_NAMES | {"twice"}
+        assert jit.get_harness("invariants").describe("twice")["status"] == "loaded"
         assert_unbound()
     finally:
         jit._request_finished(ctx)
+        close_sessions(jit, "invariants")
 
 
-async def test_request_scoped_base_rebinding_changes_implementation_without_leaking_other_session():
+async def test_request_scoped_base_rebinding_changes_implementation_without_leaking_other_session(tmp_path):
     class Bases(AgentExtension):
         async def on_tool(self, ctx):
             marker = ctx.input_message.content
@@ -736,9 +718,9 @@ async def test_request_scoped_base_rebinding_changes_implementation_without_leak
             """Never retain a resource from a previous request."""
             return await harness.call_tool("resource")
     ''')
-    template = JITHarness()
-    template.create_tool(source, entrypoint="read_current")
-    jit, history = JITHarnessExtension(template.snapshot()), InMemoryMessageAccumulator()
+    seed_repo(tmp_path, "one", {"read_current": source})
+    seed_repo(tmp_path, "two", {"read_current": source})
+    jit, history = JITHarnessExtension(tmp_path), InMemoryMessageAccumulator()
 
     class Model:
         retry = RetryOptions(max_retries=0)
@@ -755,7 +737,7 @@ async def test_request_scoped_base_rebinding_changes_implementation_without_leak
     results = await asyncio.gather(agent.run("first", config=one), agent.run("other", config=two))
     assert [result.content for result in results] == ["first", "other"]
     first, second = jit.get_harness("one"), jit.get_harness("two")
-    assert first.inspect_tool("resource")["status"] == second.inspect_tool("resource")["status"] == "missing"
+    assert first.describe("resource")["status"] == second.describe("resource")["status"] == "missing"
     assert (await agent.run("second", config=one)).content == "second"
     first.unload_tool("resource")
     failed = await agent.run("blocked", config=one)
@@ -764,12 +746,14 @@ async def test_request_scoped_base_rebinding_changes_implementation_without_leak
     # A missing request-scoped tool cannot be loaded while idle.
     with pytest.raises(ValueError, match="Missing base tool"):
         first.load_tool("resource")
-    assert first.snapshot().unloaded_tools == ("resource",)
-    assert second.snapshot().unloaded_tools == ()
+    assert first.describe("resource")["status"] == "unloaded"
+    assert second.describe("resource")["status"] == "missing"  # Idle and unbound, but never unloaded.
+    assert "resource" not in second._unloaded
     assert_unbound()
+    close_sessions(jit, "one", "two")
 
 
-async def test_cancellation_of_one_session_cleans_fanout_and_does_not_cancel_another_session():
+async def test_cancellation_of_one_session_cleans_fanout_and_does_not_cancel_another_session(tmp_path):
     arrived, cancelled = asyncio.Event(), asyncio.Event()
     release_other = asyncio.Event()
     observed = []
@@ -802,9 +786,9 @@ async def test_cancellation_of_one_session_cleans_fanout_and_does_not_cancel_ano
                 harness.call_tool("wait", index=1), harness.call_tool("wait", index=2)
             ))
     ''')
-    template = JITHarness()
-    template.create_tool(source, entrypoint="pair")
-    jit, history = JITHarnessExtension(template.snapshot()), InMemoryMessageAccumulator()
+    seed_repo(tmp_path, "cancel", {"pair": source})
+    seed_repo(tmp_path, "keep", {"pair": source})
+    jit, history = JITHarnessExtension(tmp_path), InMemoryMessageAccumulator()
 
     class Model:
         retry = RetryOptions(max_retries=0)
@@ -846,10 +830,14 @@ async def test_cancellation_of_one_session_cleans_fanout_and_does_not_cancel_ano
         first.cancel()
         second.cancel()
         await asyncio.gather(first, second, return_exceptions=True)
+        close_sessions(jit, "cancel", "keep")
 
 
 @pytest.mark.parametrize("mutation", ["unload_parent", "unload_dependency", "update_parent"])
-async def test_inflight_request_keeps_started_implementation_but_old_wrappers_recheck_mutations(mutation):
+async def test_inflight_request_keeps_started_implementation_but_old_wrappers_recheck_mutations(
+    mutation,
+    make_harness,
+):
     entered, release = asyncio.Event(), asyncio.Event()
     invocations = []
 
@@ -861,9 +849,9 @@ async def test_inflight_request_keeps_started_implementation_but_old_wrappers_re
         await release.wait()
         return value
 
-    harness = JITHarness(tools=[gate])
+    harness = make_harness(tools=[gate])
     source = PURE_SOURCE.replace("value * 2", '(await harness.call_tool("gate", value=value)) * 2')
-    harness.create_tool(source, entrypoint="twice")
+    put_tool(harness, source, "twice")
     ctx = context(gate)
     harness.attach(ctx)
     old = ctx.tools["twice"]
@@ -871,7 +859,7 @@ async def test_inflight_request_keeps_started_implementation_but_old_wrappers_re
     try:
         await asyncio.wait_for(entered.wait(), timeout=2)
         if mutation == "update_parent":
-            harness.update_tool("twice", PURE_SOURCE.replace("value * 2", "value * 3"), entrypoint="twice")
+            put_tool(harness, PURE_SOURCE.replace("value * 2", "value * 3"), "twice")
             assert await old({"value": 2}) == 6
         else:
             harness.unload_tool("twice" if mutation == "unload_parent" else "gate")
@@ -889,7 +877,7 @@ async def test_inflight_request_keeps_started_implementation_but_old_wrappers_re
         harness.detach(ctx)
 
 
-async def test_call_waiting_in_before_hook_cannot_enter_a_later_request():
+async def test_call_waiting_in_before_hook_cannot_enter_a_later_request(make_harness):
     entered, release = asyncio.Event(), asyncio.Event()
     calls = []
 
@@ -904,8 +892,8 @@ async def test_call_waiting_in_before_hook_cannot_enter_a_later_request():
         calls.append(True)
         return 42
 
-    harness = JITHarness(tools=[dependency])
-    harness.create_tool(PURE_SOURCE.replace("value * 2", 'await harness.call_tool("dependency")'), entrypoint="twice")
+    harness = make_harness(tools=[dependency])
+    put_tool(harness, PURE_SOURCE.replace("value * 2", 'await harness.call_tool("dependency")'), "twice")
     first = context(dependency, extensions=(Hooks(),))
     harness.attach(first)
     running = asyncio.create_task(first.tools["twice"]({"value": 0}))
@@ -931,14 +919,14 @@ async def test_call_waiting_in_before_hook_cannot_enter_a_later_request():
 
 
 @pytest.mark.parametrize("max_depth", [1, 2, 5])
-async def test_mutual_recursion_hits_depth_bound_and_next_independent_call_still_works(max_depth):
-    harness = JITHarness(max_call_depth=max_depth)
+async def test_mutual_recursion_hits_depth_bound_and_next_independent_call_still_works(max_depth, make_harness):
+    harness = make_harness(max_call_depth=max_depth)
     for name, dependency in (("a", "b"), ("b", "a")):
         source = PURE_SOURCE.replace("twice", name).replace(
             "value * 2", f"await harness.call_tool({dependency!r}, value=value)"
         )
-        harness.create_tool(source, entrypoint=name)
-    harness.create_tool(PURE_SOURCE, entrypoint="twice")
+        put_tool(harness, source, name)
+    put_tool(harness, PURE_SOURCE, "twice")
     ctx = context()
     harness.attach(ctx)
     try:
@@ -951,24 +939,24 @@ async def test_mutual_recursion_hits_depth_bound_and_next_independent_call_still
         harness.detach(ctx)
 
 
-def test_loading_source_cannot_dispatch_a_tool_at_module_top_level():
-    harness = JITHarness(tools=[add])
-    before = harness.snapshot()
+def test_a_module_body_cannot_dispatch_a_tool_while_it_loads(make_harness):
+    harness = make_harness(tools=[add])
+    before = harness.list_tools()
     source = 'import asyncio\nasyncio.run(harness.call_tool("add", left=1, right=2))\n' + PURE_SOURCE
-    with pytest.raises(RuntimeError, match="Cannot call tools while loading"):
-        harness.create_tool(source, entrypoint="twice")
-    assert harness.snapshot() == before and not harness._compiling
+    with pytest.raises(ValueError, match="Cannot call tools while loading"):
+        put_tool(harness, source, "twice")
+    assert harness.list_tools() == before and not harness._compiling
 
 
-async def test_dynamic_guidance_has_only_current_definitions_and_never_mutates_input_request():
-    jit = JITHarnessExtension()
+async def test_dynamic_guidance_has_only_current_definitions_and_never_mutates_input_request(tmp_path):
+    jit = JITHarnessExtension(tmp_path)
     ctx = context(add)
     await jit.on_tool(ctx)
     await ToolGuidelinesExtension().on_state(ctx)
     harness = jit.get_harness("invariants")
     recorded = []
     source = PURE_SOURCE.replace("Compose exact addition.", "FIRST_VERSION_GUIDANCE")
-    harness.create_tool(source, entrypoint="twice")
+    put_tool(harness, source, "twice")
 
     async def next_(request):
         recorded.append(request)
@@ -997,13 +985,11 @@ async def test_dynamic_guidance_has_only_current_definitions_and_never_mutates_i
         assert "correct, complete, satisfying answer" in initial_guidance
         assert "Never sacrifice" in initial_guidance
         assert "required work, safety, or answer quality" in initial_guidance
-        assert "Actively use JIT harness capabilities" in initial_guidance
-        assert "inspection, creation, and validation costs" in initial_guidance
-        assert "avoid unnecessary tool-building or open-ended optimization" in initial_guidance
+        assert "Actively use the JIT repository" in initial_guidance
+        assert "writing and validation costs" in initial_guidance
+        assert "avoid unnecessary tool-building" in initial_guidance
         assert "Prefer existing tools or a direct solution" in initial_guidance
-        harness.update_tool(
-            "twice", source.replace("FIRST_VERSION_GUIDANCE", "SECOND_VERSION_GUIDANCE"), entrypoint="twice"
-        )
+        put_tool(harness, source.replace("FIRST_VERSION_GUIDANCE", "SECOND_VERSION_GUIDANCE"), "twice")
         updated = await render()
         assert "SECOND_VERSION_GUIDANCE" in updated and "FIRST_VERSION_GUIDANCE" not in updated
         harness.unload_tool("twice")
@@ -1014,10 +1000,11 @@ async def test_dynamic_guidance_has_only_current_definitions_and_never_mutates_i
         assert "SECOND_VERSION_GUIDANCE" not in "\n".join(item.content for item in ctx.state.messages)
     finally:
         jit._request_finished(ctx)
+        close_sessions(jit, "invariants")
 
 
 @pytest.mark.parametrize("kind", ["plain", "text", "parts"])
-async def test_in_place_result_hook_transformations_are_visible_to_composing_parent(kind):
+async def test_in_place_result_hook_transformations_are_visible_to_composing_parent(kind, make_harness):
     class Redact(AgentExtension):
         async def after_tool(self, context, call, result, error):
             if isinstance(result.content, list):
@@ -1030,8 +1017,8 @@ async def test_in_place_result_hook_transformations_are_visible_to_composing_par
         """Return different result representations for hook redaction."""
         return "secret" if kind == "plain" else TextContent("secret") if kind == "text" else [TextContent("secret")]
 
-    harness = JITHarness(tools=[secret])
-    harness.create_tool(PURE_SOURCE.replace("value * 2", 'await harness.call_tool("secret")'), entrypoint="twice")
+    harness = make_harness(tools=[secret])
+    put_tool(harness, PURE_SOURCE.replace("value * 2", 'await harness.call_tool("secret")'), "twice")
     ctx = context(secret, extensions=(Redact(),))
     harness.attach(ctx)
     try:
@@ -1042,28 +1029,20 @@ async def test_in_place_result_hook_transformations_are_visible_to_composing_par
         harness.detach(ctx)
 
 
-async def test_concurrent_duplicate_creations_have_exactly_one_winner_and_no_partial_definitions():
-    harness = JITHarness()
-    modules = {name for name in sys.modules if name.startswith("zett_jit_")}
+async def test_concurrent_loads_leave_one_registered_definition_and_no_partial_state(make_harness):
+    harness = make_harness()
+    put_tool(harness, PURE_SOURCE, "twice")
 
-    def create():
-        try:
-            harness.create_tool(PURE_SOURCE, entrypoint="twice")
-            return "created"
-        except ValueError as error:
-            assert "already exists" in str(error)
-            return "duplicate"
-
-    outcomes = await asyncio.gather(*(asyncio.to_thread(create) for _ in range(16)))
-    assert outcomes.count("created") == 1 and outcomes.count("duplicate") == 15
-    assert len(harness.list_tools()) == 1 and harness.snapshot().tools[0].source == PURE_SOURCE
-    assert {name for name in sys.modules if name.startswith("zett_jit_")} == modules
+    outcomes = await asyncio.gather(*(asyncio.to_thread(harness.load_repo) for _ in range(16)))
+    assert [item["tools"] for item in outcomes] == [["twice"]] * 16
+    assert harness.list_tools() == [harness.describe("twice")]
+    assert len(jit_finders()) == 1  # Each reload replaced the previous package; the one shared hook stays.
     assert not harness._compiling
     assert await harness.call_tool("twice", value=21) == 42
     assert_unbound()
 
 
-async def test_parallel_failed_child_can_be_caught_without_poisoning_siblings_or_parent_binding():
+async def test_parallel_failed_child_can_be_caught_without_poisoning_siblings_or_parent_binding(make_harness):
     seen = []
 
     class Hooks(AgentExtension):
@@ -1092,8 +1071,8 @@ async def test_parallel_failed_child_can_be_caught_without_poisoning_siblings_or
             assert current_tool_call_id() == parent
             return [*values[1:], await harness.call_tool("partial", value=3)]
     ''')
-    harness = JITHarness(tools=[partial], max_call_depth=2)
-    harness.create_tool(source, entrypoint="collect")
+    harness = make_harness(tools=[partial], max_call_depth=2)
+    put_tool(harness, source, "collect")
     ctx = context(partial, extensions=(Hooks(),))
     harness.attach(ctx)
     try:
@@ -1108,7 +1087,7 @@ async def test_parallel_failed_child_can_be_caught_without_poisoning_siblings_or
 
 
 @pytest.mark.parametrize("representation", ["none", "empty", "dict", "dataclass", "pydantic"])
-async def test_raw_python_result_shape_survives_composition_and_serializes_only_once(representation):
+async def test_raw_python_result_shape_survives_composition_and_serializes_only_once(representation, tmp_path):
     source = dedent('''\
         from dataclasses import dataclass
         from pydantic import BaseModel
@@ -1141,10 +1120,8 @@ async def test_raw_python_result_shape_survives_composition_and_serializes_only_
                 assert result.value == 42
             return result
     ''')
-    template = JITHarness()
-    template.create_tool(source, entrypoint="structured")
-    template.create_tool(source, entrypoint="proxy")
-    jit, history = JITHarnessExtension(template.snapshot()), InMemoryMessageAccumulator()
+    seed_repo(tmp_path, "structured", {"tools": source})
+    jit, history = JITHarnessExtension(tmp_path), InMemoryMessageAccumulator()
     model = ScriptModel((ToolCall("outer", "proxy", {"kind": representation}),))
     agent = await Agent.create(model, extensions=[history, jit])
     await agent.run("compose", config=AgentRunConfig("structured"))
@@ -1154,3 +1131,4 @@ async def test_raw_python_result_shape_survives_composition_and_serializes_only_
         None if representation == "none" else [] if representation == "empty" else {"value": 42}
     )
     assert_unbound()
+    close_sessions(jit, "structured")

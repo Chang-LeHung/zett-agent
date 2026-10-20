@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 21:43+0800\n"
+"POT-Creation-Date: 2026-10-21 01:54+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -16,222 +16,222 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: ../../index.rst:-1
+#: ../../../Users/huchang/zett-agent/docs/index.rst:-1
 msgid "Agents that forge the tools they need. A small Python runtime for tool-calling agents, with a JIT harness that lets a model write, reuse, and inspect its own tools in the middle of a run."
 msgstr "能自己锻造所需工具的智能体。一个用于工具调用智能体的小型 Python 运行时，内置 JIT harness，让模型在一次运行途中编写、复用和检查自己的工具。"
 
-#: ../../index.rst:9 ../../index.rst:17
+#: ../../../Users/huchang/zett-agent/docs/index.rst:9
+#: ../../../Users/huchang/zett-agent/docs/index.rst:17
 msgid "Zett Agent"
 msgstr "Zett Agent"
 
-#: ../../index.rst:25
+#: ../../../Users/huchang/zett-agent/docs/index.rst:25
 msgid ":doc:`Meet the JIT harness → <learn/jit-harness>`"
 msgstr ":doc:`认识 JIT harness → <learn/jit-harness>`"
 
-#: ../../index.rst:29
+#: ../../../Users/huchang/zett-agent/docs/index.rst:29
 msgid "Agents that forge **the tools they need.**"
 msgstr "能自己锻造\\ **所需工具**\\ 的智能体。"
 
-#: ../../index.rst:31
-msgid "Zett Agent is a small Python runtime for tool-calling agents. Its JIT harness lets a model write, reuse, and inspect its own tools in the middle of a run, so a long task stops paying for the same exploration twice."
-msgstr "Zett Agent 是一个用于工具调用智能体的小型 Python 运行时。它的 JIT harness 让模型在一次运行途中编写、复用和检查自己的工具，因此长任务不必为同样的探索反复付出代价。"
+#: ../../../Users/huchang/zett-agent/docs/index.rst:31
+msgid "Zett Agent is a small Python runtime for tool-calling agents. Its JIT harness lets a model write and reuse its own tools in the middle of a run, so a long task stops paying for the same exploration twice."
+msgstr "Zett Agent 是一个用于工具调用智能体的小型 Python 运行时。它的 JIT harness 让模型在一次运行途中编写并复用自己的工具，因此长任务不必为同样的探索反复付出代价。"
 
-#: ../../index.rst:36
+#: ../../../Users/huchang/zett-agent/docs/index.rst:36
 msgid "Bring your own model and ordinary Python functions. Add skills, persistence, and delegation when you need them."
 msgstr "带上你自己的模型和普通的 Python 函数。需要时再添加技能、持久化和委派。"
 
-#: ../../index.rst:41
+#: ../../../Users/huchang/zett-agent/docs/index.rst:41
 msgid ":doc:`Build your first agent → <learn/first-agent>`"
 msgstr ":doc:`构建你的第一个智能体 → <learn/first-agent>`"
 
-#: ../../index.rst:43
+#: ../../../Users/huchang/zett-agent/docs/index.rst:43
 msgid ":doc:`Meet the JIT harness <learn/jit-harness>`"
 msgstr ":doc:`认识 JIT harness <learn/jit-harness>`"
 
-#: ../../index.rst:47
+#: ../../../Users/huchang/zett-agent/docs/index.rst:47
 msgid "Python 3.10+"
 msgstr "Python 3.10+"
 
-#: ../../index.rst:48
+#: ../../../Users/huchang/zett-agent/docs/index.rst:48
 msgid "`MIT licensed <https://github.com/Chang-LeHung/zett-agent/blob/main/LICENSE>`__"
 msgstr "`MIT 许可证 <https://github.com/Chang-LeHung/zett-agent/blob/main/LICENSE>`__"
 
-#: ../../index.rst:49
+#: ../../../Users/huchang/zett-agent/docs/index.rst:49
 msgid "`Available on PyPI ↗ <https://pypi.org/project/zett-agent/>`__"
 msgstr "`PyPI 上可用 ↗ <https://pypi.org/project/zett-agent/>`__"
 
-#: ../../index.rst:55
+#: ../../../Users/huchang/zett-agent/docs/index.rst:55
 msgid "Your application"
 msgstr "你的应用"
 
-#: ../../index.rst:56 ../../index.rst:77
+#: ../../../Users/huchang/zett-agent/docs/index.rst:56
+#: ../../../Users/huchang/zett-agent/docs/index.rst:77
 msgid "Python"
 msgstr "Python"
 
-#: ../../index.rst:76
+#: ../../../Users/huchang/zett-agent/docs/index.rst:76
 msgid "Written by the model, mid-run"
 msgstr "由模型在运行途中编写"
 
-#: ../../index.rst:90
+#: ../../../Users/huchang/zett-agent/docs/index.rst:90
 msgid "Use a configured model inside an async function. Start with :doc:`the complete, no-key example <learn/first-agent>`. Generated tools are trusted code, not a sandbox: :doc:`read the JIT harness guide <learn/jit-harness>`."
 msgstr "在异步函数中使用已配置好的模型。可以先看\\ :doc:`完整且无需密钥的示例 <learn/first-agent>`\\ 。生成出来的工具是受信任的代码，而不是沙箱：请阅读\\ :doc:`JIT harness 指南 <learn/jit-harness>`\\ 。"
 
-#: ../../index.rst
+#: ../../../Users/huchang/zett-agent/docs/index.rst
 msgid "pip"
 msgstr "pip"
 
-#: ../../index.rst
+#: ../../../Users/huchang/zett-agent/docs/index.rst
 msgid "uv"
 msgstr "uv"
 
-#: ../../index.rst:112
+#: ../../../Users/huchang/zett-agent/docs/index.rst:112
 msgid "Let the model forge what it needs"
 msgstr "让模型锻造它需要的东西"
 
-#: ../../index.rst:114
+#: ../../../Users/huchang/zett-agent/docs/index.rst:114
 msgid "JIT here means building the tool environment when a task needs it, not a Python just-in-time compiler. The harness works through ordinary function calling, so it runs on Responses and Chat Completions alike."
 msgstr "这里的 JIT 指的是在任务需要时构建工具环境，而不是 Python 的即时编译器。JIT harness 通过普通的函数调用来工作，因此在 Responses 和 Chat Completions 上都能运行。"
 
-#: ../../index.rst:122
+#: ../../../Users/huchang/zett-agent/docs/index.rst:122
 msgid "**Forge**"
 msgstr "**锻造**"
 
-#: ../../index.rst:124
-msgid "``create_tool`` registers a Python tool or a Markdown procedure the model just wrote. A Python tool can span several files that import each other."
-msgstr "``create_tool``\\ 注册模型刚刚编写的 Python 工具或 Markdown 过程。一个 Python 工具可以横跨多个相互导入的文件。"
+#: ../../../Users/huchang/zett-agent/docs/index.rst:124
+msgid "The model writes a Python tool or a Markdown procedure into its repository on disk, and ``repo_load`` registers it. A tool can span several files that import each other."
+msgstr "模型把 Python 工具或 Markdown 过程写进自己磁盘上的仓库，再由 ``repo_load`` 注册它。一个工具可以横跨多个相互导入的文件。"
 
-#: ../../index.rst:130
+#: ../../../Users/huchang/zett-agent/docs/index.rst:130
 msgid "**Reuse and compose**"
 msgstr "**复用与组合**"
 
-#: ../../index.rst:132
+#: ../../../Users/huchang/zett-agent/docs/index.rst:132
 msgid "Tools call each other through ``harness.call_tool``. One outer call can drive a loop of nested calls whose results never enter the context."
 msgstr "工具之间通过 ``harness.call_tool`` 相互调用。一次外层调用可以驱动一串嵌套调用，而这些调用的结果从不进入上下文。"
 
-#: ../../index.rst:137
-msgid "**Inspect and unload**"
-msgstr "**检查与卸载**"
+#: ../../../Users/huchang/zett-agent/docs/index.rst:137
+msgid "**Keep and unload**"
+msgstr "**保留与卸载**"
 
-#: ../../index.rst:139
-msgid "Source, profiles, and recent errors stay inspectable. Unload what the task no longer needs, and carry the toolbox to the next session in a snapshot."
-msgstr "源码、性能分析结果和最近的错误都始终可查。卸载任务不再需要的部分，并用快照把工具箱带到下一个会话。"
+#: ../../../Users/huchang/zett-agent/docs/index.rst:139
+msgid "The repository is ordinary files, so the next session finds its tools again, with its notes listed. Unload what the task no longer needs; the model reads how its tools do through ``profile_tools``, and your application can read all of it."
+msgstr "仓库就是普通文件，所以下一个会话还能找到自己的工具，并列出它的笔记。卸载任务不再需要的内容；模型通过 ``profile_tools``\\ 查看自己工具的表现，你的应用则可以读取全部数据。"
 
-#: ../../index.rst:143
-msgid ":doc:`Read the JIT harness guide <learn/jit-harness>` for the control loop, what the model sees, and the trust boundary."
-msgstr ":doc:`阅读 JIT harness 指南 <learn/jit-harness>`，了解控制循环、模型看到的内容以及信任边界。"
+#: ../../../Users/huchang/zett-agent/docs/index.rst:144
+msgid ":doc:`Read the JIT harness guide <learn/jit-harness>` for the four tools the model sees, loading, and the trust boundary."
+msgstr ":doc:`阅读 JIT harness 指南 <learn/jit-harness>`，了解模型看到的四个工具、加载方式以及信任边界。"
 
-#: ../../index.rst:147
+#: ../../../Users/huchang/zett-agent/docs/index.rst:148
 msgid "Everything you need. Only when you need it."
 msgstr "需要的一切，只在需要时出现。"
 
-#: ../../index.rst:149
+#: ../../../Users/huchang/zett-agent/docs/index.rst:150
 msgid "Keep the first agent simple. Add capabilities without changing how you run it."
 msgstr "让第一个智能体保持简单。添加能力，但不改变运行方式。"
 
-#: ../../index.rst:154
+#: ../../../Users/huchang/zett-agent/docs/index.rst:155
 msgid "Bring your model"
 msgstr "接入你的模型"
 
-#: ../../index.rst:158
+#: ../../../Users/huchang/zett-agent/docs/index.rst:159
 msgid "OpenAI, Anthropic, Google, DeepSeek, or Ollama. Use the same client, tools, and event callbacks with every built-in adapter."
 msgstr "OpenAI、Anthropic、Google、DeepSeek 或 Ollama。每个内置适配器都使用同一套客户端、工具和事件回调。"
 
-#: ../../index.rst:161
+#: ../../../Users/huchang/zett-agent/docs/index.rst:162
 msgid "Turn functions into tools"
 msgstr "把函数变成工具"
 
-#: ../../index.rst:165
+#: ../../../Users/huchang/zett-agent/docs/index.rst:166
 msgid "Write a typed Python function. Its signature and docstring become the tool definition; the runtime validates and executes calls."
 msgstr "编写一个带类型注解的 Python 函数。它的签名和文档字符串成为工具定义；运行时负责校验并执行调用。"
 
-#: ../../index.rst:168
+#: ../../../Users/huchang/zett-agent/docs/index.rst:169
 msgid "Stream the whole conversation"
 msgstr "流式输出整段对话"
 
-#: ../../index.rst:172
+#: ../../../Users/huchang/zett-agent/docs/index.rst:173
 msgid "Show incremental text, reasoning when available, tool progress, and results. Connect your own terminal, UI, or service."
 msgstr "展示增量文本、可用的推理内容、工具进度和结果。接入你自己的终端、UI 或服务。"
 
-#: ../../index.rst:175
+#: ../../../Users/huchang/zett-agent/docs/index.rst:176
 msgid "Load capabilities on demand"
 msgstr "按需加载能力"
 
-#: ../../index.rst:179
+#: ../../../Users/huchang/zett-agent/docs/index.rst:180
 msgid "Keep skills in editable text files. Discover their instructions as needed, or search deferred tools on supported Responses endpoints."
 msgstr "把技能保存在可编辑的文本文件中。需要时再发现它们的指令，或者在支持的 Responses 端点上搜索延迟加载的工具。"
 
-#: ../../index.rst:183
+#: ../../../Users/huchang/zett-agent/docs/index.rst:184
 msgid "Start here. Go further."
 msgstr "从这里开始，走得更远。"
 
-#: ../../index.rst:185
+#: ../../../Users/huchang/zett-agent/docs/index.rst:186
 msgid "Follow a tutorial, find a complete example, or look up an exact interface."
 msgstr "跟着教程做一遍，找一个完整示例，或者查阅某个确切的接口。"
 
-#: ../../index.rst:191
+#: ../../../Users/huchang/zett-agent/docs/index.rst:192
 msgid "**01 / Get started**"
 msgstr "**01 / 快速开始**"
 
-#: ../../index.rst:193
+#: ../../../Users/huchang/zett-agent/docs/index.rst:194
 msgid ":doc:`Run your first agent <learn/first-agent>` without an API key. Then connect a provider, add tools, and stream a real answer."
 msgstr ":doc:`运行你的第一个智能体 <learn/first-agent>`，无需 API 密钥。然后接入模型提供商、添加工具，并流式输出真实的回答。"
 
-#: ../../index.rst:198
+#: ../../../Users/huchang/zett-agent/docs/index.rst:199
 msgid "**02 / Find working code**"
 msgstr "**02 / 找到可运行的代码**"
 
-#: ../../index.rst:200
+#: ../../../Users/huchang/zett-agent/docs/index.rst:201
 msgid ":doc:`Browse complete examples <examples/index>` for sessions, approvals, context compaction, delegation, and cancellation."
 msgstr ":doc:`浏览完整示例 <examples/index>`，了解会话、审批、上下文压缩、委派和取消。"
 
-#: ../../index.rst:205
+#: ../../../Users/huchang/zett-agent/docs/index.rst:206
 msgid "**03 / Make it yours**"
 msgstr "**03 / 打造成你自己的**"
 
-#: ../../index.rst:207
+#: ../../../Users/huchang/zett-agent/docs/index.rst:208
 msgid ":doc:`Build an extension <extending/first-extension>` for your workflow. Learn how to add tools, instructions, and progress events."
 msgstr ":doc:`为你的工作流构建扩展 <extending/first-extension>`\\ 。了解如何添加工具、指令和进度事件。"
 
-#: ../../index.rst:212
+#: ../../../Users/huchang/zett-agent/docs/index.rst:213
 msgid "**04 / Look it up**"
 msgstr "**04 / 查阅接口**"
 
-#: ../../index.rst:214
+#: ../../../Users/huchang/zett-agent/docs/index.rst:215
 msgid ":doc:`Explore the API reference <reference/index>` for signatures, defaults, configuration fields, and examples."
 msgstr ":doc:`浏览 API 参考 <reference/index>`，查找签名、默认值、配置字段和示例。"
 
-#: ../../index.rst:217
+#: ../../../Users/huchang/zett-agent/docs/index.rst:218
 msgid "Already building an application? Start with :doc:`learn/configuration` for defaults and request overrides, :doc:`learn/application` for timeouts and concurrent conversations, and :doc:`learn/testing` for deterministic tests."
 msgstr "已经在开发应用了？可以从\\ :doc:`learn/configuration`\\ 入手了解默认值和请求级覆盖，用\\ :doc:`learn/application`\\ 了解超时和并发对话，用\\ :doc:`learn/testing`\\ 编写确定性的测试。"
 
-#: ../../index.rst:222
+#: ../../../Users/huchang/zett-agent/docs/index.rst:223
 msgid "A simple loop, from question to answer"
 msgstr "从问题到答案的简单循环"
 
-#: ../../index.rst:224
+#: ../../../Users/huchang/zett-agent/docs/index.rst:225
 msgid "The model can answer immediately or ask for tools. Zett Agent runs those tools, returns their results, and calls the model again until it answers."
 msgstr "模型可以直接作答，也可以请求工具。Zett Agent 运行这些工具，返回工具结果，然后再次调用模型，直到它给出答案。"
 
-#: ../../index.rst:229
+#: ../../../Users/huchang/zett-agent/docs/index.rst:230
 msgid "Your message"
 msgstr "你的消息"
 
-#: ../../index.rst:230 ../../index.rst:232
+#: ../../../Users/huchang/zett-agent/docs/index.rst:231
+#: ../../../Users/huchang/zett-agent/docs/index.rst:233
 msgid "Model"
 msgstr "模型"
 
-#: ../../index.rst:231
+#: ../../../Users/huchang/zett-agent/docs/index.rst:232
 msgid "Tools, if needed"
 msgstr "工具（如需要）"
 
-#: ../../index.rst:233
+#: ../../../Users/huchang/zett-agent/docs/index.rst:234
 msgid "Answer"
 msgstr "答案"
 
-#: ../../index.rst:235
+#: ../../../Users/huchang/zett-agent/docs/index.rst:236
 msgid "History, approvals, and context management extend that same loop. You choose what to enable; your application keeps control of its UI and resources. See :doc:`how it works <concepts/architecture>` when you want the mental model."
 msgstr "历史记录、审批和上下文管理都是在这同一个循环上扩展出来的。启用哪些由你决定，你的应用始终掌控自己的 UI 和资源。想建立整体认知时，可以看\\ :doc:`工作原理 <concepts/architecture>`\\ 。"
-
-#~ msgid "Meet the JIT harness"
-#~ msgstr "认识 JIT harness"
 

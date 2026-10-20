@@ -65,8 +65,8 @@ runtime already provides them.
      - Search for optional tools instead of sending every definition up front, and list what can be found.
      - Requires the Responses or Anthropic Messages protocol; see :doc:`../learn/on-demand`.
    * - JITHarnessExtension
-     - Let a model create, compose, update, unload, and reload Python tools.
-     - Trusted code, not a sandbox; deferred inspection tools keep context small; see :doc:`../learn/jit-harness`.
+     - Let a model keep Python tools and Markdown notes in a repository on disk, and load, reload, and unload them.
+     - Trusted code, not a sandbox; four tools keep context small; see :doc:`../learn/jit-harness`.
    * - McpExtension
      - Register remote or subprocess MCP tools.
      - Trust and resource ownership remain application responsibilities.

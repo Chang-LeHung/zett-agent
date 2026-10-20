@@ -29,7 +29,7 @@ Zett Agent
       Agents that forge **the tools they need.**
 
       Zett Agent is a small Python runtime for tool-calling agents. Its JIT
-      harness lets a model write, reuse, and inspect its own tools in the
+      harness lets a model write and reuse its own tools in the
       middle of a run, so a long task stops paying for the same exploration
       twice.
 
@@ -66,7 +66,7 @@ Zett Agent
              tools=[add],
              extensions=[
                  InMemoryMessageAccumulator(),
-                 JITHarnessExtension(),
+                 JITHarnessExtension("jit"),
              ],
          )
          await client.run("Build a tool that doubles 21, then use it.")
@@ -121,9 +121,9 @@ calling, so it runs on Responses and Chat Completions alike.
 
       **Forge**
 
-      ``create_tool`` registers a Python tool or a Markdown procedure the
-      model just wrote. A Python tool can span several files that import each
-      other.
+      The model writes a Python tool or a Markdown procedure into its
+      repository on disk, and ``repo_load`` registers it. A tool can span
+      several files that import each other.
 
    .. container:: zett-step
 
@@ -134,14 +134,15 @@ calling, so it runs on Responses and Chat Completions alike.
 
    .. container:: zett-step
 
-      **Inspect and unload**
+      **Keep and unload**
 
-      Source, profiles, and recent errors stay inspectable. Unload what the
-      task no longer needs, and carry the toolbox to the next session in a
-      snapshot.
+      The repository is ordinary files, so the next session finds its tools
+      again, with its notes listed. Unload what the task no longer needs; the
+      model reads how its tools do through ``profile_tools``, and your
+      application can read all of it.
 
-:doc:`Read the JIT harness guide <learn/jit-harness>` for the control loop,
-what the model sees, and the trust boundary.
+:doc:`Read the JIT harness guide <learn/jit-harness>` for the four tools the
+model sees, loading, and the trust boundary.
 
 Everything you need. Only when you need it.
 ------------------------------------------------

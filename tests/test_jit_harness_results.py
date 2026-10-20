@@ -9,8 +9,21 @@ from pydantic import TypeAdapter, ValidationError
 
 import zett_agent.jit_harness as jit_harness
 from zett_agent.jit_harness import results
+from zett_agent.jit_harness.enums import ToolOrigin
 from zett_agent.jit_harness.errors import ToolErrorRecord
 from zett_agent.jit_harness.profiling import ToolCallProfile, ToolProfileStats
+from zett_agent.jit_harness.repo import TextKind
+
+#: Result types of the removed inspection tiers; nothing may advertise them again.
+REMOVED_RESULTS = (
+    "ToolTextPage",  # A note is a file the model reads itself, not a paged tool answer.
+    "ToolInspection",
+    "ToolListPage",
+    "ToolDefinitionView",
+    "ToolCallDetails",
+    "ToolCallsPage",
+    "ToolErrorsPage",
+)
 
 
 @pytest.mark.parametrize(
@@ -18,13 +31,8 @@ from zett_agent.jit_harness.profiling import ToolCallProfile, ToolProfileStats
     [
         "ToolMutationResult",
         "ToolCatalogEntry",
-        "ToolInspection",
-        "ToolListPage",
-        "ToolDefinitionView",
-        "ToolTextPage",
-        "ToolCallDetails",
-        "ToolCallsPage",
-        "ToolErrorsPage",
+        "RepoResult",
+        "ResourceInfo",
     ],
 )
 def test_public_result_types_keep_their_identity_and_defining_module(name):
@@ -32,6 +40,14 @@ def test_public_result_types_keep_their_identity_and_defining_module(name):
     assert result_type.__module__ == "zett_agent.jit_harness.results"
     assert getattr(jit_harness, name) is result_type
     assert name in jit_harness.__all__
+
+
+@pytest.mark.parametrize("name", REMOVED_RESULTS)
+def test_removed_result_types_are_gone_from_the_module_and_the_facade(name):
+    """The repository reports paths and statuses, not snapshots or call pages."""
+    assert not hasattr(results, name)
+    assert not hasattr(jit_harness, name)
+    assert name not in jit_harness.__all__
 
 
 def test_rename_has_no_catalog_compatibility_module():
@@ -84,26 +100,64 @@ def test_result_shapes_stay_minimal_and_drop_internal_telemetry():
         "status",
         "caller_tool_name",
     }
-    assert results.ToolInspection.__required_keys__ | results.ToolInspection.__optional_keys__ == {
-        "name",
-        "origin",
-        "status",
-        "description",
-        "source",
-        "entrypoint",
-        "parameters",
-        "guidelines",
-        "files",
-    }
-    # Optional context stays optional without weakening the required core fields.
-    assert results.ToolCallDetails.__required_keys__ == {
-        "call_id",
-        "status",
-        "duration_ms",
-        "input_chars",
-        "output_chars",
-    }
-    assert results.ToolCallDetails.__optional_keys__ == {"caller_tool_name", "error_type"}
+    assert set(results.ToolMutationResult.__annotations__) == {"name", "status"}
+    assert set(results.ToolCatalogEntry.__annotations__) == {"name", "origin", "status", "description"}
+    assert set(results.RepoResult.__annotations__) == {"repo", "path", "status", "tools", "resources"}
+    assert set(results.ResourceInfo.__annotations__) == {"name", "kind", "description", "path"}
     for removed in ("implementation_id", "session_id", "request_id", "parent_call_id", "sequence", "error_id"):
         assert removed not in ToolCallProfile.model_fields
         assert removed not in ToolErrorRecord.model_fields
+
+
+@pytest.mark.parametrize(
+    ("result_type", "payload"),
+    [
+        (results.ToolMutationResult, {"name": "repo_load", "status": "loaded"}),
+        (
+            results.ToolCatalogEntry,
+            {
+                "name": "repo_load",
+                "origin": ToolOrigin.MANAGEMENT,
+                "status": "loaded",
+                "description": "Import the repository and register what it defines.",
+            },
+        ),
+        (
+            results.RepoResult,
+            {"repo": "repo", "path": "/sessions/session/repo", "status": "created", "tools": [], "resources": []},
+        ),
+        (
+            results.ResourceInfo,
+            {
+                "name": "investigate",
+                "kind": TextKind.WORKFLOW,
+                "description": "Use when a test fails.",
+                "path": "/sessions/session/repo/resources/investigate.md",
+            },
+        ),
+    ],
+    ids=["mutation", "catalog-entry", "repository", "resource-info"],
+)
+def test_every_declared_result_field_is_required(result_type, payload):
+    """Each acknowledgement is complete, so the model can act without another call."""
+    adapter = TypeAdapter(result_type)
+    assert adapter.validate_python(payload) == payload
+    for field in payload:
+        with pytest.raises(ValidationError):
+            adapter.validate_python({name: value for name, value in payload.items() if name != field})
+
+
+def test_repository_status_is_not_the_catalog_unload_vocabulary():
+    """A repository reports what happened to it; a catalog row reports unload state."""
+    repo = {"repo": "repo", "path": "/sessions/session/repo", "tools": [], "resources": []}
+    for status in ("created", "loaded", "unloaded"):
+        assert TypeAdapter(results.RepoResult).validate_python({**repo, "status": status})["status"] == status
+    with pytest.raises(ValidationError):
+        TypeAdapter(results.RepoResult).validate_python({**repo, "status": "missing"})
+    entry = {"name": "repo_load", "origin": ToolOrigin.MANAGEMENT, "description": "Import the repository."}
+    for status in ("loaded", "unloaded", "missing", "unavailable"):
+        assert TypeAdapter(results.ToolCatalogEntry).validate_python({**entry, "status": status})["status"] == status
+    with pytest.raises(ValidationError):
+        TypeAdapter(results.ToolCatalogEntry).validate_python({**entry, "status": "created"})
+    with pytest.raises(ValidationError):
+        TypeAdapter(results.ToolMutationResult).validate_python({"name": "repo_load", "status": "created"})

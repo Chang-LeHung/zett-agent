@@ -330,6 +330,37 @@ async def test_deepseek_responses_uses_stateless_endpoint_and_replays_output() -
     assert events[-1].response.message.provider == "deepseek"
 
 
+@pytest.mark.parametrize(
+    ("effort", "expected", "includes_reasoning_state"),
+    [
+        (ReasoningEffort.OFF, {"effort": "none"}, False),
+        (ReasoningEffort.MEDIUM, {"effort": "high"}, True),
+        (ReasoningEffort.ULTRA, {"effort": "max"}, True),
+    ],
+)
+async def test_deepseek_responses_speaks_its_own_reasoning_vocabulary(
+    effort: ReasoningEffort, expected: dict[str, str], includes_reasoning_state: bool
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            content=_responses_sse([_completed_event([], model="deepseek-flash")]),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = DeepSeekProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    try:
+        await anext(provider.stream(ModelRequest(messages=(UserMessage(content="Hi"),), reasoning_effort=effort)))
+    finally:
+        await provider.aclose()
+
+    assert captured["body"]["reasoning"] == expected
+    assert ("include" in captured["body"]) is includes_reasoning_state
+
+
 async def test_responses_history_uses_function_call_output_items() -> None:
     captured: dict[str, Any] = {}
 

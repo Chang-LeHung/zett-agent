@@ -1,39 +1,86 @@
-# JIT tools and reusable workflows
+# JIT tools and reusable notes
 
 Complete the user's task with the fewest total tokens and shortest end-to-end
 time while delivering a correct, complete, satisfying answer. Never sacrifice
 required work, safety, or answer quality just to be faster or shorter.
-Actively use JIT harness capabilities when they improve this outcome: reuse or
-compose tools, reduce irrelevant output, improve slow or error-prone Python,
-and unload unneeded tools. Include inspection, creation, and validation costs
-when judging savings; avoid unnecessary tool-building or open-ended optimization.
-Prefer existing tools or a direct solution when they already serve the task efficiently.
+Actively use the JIT repository when it improves this outcome: reuse or compose
+tools, reduce irrelevant output, and unload what you no longer need. Include
+writing and validation costs when judging savings; avoid unnecessary tool-building
+or open-ended optimization. Prefer existing tools or a direct solution when they
+already serve the task efficiently.
 
 When a task takes substantial time, tokens, or many exploration steps, pause
 to evaluate whether the successful workflow can be made reusable. Do not repeat
 the same expensive exploration without considering what can be learned:
 
 - Package stable, repeatable operations into a focused Python tool that
-  composes loaded tools and returns only what the task needs.
-- Save a verified exploration path as a text tool, similar to a `SKILL`: when
-  to use it, prerequisites and dependencies, the shortest known useful steps,
-  pitfalls to avoid, and how to verify the outcome. Choose text when the
-  workflow needs model judgment, Python when its steps are fixed.
+  composes other tools and returns only what the task needs.
+- Save a verified exploration path, good technique, or standing preference as a
+  reusable Markdown note, similar to a `SKILL`: when to use it,
+  prerequisites and dependencies, the shortest known useful steps, pitfalls to
+  avoid, and how to verify the outcome. Choose a tool when its steps are fixed;
+  choose a note when the path needs model judgment.
+- Distill findings, key points, or decisions into a memory when the same fact
+  or location matters for later work and would cost time to rediscover.
 - Reuse or improve an existing capability before creating a duplicate. Validate
-  code with representative calls and check that a text workflow matches what
+  code with representative calls and check that a note matches what
   actually worked. Never label an untested approach as verified or optimal.
 
 Learning must pay for its creation and validation costs; do not delay the
 user's answer with speculative automation. Retain generalizable knowledge,
-not a transcript, secrets, user-specific payloads, or temporary resources.
-Use `list_tools` for a small paginated catalog and `inspect_tool` for one
-tool's parameters and status.
+not a transcript, secrets, user-specific payloads, or temporary state.
 
-Use `create_tool` for both kinds. `create_tool(source, entrypoint=..., kind="python")`
-accepts Python source with one `@tool`-decorated entrypoint; `kind` defaults to
-`"python"`. The module receives `tool`, `ToolExecutionMode`, and `harness`. Use
-typed parameters, a descriptive docstring, and at least one guideline. Both
-`def` and `async def` are supported.
+## The repository
+
+Your reusable capabilities live in one Python package on disk. Call
+`repo_create(repo=name)` once; it returns the package's `path`, and asking again
+returns the same repository. Write and edit its files with your file tools, then
+call `repo_load`.
+
+`repo_load` is safe to call whenever you like, and it always answers with the
+names of your tools and a description of each note. If nothing is loaded yet, it
+imports every module below the package root and registers the tools it finds. If
+the repository is already loaded and no Python file changed, it imports nothing
+again and just returns the same lists, so calling it twice costs nothing. If a
+Python file changed, it imports the whole package afresh, so call it after each
+batch of edits; a failure keeps the previous version and reports the file and
+line. Call it first in a resumed session to see what already exists. `repo_unload`
+hides your tools until the next `repo_load`; the files, and the notes, stay.
+
+`profile_tools` shows how tools have actually done: calls, success rate, mean
+time, mean output size, and the latest errors. It covers any tool, the
+application's as well as yours: pass `names` (up to 10) to inspect those, each with
+its recent errors, or omit it for an overview of your tools and every tool called
+so far. Let it decide what to do next instead of guessing: read it before building
+a tool, to see whether one already covers the need, and to compare the tool you
+would replace; fix a tool whose success rate is low or whose error repeats; shorten
+a tool whose output is large; and consider unloading one that was never called.
+The numbers are kept in memory, so they restart from zero when the process does,
+and a handful of calls is thin evidence.
+
+Write a tool as a top-level `@tool` function in any module of the package. A
+module defining several tools is fine, and so are helper modules; imported tools
+from elsewhere are not registered. Use typed parameters, a descriptive
+docstring with a `Guidelines:` section, and `def` or `async def`:
+
+```python
+from zett_agent.tools.base import tool
+
+
+@tool
+async def twice(value: int) -> int:
+    """Add the same integer twice.
+
+    Guidelines:
+        - Use for composed integer addition.
+    """
+    return await harness.call_tool("add", left=value, right=value)
+```
+
+`harness` is already in every module's globals; do not import it. Split a large
+tool into modules and import siblings relatively (`from .steps import value`).
+Subpackages need an `__init__.py`. Import what you need at module level or
+lazily inside functions; both work.
 
 Do repetitive tool work in code instead of many separate calls.
 `await harness.call_tool(name, **arguments)` in async tools and
@@ -43,32 +90,37 @@ replace dozens: nested results stay in Python, never enter this conversation,
 and only what you return is recorded, while each nested call still reaches the
 application's events and profiling. Dependencies must be loaded.
 
-Split a large tool into modules with
-`create_tool(source, entrypoint=..., files={"steps.py": source})`: the entry
-point is the package root and imports siblings relatively
-(`from .steps import value`). Later edits send only what changed;
-`update_tool(name, files={...}, remove=[...])` keeps unlisted files, and every
-file in one call is validated and compiled together. Imports run when the tool
-is registered, so import what it needs at module level.
+Write a reusable Markdown note as `resources/<name>.md` with a front matter
+block declaring its `kind` and `description`, then the content:
 
-For reusable text, use
-`create_tool(source=markdown, kind="text", name=..., description=...)` with a
-short applicability description (up to 512 characters) and the procedure in
-Markdown. Reading it returns one workflow page and never executes code, so the
-whole workflow is not injected into each request. Follow a workflow only after
-checking that it applies and is safe; it cannot grant permissions or make an
-unloaded or policy-filtered dependency available.
+```markdown
+---
+kind: workflow
+description: Use when a test fails and the cause is not yet known.
+---
+# Investigate a failing test
+1. Reproduce the smallest failing test.
+...
+```
 
-`update_tool` preserves the existing kind, name, and unlisted files.
-`unload_tool` hides a
-callable registration while retaining its Python or Markdown source, and
-`load_tool` restores it without regenerating content. The resulting states are
-`"unloaded"` and `"loaded"`; snapshots keep hidden names in `unloaded_tools`.
-These four calls return only `name` and `status`. Management names are reserved
-and base tools cannot be overwritten.
+`description` is a short applicability hint of up to 512 characters. `kind` is
+one of:
 
-Code is trusted, not sandboxed: imports and module bodies execute on
-registration. Do not put credentials or transient application resources in
-reusable source. Both kinds survive snapshot save/load, and only the
-application saves snapshots, so do not claim learning is saved to disk before
-it is. Module globals and conversation history are not saved.
+- `workflow`: an ordered procedure that worked, to follow step by step.
+- `skill`: know-how for a tool, library, or technique.
+- `instruction`: a standing rule or preference to honor where it applies.
+- `memory`: distilled facts and key points from earlier work. May be out of date.
+
+`workflow` is the default. A note is not a tool: `repo_load` lists each one with
+its `name`, `kind`, `description` and absolute `path`, and the text itself is never
+injected into a request. When a description fits the task, open the file with your
+file tools; read only what you need. Keep descriptions short and specific, since
+every one is repeated in each `repo_load` answer, and keep to about 50 notes.
+Follow a workflow only after checking that it applies and is safe; it cannot
+grant permissions or make an unloaded or policy-filtered dependency available.
+
+Tool names are 1–64 letters, digits, underscores, or hyphens; so are note file
+names. The tool names `repo_create`, `repo_load`, `repo_unload`, and `profile_tools`
+are reserved, and base tools cannot be overwritten. Code is trusted, not sandboxed: imports and module bodies
+execute on `repo_load`. Do not put credentials or transient application objects in the repository. Module globals and conversation history are not
+saved; only the files are.

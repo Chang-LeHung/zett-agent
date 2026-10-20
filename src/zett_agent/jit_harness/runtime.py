@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from contextvars import ContextVar, copy_context
 from copy import deepcopy
 from dataclasses import dataclass, replace
@@ -23,21 +23,21 @@ from ..tools.base import (
     current_tool_call_id,
 )
 from ..tools.invocation import invoke_tool
-from .enums import ToolCallStatus, ToolKind, ToolOrigin
+from .enums import ToolCallStatus, ToolOrigin
 from .errors import ToolErrorReport
 from .profiling import MAX_RETAINED_CALLS, ActiveToolCall, JITHarnessProfile, ToolProfiler, ToolProfileStats
-from .python import _load_python_tool
-from .results import ToolCatalogEntry, ToolInspection, ToolMutationResult
-from .snapshot import (
-    _ENTRYPOINT_FILE,
-    _MANAGEMENT_NAMES,
-    JITHarnessSnapshot,
-    PythonToolSource,
-    TextToolSource,
-    _validate_file_path,
-    _validate_name,
+from .repo import (
+    INIT_FILE,
+    MANAGEMENT_NAMES,
+    SKELETON,
+    LoadedRepo,
+    TextResource,
+    load_repo,
+    scan_repo,
+    validate_name,
+    validate_repo_name,
 )
-from .text import load_text_tool
+from .results import RepoResult, ResourceInfo, ToolCatalogEntry, ToolMutationResult, ToolStatsReport, ToolStatsRow
 
 
 @dataclass(frozen=True)
@@ -55,6 +55,12 @@ class HarnessBinding:
 
 _BINDING: ContextVar[HarnessBinding | None] = ContextVar("zett_jit_binding", default=None)
 _CALL_STACK: ContextVar[tuple[str, ...]] = ContextVar("zett_jit_stack", default=())
+#: Rows of the overview, tools one question may name, and the length of an error each row may quote.
+#: A row with its errors is under a thousand characters, so both fit one response comfortably.
+MAX_PROFILE_ROWS = 20
+MAX_PROFILE_NAMES = 10
+PROFILE_ERROR_CHARS = 160
+
 _PROFILE_CALL: ContextVar[tuple[JITHarness, ActiveToolCall] | None] = ContextVar("zett_jit_profile_call", default=None)
 
 
@@ -91,12 +97,18 @@ async def _run_sync_tool(function: Callable[..., Any], **arguments: Any) -> Tool
 
 
 class JITHarness:
-    """An independently evolving toolbox of Python and Markdown capabilities.
+    """An independently evolving toolbox of Python tools and Markdown notes.
+
+    The toolbox is one repository: a Python package in a directory, written with
+    ordinary file tools. :meth:`load_repo` imports it and registers every ``@tool``
+    it defines, and lists the Markdown notes under ``resources/``. The notes are
+    files the model reads itself, not tools.
 
     Args:
-        snapshot: Definitions to activate. Activation executes Python module
-            bodies, including imports, but does not call tool entry points.
-        tools: Application-owned base tools; they are never serialized as code.
+        directory: Where this harness keeps its repository. The repository is a
+            subdirectory of it, created by :meth:`create_repo`. Nothing is
+            written before then.
+        tools: Application-owned base tools; they are never loaded from disk.
         manage_base_tools: Wrap base tools for unloading and profiling. False
             leaves their request registrations intact and skips their profiling.
         max_call_depth: Bound nested composition, including recursive calls.
@@ -108,22 +120,21 @@ class JITHarness:
     Note:
         This is not a Python sandbox. Source has the process's filesystem,
         network, and import privileges. Unload controls harness dispatch, not
-        what arbitrary Python can do. Module globals are not persisted.
-        Session-local profiles retain a bounded window of managed dispatches
-        without payloads, independently of executable snapshots; inspect them
-        with profile().
+        what arbitrary Python can do. Session-local profiles retain a bounded
+        window of managed dispatches without payloads; inspect them with profile().
 
     Examples:
-        Save definitions for another session::
+        Create a repository, write a tool into it, and load it::
 
-            harness = JITHarness(tools=[read_file])
-            harness.create_tool(source, entrypoint="preview_file")
-            harness.save("harness.json")
+            harness = JITHarness("jit", tools=[read_file])
+            path = harness.create_repo("helpers")["path"]
+            Path(path, "preview.py").write_text(source)
+            harness.load_repo()
     """
 
     def __init__(
         self,
-        snapshot: JITHarnessSnapshot | None = None,
+        directory: str | Path,
         *,
         tools: Sequence[AgentTool] = (),
         manage_base_tools: bool = True,
@@ -138,8 +149,9 @@ class JITHarness:
             raise ValueError("manage_base_tools must be a boolean")
         self.manage_base_tools = manage_base_tools
         self.max_call_depth = max_call_depth
-        # Guards every registry mutation and snapshot read below. It is a plain
-        # re-entrant lock because helpers such as create_tool call each other.
+        self._directory = Path(directory).expanduser().absolute()
+        # Guards every registry mutation below. It is a plain re-entrant lock
+        # because helpers such as load_repo call each other.
         self._lock = RLock()
         # True only while a module body executes. It stops that trusted code from
         # mutating the registry or dispatching tools through the harness.
@@ -150,17 +162,29 @@ class JITHarness:
         # Tasks performing composed calls, mapped to the request that owns them.
         # detach() cancels them so nested work cannot outlive its request.
         self._nested_tasks: dict[asyncio.Task[Any], AgentRunContext] = {}
-        # Serializable Python or Markdown source for dynamic tools. Unloading keeps
-        # these entries; this mapping is what snapshots and inspect_tool expose.
-        self._sources: dict[str, PythonToolSource | TextToolSource] = {}
-        # Executable Python tools and non-executable Markdown readers. Updates
-        # replace the entry; unload only hides the name, without reloading source.
+        # Origin of every dynamic tool (always PYTHON) for the repository's
+        # currently loaded version. Unloading keeps these entries.
+        self._kinds: dict[str, ToolOrigin] = {}
+        # The Python tools of the loaded version. A reload replaces them as one
+        # set; unload only hides the names.
         self._dynamic: dict[str, AgentTool] = {}
+        # The Markdown notes the last successful scan found. They are files the
+        # model reads itself, so nothing about them is registered or hidden.
+        self._resources: dict[str, TextResource] = {}
+        # The repository this harness serves, if any: its name, and the imported
+        # package while it is loaded. A failed first load leaves the name only.
+        self._repo: str | None = None
+        self._loaded: LoadedRepo | None = None
+        # True while unload_repo() hides the loaded version.
+        self._hidden = False
+        # Whether the session directory was already searched for a repository
+        # left by an earlier process; done once, on the first attach().
+        self._adopted = False
         # Base tools bound for the current request: constructor tools plus any a
         # tool-registering extension added. Rebuilt on attach, dropped on detach.
         self._bases: dict[str, AgentTool] = {}
-        # Tools passed to the constructor. They are never serialized and are the
-        # ones that stay known across requests when a request adds no binding.
+        # Tools passed to the constructor. They are the ones that stay known
+        # across requests when a request adds no binding.
         self._provided: dict[str, AgentTool] = {}
         # Control tools registered for the current request; cleared on detach
         # because they close over that request's harness state.
@@ -170,46 +194,25 @@ class JITHarness:
         # without mistaking them for a new base implementation or wrapping twice.
         self._wrapper_handlers: dict[int, Callable[..., Any]] = {}
         # Session-local counters, call records, and the recent-error cache. Kept
-        # for the lifetime of this harness and never written into snapshots.
+        # for the lifetime of this harness.
         self._profiler = ToolProfiler(
             error_capacity=error_capacity, error_message_chars=error_message_chars, call_capacity=call_capacity
         )
-        initial = snapshot or JITHarnessSnapshot()
         # Every base name this harness has seen, accumulated across requests. An
         # unbound name is reported as "missing" instead of unknown.
-        self._base_names = set(initial.base_tools)
-        # Names hidden from dispatch while their source is retained. Unload only
-        # edits this set; loading removes the name again.
-        self._unloaded = set(initial.unloaded_tools)
-        records: tuple[PythonToolSource | TextToolSource, ...] = (*initial.tools, *initial.text_tools)
-        dynamic_names = {record.name for record in records}
+        self._base_names: set[str] = set()
+        # Names hidden from dispatch. Unload only edits this set; loading removes
+        # the name again.
+        self._unloaded: set[str] = set()
         for candidate in tools:
-            _validate_name(candidate.name)
-            if candidate.name in dynamic_names or candidate.name in self._provided:
+            validate_name(candidate.name)
+            if candidate.name in self._provided:
                 raise ValueError(f"Duplicate tool: {candidate.name}")
             if candidate.local_tool_search:
                 raise ValueError("JIT harness does not manage client-side tool search")
             self._provided[candidate.name] = replace(candidate, parameters=deepcopy(candidate.parameters))
         self._base_names.update(self._provided)
         self._bases = dict(self._provided)
-        for record in initial.tools:
-            registered, rebuilt = self._compile(record.source, record.entrypoint, record.files)
-            if registered.name != record.name:
-                raise ValueError(f"Source entrypoint does not match stored tool name {record.name!r}")
-            self._sources[record.name] = rebuilt
-            self._dynamic[record.name] = registered
-        for text_record in initial.text_tools:
-            self._sources[text_record.name] = text_record.model_copy(deep=True)
-            self._dynamic[text_record.name] = load_text_tool(text_record)
-
-    def _compile(
-        self, source: str, entrypoint: str, files: Mapping[str, str] | None = None
-    ) -> tuple[AgentTool, PythonToolSource]:
-        self._compiling = True
-        try:
-            return _load_python_tool(source, entrypoint, self, files)
-        finally:
-            self._compiling = False
 
     def _check_mutation(self) -> None:
         if self._compiling:
@@ -219,28 +222,28 @@ class JITHarness:
             raise RuntimeError("This tool's request has already closed")
 
     def _known(self, name: str) -> None:
-        if name in _MANAGEMENT_NAMES:
+        if name in MANAGEMENT_NAMES:
             raise ValueError("JIT management tools cannot be changed or composed")
-        if name not in self._sources and name not in self._base_names:
+        if name not in self._kinds and name not in self._base_names:
             raise ValueError(f"Unknown tool: {name}")
 
     def origin(self, name: str) -> ToolOrigin:
         """Return which registry currently serves one tool name.
 
         Labels observability events and profile records: ``BASE`` for application
-        tools, ``PYTHON`` for executable dynamic tools, ``TEXT`` for Markdown
-        workflows, ``MANAGEMENT`` for
-        the harness control functions, and ``UNKNOWN`` for a name this harness has
-        never seen. The answer does not depend on the request binding.
+        tools, ``PYTHON`` for tools the repository defines, ``MANAGEMENT`` for the
+        harness's own tools, and ``UNKNOWN`` for a
+        name this harness has never seen. The answer does not depend on the
+        request binding.
         """
         with self._lock:
             return self._resolve_origin(name)
 
     def _resolve_origin(self, name: str) -> ToolOrigin:
-        if name in _MANAGEMENT_NAMES:
+        if name in MANAGEMENT_NAMES:
             return ToolOrigin.MANAGEMENT
-        if name in self._sources:
-            return ToolOrigin.TEXT if isinstance(self._sources[name], TextToolSource) else ToolOrigin.PYTHON
+        if name in self._kinds:
+            return self._kinds[name]
         if name in self._base_names:
             return ToolOrigin.BASE
         return ToolOrigin.UNKNOWN
@@ -261,7 +264,7 @@ class JITHarness:
         return registered
 
     def _is_unloaded(self, name: str) -> bool:
-        return name in self._unloaded and (self.manage_base_tools or name in self._sources)
+        return name in self._unloaded and (self.manage_base_tools or name in self._kinds)
 
     def _wrapper(self, registered: AgentTool, context: AgentRunContext | None) -> AgentTool:
         name = registered.name
@@ -326,7 +329,7 @@ class JITHarness:
         status = ToolCallStatus.REJECTED
         try:
             with self._lock:
-                if name in _MANAGEMENT_NAMES:
+                if name in MANAGEMENT_NAMES:
                     if context is None or name not in context.tools:
                         raise ValueError(f"Tool {name!r} is not registered in the current request")
                     target = self._management[name]
@@ -394,7 +397,7 @@ class JITHarness:
                 raise RuntimeError("This harness already has an active request")
             bases = dict(self._provided)
             for registered in context.tools.values():
-                _validate_name(registered.name)
+                validate_name(registered.name)
                 if registered.name in self._dynamic:
                     raise ValueError(f"Base tool conflicts with dynamic tool: {registered.name}")
                 if registered.local_tool_search:
@@ -403,7 +406,8 @@ class JITHarness:
             self._context = context
             self._bases = bases
             self._base_names.update(bases)
-            for name in self._base_names | self._sources.keys():
+            self._adopt_existing()
+            for name in self._base_names | self._kinds.keys():
                 self._publish(name)
             for registered in management_tools:
                 self._management[registered.name] = registered
@@ -427,8 +431,8 @@ class JITHarness:
                     raise ValueError("Tool registry key must match the registered tool name")
                 if id(registered.handler) in self._wrapper_handlers:
                     continue
-                _validate_name(name)
-                if name in self._sources:
+                validate_name(name)
+                if name in self._kinds:
                     raise ValueError(f"Base tool conflicts with dynamic tool: {name}")
                 if registered.local_tool_search:
                     raise ValueError("JIT harness does not manage client-side tool search")
@@ -460,140 +464,202 @@ class JITHarness:
                     if owner is context:
                         task.get_loop().call_soon_threadsafe(task.cancel)
 
-    def _prepare_tool(
-        self,
-        source: str,
-        *,
-        kind: ToolKind,
-        entrypoint: str | None,
-        name: str | None,
-        description: str | None,
-        files: Mapping[str, str] | None = None,
-    ) -> tuple[AgentTool, PythonToolSource | TextToolSource]:
-        if kind is ToolKind.TEXT:
-            if entrypoint is not None:
-                raise ValueError("Text tools do not have a Python entrypoint")
-            if files:
-                raise ValueError("Text tools have a single document, not a package")
-            if name is None or description is None:
-                raise ValueError("Text tools require name and description")
-            record = TextToolSource(name=name, source=source, description=description)
-            return load_text_tool(record), record
-        if entrypoint is None:
-            raise ValueError("Python tools require entrypoint")
-        if name is not None or description is not None:
-            raise ValueError("Python tool name and description come from the @tool entrypoint")
-        return self._compile(source, entrypoint, files)
+    def _adopt_existing(self) -> None:
+        """Pick up the repository an earlier process left in this directory, once.
 
-    def create_tool(
-        self,
-        source: str,
-        *,
-        entrypoint: str | None = None,
-        kind: ToolKind = ToolKind.PYTHON,
-        name: str | None = None,
-        description: str | None = None,
-        files: Mapping[str, str] | None = None,
-    ) -> ToolMutationResult:
-        """Create a Python tool or a reusable Markdown workflow after validation.
+        A resumed session should find its tools again without the model asking.
+        Only a single repository is adopted, and a load failure is not fatal here:
+        the model can call ``repo_load`` to see the error and fix the files.
+        """
+        if self._adopted:
+            return
+        self._adopted = True
+        if self._repo is not None or not self._directory.is_dir():
+            return
+        found = [
+            path.name
+            for path in self._directory.iterdir()
+            if path.is_dir() and (path / INIT_FILE).is_file() and not path.name.startswith(".")
+        ]
+        if len(found) == 1:
+            self._repo = found[0]
+            try:
+                self._load()
+            except Exception:
+                # The files stay on disk and ``repo_load`` reports the error.
+                pass
 
-        Imports and module-level code execute with application privileges.
-        Their external side effects cannot be rolled back on validation failure.
-        With kind=TEXT, source is inert Markdown and name/description are required
-        instead of entrypoint. Calling a loaded text tool reads a bounded page;
-        the model follows its workflow using separately available tools.
-        A Python tool may ship a package: ``files`` maps relative module paths to
-        source, reachable from the entry point with relative imports. Source and
-        files are validated as one unit before anything is registered.
-        Returns only the name and resulting state, not metadata or profiling.
+    @property
+    def repo(self) -> str | None:
+        """The repository's name, or None before one exists."""
+        return self._repo
+
+    @property
+    def repo_path(self) -> Path | None:
+        """The repository's directory, or None before one exists."""
+        return None if self._repo is None else self._directory / self._repo
+
+    def _result(self, status: Literal["created", "loaded", "unloaded"] | None = None) -> RepoResult:
+        assert self._repo is not None
+        if status is None:
+            status = "unloaded" if self._hidden or self._loaded is None else "loaded"
+        return {
+            "repo": self._repo,
+            "path": str(self._directory / self._repo),
+            "status": status,
+            "tools": sorted(self._dynamic),
+            "resources": self._resource_infos(),
+        }
+
+    def _resource_infos(self) -> list[ResourceInfo]:
+        assert self._repo is not None
+        root = self._directory / self._repo
+        return [
+            {
+                "name": resource.name,
+                "kind": resource.kind,
+                "description": resource.description,
+                "path": str(root / resource.path),
+            }
+            for resource in sorted(self._resources.values(), key=lambda item: item.name)
+        ]
+
+    def create_repo(self, repo: str) -> RepoResult:
+        """Create this harness's repository, or return the one that already exists.
+
+        The repository is a Python package in a subdirectory named ``repo``. There
+        is one per harness: asking again for the same name returns it unchanged,
+        and asking for another name is an error. Write modules into the returned
+        path with ordinary file tools, then call :meth:`load_repo`.
+
+        Args:
+            repo: Directory name, 1–64 letters, digits, underscores, or hyphens.
         """
         with self._lock:
             self._check_mutation()
-            registered, record = self._prepare_tool(
-                source,
-                kind=ToolKind(kind),
-                entrypoint=entrypoint,
-                name=name,
-                description=description,
-                files=files,
-            )
-            if record.name in self._sources or record.name in self._base_names:
-                raise ValueError(f"Tool {record.name!r} already exists; use update_tool or load_tool")
-            self._sources[record.name] = record
-            self._dynamic[record.name] = registered
-            self._publish(record.name)
-            return {"name": record.name, "status": "loaded"}
+            validate_repo_name(repo)
+            self._adopt_existing()
+            if self._repo is not None and self._repo != repo:
+                raise ValueError(f"This session already has the repository {self._repo!r}; keep using it")
+            path = self._directory / repo
+            existed = (path / INIT_FILE).is_file()
+            if not existed:
+                path.mkdir(parents=True, exist_ok=True)
+                (path / INIT_FILE).write_text(SKELETON, encoding="utf-8")
+            self._repo = repo
+            return self._result(None if existed else "created")
 
-    def update_tool(
-        self,
-        name: str,
-        source: str | None = None,
-        *,
-        entrypoint: str | None = None,
-        description: str | None = None,
-        files: Mapping[str, str] | None = None,
-        remove: Sequence[str] = (),
-    ) -> ToolMutationResult:
-        """Atomically replace or extend one dynamic tool; preserve its unload state.
+    def _load(self) -> None:
+        """Make the repository's tools current and list its notes.
 
-        The existing kind is preserved; text updates need replacement source and
-        may replace the description. Python updates may omit source and
-        entrypoint to keep them, replace or add package files, and delete files
-        by path. Everything the call provides is validated and compiled as one
-        new version, so a failed load retains the previous definition and a
-        multi-file refactor is applied at once. Executions already started keep
-        their original implementation; later calls use the new one.
-        Returns only the name and resulting state, not metadata or profiling.
+        The files are checked first, so a bad one fails the call before anything
+        changes. When no Python source differs from what is imported, nothing is
+        imported again: the modules are resident, and importing them would only run
+        their bodies a second time. Otherwise the new package is imported before
+        anything changes, so a failure keeps the previous version registered. Module
+        bodies run with ``_compiling`` set, which stops them from mutating the
+        harness or dispatching tools.
         """
-        with self._lock:
-            self._check_mutation()
-            self._known(name)
-            if name not in self._sources:
-                raise ValueError("Only dynamic tools can be updated")
-            previous = self._sources[name]
-            if isinstance(previous, TextToolSource):
-                if files is not None or remove:
-                    raise ValueError("Text tools have a single document, not a package")
-                if source is None:
-                    raise ValueError("Text tools require replacement source")
-                registered, record = self._prepare_tool(
-                    source,
-                    kind=ToolKind.TEXT,
-                    entrypoint=entrypoint,
-                    name=name,
-                    description=description if description is not None else previous.description,
-                )
-            else:
-                if source is None and files is None and not remove:
-                    raise ValueError("Python updates need source, files, or remove")
-                updated = dict(previous.files)
-                for path in remove:
-                    _validate_file_path(path)
-                    if path not in updated:
-                        raise ValueError(f"Unknown package file: {path}")
-                    del updated[path]
-                updated.update(files or {})
-                registered, record = self._prepare_tool(
-                    previous.source if source is None else source,
-                    kind=ToolKind.PYTHON,
-                    entrypoint=previous.entrypoint if entrypoint is None else entrypoint,
-                    name=None,
-                    description=description,
-                    files=updated,
-                )
-            if record.name != name:
-                raise ValueError("update_tool cannot rename a tool")
-            self._sources[name] = record
-            self._dynamic[name] = registered
+        assert self._repo is not None
+        directory = self._directory / self._repo
+        scan = scan_repo(directory)
+        self._resources = scan.resources
+        if self._loaded is not None and self._loaded.fingerprint == scan.fingerprint:
+            self._reveal()
+            return
+        self._compiling = True
+        try:
+            loaded = load_repo(directory, self, scan)
+        finally:
+            self._compiling = False
+        clash = sorted(loaded.tools.keys() & self._base_names)
+        if clash:
+            loaded.close()
+            raise ValueError(f"Tool {clash[0]!r} is already an application tool; choose another name")
+        previous, previous_names = self._loaded, set(self._dynamic)
+        self._loaded = loaded
+        self._dynamic = dict(loaded.tools)
+        self._kinds = dict.fromkeys(loaded.tools, ToolOrigin.PYTHON)
+        # A fresh version starts loaded, whatever state the old one was in.
+        self._hidden = False
+        self._unloaded -= previous_names | self._dynamic.keys()
+        context = self._context
+        if context is not None:
+            for name in previous_names - self._dynamic.keys():
+                context.tools.pop(name, None)
+            for name in self._dynamic:
+                self._publish(name)
+        if previous is not None:
+            previous.close()
+
+    def _reveal(self) -> None:
+        """Make every tool of the loaded version callable again, importing nothing."""
+        revived = set(self._dynamic) if self._hidden else self._unloaded & self._dynamic.keys()
+        self._hidden = False
+        self._unloaded -= revived
+        for name in revived:
             self._publish(name)
-            return {"name": name, "status": "unloaded" if name in self._unloaded else "loaded"}
+
+    def load_repo(self) -> RepoResult:
+        """Load the repository, or confirm it is loaded, and list what it provides.
+
+        Safe to call at any time. The answer always names the tools and describes the
+        Markdown notes under ``resources/`` (name, kind, description, path); the notes
+        are files the model reads itself, so none of them becomes a tool.
+
+        * **Not loaded yet**: every module below the package root is imported and each
+          top-level ``@tool`` is registered.
+        * **Loaded and no Python source changed**: nothing is imported again. Tools
+          that were hidden by :meth:`unload_repo` or :meth:`unload_tool` are made
+          callable, so calling it twice leaves the same state as calling it once.
+        * **Loaded and a source changed**: the whole package is imported afresh and
+          replaces the previous version in one step. Changes are found by content, so
+          even an edit of the same length is seen.
+
+        A failure leaves the previous version in place and raises a ``ValueError``
+        naming the file and line. Module bodies run with the application's
+        privileges; their side effects cannot be rolled back.
+        """
+        with self._lock:
+            self._check_mutation()
+            if self._repo is None:
+                raise ValueError("Create the repository first with repo_create")
+            self._load()
+            return self._result()
+
+    def unload_repo(self) -> RepoResult:
+        """Hide every tool of the repository; the files stay on disk.
+
+        Calling a hidden tool is rejected. :meth:`load_repo` restores them without
+        importing anything again, unless a Python file changed meanwhile. The notes
+        are files, so they stay listed.
+        """
+        with self._lock:
+            self._check_mutation()
+            if self._repo is None:
+                raise ValueError("Create the repository first with repo_create")
+            self._unloaded.update(self._dynamic)
+            self._hidden = True
+            for name in self._dynamic:
+                self._publish(name)
+            return self._result("unloaded")
+
+    def close(self) -> None:
+        """Remove the repository's modules and import hook from the interpreter.
+
+        The files stay on disk. The harness can load them again afterwards.
+        """
+        with self._lock:
+            if self._loaded is not None:
+                self._loaded.close()
+                self._loaded = None
 
     def unload_tool(self, name: str) -> ToolMutationResult:
         """Unload a callable registration while retaining its available implementation.
 
-        Dynamic source is retained; base implementations are rebound per request.
-        Requires manage_base_tools=True for base tools. The resulting state is
-        serialized as ``unloaded``; load_tool() restores a bound tool.
+        Dynamic tools stay imported; base implementations are rebound per request.
+        Requires manage_base_tools=True for base tools. :meth:`load_tool` restores
+        a bound tool, and :meth:`unload_repo` hides every repository tool at once.
         """
         with self._lock:
             self._check_mutation()
@@ -627,13 +693,13 @@ class JITHarness:
         never repeats source or call history.
         """
         with self._lock:
-            return [self.describe(name) for name in sorted(self._base_names | self._sources.keys())]
+            return [self.describe(name) for name in sorted(self._base_names | self._kinds.keys())]
 
     def describe(self, name: str) -> ToolCatalogEntry:
         """Return one tool's compact catalog entry.
 
         Holds the name, origin, status, and description, without measurements.
-        Read inspect_tool() for schema and source, or profile() for statistics.
+        Read profile() for statistics.
         """
         with self._lock:
             self._known(name)
@@ -650,73 +716,93 @@ class JITHarness:
                 "description": registered.description if registered is not None else "",
             }
 
-    def definition(self, name: str) -> ToolInspection:
-        """Read metadata and the argument schema, without source or measurements."""
-        with self._lock:
-            info: ToolInspection = {**self.describe(name)}
-            registered = self._dynamic.get(name) or self._bases.get(name)
-            if registered is not None:
-                info["parameters"] = deepcopy(registered.parameters)
-                info["guidelines"] = list(registered.guidelines)
-            source = self._sources.get(name)
-            if isinstance(source, PythonToolSource):
-                info["entrypoint"] = source.entrypoint
-                if source.files:
-                    # A Python tool is a package whose entry point is __init__.
-                    sizes = {path: len(text) for path, text in sorted(source.files.items())}
-                    info["files"] = {_ENTRYPOINT_FILE: len(source.source), **sizes}
-            return info
-
-    def source(self, name: str, path: str | None = None) -> str:
-        """Read exact retained source of one tool file; base tools have none.
-
-        ``path`` selects an extra module of a Python tool package, and the
-        default or ``__init__.py`` reads the entry point module. Text tools,
-        which have a single document, reject a path.
-        """
-        with self._lock:
-            self._known(name)
-            record = self._sources.get(name)
-            if record is None:
-                raise ValueError(f"Base tool {name!r} has no retained Python source")
-            if isinstance(record, TextToolSource):
-                if path is not None:
-                    raise ValueError("Text tools hold a single document, not a package")
-                return record.source
-            if path is None or path == _ENTRYPOINT_FILE:
-                return record.source
-            _validate_file_path(path)
-            try:
-                return record.files[path]
-            except KeyError:
-                raise ValueError(f"Unknown package file: {path}") from None
-
-    def inspect_tool(self, name: str) -> ToolInspection:
-        """Return metadata, schema, guidelines, and retained source.
-
-        This is the detailed application view: the compact entry from
-        :meth:`describe` plus the argument schema, guidelines, and source.
-        Measurements stay separate: read :meth:`profile_stats` for aggregates
-        and :meth:`profile` for individual call records.
-        """
-        with self._lock:
-            self._known(name)
-            info: ToolInspection = {**self.definition(name)}
-            if name in self._sources:
-                info["source"] = self.source(name)
-            return info
-
     def profile(self, name: str | None = None, *, offset: int = 0, limit: int = 100) -> JITHarnessProfile:
         """Read aggregate counters and a page of finished, payload-free calls.
 
         All managed dispatch attempts through harness wrappers are counted, including
         nested calls, validation failures, and cancellations. Middleware and
         lifecycle hooks run outside this measured boundary. Histories remain
-        in this harness across requests/updates/unload, bounded by call_capacity,
-        but are not restored from executable snapshots. Base calls are excluded when
+        in this harness across requests/reloads/unload, bounded by call_capacity,
+        and are not written to disk. Base calls are excluded when
         manage_base_tools=False. Export with profile().model_dump_json().
         """
         return self._profiler.report(name, offset, limit)
+
+    def profile_tools(self, names: Sequence[str] | None = None) -> ToolStatsReport:
+        """Summarize how tools are doing, in a size a model can read at once.
+
+        Any tool can be asked about by name, an application tool as well as one the
+        model wrote: ``names`` lists them, and the answer has one row for each in the
+        order given, with up to three recent distinct errors, which is where to look
+        before fixing a tool. A tool that was never called gets a row of zeros, so
+        "unused" is an answer too. At most :data:`MAX_PROFILE_NAMES` names are taken.
+
+        Without ``names`` the answer is an overview: every tool of the repository,
+        called or not, and every application tool that has been called, most called
+        first, one recent error each, and at most :data:`MAX_PROFILE_ROWS` rows with
+        ``omitted`` counting the rest. The management tools are never measured.
+
+        Application tools are measured only with ``manage_base_tools=True``; with it
+        off they have no numbers, so asking for one is an error instead of a row of
+        zeros that would read as "never used". This is a view of :meth:`profile` and
+        :meth:`tool_errors`, which keep the full measurements.
+
+        Args:
+            names: Tools to look at, or None for the overview.
+
+        Raises:
+            ValueError: If a name is unknown, is a management tool, is an application
+                tool while base management is off, or if there are too many names.
+        """
+        explicit = names is not None
+        with self._lock:
+            known = self._base_names | self._kinds.keys()
+            if names is None:
+                wanted = sorted(known)
+            else:
+                wanted = list(dict.fromkeys(names))
+                if not wanted or len(wanted) > MAX_PROFILE_NAMES:
+                    raise ValueError(f"Name between 1 and {MAX_PROFILE_NAMES} tools")
+                unknown = [item for item in wanted if item not in known]
+                if unknown:
+                    raise ValueError(f"Unknown tool: {', '.join(unknown)} (the repo_* tools are not measured)")
+                if not self.manage_base_tools:
+                    unmeasured = [item for item in wanted if item not in self._kinds]
+                    if unmeasured:
+                        raise ValueError(
+                            f"Application tools are not measured here: {', '.join(unmeasured)} "
+                            "(base tool management is off)"
+                        )
+            catalog = {item: self.describe(item) for item in wanted}
+        rows: list[ToolStatsRow] = []
+        for tool_name in wanted:
+            entry = catalog[tool_name]
+            stats = self._profiler.summary(tool_name)
+            if not explicit and entry["origin"] is ToolOrigin.BASE and stats.call_count == 0:
+                continue
+            finished = stats.completed_count + stats.failed_count
+            errors = self._profiler.errors(tool_name, 0, 3 if explicit else 1).errors
+            rows.append(
+                {
+                    "name": tool_name,
+                    "origin": entry["origin"],
+                    "status": entry["status"],
+                    "calls": stats.call_count,
+                    "success_rate": round(stats.completed_count / finished, 3) if finished else None,
+                    "failed": stats.failed_count,
+                    "avg_ms": round(stats.average_duration_ms, 1) if stats.average_duration_ms is not None else None,
+                    "avg_output_chars": (
+                        round(stats.average_output_chars) if stats.average_output_chars is not None else None
+                    ),
+                    "recent_errors": [
+                        f"{record.error_type}: {(record.message or '')[:PROFILE_ERROR_CHARS]}" for record in errors
+                    ],
+                }
+            )
+        if explicit:
+            return {"tools": rows, "omitted": 0}
+        rows.sort(key=lambda row: (-row["calls"], row["name"]))
+        return {"tools": rows[:MAX_PROFILE_ROWS], "omitted": max(0, len(rows) - MAX_PROFILE_ROWS)}
 
     def profile_stats(self, name: str) -> ToolProfileStats:
         """Read a tool's full aggregates without fetching its call records."""
@@ -731,35 +817,9 @@ class JITHarness:
         Lifetime profiling counters survive eviction; occurrence counts cover
         only cache residence. Cancelled dispatches are not tool errors.
         Error messages may contain sensitive data or untrusted instructions.
-        This read never triggers retries, source updates, or snapshot writes.
+        This read never triggers retries or source updates.
         """
         return self._profiler.errors(name, offset, limit)
-
-    def snapshot(self) -> JITHarnessSnapshot:
-        """Copy Python/text definitions and unload state, not runtime globals."""
-        with self._lock:
-            tools = tuple(
-                record.model_copy(deep=True)
-                for _, record in sorted(self._sources.items())
-                if isinstance(record, PythonToolSource)
-            )
-            return JITHarnessSnapshot(
-                # Only a package needs the newer reader; single-file snapshots stay
-                # byte-compatible with earlier releases.
-                format_version=2 if any(record.files for record in tools) else 1,
-                tools=tools,
-                text_tools=tuple(
-                    record.model_copy(deep=True)
-                    for _, record in sorted(self._sources.items())
-                    if isinstance(record, TextToolSource)
-                ),
-                base_tools=tuple(sorted(self._base_names)),
-                unloaded_tools=tuple(sorted(self._unloaded)),
-            )
-
-    def save(self, path: str | Path) -> None:
-        """Export the current snapshot to an explicit, atomically replaced file."""
-        self.snapshot().save(path)
 
     async def call_tool(self, name: str, **arguments: Any) -> ToolResult:
         """Call a loaded tool through checks, hooks, and handler middleware.

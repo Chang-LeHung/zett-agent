@@ -14,7 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from ..messages import ImageContent, TextContent
 from .enums import ToolCallStatus, ToolOrigin
 from .errors import ToolErrorCache, ToolErrorReport
-from .pages import MAX_MEASURED_CHARS
+
+#: Character measurements stop here: past it, extra precision costs dispatch time without changing
+#: a decision, and a reported value equal to this limit means "at least this many".
+MAX_MEASURED_CHARS = 8000
 
 #: Finished call records kept per harness, oldest dropped first. Totals survive
 #: eviction, so frequent tools still report lifetime aggregates.

@@ -42,7 +42,7 @@ class AnthropicServerToolExtension(ServerToolExtension):
             ])
     """
 
-    default_server_tools = (
+    default_server_tools: tuple[ServerToolDefinition, ...] = (
         ServerToolDefinition("web_search_20260318"),
         ServerToolDefinition("web_fetch_20260318"),
     )

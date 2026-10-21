@@ -11,7 +11,10 @@ from zett_agent.agent import (
 from zett_agent.extensions.base import AgentExtension
 from zett_agent.extensions.server_tools.anthropic import AnthropicServerToolExtension
 from zett_agent.extensions.server_tools.base import ServerToolExtension
-from zett_agent.extensions.server_tools.deepseek import DeepSeekServerToolExtension
+from zett_agent.extensions.server_tools.deepseek import (
+    DeepSeekMessagesServerToolExtension,
+    DeepSeekServerToolExtension,
+)
 from zett_agent.extensions.server_tools.google import GoogleServerToolExtension
 from zett_agent.extensions.server_tools.openai import OpenAIServerToolExtension
 from zett_agent.extensions.server_tools.openrouter import OpenRouterServerToolExtension
@@ -38,6 +41,7 @@ class RecordingModel:
     [
         (OpenAIServerToolExtension(), "web_search", {}),
         (DeepSeekServerToolExtension(), "web_search", {}),
+        (DeepSeekMessagesServerToolExtension(), "web_search_20250305", {"name": "web_search"}),
         (
             GoogleServerToolExtension(),
             ("google_search", "url_context"),

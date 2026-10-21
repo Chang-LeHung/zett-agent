@@ -52,6 +52,9 @@ Choose the extension that matches the endpoint
    * - :class:`~zett_agent.extensions.server_tools.xai.XAIServerToolExtension`
      - ``web_search`` + ``x_search``
      - xAI Responses API; not legacy Chat Completions.
+   * - :class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekMessagesServerToolExtension`
+     - ``web_search_20250305``
+     - DeepSeek Anthropic Messages endpoint; verified only on a gateway in front of ``deepseek-flash``.
 
 OpenAIProvider, DeepSeekProvider and XAIProvider use Chat Completions by default.
 Construct any of them with ``response=True`` to use its Responses endpoint and enable
@@ -71,6 +74,15 @@ tool types still depend on the selected provider endpoint and model.
 OpenAI, DeepSeek and xAI publish no separate ``web_fetch`` type. Their hosted
 web-search workflow retrieves relevant pages itself. The defaults intentionally
 use documented types instead of sending an invented fetch discriminator.
+
+On the Messages protocol the server tool type is a versioned string, and an endpoint
+that does not know a version treats it as an ordinary client tool: the model calls it,
+nothing runs it, and the model reports an "Unknown tool" error. The gateway tried in
+front of ``deepseek-flash`` ran ``web_search_20250305`` on the server and treated
+``web_search_20260318`` as a client tool, so
+:class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekMessagesServerToolExtension`
+declares the first. DeepSeek's own documentation does not list that type, so test it
+on your endpoint before relying on it.
 
 Allow protocol evolution
 -----------------------------

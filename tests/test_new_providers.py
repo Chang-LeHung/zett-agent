@@ -421,3 +421,17 @@ async def test_an_auth_failure_is_reported_as_one_by_a_new_provider():
     provider = XAIProvider(model="grok-4.7", api_key="k", transport=httpx.MockTransport(handler))
     with pytest.raises(ProviderAuthError):
         await run(provider)
+
+
+async def test_deepseek_messages_declares_a_web_search_the_endpoint_runs_itself():
+    from zett_agent.extensions.server_tools import DeepSeekMessagesServerToolExtension
+    from zett_agent.model import ServerToolDefinition
+    from zett_agent.providers import DeepSeekAnthropicProvider
+
+    default = DeepSeekMessagesServerToolExtension().server_tools
+    capped = DeepSeekMessagesServerToolExtension([ServerToolDefinition("web_search_20250305", {"max_uses": 3})])
+    wire = Wire(answer("hi"))
+    provider = DeepSeekAnthropicProvider("deepseek-flash", "k", wire.transport)
+    await run(provider, server_tools=default)
+    assert wire.sent()["tools"] == [{"type": "web_search_20250305", "name": "web_search"}]
+    assert capped.server_tools[0].configuration == {"max_uses": 3, "name": "web_search"}

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-21 10:33+0800\n"
+"POT-Creation-Date: 2026-10-21 22:54+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -116,31 +116,47 @@ msgstr "``web_search`` + ``x_search``"
 msgid "xAI Responses API; not legacy Chat Completions."
 msgstr "xAI Responses API；而非旧版的 Chat Completions。"
 
+#: ../../extending/server-tools.rst:55
+msgid ":class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekMessagesServerToolExtension`"
+msgstr ":class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekMessagesServerToolExtension`"
+
 #: ../../extending/server-tools.rst:56
+msgid "``web_search_20250305``"
+msgstr "``web_search_20250305``"
+
+#: ../../extending/server-tools.rst:57
+msgid "DeepSeek Anthropic Messages endpoint; verified only on a gateway in front of ``deepseek-flash``."
+msgstr "DeepSeek Anthropic Messages 端点；仅在 ``deepseek-flash`` 前面的一个网关上验证过。"
+
+#: ../../extending/server-tools.rst:59
 msgid "OpenAIProvider, DeepSeekProvider and XAIProvider use Chat Completions by default. Construct any of them with ``response=True`` to use its Responses endpoint and enable its hosted tools explicitly::"
 msgstr "OpenAIProvider、DeepSeekProvider 和 XAIProvider 默认使用 Chat Completions。用 ``response=True``\\ 构造其中任何一个，即可改用它的 Responses 端点，并显式启用其托管工具::"
 
-#: ../../extending/server-tools.rst:66
+#: ../../extending/server-tools.rst:69
 msgid "The Responses adapter sends complete history on every request. It preserves provider output items for later function-result turns and maps hosted-tool start/completion records into the common server-tool event lifecycle. Available tool types still depend on the selected provider endpoint and model."
 msgstr "Responses 适配器在每次请求时都会发送完整的历史记录。它会保留模型提供商的输出项，供之后的函数结果轮次使用，并把托管工具的启动/完成记录映射到通用的服务端工具事件生命周期中。可用的工具类型仍取决于所选的提供商端点与模型。"
 
-#: ../../extending/server-tools.rst:71
+#: ../../extending/server-tools.rst:74
 msgid "OpenAI, DeepSeek and xAI publish no separate ``web_fetch`` type. Their hosted web-search workflow retrieves relevant pages itself. The defaults intentionally use documented types instead of sending an invented fetch discriminator."
 msgstr "OpenAI、DeepSeek 和 xAI 没有单独发布 ``web_fetch``\\ 类型。它们托管的网页搜索工作流会自行抓取相关页面。默认值有意使用官方文档中的类型，而不是发送一个自造的 fetch 区分标识。"
 
-#: ../../extending/server-tools.rst:76
+#: ../../extending/server-tools.rst:78
+msgid "On the Messages protocol the server tool type is a versioned string, and an endpoint that does not know a version treats it as an ordinary client tool: the model calls it, nothing runs it, and the model reports an \"Unknown tool\" error. The gateway tried in front of ``deepseek-flash`` ran ``web_search_20250305`` on the server and treated ``web_search_20260318`` as a client tool, so :class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekMessagesServerToolExtension` declares the first. DeepSeek's own documentation does not list that type, so test it on your endpoint before relying on it."
+msgstr "在 Messages 协议上，服务端工具的类型是带版本的字符串；端点如果不认识某个版本，就会把它当成普通的客户端工具：模型发起调用，却没有任何东西执行它，模型随后报告“Unknown tool”错误。在 ``deepseek-flash`` 前面试用的那个网关会在服务端执行 ``web_search_20250305``，而把 ``web_search_20260318`` 当成客户端工具，因此 :class:`~zett_agent.extensions.server_tools.deepseek.DeepSeekMessagesServerToolExtension`\\ 声明的是前者。DeepSeek 自己的文档没有列出这个类型，所以依赖它之前请先在你的端点上测试。"
+
+#: ../../extending/server-tools.rst:88
 msgid "Allow protocol evolution"
 msgstr "允许协议演进"
 
-#: ../../extending/server-tools.rst:78
+#: ../../extending/server-tools.rst:90
 msgid "Tool types are open strings and configurations are opaque mappings. New provider versions therefore do not require a zett-agent enum update::"
 msgstr "工具类型是开放的字符串，配置则是不透明的映射。因此新的提供商版本不需要更新 zett-agent 的枚举::"
 
-#: ../../extending/server-tools.rst:95
+#: ../../extending/server-tools.rst:107
 msgid "The provider remains responsible for model compatibility and field validation. Duplicate types in one request are rejected before network I/O because their ordering would otherwise make the active configuration ambiguous."
 msgstr "模型兼容性和字段校验仍由提供商负责。同一次请求中出现重复的类型时，会在网络 I/O 之前就被拒绝，否则它们的顺序会让当前生效的配置变得有歧义。"
 
-#: ../../extending/server-tools.rst:99
+#: ../../extending/server-tools.rst:111
 msgid "When none of the tools needs configuration, pass their type strings directly::"
 msgstr "当所有工具都不需要配置时，直接传入它们的类型字符串::"
 

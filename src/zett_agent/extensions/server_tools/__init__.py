@@ -12,7 +12,7 @@ from ..._lazy import lazy_exports as _lazy_exports
 _MODULES = {
     "anthropic": ("AnthropicServerToolExtension",),
     "base": ("ServerToolExtension",),
-    "deepseek": ("DeepSeekServerToolExtension",),
+    "deepseek": ("DeepSeekMessagesServerToolExtension", "DeepSeekServerToolExtension"),
     "google": ("GoogleServerToolExtension",),
     "openai": ("OpenAIServerToolExtension",),
     "openrouter": ("OpenRouterServerToolExtension",),
@@ -26,6 +26,7 @@ __getattr__, __dir__ = _lazy_exports(__name__, _EXPORTS)
 if _TYPE_CHECKING:
     from .anthropic import AnthropicServerToolExtension as AnthropicServerToolExtension
     from .base import ServerToolExtension as ServerToolExtension
+    from .deepseek import DeepSeekMessagesServerToolExtension as DeepSeekMessagesServerToolExtension
     from .deepseek import DeepSeekServerToolExtension as DeepSeekServerToolExtension
     from .google import GoogleServerToolExtension as GoogleServerToolExtension
     from .openai import OpenAIServerToolExtension as OpenAIServerToolExtension

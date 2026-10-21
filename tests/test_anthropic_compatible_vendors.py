@@ -122,7 +122,8 @@ async def test_a_compatible_endpoint_works_with_nothing_but_a_base_url():
     assert request.headers["x-api-key"] == "k" and "authorization" not in request.headers
     body = wire.sent()
     assert "cache_control" not in json.dumps(body) and "tools" not in body  # nothing unasked-for
-    assert body["thinking"]["type"] == "enabled"  # the Anthropic default for hooks not overridden
+    assert body["thinking"] == {"type": "adaptive"}  # the Anthropic default for hooks not overridden
+    assert body["output_config"] == {"effort": "medium"}
     assert response.message.content == "hi" and response.message.provider == "anthropic"
     assert (response.usage.input_tokens, response.usage.output_tokens) == (3, 2)
 
@@ -283,6 +284,36 @@ async def test_system_prompts_are_joined_and_tools_are_left_out_when_there_are_n
 
     body = wire.sent()
     assert body["system"] == "one\n\ntwo" and "tools" not in body
+
+
+# -------------------------------------------------------------------------------------- Anthropic
+
+
+@pytest.mark.parametrize(
+    ("effort", "fields"),
+    [
+        (ReasoningEffort.OFF, {"thinking": {"type": "disabled"}}),
+        (ReasoningEffort.MINIMAL, "low"),
+        (ReasoningEffort.LOW, "low"),
+        (ReasoningEffort.MEDIUM, "medium"),
+        (ReasoningEffort.HIGH, "high"),
+        (ReasoningEffort.XHIGH, "xhigh"),
+        (ReasoningEffort.MAX, "max"),
+        (ReasoningEffort.ULTRA, "max"),
+    ],
+)
+def test_anthropic_sends_adaptive_thinking_with_an_effort_and_no_budget(effort, fields):
+    expected = (
+        fields if isinstance(fields, dict) else {"thinking": {"type": "adaptive"}, "output_config": {"effort": fields}}
+    )
+    provider = AnthropicProvider("claude", "k")
+    assert provider.request_fields(ModelRequest(HELLO, reasoning_effort=effort)) == expected
+
+
+def test_anthropic_disables_thinking_under_a_forced_tool_choice():
+    provider = AnthropicProvider("claude", "k")
+    request = ModelRequest(HELLO, reasoning_effort=ReasoningEffort.HIGH, tool_choice="extract")
+    assert provider.request_fields(request) == {"thinking": {"type": "disabled"}}
 
 
 # --------------------------------------------------------------------------------------- DeepSeek

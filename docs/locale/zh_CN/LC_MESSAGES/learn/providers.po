@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-16 23:17+0800\n"
+"POT-Creation-Date: 2026-10-21 10:33+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -30,7 +30,7 @@ msgid ""
 "does not touch the rest of your code."
 msgstr "所有适配器都实现同一套协议，因此替换其中一个适配器不会影响代码的其他部分。"
 
-#: ../../learn/providers.rst:14
+#: ../../learn/providers.rst:14 ../../learn/providers.rst:314
 msgid "Adapter"
 msgstr "适配器"
 
@@ -53,7 +53,9 @@ msgstr "OpenAI Chat Completions 或 Responses"
 #: ../../learn/providers.rst:19 ../../learn/providers.rst:22
 #: ../../learn/providers.rst:25 ../../learn/providers.rst:28
 #: ../../learn/providers.rst:34 ../../learn/providers.rst:37
-#: ../../learn/providers.rst:43
+#: ../../learn/providers.rst:40 ../../learn/providers.rst:43
+#: ../../learn/providers.rst:46 ../../learn/providers.rst:49
+#: ../../learn/providers.rst:52 ../../learn/providers.rst:58
 msgid "Model name and API key"
 msgstr "模型名称和 API 密钥"
 
@@ -110,52 +112,106 @@ msgid "GLM (Z.ai) Chat Completions"
 msgstr "GLM（智谱 Z.ai）Chat Completions"
 
 #: ../../learn/providers.rst:38
+msgid ":class:`~zett_agent.providers.xai.XAIProvider`"
+msgstr ":class:`~zett_agent.providers.xai.XAIProvider`"
+
+#: ../../learn/providers.rst:39
+msgid "xAI (Grok) Chat Completions or Responses"
+msgstr "xAI（Grok）Chat Completions 或 Responses"
+
+#: ../../learn/providers.rst:41
+msgid ":class:`~zett_agent.providers.minimax.MiniMaxProvider`"
+msgstr ":class:`~zett_agent.providers.minimax.MiniMaxProvider`"
+
+#: ../../learn/providers.rst:42
+msgid "MiniMax Chat Completions"
+msgstr "MiniMax Chat Completions"
+
+#: ../../learn/providers.rst:44
+msgid ":class:`~zett_agent.providers.mistral.MistralProvider`"
+msgstr ":class:`~zett_agent.providers.mistral.MistralProvider`"
+
+#: ../../learn/providers.rst:45
+msgid "Mistral AI Chat Completions"
+msgstr "Mistral AI Chat Completions"
+
+#: ../../learn/providers.rst:47
+msgid ""
+":class:`~zett_agent.providers.groq.GroqProvider`, "
+":class:`~zett_agent.providers.cerebras.CerebrasProvider`"
+msgstr ""
+":class:`~zett_agent.providers.groq.GroqProvider`、 "
+":class:`~zett_agent.providers.cerebras.CerebrasProvider`"
+
+#: ../../learn/providers.rst:48
+msgid "Groq and Cerebras Chat Completions"
+msgstr "Groq 与 Cerebras 的 Chat Completions"
+
+#: ../../learn/providers.rst:50
+msgid ""
+":class:`~zett_agent.providers.hosts.TogetherProvider`, "
+":class:`~zett_agent.providers.hosts.FireworksProvider`, "
+":class:`~zett_agent.providers.hosts.SiliconFlowProvider`, "
+":class:`~zett_agent.providers.hosts.DeepInfraProvider`"
+msgstr ""
+":class:`~zett_agent.providers.hosts.TogetherProvider`、 "
+":class:`~zett_agent.providers.hosts.FireworksProvider`、 "
+":class:`~zett_agent.providers.hosts.SiliconFlowProvider`、 "
+":class:`~zett_agent.providers.hosts.DeepInfraProvider`"
+
+#: ../../learn/providers.rst:51
+msgid "Together AI, Fireworks AI, SiliconFlow and DeepInfra Chat Completions"
+msgstr "Together AI、Fireworks AI、SiliconFlow 与 DeepInfra 的 Chat Completions"
+
+#: ../../learn/providers.rst:53
 msgid ":class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`"
 msgstr ":class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`"
 
-#: ../../learn/providers.rst:39
+#: ../../learn/providers.rst:54
 msgid "Any service that speaks Chat Completions, with no vendor assumptions"
 msgstr "任何支持 Chat Completions 的服务，不带任何厂商假设"
 
-#: ../../learn/providers.rst:40 ../../learn/providers.rst:46
+#: ../../learn/providers.rst:55 ../../learn/providers.rst:61
 msgid "Model name, API key, and ``base_url``"
 msgstr "模型名称、API 密钥和 ``base_url``"
 
-#: ../../learn/providers.rst:41
+#: ../../learn/providers.rst:56
 msgid ""
 ":class:`~zett_agent.providers.deepseek.DeepSeekAnthropicProvider`, "
 ":class:`~zett_agent.providers.kimi.KimiAnthropicProvider`, "
-":class:`~zett_agent.providers.glm.GLMAnthropicProvider`"
+":class:`~zett_agent.providers.glm.GLMAnthropicProvider`, "
+":class:`~zett_agent.providers.minimax.MiniMaxAnthropicProvider`"
 msgstr ""
 ":class:`~zett_agent.providers.deepseek.DeepSeekAnthropicProvider`、 "
 ":class:`~zett_agent.providers.kimi.KimiAnthropicProvider`、 "
-":class:`~zett_agent.providers.glm.GLMAnthropicProvider`"
+":class:`~zett_agent.providers.glm.GLMAnthropicProvider`、 "
+":class:`~zett_agent.providers.minimax.MiniMaxAnthropicProvider`"
 
-#: ../../learn/providers.rst:42
-msgid "The same three services over the Anthropic Messages protocol"
-msgstr "同样这三个服务，走 Anthropic Messages 协议"
+#: ../../learn/providers.rst:57
+msgid "The same four services over the Anthropic Messages protocol"
+msgstr "同样这四个服务，走 Anthropic Messages 协议"
 
-#: ../../learn/providers.rst:44
+#: ../../learn/providers.rst:59
 msgid ":class:`~zett_agent.providers.anthropic_compatible.AnthropicCompatibleProvider`"
 msgstr ":class:`~zett_agent.providers.anthropic_compatible.AnthropicCompatibleProvider`"
 
-#: ../../learn/providers.rst:45
+#: ../../learn/providers.rst:60
 msgid "Any service that speaks the Messages protocol, with no vendor assumptions"
 msgstr "任何支持 Messages 协议的服务，不带任何厂商假设"
 
-#: ../../learn/providers.rst:47
+#: ../../learn/providers.rst:62
 msgid ":class:`~zett_agent.providers.ollama.OllamaProvider`"
 msgstr ":class:`~zett_agent.providers.ollama.OllamaProvider`"
 
-#: ../../learn/providers.rst:48
+#: ../../learn/providers.rst:63
 msgid "A running Ollama server"
 msgstr "一个正在运行的 Ollama 服务器"
 
-#: ../../learn/providers.rst:49
+#: ../../learn/providers.rst:64
 msgid "Installed model (and server URL if not localhost)"
 msgstr "已安装的模型（非本地部署时还需提供服务器 URL）"
 
-#: ../../learn/providers.rst:51
+#: ../../learn/providers.rst:66
 msgid ""
 "The adapter normalizes messages, tools, and events, not the capabilities "
 "of every model. Pick an endpoint and model that support your workflow. In"
@@ -167,11 +223,11 @@ msgstr ""
 "适配器负责统一消息、工具和事件，但不统一每个模型的能力。请选择与你的工作流相匹配的端点和模型。尤其是，图像、可见推理、托管工具和工具搜索并非在所有端点上可用。本运行时不提供通用的"
 " ``response_format`` 或结构化最终输出设置；如果需要经过校验的数据，请使用带类型的工具，或在应用中校验最终答案。"
 
-#: ../../learn/providers.rst:59
+#: ../../learn/providers.rst:74
 msgid "Configure your chosen provider"
 msgstr "配置你选定的模型提供商"
 
-#: ../../learn/providers.rst:61
+#: ../../learn/providers.rst:76
 msgid ""
 "Read credentials and model names from your environment. Every tab creates"
 " a ``model`` you can pass to ``create_agent``; close it with ``await "
@@ -185,7 +241,7 @@ msgstr ""
 msgid "OpenAI"
 msgstr "OpenAI"
 
-#: ../../learn/providers.rst:81
+#: ../../learn/providers.rst:96
 msgid ""
 "``response=True`` selects the Responses API. Omit it for Chat Completions"
 " (the default). Choose a protocol supported by your endpoint; enabling "
@@ -198,7 +254,7 @@ msgstr ""
 msgid "Anthropic"
 msgstr "Anthropic"
 
-#: ../../learn/providers.rst:97
+#: ../../learn/providers.rst:112
 msgid "Uses the Messages API. ``response=True`` is not supported."
 msgstr "使用 Messages API。不支持 ``response=True``\\ 。"
 
@@ -206,7 +262,7 @@ msgstr "使用 Messages API。不支持 ``response=True``\\ 。"
 msgid "Google"
 msgstr "Google"
 
-#: ../../learn/providers.rst:111
+#: ../../learn/providers.rst:126
 msgid ""
 "Uses Google GenAI with an API key. ``base_url`` points it at a proxy or a"
 " local test server. The built-in constructor does not expose Vertex AI "
@@ -219,7 +275,7 @@ msgstr ""
 msgid "DeepSeek"
 msgstr "DeepSeek"
 
-#: ../../learn/providers.rst:127
+#: ../../learn/providers.rst:142
 msgid ""
 "Uses Chat Completions by default. ``response=True`` selects a Responses-"
 "compatible endpoint when your service supports it."
@@ -229,7 +285,7 @@ msgstr "默认使用 Chat Completions。当你的服务支持时，``response=Tr
 msgid "OpenRouter"
 msgstr "OpenRouter"
 
-#: ../../learn/providers.rst:144
+#: ../../learn/providers.rst:159
 msgid ""
 "``site_url`` and ``app_name`` are optional and identify your app to "
 "OpenRouter. Reasoning that a model returns in a form that cannot be shown"
@@ -243,7 +299,7 @@ msgstr ""
 msgid "Kimi"
 msgstr "Kimi"
 
-#: ../../learn/providers.rst:161
+#: ../../learn/providers.rst:176
 msgid ""
 "The default endpoint is ``https://api.moonshot.ai/v1``. An account on the"
 " China platform passes ``base_url=\"https://api.moonshot.cn/v1\"``; keys "
@@ -256,7 +312,7 @@ msgstr ""
 msgid "GLM"
 msgstr "GLM"
 
-#: ../../learn/providers.rst:177
+#: ../../learn/providers.rst:192
 msgid ""
 "The default endpoint is ``https://api.z.ai/api/paas/v4``. An account on "
 "the China platform passes "
@@ -268,10 +324,37 @@ msgstr ""
 "``tool_stream=True`` 会在工具调用的参数生成时就流式送出，而不是等到全部写完。"
 
 #: ../../learn/providers.rst
+msgid "xAI"
+msgstr "xAI"
+
+#: ../../learn/providers.rst:210
+msgid ""
+"xAI calls Chat Completions its legacy endpoint, and its hosted web and X "
+"search tools are on Responses, which ``response=True`` selects. The level"
+" is sent only to ``grok-4.5`` and later."
+msgstr ""
+"xAI 把 Chat Completions 称为其旧版端点，托管的网页搜索和 X 搜索工具只在 Responses 上提供，用 "
+"``response=True`` 即可选用。推理等级只会发送给 ``grok-4.5`` 及之后的模型。"
+
+#: ../../learn/providers.rst
+msgid "MiniMax"
+msgstr "MiniMax"
+
+#: ../../learn/providers.rst:226
+msgid ""
+"The default endpoint is ``https://api.minimax.io/v1``. An account on the "
+"China platform passes ``base_url=\"https://api.minimaxi.com/v1\"``. "
+"``MiniMaxAnthropicProvider`` is the same service over Messages."
+msgstr ""
+"默认端点是 ``https://api.minimax.io/v1``\\ 。中国站的账号请传入 "
+"``base_url=\"https://api.minimaxi.com/v1\"``\\ 。\\ ``MiniMaxAnthropicProvider`` "
+"是同一项服务的 Messages 版本。"
+
+#: ../../learn/providers.rst
 msgid "Ollama"
 msgstr "Ollama"
 
-#: ../../learn/providers.rst:194
+#: ../../learn/providers.rst:242
 msgid ""
 "Start Ollama and install the selected model separately. Construction does"
 " not start a server or download a model. No API key is required for a "
@@ -280,11 +363,11 @@ msgstr ""
 "请单独启动 Ollama 并安装所选模型。构造适配器不会启动服务器，也不会下载模型。本地服务无需 API 密钥；此适配器只使用 Ollama 的 "
 "chat 协议。"
 
-#: ../../learn/providers.rst:199
+#: ../../learn/providers.rst:247
 msgid "A complete tool-calling request"
 msgstr "一次完整的工具调用请求"
 
-#: ../../learn/providers.rst:201
+#: ../../learn/providers.rst:249
 msgid ""
 "This program makes a real network request and may incur charges. Export "
 "the variables in your shell rather than pasting keys into source or logs."
@@ -294,11 +377,11 @@ msgstr ""
 "这个程序会发起真实的网络请求，可能产生费用。请在 shell "
 "中导出环境变量，不要把密钥粘贴到源码或日志里。程序会注册一个加法工具、流式输出响应，并在请求失败时也关闭模型提供商。"
 
-#: ../../learn/providers.rst:210
+#: ../../learn/providers.rst:258
 msgid ":download:`Download real_provider.py <../_examples/real_provider.py>`."
 msgstr ":download:`下载 real_provider.py <../_examples/real_provider.py>`\\ 。"
 
-#: ../../learn/providers.rst:218
+#: ../../learn/providers.rst:266
 msgid ""
 "From an installed package, download the file and run ``python "
 "real_provider.py``. The exact wording and whether the model obeys the "
@@ -309,17 +392,17 @@ msgstr ""
 "。具体措辞以及模型是否遵循工具请求，取决于所选的模型。要确定性地验证相同的工具往返，请运行 :doc:`../examples"
 "/streaming-tools`\\ 。"
 
-#: ../../learn/providers.rst:224
+#: ../../learn/providers.rst:272
 msgid "Connect a compatible gateway"
 msgstr "连接兼容的网关"
 
-#: ../../learn/providers.rst:226
+#: ../../learn/providers.rst:274
 msgid ""
 "Use ``base_url`` for a service implementing an existing protocol instead "
 "of writing a new adapter:"
 msgstr "对于实现了现有协议的服务，请使用 ``base_url``，而不必编写新的适配器："
 
-#: ../../learn/providers.rst:238
+#: ../../learn/providers.rst:286
 msgid ""
 "The URL is the API root, for example a service's ``.../v1``, not its "
 "``.../chat/completions`` route. Match the protocol to the gateway. Some "
@@ -332,7 +415,7 @@ msgstr ""
 "路由。请让协议与网关匹配。有些网关会拒绝可选字段，比如 ``prompt_cache_key`` "
 "或某些推理级别；请只配置受支持的选项，并测试你的组合。适配器不会从端点 URL 自动探测模型能力。"
 
-#: ../../learn/providers.rst:244
+#: ../../learn/providers.rst:292
 msgid ""
 ":class:`~zett_agent.providers.openai.OpenAIProvider` speaks OpenAI's own "
 "dialect: it sends ``parallel_tool_calls`` and a top-level "
@@ -347,11 +430,220 @@ msgstr ""
 ":class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`，它只发送"
 " ``reasoning_effort``，并接受同样的 ``base_url``\\ 。"
 
-#: ../../learn/providers.rst:252
+#: ../../learn/providers.rst:300
+msgid "Services that need no adapter of their own"
+msgstr "无需专用适配器的服务"
+
+#: ../../learn/providers.rst:302
+msgid ""
+"These services speak a protocol the generic adapters already handle. Pass"
+" the root as ``base_url``; give a model its reasoning options in "
+"``extra_body``. The roots below were checked to answer on the network, "
+"not exercised with a chat request, so confirm the root, the model names, "
+"and the options in the service's own documentation before relying on "
+"them."
+msgstr ""
+"这些服务说的是通用适配器已经支持的协议。把根地址作为 ``base_url`` 传入，模型的推理选项放在 "
+"``extra_body`` 里。下表中的根地址只验证过网络上有应答，并没有用聊天请求实测过，因此依赖它们之前，"
+"请先对照服务自己的文档确认根地址、模型名称和选项。"
+
+#: ../../learn/providers.rst:312
+msgid "Service"
+msgstr "服务"
+
+#: ../../learn/providers.rst:313
+msgid "``base_url``"
+msgstr "``base_url``"
+
+#: ../../learn/providers.rst:315
+msgid "Alibaba Cloud Model Studio (Qwen, international)"
+msgstr "阿里云百炼（通义千问，国际站）"
+
+#: ../../learn/providers.rst:316
+msgid "``https://dashscope-intl.aliyuncs.com/compatible-mode/v1``"
+msgstr "``https://dashscope-intl.aliyuncs.com/compatible-mode/v1``"
+
+#: ../../learn/providers.rst:317 ../../learn/providers.rst:323
+#: ../../learn/providers.rst:329 ../../learn/providers.rst:332
+#: ../../learn/providers.rst:335 ../../learn/providers.rst:341
+#: ../../learn/providers.rst:344 ../../learn/providers.rst:347
+#: ../../learn/providers.rst:350 ../../learn/providers.rst:353
+#: ../../learn/providers.rst:356 ../../learn/providers.rst:359
+#: ../../learn/providers.rst:362 ../../learn/providers.rst:365
+msgid "``OpenAICompatibleProvider``"
+msgstr "``OpenAICompatibleProvider``"
+
+#: ../../learn/providers.rst:318
+msgid "Alibaba Cloud Model Studio (Messages)"
+msgstr "阿里云百炼（Messages）"
+
+#: ../../learn/providers.rst:319
+msgid "``https://dashscope-intl.aliyuncs.com/apps/anthropic``"
+msgstr "``https://dashscope-intl.aliyuncs.com/apps/anthropic``"
+
+#: ../../learn/providers.rst:320 ../../learn/providers.rst:326
+#: ../../learn/providers.rst:338
+msgid "``AnthropicCompatibleProvider``"
+msgstr "``AnthropicCompatibleProvider``"
+
+#: ../../learn/providers.rst:321
+msgid "ByteDance Volcengine Ark"
+msgstr "字节跳动火山方舟"
+
+#: ../../learn/providers.rst:322
+msgid "``https://ark.cn-beijing.volces.com/api/v3``"
+msgstr "``https://ark.cn-beijing.volces.com/api/v3``"
+
+#: ../../learn/providers.rst:324
+msgid "ByteDance Volcengine Ark (Messages)"
+msgstr "字节跳动火山方舟（Messages）"
+
+#: ../../learn/providers.rst:325
+msgid "``https://ark.cn-beijing.volces.com/api/compatible``"
+msgstr "``https://ark.cn-beijing.volces.com/api/compatible``"
+
+#: ../../learn/providers.rst:327
+msgid "Tencent Hunyuan"
+msgstr "腾讯混元"
+
+#: ../../learn/providers.rst:328
+msgid "``https://api.hunyuan.cloud.tencent.com/v1``"
+msgstr "``https://api.hunyuan.cloud.tencent.com/v1``"
+
+#: ../../learn/providers.rst:330
+msgid "Baidu Qianfan"
+msgstr "百度千帆"
+
+#: ../../learn/providers.rst:331
+msgid "``https://qianfan.baidubce.com/v2``"
+msgstr "``https://qianfan.baidubce.com/v2``"
+
+#: ../../learn/providers.rst:333
+msgid "Xiaomi MiMo"
+msgstr "小米 MiMo"
+
+#: ../../learn/providers.rst:334
+msgid "``https://api.xiaomimimo.com/v1``"
+msgstr "``https://api.xiaomimimo.com/v1``"
+
+#: ../../learn/providers.rst:336
+msgid "Xiaomi MiMo (Messages)"
+msgstr "小米 MiMo（Messages）"
+
+#: ../../learn/providers.rst:337
+msgid "``https://api.xiaomimimo.com/anthropic``"
+msgstr "``https://api.xiaomimimo.com/anthropic``"
+
+#: ../../learn/providers.rst:339
+msgid "StepFun"
+msgstr "阶跃星辰"
+
+#: ../../learn/providers.rst:340
+msgid "``https://api.stepfun.com/v1``"
+msgstr "``https://api.stepfun.com/v1``"
+
+#: ../../learn/providers.rst:342
+msgid "Baichuan"
+msgstr "百川智能"
+
+#: ../../learn/providers.rst:343
+msgid "``https://api.baichuan-ai.com/v1``"
+msgstr "``https://api.baichuan-ai.com/v1``"
+
+#: ../../learn/providers.rst:345
+msgid "NVIDIA API Catalog"
+msgstr "NVIDIA API Catalog"
+
+#: ../../learn/providers.rst:346
+msgid "``https://integrate.api.nvidia.com/v1``"
+msgstr "``https://integrate.api.nvidia.com/v1``"
+
+#: ../../learn/providers.rst:348
+msgid "Perplexity"
+msgstr "Perplexity"
+
+#: ../../learn/providers.rst:349
+msgid "``https://api.perplexity.ai/v1``"
+msgstr "``https://api.perplexity.ai/v1``"
+
+#: ../../learn/providers.rst:351
+msgid "Cohere (compatibility API)"
+msgstr "Cohere（兼容 API）"
+
+#: ../../learn/providers.rst:352
+msgid "``https://api.cohere.ai/compatibility/v1``"
+msgstr "``https://api.cohere.ai/compatibility/v1``"
+
+#: ../../learn/providers.rst:354
+msgid "Hugging Face Inference Providers"
+msgstr "Hugging Face Inference Providers"
+
+#: ../../learn/providers.rst:355
+msgid "``https://router.huggingface.co/v1``"
+msgstr "``https://router.huggingface.co/v1``"
+
+#: ../../learn/providers.rst:357
+msgid "Novita AI"
+msgstr "Novita AI"
+
+#: ../../learn/providers.rst:358
+msgid "``https://api.novita.ai/openai``"
+msgstr "``https://api.novita.ai/openai``"
+
+#: ../../learn/providers.rst:360
+msgid "SambaNova"
+msgstr "SambaNova"
+
+#: ../../learn/providers.rst:361
+msgid "``https://api.sambanova.ai/v1``"
+msgstr "``https://api.sambanova.ai/v1``"
+
+#: ../../learn/providers.rst:363
+msgid "Nebius AI Studio"
+msgstr "Nebius AI Studio"
+
+#: ../../learn/providers.rst:364
+msgid "``https://api.studio.nebius.com/v1``"
+msgstr "``https://api.studio.nebius.com/v1``"
+
+#: ../../learn/providers.rst:366
+msgid "Azure OpenAI"
+msgstr "Azure OpenAI"
+
+#: ../../learn/providers.rst:367
+msgid "``https://<resource>.openai.azure.com/openai/v1``"
+msgstr "``https://<resource>.openai.azure.com/openai/v1``"
+
+#: ../../learn/providers.rst:368
+msgid "``OpenAIProvider``"
+msgstr "``OpenAIProvider``"
+
+#: ../../learn/providers.rst:369
+msgid "LiteLLM proxy, Portkey, Helicone and other gateways"
+msgstr "LiteLLM 代理、Portkey、Helicone 等网关"
+
+#: ../../learn/providers.rst:370
+msgid "The gateway's own URL"
+msgstr "网关自己的 URL"
+
+#: ../../learn/providers.rst:371
+msgid "``OpenAICompatibleProvider`` or ``OpenAIProvider``"
+msgstr "``OpenAICompatibleProvider`` 或 ``OpenAIProvider``"
+
+#: ../../learn/providers.rst:373
+msgid ""
+"A service that has a hosted search tool of its own is a different matter:"
+" :doc:`../extending/server-tools` lists the declarations the runtime "
+"ships, and a string type plus a configuration mapping declares any other."
+msgstr ""
+"自带托管搜索工具的服务则是另一回事：:doc:`../extending/server-tools`\\ 列出了运行时自带的声明，"
+"其他的用一个字符串类型加一个配置映射即可声明。"
+
+#: ../../learn/providers.rst:378
 msgid "Write a provider for another compatible service"
 msgstr "为另一个兼容服务编写适配器"
 
-#: ../../learn/providers.rst:254
+#: ../../learn/providers.rst:380
 msgid ""
 "Most services that speak Chat Completions bend it in a few places: the "
 "field that carries reasoning, how thinking is switched on and off, an "
@@ -364,87 +656,87 @@ msgstr ""
 ":class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`"
 " 调用的一个方法，所以为又一个服务写适配器，就是写一个子类，只覆盖该服务与标准协议不同的地方："
 
-#: ../../learn/providers.rst:284 ../../learn/providers.rst:318
+#: ../../learn/providers.rst:410 ../../learn/providers.rst:444
 msgid "Method"
 msgstr "方法"
 
-#: ../../learn/providers.rst:285 ../../learn/providers.rst:319
+#: ../../learn/providers.rst:411 ../../learn/providers.rst:445
 msgid "Override it when"
 msgstr "在这些情况下覆盖它"
 
-#: ../../learn/providers.rst:286 ../../learn/providers.rst:320
+#: ../../learn/providers.rst:412 ../../learn/providers.rst:446
 msgid "``vendor_headers``"
 msgstr "``vendor_headers``"
 
-#: ../../learn/providers.rst:287 ../../learn/providers.rst:321
+#: ../../learn/providers.rst:413 ../../learn/providers.rst:447
 msgid "The service wants headers on every request."
 msgstr "服务要求每个请求都带上某些请求头。"
 
-#: ../../learn/providers.rst:288 ../../learn/providers.rst:322
+#: ../../learn/providers.rst:414 ../../learn/providers.rst:448
 msgid "``request_fields``"
 msgstr "``request_fields``"
 
-#: ../../learn/providers.rst:289
+#: ../../learn/providers.rst:415
 msgid ""
 "The service spells the reasoning level, or takes other options, in the "
 "request body."
 msgstr "服务在请求体里用自己的写法表达推理等级，或接受其他选项。"
 
-#: ../../learn/providers.rst:290
+#: ../../learn/providers.rst:416
 msgid "``replay_reasoning``"
 msgstr "``replay_reasoning``"
 
-#: ../../learn/providers.rst:291
+#: ../../learn/providers.rst:417
 msgid ""
 "An earlier assistant turn must be sent back in a form of the service's "
 "own."
 msgstr "较早的助手回合必须以服务自己的形式回传。"
 
-#: ../../learn/providers.rst:292
+#: ../../learn/providers.rst:418
 msgid "``read_delta`` and ``reasoning_keys``"
 msgstr "``read_delta`` 和 ``reasoning_keys``"
 
-#: ../../learn/providers.rst:293
+#: ../../learn/providers.rst:419
 msgid ""
 "A streamed delta carries reasoning, or other data, under names the plain "
 "protocol does not use."
 msgstr "流式增量里的推理内容或其他数据，使用了标准协议没有的字段名。"
 
-#: ../../learn/providers.rst:294
+#: ../../learn/providers.rst:420
 msgid "``merge_replay``"
 msgstr "``merge_replay``"
 
-#: ../../learn/providers.rst:295
+#: ../../learn/providers.rst:421
 msgid ""
 "Opaque blocks arrive in pieces that must be put together before they are "
 "sent back."
 msgstr "不透明的块是分片到达的，回传之前必须先拼起来。"
 
-#: ../../learn/providers.rst:296
+#: ../../learn/providers.rst:422
 msgid "``read_usage``"
 msgstr "``read_usage``"
 
-#: ../../learn/providers.rst:297
+#: ../../learn/providers.rst:423
 msgid "The token counts use names that the default reader does not know."
 msgstr "token 计数使用了默认读取器不认识的字段名。"
 
-#: ../../learn/providers.rst:298
+#: ../../learn/providers.rst:424
 msgid "``chat_stop``"
 msgstr "``chat_stop``"
 
-#: ../../learn/providers.rst:299
+#: ../../learn/providers.rst:425
 msgid "The service has finish reasons of its own."
 msgstr "服务有自己专用的结束原因。"
 
-#: ../../learn/providers.rst:300 ../../learn/providers.rst:330
+#: ../../learn/providers.rst:426 ../../learn/providers.rst:456
 msgid "``status_error``"
 msgstr "``status_error``"
 
-#: ../../learn/providers.rst:301 ../../learn/providers.rst:331
+#: ../../learn/providers.rst:427 ../../learn/providers.rst:457
 msgid "The service explains an HTTP failure in a body of its own."
 msgstr "服务用自己格式的响应体解释 HTTP 失败。"
 
-#: ../../learn/providers.rst:303
+#: ../../learn/providers.rst:429
 msgid ""
 "A method that is not overridden does what the plain protocol does, so a "
 "provider stays as small as the ways its service differs. The built-in "
@@ -453,7 +745,7 @@ msgstr ""
 "没有被覆盖的方法就按标准协议处理，因此一个适配器有多大，只取决于它的服务与标准协议有多少不同。内置的 OpenRouter、Kimi 和 GLM "
 "适配器就是这样写的。"
 
-#: ../../learn/providers.rst:307
+#: ../../learn/providers.rst:433
 msgid ""
 "The Messages protocol works the same way through "
 ":class:`~zett_agent.providers.anthropic_compatible.AnthropicCompatibleProvider`,"
@@ -463,43 +755,44 @@ msgid ""
 "behavior is what a hook does when it is not overridden:"
 msgstr ""
 "Messages 协议的做法相同，入口是 "
-":class:`~zett_agent.providers.anthropic_compatible.AnthropicCompatibleProvider`"
-"，它是 :class:`~zett_agent.providers.anthropic.AnthropicProvider` 以及 DeepSeek、Kimi 和 GLM 的 Messages "
-"适配器的基础。它的钩子正是各服务差异最大的地方；钩子没有被覆盖时，做的就是标准的 Anthropic 行为："
+":class:`~zett_agent.providers.anthropic_compatible.AnthropicCompatibleProvider`，它是"
+" :class:`~zett_agent.providers.anthropic.AnthropicProvider` 以及 "
+"DeepSeek、Kimi 和 GLM 的 Messages 适配器的基础。它的钩子正是各服务差异最大的地方；钩子没有被覆盖时，做的就是标准的 "
+"Anthropic 行为："
 
-#: ../../learn/providers.rst:323
+#: ../../learn/providers.rst:449
 msgid ""
 "The service takes the reasoning level in a field of its own, or rejects "
-"the token budget Anthropic uses."
-msgstr "服务把推理等级放在自己的字段里，或者拒绝 Anthropic 使用的 token 预算。"
+"the adaptive thinking Anthropic uses."
+msgstr "服务把推理等级放在自己的字段里，或者拒绝 Anthropic 使用的自适应思考。"
 
-#: ../../learn/providers.rst:324
+#: ../../learn/providers.rst:450
 msgid "``mark_cache``"
 msgstr "``mark_cache``"
 
-#: ../../learn/providers.rst:325
+#: ../../learn/providers.rst:451
 msgid ""
 "The service ignores the cache markers Anthropic needs, or reads them "
 "somewhere else."
 msgstr "服务忽略 Anthropic 需要的缓存标记，或者在别的位置读取它们。"
 
-#: ../../learn/providers.rst:326
+#: ../../learn/providers.rst:452
 msgid "``start_usage`` and ``finish_usage``"
 msgstr "``start_usage`` 和 ``finish_usage``"
 
-#: ../../learn/providers.rst:327
+#: ../../learn/providers.rst:453
 msgid "The token counts carry more than Anthropic's, such as reasoning tokens."
 msgstr "token 计数比 Anthropic 的更多，例如推理 token。"
 
-#: ../../learn/providers.rst:328
+#: ../../learn/providers.rst:454
 msgid "``message_stop``"
 msgstr "``message_stop``"
 
-#: ../../learn/providers.rst:329
+#: ../../learn/providers.rst:455
 msgid "The service has stop reasons of its own."
 msgstr "服务有自己专用的停止原因。"
 
-#: ../../learn/providers.rst:333
+#: ../../learn/providers.rst:459
 msgid ""
 "Two class attributes cover the rest: ``bearer_auth = True`` also sends "
 "the key as ``Authorization: Bearer``, for a service that takes only that,"
@@ -507,16 +800,15 @@ msgid ""
 "loads a tool when a ``tool_reference`` names it, which only Anthropic "
 "does."
 msgstr ""
-"另有两个类属性负责其余的差异：``bearer_auth = True`` 会把密钥同时作为 "
-"``Authorization: Bearer`` 发送，适用于只接受这种认证的服务；"
-"``native_deferred_tools`` 保持 ``False``，除非服务自身能在 ``tool_reference`` "
-"点名时加载工具——目前只有 Anthropic 做得到。"
+"另有两个类属性负责其余的差异：``bearer_auth = True`` 会把密钥同时作为 ``Authorization: Bearer`` "
+"发送，适用于只接受这种认证的服务；``native_deferred_tools`` 保持 ``False``，除非服务自身能在 "
+"``tool_reference`` 点名时加载工具——目前只有 Anthropic 做得到。"
 
-#: ../../learn/providers.rst:339
+#: ../../learn/providers.rst:465
 msgid "Send extra headers, query parameters, or body fields"
 msgstr "发送额外的请求头、查询参数或请求体字段"
 
-#: ../../learn/providers.rst:341
+#: ../../learn/providers.rst:467
 msgid ""
 "Gateways often route, bill, or version on something the adapters do not "
 "model. Every adapter accepts ``extra_headers``; the OpenAI-style and "
@@ -527,7 +819,7 @@ msgstr ""
 "Anthropic 适配器还接受 ``extra_query`` 和 ``extra_body``，Google 接受 "
 "``extra_body`` 和 ``base_url``，Ollama 接受 ``extra_query``\\ 。"
 
-#: ../../learn/providers.rst:357
+#: ../../learn/providers.rst:483
 msgid ""
 "Headers and query parameters go on every request after the adapter's own,"
 " so one given here replaces the SDK default of the same name (use it for "
@@ -542,83 +834,97 @@ msgstr ""
 "最后才合并进请求体：它可以添加适配器没有建模的选项，也可以覆盖适配器已有的选项，例如 DeepSeek 的 ``thinking``\\ "
 "。这些值会在构造提供商时被复制并校验，且 ``extra_body`` 必须是 JSON。"
 
-#: ../../learn/providers.rst:365
+#: ../../learn/providers.rst:491
 msgid "Reasoning effort"
 msgstr "推理强度"
 
-#: ../../learn/providers.rst:367
+#: ../../learn/providers.rst:493
 msgid ""
 "Set a provider-neutral level on the run instead of vendor-specific "
 "options:"
 msgstr "在运行上设置与提供商无关的级别，而不是使用厂商专属选项："
 
-#: ../../learn/providers.rst:379
+#: ../../learn/providers.rst:505
 msgid "Level"
 msgstr "级别"
 
-#: ../../learn/providers.rst:380
+#: ../../learn/providers.rst:506
 msgid "Meaning"
 msgstr "含义"
 
-#: ../../learn/providers.rst:381
+#: ../../learn/providers.rst:507
 msgid "``MINIMAL``"
 msgstr "``MINIMAL``"
 
-#: ../../learn/providers.rst:382
+#: ../../learn/providers.rst:508
 msgid "Request a minimal reasoning budget when the model supports it."
 msgstr "在模型支持时请求最小的推理预算。"
 
-#: ../../learn/providers.rst:383
+#: ../../learn/providers.rst:509
 msgid "``LOW`` / ``MEDIUM``"
 msgstr "``LOW`` / ``MEDIUM``"
 
-#: ../../learn/providers.rst:384
+#: ../../learn/providers.rst:510
 msgid "Lower or moderate effort; ``MEDIUM`` is the runtime default."
 msgstr "较低的或中等的强度；``MEDIUM`` 是运行时默认值。"
 
-#: ../../learn/providers.rst:385
+#: ../../learn/providers.rst:511
 msgid "``HIGH`` / ``XHIGH``"
 msgstr "``HIGH`` / ``XHIGH``"
 
-#: ../../learn/providers.rst:386
+#: ../../learn/providers.rst:512
 msgid "Request more effort for difficult multi-step tasks."
 msgstr "对于困难的多步骤任务请求更高的强度。"
 
-#: ../../learn/providers.rst:387
+#: ../../learn/providers.rst:513
 msgid "``MAX`` / ``ULTRA``"
 msgstr "``MAX`` / ``ULTRA``"
 
-#: ../../learn/providers.rst:388
+#: ../../learn/providers.rst:514
 msgid ""
 "Highest requested levels; an adapter may map them to the same supported "
 "setting."
 msgstr "请求的最高级别；适配器可能将它们映射到同一个受支持的设置。"
 
-#: ../../learn/providers.rst:389
+#: ../../learn/providers.rst:515
 msgid "``OFF``"
 msgstr "``OFF``"
 
-#: ../../learn/providers.rst:390
+#: ../../learn/providers.rst:516
 msgid "Omit or disable explicit reasoning configuration according to the adapter."
 msgstr "根据适配器的不同，省略或禁用显式的推理配置。"
 
-#: ../../learn/providers.rst:392
+#: ../../learn/providers.rst:518
 msgid ""
 "The current Responses adapter maps ``XHIGH``, ``MAX``, and ``ULTRA`` to "
-"``high``. Budget-based adapters also group the highest levels. OpenAI "
-"Chat Completions forwards named levels, so a model that rejects one can "
-"still raise an endpoint error. OpenRouter sends the level as "
+"``high``. The Anthropic adapter sends adaptive thinking with the level as"
+" ``output_config.effort`` (``low``, ``medium``, ``high``, ``xhigh``, "
+"``max``; ``MINIMAL`` shares ``low`` and ``ULTRA`` shares ``max``) and "
+"sets no token budget. Google still turns the level into a "
+"``thinking_budget``, which groups the highest levels. OpenAI Chat "
+"Completions forwards named levels, so a model that rejects one can still "
+"raise an endpoint error. OpenRouter sends the level as "
 "``reasoning.effort``; Kimi and GLM send the three levels they know "
-"(``low``, ``high``, ``max``) and only to the models that take them. The "
-"runtime does not negotiate supported levels."
+"(``low``, ``high``, ``max``) and only to the models that take them. xAI, "
+"MiniMax, Groq and Cerebras do the same per model family, and Mistral and "
+"the plain hosting services send no level because their models disagree on"
+" the names: pass one in ``extra_body``. xAI cannot switch reasoning off, "
+"so ``OFF`` is sent as ``low``. The GLM Messages adapter still sends the "
+"token budget Z.ai documents. The runtime does not negotiate supported "
+"levels."
 msgstr ""
-"当前的 Responses 适配器会把 ``XHIGH``、``MAX`` 和 ``ULTRA`` 映射为 ``high``\\ "
-"。基于预算的适配器也会把最高几个级别归为一组。OpenAI Chat Completions "
-"会原样转发具名级别，因此如果模型拒绝其中某个级别，仍可能抛出端点错误。OpenRouter 把级别作为 ``reasoning.effort`` "
-"发送；Kimi 和 GLM "
-"只发送它们认识的三个级别（``low``、``high``、``max``），并且只发给支持这些字段的模型。运行时不会就支持的级别进行协商。"
+"当前的 Responses 适配器把 ``XHIGH``、``MAX`` 和 ``ULTRA`` 都映射为 ``high``\\ 。Anthropic "
+"适配器发送自适应思考，并把等级放在 ``output_config.effort``\\ （``low``\\ 、\\ ``medium``\\ 、\\ ``high``\\ 、"
+"``xhigh``\\ 、\\ ``max``\\ ；\\ ``MINIMAL`` 与 ``low`` 相同，``ULTRA`` 与 ``max`` 相同）中，不设置 token "
+"预算。Google 仍然把等级转成 ``thinking_budget``，最高几个等级会归并。OpenAI Chat "
+"Completions 原样转发等级名，因此模型如果拒绝某个等级，仍可能触发端点错误。OpenRouter 把等级作为 "
+"``reasoning.effort`` 发送；Kimi 和 GLM 发送它们认识的三个等级（``low``、``high``、``max``），"
+"并且只发送给支持它们的模型。xAI、MiniMax、Groq 和 Cerebras 按模型系列做同样的事；Mistral "
+"和那些普通托管服务不发送等级，因为它们托管的模型在名称上各不相同，需要的话请在 ``extra_body`` 中传入。"
+"xAI 无法关闭推理，所以 ``OFF`` 会以 ``low`` 发送。GLM 的 Messages 适配器仍然发送 Z.ai 文档中的 "
+"token 预算。运行时不会协商支持的等级。"
 
-#: ../../learn/providers.rst:399
+#: ../../learn/providers.rst:534
 msgid ""
 "``OFF`` is not a universal guarantee of zero reasoning: OpenAI adapters "
 "omit explicit effort configuration, while some other adapters disable "
@@ -631,18 +937,18 @@ msgstr ""
 "适配器会省略显式强度配置，而其他一些适配器则关闭思考。端点的默认设置仍可能进行推理。提高级别绝不保证出现可见的推理文本、更好的答案或特定的价格。可以用"
 " ``create_agent(model, reasoning_effort=...)`` 为整个智能体设置默认值，并按请求覆盖它。"
 
-#: ../../learn/providers.rst:407
+#: ../../learn/providers.rst:542
 msgid "Retries and proxies"
 msgstr "重试与代理"
 
-#: ../../learn/providers.rst:409
+#: ../../learn/providers.rst:544
 msgid ""
 "``RetryOptions`` retries only *before* the first streamed event, so a "
 "failure halfway through an answer never replays visible text or tool "
 "fragments."
 msgstr "``RetryOptions`` 只在第一个流式事件\\ *之前*\\ 重试，因此答案进行到一半时发生的失败绝不会重放已经可见的文本或工具片段。"
 
-#: ../../learn/providers.rst:420
+#: ../../learn/providers.rst:555
 msgid ""
 "Default transports honor ``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, "
 "and ``NO_PROXY``. Pass your own transport when you need custom routing."
@@ -650,7 +956,7 @@ msgstr ""
 "默认传输会遵循 ``HTTP_PROXY``、``HTTPS_PROXY``、``ALL_PROXY`` 和 ``NO_PROXY``\\ "
 "。当你需要自定义路由时，请传入自己的传输。"
 
-#: ../../learn/providers.rst:423
+#: ../../learn/providers.rst:558
 msgid ""
 "``max_retries=3`` permits up to four transport attempts: the initial one "
 "plus three retries. Authentication and validation failures are not "
@@ -663,11 +969,11 @@ msgstr ""
 "``create_agent``\\ 。如需整个请求的总截止时间，请参阅 :doc:`application`\\ "
 "。静默的提供方由下一节的超时限制，而且超时不会重试。"
 
-#: ../../learn/providers.rst:432
+#: ../../learn/providers.rst:567
 msgid "When the provider goes quiet"
 msgstr "当提供方不再响应"
 
-#: ../../learn/providers.rst:434
+#: ../../learn/providers.rst:569
 msgid ""
 "A provider that takes the request and never answers used to be waited on "
 "for ten minutes, and then asked three more times; the Google and Ollama "
@@ -679,60 +985,60 @@ msgstr ""
 "适配器则会永远等下去。现在每个适配器都会放弃，并说明是哪一段等待超时了。\\ "
 ":class:`~zett_agent.model.TimeoutOptions` 为每个“不会有任何数据到达”的阶段各设置了一个限制："
 
-#: ../../learn/providers.rst:444
+#: ../../learn/providers.rst:579
 msgid "Limit"
 msgstr "限制项"
 
-#: ../../learn/providers.rst:445
+#: ../../learn/providers.rst:580
 msgid "Default"
 msgstr "默认值"
 
-#: ../../learn/providers.rst:446
+#: ../../learn/providers.rst:581
 msgid "What it bounds"
 msgstr "限制的是什么"
 
-#: ../../learn/providers.rst:447
+#: ../../learn/providers.rst:582
 msgid "``connect``"
 msgstr "``connect``"
 
-#: ../../learn/providers.rst:448
+#: ../../learn/providers.rst:583
 msgid "5 s"
 msgstr "5 秒"
 
-#: ../../learn/providers.rst:449
+#: ../../learn/providers.rst:584
 msgid "Opening the connection. A reachable host answers in milliseconds."
 msgstr "建立连接。可以访问的主机会在几毫秒内应答。"
 
-#: ../../learn/providers.rst:450
+#: ../../learn/providers.rst:585
 msgid "``first_byte``"
 msgstr "``first_byte``"
 
-#: ../../learn/providers.rst:451
+#: ../../learn/providers.rst:586
 msgid "60 s"
 msgstr "60 秒"
 
-#: ../../learn/providers.rst:452
+#: ../../learn/providers.rst:587
 msgid ""
 "From sending the request to receiving the response *headers*. Streaming "
 "APIs answer the headers before the model has produced anything, so a long"
 " wait here means a gateway that took the request and did nothing."
 msgstr "从发出请求到收到响应*头*。流式 API 会在模型产出任何内容之前就返回响应头，所以这里等了很久，说明有网关收下了请求却什么也没做。"
 
-#: ../../learn/providers.rst:455
+#: ../../learn/providers.rst:590
 msgid "``idle``"
 msgstr "``idle``"
 
-#: ../../learn/providers.rst:456
+#: ../../learn/providers.rst:591
 msgid "600 s"
 msgstr "600 秒"
 
-#: ../../learn/providers.rst:457
+#: ../../learn/providers.rst:592
 msgid ""
 "The longest gap between two chunks once the response has started. It is "
 "long because a reasoning model may think silently."
 msgstr "响应开始之后，两个数据块之间允许的最长间隔。它设得很长，因为推理模型可能会安静地思考。"
 
-#: ../../learn/providers.rst:470
+#: ../../learn/providers.rst:605
 msgid ""
 "There is deliberately no limit on the *total* time: a long answer that "
 "keeps streaming is healthy. Set a limit to ``None`` to switch it off. A "
@@ -744,7 +1050,7 @@ msgstr ""
 ":class:`~zett_agent.providers.base.ProviderTimeoutError`，其 ``phase`` 为 "
 "``\"connect\"``、``\"first_byte\"`` 或 ``\"idle\"``\\ 。"
 
-#: ../../learn/providers.rst:475
+#: ../../learn/providers.rst:610
 msgid ""
 "A timeout is **not retried**, except for a failed connection. Retrying a "
 "silent provider waits the whole limit a second time, and the first "
@@ -756,7 +1062,7 @@ msgstr ""
 "超时\\ "
 "**不会重试**，连接失败除外。重试一个静默的提供方，要把整个限制时间再等一遍，而且第一次请求可能仍在对方那里运行并计费。如果响应已经开始后才安静下来，已经到达的内容会被送达，所以界面上已经显示了；此时请求会失败，而不是重新开始。"
 
-#: ../../learn/providers.rst:482
+#: ../../learn/providers.rst:617
 msgid ""
 "The Google and Ollama clients send their request when the first chunk is "
 "asked for, so for them ``first_byte`` covers connecting, the response "
@@ -767,11 +1073,11 @@ msgstr ""
 "Google 和 Ollama 的客户端要等到被索取第一个数据块时才发出请求，所以对它们来说，``first_byte`` "
 "涵盖连接、响应头和第一个数据块，连接本身没有单独的限制。Ollama 的默认值给第一个数据块留了十分钟，因为本地模型可能需要先从磁盘加载。"
 
-#: ../../learn/providers.rst:489
+#: ../../learn/providers.rst:624
 msgid "When the provider answers with a web page"
 msgstr "当提供方回答的是一个网页"
 
-#: ../../learn/providers.rst:491
+#: ../../learn/providers.rst:626
 msgid ""
 "Between you and a provider there is often a reverse proxy, a gateway, a "
 "firewall or a captive portal. When that fails it answers with an HTML "
@@ -783,7 +1089,7 @@ msgstr ""
 "页面、一行纯文本或者什么都没有，而这类失败以前都会被简化成“Provider stream request "
 "failed”。现在，状态码、提供方自己的解释，以及它是一个网页这件事，都会写进错误信息："
 
-#: ../../learn/providers.rst:504
+#: ../../learn/providers.rst:639
 msgid ""
 "Failures arrive as :class:`~zett_agent.providers.base.ProviderHTTPError`,"
 " which has ``status_code``, ``reason`` (the provider's own words, when "
@@ -798,7 +1104,7 @@ msgstr ""
 ":class:`~zett_agent.providers.base.ProviderAuthError`，并附上同样的细节。SDK "
 "自己的错误保留在 ``__cause__`` 上。"
 
-#: ../../learn/providers.rst:510
+#: ../../learn/providers.rst:645
 msgid ""
 "A streaming request that is answered with a web page or with JSON is an "
 "error too, whatever the status. A ``200`` with a login page, or with JSON"
@@ -812,15 +1118,15 @@ msgstr ""
 "JSON，会被当作一次没有文本的成功回复；现在它们会被抛出，并指出内容类型和响应体说了什么。其他任何内容类型都按流来读取，因为有些网关会把流以 "
 "``text/plain`` 发送；一个流如果连一个事件都没有就结束，会作为错误抛出。"
 
-#: ../../learn/providers.rst:518
+#: ../../learn/providers.rst:653
 msgid "Streams that end early or carry broken tool calls"
 msgstr "提前结束或携带损坏工具调用的流"
 
-#: ../../learn/providers.rst:520
+#: ../../learn/providers.rst:655
 msgid "Providers keep a request alive through three failures that used to end it."
 msgstr "过去有三种失败会让请求终止，现在模型提供商会让请求在这些失败中继续。"
 
-#: ../../learn/providers.rst:522
+#: ../../learn/providers.rst:657
 msgid ""
 "**Malformed or truncated tool arguments.** If a tool call's JSON is "
 "invalid, for example because the response hit its output limit or a "
@@ -838,7 +1144,7 @@ msgstr ""
 "``AnthropicProvider(max_tokens=...)`` 设置每次响应的输出预算（默认 "
 "16384）；写入量大时可调高，模型上限较小时可调低。"
 
-#: ../../learn/providers.rst:531
+#: ../../learn/providers.rst:666
 msgid ""
 "**Responses ``error`` events.** A mid-stream ``error`` event (rate limit,"
 " overload) is raised with its own code and message instead of surfacing "
@@ -847,7 +1153,7 @@ msgstr ""
 "**Responses 的 ``error`` 事件。** 流中途出现的 ``error`` "
 "事件（限流、过载）会带着自己的代码和消息抛出，而不会表现为缺少终止响应。"
 
-#: ../../learn/providers.rst:534
+#: ../../learn/providers.rst:669
 msgid ""
 "**Responses streams without a terminal event.** If a gateway drops "
 "``response.completed`` after every output item finished, the finished "
@@ -861,11 +1167,11 @@ msgstr ""
 "``\"incomplete\"``\\ 。如果有某个项从未完成，或者什么都没到达，流就会抛出 "
 "``ProviderResponseError``；空流会被重试，因为此时还没有展示任何内容。"
 
-#: ../../learn/providers.rst:541
+#: ../../learn/providers.rst:676
 msgid "Prompt caching"
 msgstr "提示词缓存"
 
-#: ../../learn/providers.rst:543
+#: ../../learn/providers.rst:678
 msgid ""
 "The runtime derives a prompt-cache key from the session, so every step of"
 " one conversation can use the same routing hint on endpoints that support"
@@ -880,14 +1186,14 @@ msgstr ""
 "``cache_key``，可以把多个对话路由到同一个前缀；当端点拒绝该字段时，可以用 "
 "``send_prompt_cache_key=False`` 构造提供商。"
 
-#: ../../learn/providers.rst:550
+#: ../../learn/providers.rst:685
 msgid ""
 "OpenAI sends the key by default. DeepSeek omits it by default because its"
 " first-party service caches automatically; enable it only for a gateway "
 "that expects it. Other adapters may not expose cache routing."
 msgstr "OpenAI 默认会发送该键。DeepSeek 默认省略它，因为其自有服务会自动缓存；只有网关需要时才应启用。其他适配器可能不提供缓存路由。"
 
-#: ../../learn/providers.rst:554
+#: ../../learn/providers.rst:689
 msgid ""
 "When a provider reports cache hits, ``ModelUsage.cache_read_tokens`` and "
 "``cache_hit_rate`` expose them. Requests through gateways that translate "
@@ -898,21 +1204,21 @@ msgstr ""
 "会将其暴露出来。经过协议转换网关的请求往往会省略明细；此时 ``ModelUsage.cache_reported`` 为 "
 "``False``，从而区分“未知”和实测的 0% 未命中。"
 
-#: ../../learn/providers.rst:560
+#: ../../learn/providers.rst:695
 msgid "Always release the adapter"
 msgstr "始终释放适配器"
 
-#: ../../learn/providers.rst:562
+#: ../../learn/providers.rst:697
 msgid ""
 "The client does not own a provider you passed in. Close it when the "
 "application is done, even if several clients shared it:"
 msgstr "客户端并不拥有你传入的提供商。应用结束时请关闭它，即使多个客户端共享同一个提供商："
 
-#: ../../learn/providers.rst:570
+#: ../../learn/providers.rst:705
 msgid "Changing models mid-conversation"
 msgstr "对话中途更换模型"
 
-#: ../../learn/providers.rst:572
+#: ../../learn/providers.rst:707
 msgid ""
 "Pass ``model=other_model`` to ``run`` or ``stream`` to override the "
 "default for one request. Ordinary messages and local tools remain "
@@ -924,9 +1230,31 @@ msgstr ""
 "把 ``model=other_model`` 传给 ``run`` 或 "
 "``stream``，即可为单个请求覆盖默认值。普通消息和本地工具仍然与提供商无关，但视觉支持和托管工具必须与新端点匹配。带签名的推理/重放块只保留给能够消费它们的提供商/模型标识；不要把它们当作可移植的指令。"
 
-#: ../../learn/providers.rst:578
+#: ../../learn/providers.rst:713
 msgid ""
 "Next: :doc:`streaming`, or write your own adapter in :doc:`../extending"
 "/model-adapter`."
 msgstr "下一步：:doc:`streaming`，或者按照 :doc:`../extending/model-adapter`\\ 编写你自己的适配器。"
+
+#~ msgid ""
+#~ "The current Responses adapter maps "
+#~ "``XHIGH``, ``MAX``, and ``ULTRA`` to "
+#~ "``high``. Budget-based adapters also "
+#~ "group the highest levels. OpenAI Chat"
+#~ " Completions forwards named levels, so "
+#~ "a model that rejects one can still"
+#~ " raise an endpoint error. OpenRouter "
+#~ "sends the level as ``reasoning.effort``; "
+#~ "Kimi and GLM send the three levels"
+#~ " they know (``low``, ``high``, ``max``) "
+#~ "and only to the models that take"
+#~ " them. The runtime does not negotiate"
+#~ " supported levels."
+#~ msgstr ""
+#~ "当前的 Responses 适配器会把 ``XHIGH``、``MAX`` 和 "
+#~ "``ULTRA`` 映射为 ``high``\\ "
+#~ "。基于预算的适配器也会把最高几个级别归为一组。OpenAI Chat Completions "
+#~ "会原样转发具名级别，因此如果模型拒绝其中某个级别，仍可能抛出端点错误。OpenRouter 把级别作为 "
+#~ "``reasoning.effort`` 发送；Kimi 和 GLM "
+#~ "只发送它们认识的三个级别（``low``、``high``、``max``），并且只发给支持这些字段的模型。运行时不会就支持的级别进行协商。"
 

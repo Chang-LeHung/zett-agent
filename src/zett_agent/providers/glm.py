@@ -31,6 +31,7 @@ from ..model import (
     TimeoutOptions,
 )
 from .anthropic_compatible import DEFAULT_MAX_TOKENS, AnthropicCompatibleProvider
+from .base import reasoning_effort_to_budget
 from .openai_compatible import OpenAICompatibleProvider
 from .wire import JsonObject
 
@@ -227,4 +228,8 @@ class GLMAnthropicProvider(AnthropicCompatibleProvider):
             return {}
         if request.reasoning_effort == ReasoningEffort.OFF and version >= (5, 3):
             return {}  # only ever thinks
-        return super().request_fields(request)
+        if request.reasoning_effort == ReasoningEffort.OFF or request.tool_choice:
+            return {"thinking": {"type": "disabled"}}
+        # Unchanged from before the Anthropic default moved to adaptive thinking: Z.ai is still sent a budget.
+        budget = reasoning_effort_to_budget(request.reasoning_effort)
+        return {"max_tokens": budget + self.max_tokens, "thinking": {"type": "enabled", "budget_tokens": budget}}

@@ -60,12 +60,16 @@ Common entry points
 
 .. note::
 
-   Packages re-export nothing. Import each name from the module that defines it::
+   The ``tools``, ``providers``, ``extensions``, ``extensions.server_tools``, and ``sandbox``
+   packages re-export their main names lazily: a name loads its defining module the first time it
+   is used, so importing the package imports nothing. Every other name is imported from the module
+   that defines it::
 
       from zett_agent.client import create_agent
-      from zett_agent.tools.base import tool
-      from zett_agent.providers.openai import OpenAIProvider
-      from zett_agent.extensions.coding import CodingExtension
+      from zett_agent.tools import tool
+      from zett_agent.providers import OpenAIProvider
+      from zett_agent.extensions import CodingExtension
+      from zett_agent.messages import UserMessage
 
 The reference documents every public object the runtime defines, plus the
 protected subclass helpers extension authors need. It intentionally omits

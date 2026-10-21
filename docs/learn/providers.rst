@@ -35,11 +35,26 @@ touch the rest of your code.
    * - :class:`~zett_agent.providers.glm.GLMProvider`
      - GLM (Z.ai) Chat Completions
      - Model name and API key
+   * - :class:`~zett_agent.providers.xai.XAIProvider`
+     - xAI (Grok) Chat Completions or Responses
+     - Model name and API key
+   * - :class:`~zett_agent.providers.minimax.MiniMaxProvider`
+     - MiniMax Chat Completions
+     - Model name and API key
+   * - :class:`~zett_agent.providers.mistral.MistralProvider`
+     - Mistral AI Chat Completions
+     - Model name and API key
+   * - :class:`~zett_agent.providers.groq.GroqProvider`, :class:`~zett_agent.providers.cerebras.CerebrasProvider`
+     - Groq and Cerebras Chat Completions
+     - Model name and API key
+   * - :class:`~zett_agent.providers.hosts.TogetherProvider`, :class:`~zett_agent.providers.hosts.FireworksProvider`, :class:`~zett_agent.providers.hosts.SiliconFlowProvider`, :class:`~zett_agent.providers.hosts.DeepInfraProvider`
+     - Together AI, Fireworks AI, SiliconFlow and DeepInfra Chat Completions
+     - Model name and API key
    * - :class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`
      - Any service that speaks Chat Completions, with no vendor assumptions
      - Model name, API key, and ``base_url``
-   * - :class:`~zett_agent.providers.deepseek.DeepSeekAnthropicProvider`, :class:`~zett_agent.providers.kimi.KimiAnthropicProvider`, :class:`~zett_agent.providers.glm.GLMAnthropicProvider`
-     - The same three services over the Anthropic Messages protocol
+   * - :class:`~zett_agent.providers.deepseek.DeepSeekAnthropicProvider`, :class:`~zett_agent.providers.kimi.KimiAnthropicProvider`, :class:`~zett_agent.providers.glm.GLMAnthropicProvider`, :class:`~zett_agent.providers.minimax.MiniMaxAnthropicProvider`
+     - The same four services over the Anthropic Messages protocol
      - Model name and API key
    * - :class:`~zett_agent.providers.anthropic_compatible.AnthropicCompatibleProvider`
      - Any service that speaks the Messages protocol, with no vendor assumptions
@@ -179,6 +194,39 @@ examples.
       ``base_url="https://open.bigmodel.cn/api/paas/v4"``. ``tool_stream=True``
       streams a tool call's arguments as they are written.
 
+   .. tab-item:: xAI
+
+      .. code-block:: python
+
+         import os
+         from zett_agent.providers.xai import XAIProvider
+
+         model = XAIProvider(
+             model=os.environ["XAI_MODEL"],
+             api_key=os.environ["XAI_API_KEY"],
+             response=True,
+         )
+
+      xAI calls Chat Completions its legacy endpoint, and its hosted web and X
+      search tools are on Responses, which ``response=True`` selects. The level is
+      sent only to ``grok-4.5`` and later.
+
+   .. tab-item:: MiniMax
+
+      .. code-block:: python
+
+         import os
+         from zett_agent.providers.minimax import MiniMaxProvider
+
+         model = MiniMaxProvider(
+             model=os.environ["MINIMAX_MODEL"],
+             api_key=os.environ["MINIMAX_API_KEY"],
+         )
+
+      The default endpoint is ``https://api.minimax.io/v1``. An account on the
+      China platform passes ``base_url="https://api.minimaxi.com/v1"``.
+      ``MiniMaxAnthropicProvider`` is the same service over Messages.
+
    .. tab-item:: Ollama
 
       .. code-block:: python
@@ -247,6 +295,84 @@ that rejects either can use
 :class:`~zett_agent.providers.openai_compatible.OpenAICompatibleProvider`
 instead, which sends only the ``reasoning_effort`` and takes the same
 ``base_url``.
+
+Services that need no adapter of their own
+-------------------------------------------
+
+These services speak a protocol the generic adapters already handle. Pass the
+root as ``base_url``; give a model its reasoning options in ``extra_body``. The
+roots below were checked to answer on the network, not exercised with a chat
+request, so confirm the root, the model names, and the options in the service's
+own documentation before relying on them.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 46 30
+
+   * - Service
+     - ``base_url``
+     - Adapter
+   * - Alibaba Cloud Model Studio (Qwen, international)
+     - ``https://dashscope-intl.aliyuncs.com/compatible-mode/v1``
+     - ``OpenAICompatibleProvider``
+   * - Alibaba Cloud Model Studio (Messages)
+     - ``https://dashscope-intl.aliyuncs.com/apps/anthropic``
+     - ``AnthropicCompatibleProvider``
+   * - ByteDance Volcengine Ark
+     - ``https://ark.cn-beijing.volces.com/api/v3``
+     - ``OpenAICompatibleProvider``
+   * - ByteDance Volcengine Ark (Messages)
+     - ``https://ark.cn-beijing.volces.com/api/compatible``
+     - ``AnthropicCompatibleProvider``
+   * - Tencent Hunyuan
+     - ``https://api.hunyuan.cloud.tencent.com/v1``
+     - ``OpenAICompatibleProvider``
+   * - Baidu Qianfan
+     - ``https://qianfan.baidubce.com/v2``
+     - ``OpenAICompatibleProvider``
+   * - Xiaomi MiMo
+     - ``https://api.xiaomimimo.com/v1``
+     - ``OpenAICompatibleProvider``
+   * - Xiaomi MiMo (Messages)
+     - ``https://api.xiaomimimo.com/anthropic``
+     - ``AnthropicCompatibleProvider``
+   * - StepFun
+     - ``https://api.stepfun.com/v1``
+     - ``OpenAICompatibleProvider``
+   * - Baichuan
+     - ``https://api.baichuan-ai.com/v1``
+     - ``OpenAICompatibleProvider``
+   * - NVIDIA API Catalog
+     - ``https://integrate.api.nvidia.com/v1``
+     - ``OpenAICompatibleProvider``
+   * - Perplexity
+     - ``https://api.perplexity.ai/v1``
+     - ``OpenAICompatibleProvider``
+   * - Cohere (compatibility API)
+     - ``https://api.cohere.ai/compatibility/v1``
+     - ``OpenAICompatibleProvider``
+   * - Hugging Face Inference Providers
+     - ``https://router.huggingface.co/v1``
+     - ``OpenAICompatibleProvider``
+   * - Novita AI
+     - ``https://api.novita.ai/openai``
+     - ``OpenAICompatibleProvider``
+   * - SambaNova
+     - ``https://api.sambanova.ai/v1``
+     - ``OpenAICompatibleProvider``
+   * - Nebius AI Studio
+     - ``https://api.studio.nebius.com/v1``
+     - ``OpenAICompatibleProvider``
+   * - Azure OpenAI
+     - ``https://<resource>.openai.azure.com/openai/v1``
+     - ``OpenAIProvider``
+   * - LiteLLM proxy, Portkey, Helicone and other gateways
+     - The gateway's own URL
+     - ``OpenAICompatibleProvider`` or ``OpenAIProvider``
+
+A service that has a hosted search tool of its own is a different matter:
+:doc:`../extending/server-tools` lists the declarations the runtime ships, and a
+string type plus a configuration mapping declares any other.
 
 Write a provider for another compatible service
 ------------------------------------------------
@@ -320,7 +446,7 @@ hook does when it is not overridden:
    * - ``vendor_headers``
      - The service wants headers on every request.
    * - ``request_fields``
-     - The service takes the reasoning level in a field of its own, or rejects the token budget Anthropic uses.
+     - The service takes the reasoning level in a field of its own, or rejects the adaptive thinking Anthropic uses.
    * - ``mark_cache``
      - The service ignores the cache markers Anthropic needs, or reads them somewhere else.
    * - ``start_usage`` and ``finish_usage``
@@ -390,11 +516,20 @@ Set a provider-neutral level on the run instead of vendor-specific options:
      - Omit or disable explicit reasoning configuration according to the adapter.
 
 The current Responses adapter maps ``XHIGH``, ``MAX``, and ``ULTRA`` to
-``high``. Budget-based adapters also group the highest levels. OpenAI Chat
+``high``. The Anthropic adapter sends adaptive thinking with the level as
+``output_config.effort`` (``low``, ``medium``, ``high``, ``xhigh``, ``max``;
+``MINIMAL`` shares ``low`` and ``ULTRA`` shares ``max``) and sets no token
+budget. Google still turns the level into a ``thinking_budget``, which groups
+the highest levels. OpenAI Chat
 Completions forwards named levels, so a model that rejects one can still
 raise an endpoint error. OpenRouter sends the level as ``reasoning.effort``;
 Kimi and GLM send the three levels they know (``low``, ``high``, ``max``) and
-only to the models that take them. The runtime does not negotiate supported levels.
+only to the models that take them. xAI, MiniMax, Groq and Cerebras do the same
+per model family, and Mistral and the plain hosting services send no level
+because their models disagree on the names: pass one in ``extra_body``. xAI
+cannot switch reasoning off, so ``OFF`` is sent as ``low``. The GLM Messages
+adapter still sends the token budget Z.ai documents. The runtime does not
+negotiate supported levels.
 
 ``OFF`` is not a universal guarantee of zero reasoning: OpenAI adapters omit
 explicit effort configuration, while some other adapters disable thinking.

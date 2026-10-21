@@ -111,6 +111,7 @@ __all__ = [
     "chat_message",
     "chat_server_tools",
     "chat_tools",
+    "low_medium_high",
     "tool_call_deltas",
 ]
 
@@ -163,6 +164,10 @@ def chat_message(message: AnyMessage) -> ChatMessagePayload:
         case AssistantMessage():
             payload: ChatMessagePayload = {"role": "assistant", "content": message.content}
             if message.tool_calls:
+                # The protocol allows no text beside a tool call, as ``null``; some gateways refuse an
+                # empty string there.
+                if not message.content:
+                    payload["content"] = None
                 payload["tool_calls"] = [
                     {
                         "id": call.id,
@@ -203,6 +208,21 @@ def chat_tools(tools: Sequence[ToolDefinition]) -> list[JsonObject]:
 def chat_server_tools(tools: Sequence[ServerToolDefinition]) -> list[JsonObject]:
     """Render opaque server tools without treating them as local functions."""
     return [{"type": tool.type, **cast(JsonObject, dict(tool.configuration))} for tool in tools]
+
+
+def low_medium_high(effort: ReasoningEffort) -> str:
+    """Map a provider-neutral level onto ``low``, ``medium`` and ``high``, the names many services share.
+
+    ``OFF`` and ``MINIMAL`` share ``low``, and every level above ``HIGH`` shares ``high``. A service
+    that can switch reasoning off spells that itself.
+    """
+    match effort:
+        case ReasoningEffort.OFF | ReasoningEffort.MINIMAL | ReasoningEffort.LOW:
+            return "low"
+        case ReasoningEffort.MEDIUM:
+            return "medium"
+        case _:
+            return "high"
 
 
 # --- reading a stream ----------------------------------------------------------------------------
@@ -338,18 +358,27 @@ class OpenAICompatibleProvider(RetryingProvider):
     #: differ on the name (``reasoning_content`` and ``reasoning`` are the two in use), and reading
     #: both is harmless because only the first one that has text is used.
     reasoning_keys: ClassVar[tuple[str, ...]] = ("reasoning_content", "reasoning")
+    #: API root used when no ``base_url`` is given. A subclass for one service sets it; the generic
+    #: class has none, so it requires ``base_url``.
+    default_base_url: ClassVar[str | None] = None
+    #: Whether the run's prompt cache key is sent when ``send_prompt_cache_key`` is not given. A
+    #: service that rejects fields it does not know turns it off.
+    sends_prompt_cache_key: ClassVar[bool] = True
+    #: Whether ``stream_options`` asks for a final usage chunk. A service that already sends one, and
+    #: rejects fields it does not know, turns it off.
+    sends_stream_options: ClassVar[bool] = True
 
     def __init__(
         self,
         *,
         model: str,
         api_key: str,
-        base_url: str,
+        base_url: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         temperature: float | None = None,
         response: bool = False,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
-        send_prompt_cache_key: bool = True,
+        send_prompt_cache_key: bool | None = None,
         extra_headers: Mapping[str, str] | None = None,
         extra_query: Mapping[str, str] | None = None,
         extra_body: Mapping[str, JsonValue] | None = None,
@@ -365,12 +394,17 @@ class OpenAICompatibleProvider(RetryingProvider):
         validate_response(response)
         self.retry = retry
         self.timeout = timeout
-        self.send_prompt_cache_key = send_prompt_cache_key
+        self.send_prompt_cache_key = (
+            self.sends_prompt_cache_key if send_prompt_cache_key is None else send_prompt_cache_key
+        )
         self.extra_headers = validate_extra_headers(extra_headers)
         self.extra_query = validate_extra_query(extra_query)
         self.extra_body: dict[str, JsonValue] = validate_extra_body(extra_body)
         if not api_key:
             raise ValueError("api_key is required")
+        base_url = base_url or self.default_base_url
+        if not base_url:
+            raise ValueError("base_url is required")
         self.model = model
         self.temperature = temperature
         self.response = response
@@ -522,8 +556,9 @@ class OpenAICompatibleProvider(RetryingProvider):
             "model": self.model,
             "messages": self._messages(request),
             "stream": True,
-            "stream_options": {"include_usage": True},
         }
+        if self.sends_stream_options:
+            fields["stream_options"] = {"include_usage": True}
         if tools:
             fields["tools"] = tools
         if self.temperature is not None:

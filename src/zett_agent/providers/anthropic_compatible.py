@@ -78,7 +78,6 @@ from .base import (
     http_error,
     httpx_timeout,
     parse_tool_calls,
-    reasoning_effort_to_budget,
     require_event_stream,
     retry_model_stream,
     validate_extra_body,
@@ -201,6 +200,26 @@ _STALE_LIMIT = 512
 #: What the 400 for a thinking block says when the history before it changed. A tampered signature
 #: is a different failure, without this sentence, and dropping blocks does not cure it.
 _BOUND_ELSEWHERE = re.compile(r"bound to a different conversation", re.IGNORECASE)
+
+
+def messages_effort(effort: ReasoningEffort) -> str:
+    """Name the ``output_config.effort`` value for a reasoning level.
+
+    Messages has five levels, ``low``, ``medium``, ``high``, ``xhigh`` and ``max``. ``OFF`` and
+    ``MINIMAL`` share ``low``, and ``ULTRA`` shares ``max``. A service that takes the same field uses
+    this to spell the level.
+    """
+    match effort:
+        case ReasoningEffort.OFF | ReasoningEffort.MINIMAL | ReasoningEffort.LOW:
+            return "low"
+        case ReasoningEffort.MEDIUM:
+            return "medium"
+        case ReasoningEffort.HIGH:
+            return "high"
+        case ReasoningEffort.XHIGH:
+            return "xhigh"
+        case ReasoningEffort.MAX | ReasoningEffort.ULTRA:
+            return "max"
 
 
 def _thinking_key(block: Mapping[str, object]) -> str | None:
@@ -382,13 +401,13 @@ class AnthropicCompatibleProvider(RetryingProvider):
     Args:
         model: Model identifier the endpoint accepts.
         api_key: API credential supplied by the application.
-        base_url: API root. Required: only a subclass knows a default.
+        base_url: API root. Required unless the subclass sets :attr:`default_base_url`.
         transport: Optional HTTPX transport for isolated tests or custom routing.
         retry: Exponential backoff for transient failures before output starts.
         timeout: How long the provider may stay silent before the request is given up on. See
             :class:`~zett_agent.model.TimeoutOptions`.
         prompt_cache: Mark cache breakpoints, for a service that reads them. Off by default.
-        max_tokens: Output budget for one response, excluding thinking.
+        max_tokens: Output budget for one response. Thinking is paid out of it.
         extra_headers: HTTP headers sent on every request after the adapter's own.
         extra_query: URL query parameters sent on every request.
         extra_body: JSON fields merged into every request body last.
@@ -403,13 +422,15 @@ class AnthropicCompatibleProvider(RetryingProvider):
     #: See :attr:`zett_agent.model.NativeDeferredToolsModel.native_deferred_tools`. Only Anthropic
     #: itself loads a ``defer_loading`` tool when a ``tool_reference`` names it.
     native_deferred_tools: bool = False
+    #: API root used when no ``base_url`` is given. A subclass for one service sets it.
+    default_base_url: ClassVar[str | None] = None
 
     def __init__(
         self,
         *,
         model: str,
         api_key: str,
-        base_url: str,
+        base_url: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         retry: RetryOptions = DEFAULT_RETRY_OPTIONS,
         timeout: TimeoutOptions = DEFAULT_TIMEOUT_OPTIONS,
@@ -424,6 +445,9 @@ class AnthropicCompatibleProvider(RetryingProvider):
 
         if not api_key:
             raise ValueError("api_key is required")
+        base_url = base_url or self.default_base_url
+        if not base_url:
+            raise ValueError("base_url is required")
         validate_retry(retry)
         validate_timeout(timeout)
         if not isinstance(prompt_cache, bool):
@@ -471,16 +495,18 @@ class AnthropicCompatibleProvider(RetryingProvider):
     def request_fields(self, request: ModelRequest) -> JsonObject:
         """Return the reasoning and output-budget fields of ``request``.
 
-        These are merged over the standard body. The default is Anthropic's: extended thinking with a
-        token budget taken from the reasoning level, and ``max_tokens`` raised by that budget because
-        thinking is paid out of it. Thinking cannot be combined with a forced tool choice, and is
-        explicitly disabled when the level is ``OFF``. A field given in ``extra_body`` replaces one
-        returned here.
+        These are merged over the standard body. The default is Anthropic's: adaptive thinking, with
+        the reasoning level sent as ``output_config.effort`` and no token budget, so ``max_tokens`` is
+        left as configured. The model decides how much to think within that level. Thinking cannot be
+        combined with a forced tool choice, and is explicitly disabled when the level is ``OFF``. A
+        field given in ``extra_body`` replaces one returned here.
         """
         if request.reasoning_effort == ReasoningEffort.OFF or request.tool_choice:
             return {"thinking": {"type": "disabled"}}
-        budget = reasoning_effort_to_budget(request.reasoning_effort)
-        return {"max_tokens": budget + self.max_tokens, "thinking": {"type": "enabled", "budget_tokens": budget}}
+        return {
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": messages_effort(request.reasoning_effort)},
+        }
 
     def mark_cache(self, body: JsonObject, client_tools: list[JsonObject]) -> None:
         """Put cache markers into ``body`` (and the tool definitions in ``client_tools``).

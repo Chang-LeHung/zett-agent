@@ -15,12 +15,13 @@ import zett_agent
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "zett_agent"
 
-#: Packages that must not re-export the modules they contain. ``jit_harness`` is
-#: the deliberate exception: it is a documented facade whose exports must equal
-#: its reference page, enforced by
+#: Packages that must not re-export anything: the root holds the version and nothing else.
+THIN_PACKAGES = ("zett_agent",)
+
+#: Facades that re-export lazily (PEP 562). Importing one imports nothing; a name loads its defining
+#: module on first use. ``jit_harness`` is the eager facade, tied to its reference page by
 #: ``test_jit_harness_facade_is_the_documented_contract``.
-THIN_PACKAGES = (
-    "zett_agent",
+LAZY_FACADES = (
     "zett_agent.tools",
     "zett_agent.providers",
     "zett_agent.extensions",
@@ -102,6 +103,86 @@ def test_packages_re_export_nothing(package):
         if isinstance(target, ast.Name)
     }
     assert assigned <= {"__version__"}, f"{package} assigns {sorted(assigned)}"
+
+
+def _reference():
+    spec = importlib.util.spec_from_file_location("reference_contract", REFERENCE)
+    assert spec is not None and spec.loader is not None
+    reference = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reference)
+    return reference
+
+
+def _facade_tree(package):
+    return ast.parse(ROOT.joinpath(*package.split(".")[1:], "__init__.py").read_text())
+
+
+@pytest.mark.parametrize("package", LAZY_FACADES)
+def test_lazy_facades_import_only_under_type_checking(package):
+    """The only eager imports are the lazy helper; every re-export sits under ``if TYPE_CHECKING``."""
+    tree = _facade_tree(package)
+    eager = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
+    assert {node.module for node in eager} <= {"typing", "_lazy"}, [node.module for node in eager]
+    guarded = [node for node in tree.body if isinstance(node, ast.If)]
+    assert len(guarded) == 1, "exactly one `if TYPE_CHECKING:` block mirrors the exports"
+    typed = {
+        alias.asname
+        for node in guarded[0].body
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+        if alias.asname == alias.name
+    }
+    module = importlib.import_module(package)
+    assert typed == set(module.__all__), sorted(typed ^ set(module.__all__))
+    assert len(module.__all__) == len(set(module.__all__))
+
+
+@pytest.mark.parametrize("package", LAZY_FACADES)
+def test_lazy_facades_resolve_each_name_from_its_documented_module(package):
+    """A facade name is the object its reference page documents, defined in the module listed there."""
+    documented = {name: module_name for module_name, names in _reference().PUBLIC_API.items() for name in names}
+    module = importlib.import_module(package)
+    for name in module.__all__:
+        value = getattr(module, name)
+        defining = documented[name]
+        assert defining.rpartition(".")[0] == package, (name, defining)
+        assert value is getattr(importlib.import_module(defining), name), name
+        assert vars(module)[name] is value, "the first access caches the name on the package"
+    assert set(module.__all__) <= set(dir(module))
+    with pytest.raises(AttributeError, match="has no attribute 'NoSuchName'"):
+        module.NoSuchName  # noqa: B018
+
+
+@pytest.mark.parametrize("package", LAZY_FACADES)
+def test_lazy_facades_load_nothing_until_a_name_is_used(package):
+    parts = package.split(".")
+    parents = {".".join(parts[: i + 1]) for i in range(len(parts))}
+    fields = run_python(
+        "import sys; "
+        f"import {package} as facade; "
+        f"print(*sorted(name for name in sys.modules if name.startswith('zett_agent') and name not in {sorted(parents)!r})); "
+        "print('--'); "
+        "print(*[n for n in facade.__all__ if n in vars(facade)])"
+    )
+    separator = fields.index("--")
+    assert fields[:separator] == ["zett_agent._lazy"], "the package loads its helper and nothing else"
+    assert fields[separator + 1 :] == [], "no name is bound before it is used"
+
+
+def test_lazy_facades_keep_the_sdks_and_pydantic_out_until_asked():
+    names = ", ".join(f"{p!r}" for p in LAZY_FACADES)
+    fields = run_python(
+        "import importlib, sys; "
+        f"[importlib.import_module(p) for p in ({names},)]; "
+        f"print(*[name for name in {DEFERRED_THIRD_PARTY + ('pydantic', 'httpx')!r} if name in sys.modules])"
+    )
+    assert fields == [], f"importing the facades pulled in {fields}"
+    fields = run_python(
+        "import sys; "
+        "from zett_agent.providers import OpenAIProvider, AnthropicProvider, GoogleProvider; "
+        f"print(*[name for name in {DEFERRED_THIRD_PARTY!r} if name in sys.modules])"
+    )
+    assert fields == [], f"naming the adapters pulled in {fields}"
 
 
 def test_packages_hold_no_public_attributes_in_a_fresh_interpreter():

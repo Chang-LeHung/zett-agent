@@ -761,8 +761,11 @@ async def test_anthropic_provider_streams_text_and_tool_use() -> None:
     assert "input_schema" in captured["body"]["tools"][0]
     assert captured["body"]["tools"][0]["cache_control"] == {"type": "ephemeral"}
     assert "cache_control" not in captured["body"]["messages"][0]["content"][0]
-    # display is left unset: the API documents summarized as its default.
-    assert captured["body"]["thinking"] == {"type": "enabled", "budget_tokens": 8192}
+    # display is left unset: the API documents summarized as its default. The level travels as an
+    # effort, not as a token budget, so max_tokens is the configured value.
+    assert captured["body"]["thinking"] == {"type": "adaptive"}
+    assert captured["body"]["output_config"] == {"effort": "medium"}
+    assert captured["body"]["max_tokens"] == provider.max_tokens
 
     text = [event.delta for event in events if event.type == ModelEventType.TEXT_DELTA]
     assert text == ["Let me add", " those."]
@@ -1115,8 +1118,8 @@ async def test_anthropic_truncated_tool_call_is_reported_instead_of_failing_the_
     )
     events = await _collect(provider.stream(_request_with_text_and_tools()))
 
-    # ``thinking`` is enabled by the request: its budget is added on top of max_tokens.
-    assert captured["body"]["max_tokens"] == 8192 + 2048
+    # Adaptive thinking has no budget to add: max_tokens is the configured value.
+    assert captured["body"]["max_tokens"] == 2048
     response = [event for event in events if event.type == ModelEventType.RESPONSE][0].response
     [call] = response.message.tool_calls
     assert (call.id, call.name, call.arguments) == ("toolu_9", "write_file", {})

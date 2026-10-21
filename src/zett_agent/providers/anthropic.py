@@ -29,7 +29,7 @@ class AnthropicProvider(AnthropicCompatibleProvider):
             prompt, and the conversation so far. Anthropic caches only what a
             marker asks for, so disabling this trades prompt-cache reads for a
             payload without ``cache_control``.
-        max_tokens: Output budget for one response, excluding thinking. A tool
+        max_tokens: Output budget for one response, thinking included. A tool
             call that writes a large file must fit in it: a response cut off by
             this limit leaves the call's JSON incomplete, and the model is then
             told to retry with a smaller call. Lower it for models with a

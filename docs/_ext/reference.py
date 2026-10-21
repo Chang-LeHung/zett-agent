@@ -156,7 +156,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     ),
     "zett_agent.extensions.server_tools.anthropic": ("AnthropicServerToolExtension",),
     "zett_agent.extensions.server_tools.base": ("ServerToolExtension",),
-    "zett_agent.extensions.server_tools.deepseek": ("DeepSeekServerToolExtension",),
+    "zett_agent.extensions.server_tools.deepseek": ("DeepSeekMessagesServerToolExtension", "DeepSeekServerToolExtension"),
     "zett_agent.extensions.server_tools.google": ("GoogleServerToolExtension",),
     "zett_agent.extensions.server_tools.openai": ("OpenAIServerToolExtension",),
     "zett_agent.extensions.server_tools.openrouter": ("OpenRouterServerToolExtension",),

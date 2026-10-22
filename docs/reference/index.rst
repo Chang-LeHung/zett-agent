@@ -60,10 +60,10 @@ Common entry points
 
 .. note::
 
-   The ``tools``, ``providers``, ``extensions``, ``extensions.server_tools``, and ``sandbox``
-   packages re-export their main names lazily: a name loads its defining module the first time it
-   is used, so importing the package imports nothing. Every other name is imported from the module
-   that defines it::
+   The ``tools``, ``providers``, ``extensions``, ``extensions.server_tools``, ``jit_harness``, and
+   ``sandbox`` packages re-export their main names lazily: a name loads its defining module the
+   first time it is used, so importing the package imports nothing. Every other name is imported
+   from the module that defines it::
 
       from zett_agent.client import create_agent
       from zett_agent.tools import tool

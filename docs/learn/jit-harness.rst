@@ -16,9 +16,12 @@ Responses and Chat Completions, and it adds only four tools to the request.
 
    Generated Python runs with your application's privileges. Imports and
    module-level statements execute when the model calls ``repo_load``, before
-   any tool call. This is not a sandbox. Enable it only when trusted code
-   execution is appropriate, and review a repository before loading one that
-   came from elsewhere.
+   any tool call. The default host imports the package into your process, and is
+   not a sandbox. Enable it only when trusted code execution is appropriate, and
+   review a repository before loading one that came from elsewhere. To keep a
+   crash, a hang, or a runaway allocation out of your process, pass a
+   :class:`~zett_agent.jit_harness.host.SubprocessToolHost`; see
+   :ref:`where-the-code-runs`.
 
 Enable a session-local repository
 ---------------------------------
@@ -112,6 +115,68 @@ Loading imports the package under a throwaway name, so a repository called
 two quick edits of the same size are never served stale. The package stays
 imported while it is loaded, which means a tool may import a sibling lazily
 inside its body too.
+
+.. _where-the-code-runs:
+
+Where the code runs
+-------------------
+
+A repository's Python runs in one of two hosts. Both register the same tools and
+answer ``harness.call_tool`` the same way; they differ in where the code lives.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 37 37
+
+   * - Host
+     - What it isolates
+     - What it costs
+   * - :class:`~zett_agent.jit_harness.host.InProcessToolHost` (default)
+     - Nothing. A tool is an ordinary call in your process.
+     - A tool may return any Python value, and a tool cannot crash the run.
+   * - :class:`~zett_agent.jit_harness.host.SubprocessToolHost`
+     - A crash, an exit, a hang, and memory growth stay in the child, which is
+       killed at ``call_timeout``.
+     - Tool results cross a pipe: JSON values only, ``call_timeout`` adds a limit
+       to slow tools, and the child starts slower than an import.
+
+A child does not run as a different user. It is not a security boundary by
+itself; pass a sandbox to bound what it may read, write, and connect to::
+
+    from zett_agent.jit_harness import JITHarnessExtension, SubprocessToolHost
+    from zett_agent.sandbox import NetworkMode, SandboxPolicy, create_sandbox
+
+    policy = SandboxPolicy(network=NetworkMode.DISABLED)
+    jit = JITHarnessExtension(
+        Path.home() / ".myapp" / "jit",
+        host_factory=lambda: SubprocessToolHost(sandbox=create_sandbox(policy), call_timeout=60),
+    )
+
+The host is built once per session. Inside the child, ``harness.call_tool`` and
+``harness.call_tool_sync`` become frames to the agent, which runs the loaded tool
+there. Nested calls therefore still pass through extensions, events, and
+profiling, and a repository tool can compose base tools exactly as it does in
+process. Two limits follow from the pipe:
+
+* A tool returns ``None``, booleans, numbers, strings, lists, and dictionaries of
+  those. Anything else raises :class:`~zett_agent.jit_harness.host.ToolNotSerializable`
+  rather than being turned into a string.
+* ``print`` in a tool goes to standard error, so it never corrupts the protocol.
+
+If the child exits, the call raises
+:class:`~zett_agent.jit_harness.host.JITHostCrashed` and the next ``repo_load``
+starts a fresh one, even when no file changed. A tool that runs longer than
+``call_timeout`` raises :class:`~zett_agent.jit_harness.host.JITHostTimeout` and
+the child is killed.
+
+A child is created by ``repo_load``, never by a tool call, and it stays alive
+between turns so module state survives. Reloading after a source change starts a
+new interpreter rather than importing again into the old one, so the previous
+version's modules and their globals are gone. Closing the session
+(``forget_session``) or exceeding ``max_sessions`` shuts the child down, and the
+kill sweeps its whole process group, so a process a tool started does not outlive
+it. ``JITHarnessExtension(root, max_sessions=8)`` is the default: a new session
+releases the least recently used session that has no request in flight.
 
 .. _jit-load:
 

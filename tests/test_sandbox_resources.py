@@ -163,20 +163,13 @@ def test_the_user_task_count_is_the_number_of_processes_this_user_owns():
     assert count is not None and count >= 1
 
 
-def test_the_user_task_count_is_unknown_when_ps_cannot_run(monkeypatch):
-    def broken(*args, **kwargs):
-        raise OSError("no ps")
-
-    monkeypatch.setattr(resources_module.subprocess, "run", broken)
-    assert user_task_count() is None
-
-    monkeypatch.setattr(
-        resources_module.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 1, "", "bad")
-    )
+def test_the_user_task_count_is_unknown_when_nothing_can_count_it(monkeypatch):
+    monkeypatch.setattr(resources_module, "_linux_task_count", lambda *a, **k: None)
+    monkeypatch.setattr(resources_module, "_ps_task_count", lambda: None)
     assert user_task_count() is None
 
 
-def test_threads_are_counted_on_linux_and_processes_elsewhere(monkeypatch):
+def test_ps_asks_for_threads_on_linux_and_processes_elsewhere(monkeypatch):
     seen: list[list[str]] = []
 
     def record(command, **kwargs):
@@ -185,12 +178,23 @@ def test_threads_are_counted_on_linux_and_processes_elsewhere(monkeypatch):
 
     monkeypatch.setattr(resources_module.subprocess, "run", record)
     monkeypatch.setattr(resources_module.sys, "platform", "linux")
-    assert user_task_count() == 3
+    assert resources_module._ps_task_count() == 3
     monkeypatch.setattr(resources_module.sys, "platform", "darwin")
-    assert user_task_count() == 3
+    assert resources_module._ps_task_count() == 3
 
     assert "-L" in seen[0] and "lwp=" in seen[0]
     assert "-L" not in seen[1] and "pid=" in seen[1]
+
+
+def test_linux_prefers_proc_and_does_not_run_ps(monkeypatch):
+    monkeypatch.setattr(resources_module.sys, "platform", "linux")
+    monkeypatch.setattr(resources_module, "_linux_task_count", lambda *a, **k: 7)
+
+    def unexpected(*args, **kwargs):  # pragma: no cover - a call is the failure
+        raise AssertionError("ps should not be needed on Linux")
+
+    monkeypatch.setattr(resources_module.subprocess, "run", unexpected)
+    assert user_task_count() == 7
 
 
 def test_core_dumps_are_disabled_unless_asked_for():
@@ -567,7 +571,17 @@ def ps_table(*rows: tuple[int, int, int, int]):
     return lambda command, **kwargs: subprocess.CompletedProcess(list(command), 0, text, "")
 
 
-def test_the_memory_of_a_tree_is_summed_from_ps():
+def use_ps_table(monkeypatch, runner) -> None:
+    """Pin the process table to the ``ps`` parser, so a test does not depend on ``/proc``.
+
+    Linux reads ``/proc`` in production; these tests are about how a ``ps`` table is
+    interpreted, so they run that parser on every platform.
+    """
+    monkeypatch.setattr(resources_module.subprocess, "run", runner)
+    monkeypatch.setattr(resources_module, "_process_table", resources_module._ps_process_table)
+
+
+def test_the_memory_of_a_tree_is_summed_from_the_system_table():
     measured = process_tree_rss_bytes(os.getpid())
 
     assert measured is not None and measured > 0
@@ -575,9 +589,8 @@ def test_the_memory_of_a_tree_is_summed_from_ps():
 
 
 def test_the_tree_is_the_descendants_and_the_process_group_together(monkeypatch):
-    monkeypatch.setattr(
-        resources_module.subprocess,
-        "run",
+    use_ps_table(
+        monkeypatch,
         ps_table(
             (100, 1, 100, 10),  # the launcher, leader of its group
             (101, 100, 101, 20),  # a child in a session of its own (what bubblewrap does)
@@ -592,32 +605,29 @@ def test_the_tree_is_the_descendants_and_the_process_group_together(monkeypatch)
 
 
 def test_a_process_that_exited_leaves_only_what_is_still_in_its_group(monkeypatch):
-    monkeypatch.setattr(resources_module.subprocess, "run", ps_table((200, 1, 100, 64), (300, 1, 300, 999)))
+    use_ps_table(monkeypatch, ps_table((200, 1, 100, 64), (300, 1, 300, 999)))
 
     assert process_tree_rss_bytes(100) == 64 * 1024
     assert process_tree_rss_bytes(999) == 0
 
 
 def test_descendants_include_children_in_other_sessions_but_not_the_caller_or_strangers(monkeypatch):
-    monkeypatch.setattr(
-        resources_module.subprocess,
-        "run",
+    use_ps_table(
+        monkeypatch,
         ps_table((100, 1, 100, 1), (101, 100, 101, 1), (102, 101, 101, 1), (103, 1, 100, 1), (104, 1, 104, 1)),
     )
 
     assert descendant_pids(100) == {101, 102, 103}
 
 
-def test_no_descendants_are_reported_when_ps_cannot_be_read(monkeypatch):
-    monkeypatch.setattr(
-        resources_module.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 1, "", "bad")
-    )
+def test_no_descendants_are_reported_when_the_table_cannot_be_read(monkeypatch):
+    monkeypatch.setattr(resources_module, "_process_table", lambda: None)
 
     assert descendant_pids(100) == frozenset()
 
 
 def test_a_cycle_in_the_table_cannot_make_the_walk_loop(monkeypatch):
-    monkeypatch.setattr(resources_module.subprocess, "run", ps_table((100, 101, 100, 8), (101, 100, 101, 8)))
+    use_ps_table(monkeypatch, ps_table((100, 101, 100, 8), (101, 100, 101, 8)))
 
     assert process_tree_rss_bytes(100) == 16 * 1024
 
@@ -645,16 +655,8 @@ def test_a_grandchild_in_its_own_session_is_still_counted():
         child.wait()
 
 
-def test_nothing_can_be_measured_when_ps_cannot_run(monkeypatch):
-    def broken(*args, **kwargs):
-        raise OSError("no ps")
-
-    monkeypatch.setattr(resources_module.subprocess, "run", broken)
-    assert process_tree_rss_bytes(os.getpid()) is None
-
-    monkeypatch.setattr(
-        resources_module.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 1, "", "bad")
-    )
+def test_nothing_can_be_measured_when_the_table_cannot_be_read(monkeypatch):
+    monkeypatch.setattr(resources_module, "_process_table", lambda: None)
     assert process_tree_rss_bytes(os.getpid()) is None
 
 
@@ -663,7 +665,7 @@ def test_unparsable_rows_are_ignored(monkeypatch):
         text = f"   \n{os.getpid()} 1 {os.getpid()} 1024\nnonsense\n1 2 3 x\n1 2 3\n"
         return subprocess.CompletedProcess([], 0, text, "")
 
-    monkeypatch.setattr(resources_module.subprocess, "run", noisy)
+    use_ps_table(monkeypatch, noisy)
 
     assert process_tree_rss_bytes(os.getpid()) == 1024 * 1024
 

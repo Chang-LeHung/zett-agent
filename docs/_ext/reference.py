@@ -343,7 +343,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "SandboxResult",
         "SandboxedCommand",
     ),
-    "zett_agent.sandbox.binaries": ("BUNDLE_DIRECTORY", "bundled_busybox", "shell_argv"),
+    "zett_agent.sandbox.binaries": ("BUNDLE_DIRECTORY", "bundled_bwrap", "bwrap_path"),
     "zett_agent.sandbox.errors": (
         "SandboxClosedError",
         "SandboxCommandError",

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from .base import Sandbox, SandboxedCommand
+from .binaries import bwrap_path
 from .errors import SandboxUnavailableError
 from .policy import NetworkMode, ResolvedPolicy, SandboxPolicy, resolve_policy
 from .resources import MemoryStrategy
@@ -148,11 +148,12 @@ class LinuxSandbox(Sandbox):
             raise SandboxUnavailableError(
                 "LinuxSandbox needs Linux. macOS uses MacOSSandbox; Windows uses WindowsSandbox, which does not isolate."
             )
-        executable = self._bwrap_path or shutil.which("bwrap")
+        executable = self._bwrap_path or bwrap_path()
         if executable is None or not os.access(executable, os.X_OK):
             raise SandboxUnavailableError(
-                "bubblewrap (bwrap) was not found. Install it with your package manager, "
-                "for example `apt install bubblewrap` or `dnf install bubblewrap`."
+                "bubblewrap (bwrap) was not found, and this wheel carries no build for this architecture. "
+                "Install it with your package manager, for example `apt install bubblewrap` or "
+                "`dnf install bubblewrap`."
             )
         probe_arguments = [
             executable,

@@ -69,8 +69,8 @@ msgid ":class:`~zett_agent.model.AgentModel` is the protocol every adapter follo
 msgstr ":class:`~zett_agent.model.AgentModel`\\ 是每个适配器都要遵循的协议。"
 
 #: ../../reference/index.rst:62
-msgid "The ``tools``, ``providers``, ``extensions``, ``extensions.server_tools``, and ``sandbox`` packages re-export their main names lazily: a name loads its defining module the first time it is used, so importing the package imports nothing. Every other name is imported from the module that defines it::"
-msgstr "``tools``\\ 、\\ ``providers``\\ 、\\ ``extensions``\\ 、\\ ``extensions.server_tools``\\ 与\\ ``sandbox``\\ 包会惰性地再导出各自的主要名称：名称在首次使用时才加载其定义模块，所以导入包本身不会导入任何东西。其余名称仍从定义它的模块导入::"
+msgid "The ``tools``, ``providers``, ``extensions``, ``extensions.server_tools``, ``jit_harness``, and ``sandbox`` packages re-export their main names lazily: a name loads its defining module the first time it is used, so importing the package imports nothing. Every other name is imported from the module that defines it::"
+msgstr "``tools``\\ 、\\ ``providers``\\ 、\\ ``extensions``\\ 、\\ ``extensions.server_tools``\\ 、\\ ``jit_harness``\\ 与\\ ``sandbox``\\ 包会惰性地再导出各自的主要名称：名称在首次使用时才加载其定义模块，所以导入包本身不会导入任何东西。其余名称仍从定义它的模块导入::"
 
 #: ../../reference/index.rst:69
 msgid "The reference documents every public object the runtime defines, plus the protected subclass helpers extension authors need. It intentionally omits unrelated inherited methods from Python enums and third-party validation frameworks."

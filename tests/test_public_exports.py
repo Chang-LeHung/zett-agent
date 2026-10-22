@@ -26,6 +26,7 @@ LAZY_FACADES = (
     "zett_agent.providers",
     "zett_agent.extensions",
     "zett_agent.extensions.server_tools",
+    "zett_agent.jit_harness",
     "zett_agent.sandbox",
 )
 

@@ -77,6 +77,8 @@ __all__ = [
 
 #: Where a cgroup v2 hierarchy is mounted when the machine uses the unified layout.
 CGROUP_ROOT = Path("/sys/fs/cgroup")
+#: Where Linux exposes one directory per process; a test points this at a fixture tree.
+_PROC_ROOT = Path("/proc")
 #: The period a ``cpu.max`` quota is spread over, in microseconds. 100 ms is the
 #: kernel default and the unit ``cpu_percent`` is scaled to.
 CPU_PERIOD_MICROSECONDS = 100_000
@@ -231,12 +233,51 @@ def user_task_count() -> int | None:
     ``RLIMIT_NPROC`` is compared with this number, not with the size of one process
     tree: a fork fails once the user owns that many in total. Linux counts threads
     too (it is "more precisely" a limit on threads), and macOS counts processes
-    only. ``ps`` is asked rather than ``/proc`` so one code path serves both.
+    only. Linux reads ``/proc`` and macOS asks ``ps``, which is the system-provided
+    path on a platform that has no ``/proc``.
     None means it could not be counted, and the caller then does not pretend to
     limit processes.
     """
     if os.name != "posix":
         return None
+    if sys.platform.startswith("linux"):
+        counted = _linux_task_count()
+        if counted is not None:
+            return counted
+    return _ps_task_count()
+
+
+def _linux_task_count(root: Path | None = None) -> int | None:
+    """Count this uid's tasks from ``/proc``, as ``ps -L -U <uid>`` would.
+
+    Each process's ``status`` names its real uid and how many threads it has; the
+    sum is the number ``RLIMIT_NPROC`` applies to. None means ``/proc`` is not
+    readable, and the caller falls back to ``ps``.
+    """
+    base = _PROC_ROOT if root is None else root
+    uid = str(os.getuid())
+    try:
+        entries = list(base.iterdir())
+    except OSError:
+        return None
+    total = 0
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            status = (entry / "status").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue  # the process exited while it was being read
+        fields = {line.split(":", 1)[0]: line.split(":", 1)[1] for line in status.splitlines() if ":" in line}
+        if fields.get("Uid", "").split()[:1] != [uid]:
+            continue
+        threads = fields.get("Threads", "").strip()
+        total += int(threads) if threads.isdigit() else 1
+    return total if total else None
+
+
+def _ps_task_count() -> int | None:
+    """Count this uid's processes (threads on Linux) by asking ``ps``."""
     command = ["ps", "-U", str(os.getuid()), "-o", "pid="]
     if sys.platform.startswith("linux"):
         command = ["ps", "-L", "-U", str(os.getuid()), "-o", "lwp="]
@@ -727,9 +768,54 @@ def plan_resources(
 def _process_table() -> tuple[dict[int, tuple[int, int, int]], dict[int, list[int]]] | None:
     """Read every process as ``pid -> (parent, group, resident KiB)`` and the parent-to-children map.
 
-    One ``ps`` call serves both the memory watchdog and the tree kill. None means
-    ``ps`` could not be read.
+    Linux reads ``/proc``; macOS asks ``ps`` once, which serves both the memory
+    watchdog and the tree kill. None means the table could not be read.
     """
+    if sys.platform.startswith("linux"):
+        table = _linux_process_table()
+        if table is not None:
+            return table
+    return _ps_process_table()
+
+
+def _linux_process_table(
+    root: Path | None = None,
+) -> tuple[dict[int, tuple[int, int, int]], dict[int, list[int]]] | None:
+    """Build the process table from ``/proc`` without running a program."""
+    base = _PROC_ROOT if root is None else root
+    try:
+        entries = list(base.iterdir())
+    except OSError:
+        return None
+    page_size = os.sysconf("SC_PAGE_SIZE")
+    rows: dict[int, tuple[int, int, int]] = {}
+    children: dict[int, list[int]] = {}
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue  # the process exited while it was being read
+        # The command name is parenthesized and may itself contain spaces or parentheses.
+        _, _, tail = stat.rpartition(")")
+        fields = tail.split()
+        if len(fields) < 22:
+            continue
+        try:
+            parent, group, resident_pages = int(fields[1]), int(fields[2]), int(fields[21])
+        except ValueError:
+            continue
+        process = int(entry.name)
+        rows[process] = (parent, group, resident_pages * page_size // 1024)
+        children.setdefault(parent, []).append(process)
+    if not rows:
+        return None
+    return rows, children
+
+
+def _ps_process_table() -> tuple[dict[int, tuple[int, int, int]], dict[int, list[int]]] | None:
+    """Build the process table from one ``ps`` call."""
     try:
         result = subprocess.run(
             ["ps", "-axo", "pid=,ppid=,pgid=,rss="], capture_output=True, text=True, timeout=10, check=False

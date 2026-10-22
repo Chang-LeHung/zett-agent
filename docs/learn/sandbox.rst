@@ -40,9 +40,18 @@ exit, which is what you want for a program someone else wrote:
 
 ``run`` behaves like :func:`subprocess.run`. A list runs the program directly
 with nothing parsed, which is the safer form for anything built from untrusted
-text; a string runs through ``/bin/sh -c``, so pipes work. ``check=True`` raises
+text; a string runs through a shell, so pipes work. ``check=True`` raises
 :class:`~zett_agent.sandbox.errors.SandboxCommandError`, which carries the whole
 result. From async code use ``async with`` and ``await sb.arun(...)``.
+
+That shell is ``sh`` on ``PATH``, and on Linux it falls back to the static
+BusyBox the wheel carries for x86_64 and aarch64, so a distroless image without
+``/bin/sh`` can still run a command string. Pass ``shell=`` to
+:func:`~zett_agent.sandbox.policy.command_arguments` to pin another one; macOS
+and ordinary Linux images always use their own. The runtime reads process counts
+and the process tree from ``/proc`` on Linux, so it needs no ``ps`` there, and
+macOS keeps using its built-in ``ps``. If neither a shell nor a matching bundle
+exists, the error names what to install rather than running the command bare.
 
 What the session does for you:
 

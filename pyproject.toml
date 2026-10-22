@@ -59,6 +59,10 @@ packages = ["src/zett_agent"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/zett_agent/jit_harness/instructions.md" = "zett_agent/jit_harness/instructions.md"
+"src/zett_agent/_bin/linux-x86_64/busybox" = "zett_agent/_bin/linux-x86_64/busybox"
+"src/zett_agent/_bin/linux-aarch64/busybox" = "zett_agent/_bin/linux-aarch64/busybox"
+"src/zett_agent/_bin/COPYING.busybox" = "zett_agent/_bin/COPYING.busybox"
+"src/zett_agent/_bin/README.md" = "zett_agent/_bin/README.md"
 
 [tool.hatch.build.targets.sdist]
 # Keep package resources alongside Python source when rebuilding a wheel.

@@ -542,7 +542,7 @@ class SubprocessToolHost(JITToolHost):
         pending = self._send(frame)
         try:
             reply = await asyncio.wait_for(asyncio.wrap_future(pending.future), timeout)
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             self._kill(f"The repository process did not answer within {timeout:g} seconds")
             raise JITHostTimeout(f"A repository tool ran for more than {timeout:g} seconds and was stopped") from None
         return decode_value(reply.get("value"))

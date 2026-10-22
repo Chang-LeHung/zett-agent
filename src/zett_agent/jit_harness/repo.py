@@ -30,7 +30,7 @@ from ..ids import new_uuid7
 from ..tools.base import AgentTool
 
 if TYPE_CHECKING:
-    from .runtime import JITHarness
+    from .host import HarnessCalls
 
 #: Names the harness reserves for its model-facing management tools.
 MANAGEMENT_NAMES = frozenset({"repo_create", "repo_load", "repo_unload", "profile_tools"})
@@ -185,7 +185,7 @@ def parse_resource(name: str, text: str) -> TextResource:
 class RepoLoader(SourceFileLoader):
     """Internal: execute one repository module with ``harness`` in its globals."""
 
-    def __init__(self, fullname: str, path: str, harness: JITHarness) -> None:
+    def __init__(self, fullname: str, path: str, harness: HarnessCalls) -> None:
         super().__init__(fullname, path)
         self.harness = harness
 
@@ -216,14 +216,14 @@ class RepoFinder(MetaPathFinder):
     """
 
     def __init__(self) -> None:
-        self._roots: dict[str, tuple[Path, JITHarness]] = {}
+        self._roots: dict[str, tuple[Path, HarnessCalls]] = {}
 
     @property
     def empty(self) -> bool:
         """Whether no repository is mounted."""
         return not self._roots
 
-    def mount(self, alias: str, directory: Path, harness: JITHarness) -> None:
+    def mount(self, alias: str, directory: Path, harness: HarnessCalls) -> None:
         """Serve ``alias`` and its submodules from ``directory``."""
         self._roots[alias] = (directory, harness)
 
@@ -277,7 +277,7 @@ class LoadedRepo:
 _FINDER = RepoFinder()
 
 
-def _mount(alias: str, directory: Path, harness: JITHarness) -> None:
+def _mount(alias: str, directory: Path, harness: HarnessCalls) -> None:
     """Serve a repository, installing the shared finder when it is the first. Hold ``_LOAD_LOCK``."""
     _FINDER.mount(alias, directory, harness)
     if _FINDER not in sys.meta_path:
@@ -400,7 +400,7 @@ def describe_failure(error: Exception, directory: Path) -> str:
     return "\n".join(lines)[:MAX_FAILURE_CHARS]
 
 
-def load_repo(directory: Path, harness: JITHarness, scan: RepoScan) -> LoadedRepo:
+def load_repo(directory: Path, harness: HarnessCalls, scan: RepoScan) -> LoadedRepo:
     """Import every module of a repository and collect its tools.
 
     Module bodies run here, with the application's privileges. On any failure

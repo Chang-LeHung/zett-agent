@@ -121,6 +121,9 @@ grant permissions or make an unloaded or policy-filtered dependency available.
 
 Tool names are 1–64 letters, digits, underscores, or hyphens; so are note file
 names. The tool names `repo_create`, `repo_load`, `repo_unload`, and `profile_tools`
-are reserved, and base tools cannot be overwritten. Code is trusted, not sandboxed: imports and module bodies
+are reserved, and base tools cannot be overwritten. Tool results should be JSON
+values (null, booleans, numbers, strings, lists, and dictionaries of those): an
+application that runs this code in a child process cannot carry anything else.
+Code is trusted, not sandboxed: imports and module bodies
 execute on `repo_load`. Do not put credentials or transient application objects in the repository. Module globals and conversation history are not
 saved; only the files are.

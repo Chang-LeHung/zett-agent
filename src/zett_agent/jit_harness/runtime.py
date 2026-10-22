@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from ..agent import AgentRunContext
 from ..ids import new_uuid7
+from ..json_types import JsonValue
 from ..messages import ImageContent, TextContent, ToolCall, ToolMessage
 from ..tools.base import (
     _SYNC_TOOL_RUNNER,
@@ -25,14 +26,13 @@ from ..tools.base import (
 from ..tools.invocation import invoke_tool
 from .enums import ToolCallStatus, ToolOrigin
 from .errors import ToolErrorReport
+from .host import HarnessCalls, HostedRepo, InProcessToolHost, JITToolHost
 from .profiling import MAX_RETAINED_CALLS, ActiveToolCall, JITHarnessProfile, ToolProfiler, ToolProfileStats
 from .repo import (
     INIT_FILE,
     MANAGEMENT_NAMES,
     SKELETON,
-    LoadedRepo,
     TextResource,
-    load_repo,
     scan_repo,
     validate_name,
     validate_repo_name,
@@ -96,7 +96,7 @@ async def _run_sync_tool(function: Callable[..., Any], **arguments: Any) -> Tool
     return await completed
 
 
-class JITHarness:
+class JITHarness(HarnessCalls):
     """An independently evolving toolbox of Python tools and Markdown notes.
 
     The toolbox is one repository: a Python package in a directory, written with
@@ -120,8 +120,11 @@ class JITHarness:
     Note:
         This is not a Python sandbox. Source has the process's filesystem,
         network, and import privileges. Unload controls harness dispatch, not
-        what arbitrary Python can do. Session-local profiles retain a bounded
-        window of managed dispatches without payloads; inspect them with profile().
+        what arbitrary Python can do. To contain a crash or a runaway loop, pass a
+        :class:`~zett_agent.jit_harness.host.SubprocessToolHost`, which runs the
+        repository in a child process and calls back for nested tools.
+        Session-local profiles retain a bounded window of managed dispatches
+        without payloads; inspect them with profile().
 
     Examples:
         Create a repository, write a tool into it, and load it::
@@ -142,6 +145,7 @@ class JITHarness:
         error_capacity: int = 100,
         error_message_chars: int = 4000,
         call_capacity: int = MAX_RETAINED_CALLS,
+        host: JITToolHost | None = None,
     ) -> None:
         if max_call_depth < 1:
             raise ValueError("max_call_depth must be positive")
@@ -174,7 +178,12 @@ class JITHarness:
         # The repository this harness serves, if any: its name, and the imported
         # package while it is loaded. A failed first load leaves the name only.
         self._repo: str | None = None
-        self._loaded: LoadedRepo | None = None
+        self._loaded: HostedRepo | None = None
+        # Where repository Python runs and how its tools are called. The default
+        # imports into this process; a SubprocessToolHost keeps crashes and hangs
+        # in a child.
+        self._host: JITToolHost = host or InProcessToolHost()
+        self._host.bind_dispatch(self._dispatch_nested)
         # True while unload_repo() hides the loaded version.
         self._hidden = False
         # Whether the session directory was already searched for a repository
@@ -291,6 +300,20 @@ class JITHarness:
         finally:
             _SYNC_TOOL_RUNNER.reset(worker_token)
             _CALL_STACK.reset(stack_token)
+            _BINDING.reset(binding_token)
+
+    async def _dispatch_nested(self, name: str, arguments: dict[str, JsonValue]) -> ToolResult:
+        """Answer one ``harness.call_tool`` that arrived from a child process.
+
+        The call belongs to the request currently bound to this harness, so it takes
+        the same path as an in-process nested call: name checks, extension hooks, the
+        request's tool registry, and profiling. The binding is set here because the
+        frame is handled outside the task that is awaiting the outer tool.
+        """
+        binding_token = _BINDING.set(HarnessBinding(self, self._context, asyncio.get_running_loop()))
+        try:
+            return await self.call_tool(name, **arguments)
+        finally:
             _BINDING.reset(binding_token)
 
     async def _profiled_call(self, name: str, context: AgentRunContext | None, arguments: dict[str, Any]) -> ToolResult:
@@ -558,18 +581,18 @@ class JITHarness:
         their bodies a second time. Otherwise the new package is imported before
         anything changes, so a failure keeps the previous version registered. Module
         bodies run with ``_compiling`` set, which stops them from mutating the
-        harness or dispatching tools.
+        harness or dispatching tools. The host decides where the import happens.
         """
         assert self._repo is not None
         directory = self._directory / self._repo
         scan = scan_repo(directory)
         self._resources = scan.resources
-        if self._loaded is not None and self._loaded.fingerprint == scan.fingerprint:
+        if self._loaded is not None and self._loaded.fingerprint == scan.fingerprint and not self._host.needs_reload:
             self._reveal()
             return
         self._compiling = True
         try:
-            loaded = load_repo(directory, self, scan)
+            loaded = self._host.load(directory, scan, self)
         finally:
             self._compiling = False
         clash = sorted(loaded.tools.keys() & self._base_names)
@@ -645,7 +668,7 @@ class JITHarness:
             return self._result("unloaded")
 
     def close(self) -> None:
-        """Remove the repository's modules and import hook from the interpreter.
+        """Remove the repository's modules and import hook, and stop its child process.
 
         The files stay on disk. The harness can load them again afterwards.
         """
@@ -653,6 +676,7 @@ class JITHarness:
             if self._loaded is not None:
                 self._loaded.close()
                 self._loaded = None
+            self._host.close()
 
     def unload_tool(self, name: str) -> ToolMutationResult:
         """Unload a callable registration while retaining its available implementation.

@@ -383,7 +383,7 @@ def test_asking_for_an_unisolated_backend_explicitly_does_not_warn(backend, expe
 
 def test_a_backend_that_exists_but_cannot_run_is_never_replaced_by_passthrough(monkeypatch):
     monkeypatch.setattr(factory.sys, "platform", "linux")
-    monkeypatch.setattr("zett_agent.sandbox.linux.shutil.which", lambda name: None)
+    monkeypatch.setattr("zett_agent.sandbox.linux.bwrap_path", lambda explicit=None: None)
     monkeypatch.setattr("zett_agent.sandbox.linux.sys.platform", "linux")
 
     with warnings.catch_warnings():

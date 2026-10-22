@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from zett_agent.sandbox import policy as policy_module
-from zett_agent.sandbox.binaries import shell_argv
 from zett_agent.sandbox.errors import SandboxError, SandboxPolicyError, SandboxUnavailableError
 from zett_agent.sandbox.policy import (
     DEFAULT_INHERITED_ENVIRONMENT,
@@ -254,8 +253,7 @@ def test_the_real_host_environment_is_the_default_source(monkeypatch):
 
 
 def test_command_arguments_wrap_a_string_in_a_shell_and_keep_a_sequence_whole():
-    assert command_arguments("echo hi | cat") == (*shell_argv(), "-c", "echo hi | cat")
-    assert command_arguments("ls", shell="/bin/bash") == ("/bin/bash", "-c", "ls")
+    assert command_arguments("echo hi | cat") == ("/bin/sh", "-c", "echo hi | cat")
     assert command_arguments(["python3", "a b.py"]) == ("python3", "a b.py")
     assert command_arguments(("ls",)) == ("ls",)
 

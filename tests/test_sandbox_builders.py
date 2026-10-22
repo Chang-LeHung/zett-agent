@@ -285,7 +285,7 @@ def test_linux_check_needs_linux(monkeypatch):
 
 def test_linux_check_reports_a_missing_binary(monkeypatch):
     monkeypatch.setattr(linux.sys, "platform", "linux")
-    monkeypatch.setattr(linux.shutil, "which", lambda name: None)
+    monkeypatch.setattr(linux, "bwrap_path", lambda explicit=None: None)
 
     with pytest.raises(SandboxUnavailableError, match="apt install bubblewrap"):
         LinuxSandbox().check()
@@ -293,7 +293,7 @@ def test_linux_check_reports_a_missing_binary(monkeypatch):
 
 def test_linux_check_names_the_usual_causes_when_the_probe_fails(monkeypatch):
     monkeypatch.setattr(linux.sys, "platform", "linux")
-    monkeypatch.setattr(linux.shutil, "which", lambda name: "/usr/bin/bwrap")
+    monkeypatch.setattr(linux, "bwrap_path", lambda explicit=None: "/usr/bin/bwrap")
     monkeypatch.setattr(linux.os, "access", lambda path, mode: True)
     monkeypatch.setattr(
         linux.subprocess, "run", lambda *a, **k: completed(1, "bwrap: setting up uid map: Permission denied")

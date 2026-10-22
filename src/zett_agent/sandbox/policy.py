@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .._compat import StrEnum
+from .binaries import shell_argv
 from .errors import SandboxPolicyError
 
 __all__ = [
@@ -569,20 +570,26 @@ def build_environment(
     return environment
 
 
-def command_arguments(command: str | Sequence[str], *, shell: str = "/bin/sh") -> tuple[str, ...]:
+def command_arguments(command: str | Sequence[str], *, shell: str | Sequence[str] | None = None) -> tuple[str, ...]:
     """Return the argument vector for a command given as a shell string or as arguments.
 
     A string runs through ``shell -c``, so pipes and redirections work. A
     sequence runs directly, which is the safer form for a program and its
     arguments because nothing is parsed.
 
+    Args:
+        command: A shell string, or the program and its arguments.
+        shell: Shell for a string. None resolves ``sh`` on ``PATH``, then the
+            BusyBox applet the wheel carries for this Linux architecture.
+
     Raises:
         SandboxPolicyError: If the command is empty or contains NUL.
+        SandboxUnavailableError: A string was given, and no shell exists to run it.
     """
     if isinstance(command, str):
         if not command.strip():
             raise SandboxPolicyError("command cannot be blank")
-        arguments: tuple[str, ...] = (shell, "-c", command)
+        arguments: tuple[str, ...] = (*shell_argv(shell), "-c", command)
     else:
         arguments = tuple(command)
         if not arguments or not all(isinstance(item, str) for item in arguments) or not arguments[0]:

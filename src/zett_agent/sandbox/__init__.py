@@ -22,6 +22,7 @@ from .._lazy import lazy_exports as _lazy_exports
 
 _MODULES = {
     "base": ("Sandbox", "SandboxResult", "SandboxedCommand"),
+    "binaries": ("shell_argv",),
     "errors": (
         "SandboxClosedError",
         "SandboxCommandError",
@@ -46,6 +47,7 @@ if _TYPE_CHECKING:
     from .base import Sandbox as Sandbox
     from .base import SandboxedCommand as SandboxedCommand
     from .base import SandboxResult as SandboxResult
+    from .binaries import shell_argv as shell_argv
     from .errors import SandboxClosedError as SandboxClosedError
     from .errors import SandboxCommandError as SandboxCommandError
     from .errors import SandboxError as SandboxError

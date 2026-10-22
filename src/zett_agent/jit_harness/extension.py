@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
 from threading import RLock
+from time import monotonic
 
 from .._compat import aclosing_stream
 from ..agent import AgentRunContext
@@ -17,6 +18,7 @@ from ..messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage
 from ..model import ModelEvent, ModelRequest
 from ..tools.base import AgentTool, ToolExecutionMode, ToolResult, render_tool_guidance, tool
 from .enums import ToolOrigin
+from .host import JITToolHost
 from .profiling import MAX_RETAINED_CALLS, ToolProfiler
 from .repo import session_directory_name
 from .results import RepoResult, ToolStatsReport
@@ -112,6 +114,32 @@ class JITHarnessExtension(AgentExtension):
         error_message_chars: Maximum characters retained per error message.
         call_capacity: Maximum finished call records retained per session;
             oldest records are dropped first and lifetime aggregates stay complete.
+        host_factory: Builds the place each session's repository code runs, called
+            once per session. None imports it into this process. Pass
+            ``lambda: SubprocessToolHost(sandbox=...)`` to keep crashes and hangs
+            out of the agent and to bound what the code may touch.
+        max_sessions: How many sessions may keep a harness in memory at once. A new
+            session closes the harness that has gone unused the longest, as long as
+            no request is running in it, which is what releases a session's child
+            process. Sessions are also released explicitly with
+            :meth:`forget_session`. When every other session is mid-request the cap
+            is exceeded rather than dropping live work.
+
+    A session's resources live as long as it does:
+
+    .. code-block:: text
+
+        first request for a session
+              │
+              ▼
+        JITHarness ──owns──► JITToolHost ──owns──► child process (subprocess host)
+              ▲                                        │
+              │  reused on later turns                 │  spawned by repo_load
+              │                                        │  killed by a reload, timeout, crash
+              └──────── forgotten on forget_session ◄──┘  or eviction by max_sessions
+
+    Nothing closes a session when a run ends: a later turn of the same conversation
+    expects its tools and its child process to still be there.
 
     Note:
         Opt in only for trusted generated Python. The model can only run what it
@@ -140,14 +168,21 @@ class JITHarnessExtension(AgentExtension):
         error_capacity: int = 100,
         error_message_chars: int = 4000,
         call_capacity: int = MAX_RETAINED_CALLS,
+        host_factory: Callable[[], JITToolHost] | None = None,
+        max_sessions: int = 8,
     ) -> None:
         if max_call_depth < 1:
             raise ValueError("max_call_depth must be positive")
         if not isinstance(manage_base_tools, bool):
             raise ValueError("manage_base_tools must be a boolean")
+        if isinstance(max_sessions, bool) or not isinstance(max_sessions, int) or max_sessions < 1:
+            raise ValueError("max_sessions must be a positive integer")
         self._root = Path(root).expanduser().absolute()
         self._manage_base_tools = manage_base_tools
         self._max_call_depth = max_call_depth
+        # One host per session: a subprocess host owns a process that one session's
+        # repository runs in.
+        self._host_factory = host_factory
         # Validate every retention bound before the first session request.
         ToolProfiler(
             error_capacity=error_capacity, error_message_chars=error_message_chars, call_capacity=call_capacity
@@ -156,15 +191,20 @@ class JITHarnessExtension(AgentExtension):
         self._error_message_chars = error_message_chars
         self._call_capacity = call_capacity
         self._sessions: dict[str, JITHarness] = {}
+        # When each session was last served, so a full cache can drop the stalest one.
+        self._last_used: dict[str, float] = {}
+        self._max_sessions = max_sessions
         self._lock = RLock()
 
     def get_harness(self, session_id: str) -> JITHarness:
         """Return an existing session's toolbox for explicit inspection."""
         with self._lock:
             try:
-                return self._sessions[session_id]
+                harness = self._sessions[session_id]
             except KeyError:
                 raise KeyError(f"No JIT harness for session {session_id!r}") from None
+            self._last_used[session_id] = monotonic()
+            return harness
 
     def session_directory(self, session_id: str) -> Path:
         """Return the directory that holds one session's repository.
@@ -182,6 +222,27 @@ class JITHarnessExtension(AgentExtension):
                 raise RuntimeError("Cannot forget a harness with an active request")
             harness.close()
             del self._sessions[session_id]
+            self._last_used.pop(session_id, None)
+
+    def _release_stalest(self, incoming: str) -> None:
+        """Make room for one more session by closing the least recently used idle one.
+
+        A harness with a request in flight is never closed, so the cap is soft: when
+        every other session is busy the new one is added anyway, because refusing it
+        would fail the request that is already running.
+        """
+        while len(self._sessions) >= self._max_sessions:
+            candidates = [
+                (self._last_used.get(session, 0.0), session)
+                for session, harness in self._sessions.items()
+                if session != incoming and not harness.active
+            ]
+            if not candidates:
+                return
+            _, stale = min(candidates)
+            harness = self._sessions.pop(stale)
+            self._last_used.pop(stale, None)
+            harness.close()
 
     async def on_tool(self, context: AgentRunContext) -> None:
         """Rebind current base tools, mount wrappers, and remove unloaded tools."""
@@ -189,6 +250,7 @@ class JITHarnessExtension(AgentExtension):
         with self._lock:
             harness = self._sessions.get(session_id)
             if harness is None:
+                self._release_stalest(session_id)
                 harness = JITHarness(
                     self.session_directory(session_id),
                     manage_base_tools=self._manage_base_tools,
@@ -196,8 +258,10 @@ class JITHarnessExtension(AgentExtension):
                     error_capacity=self._error_capacity,
                     error_message_chars=self._error_message_chars,
                     call_capacity=self._call_capacity,
+                    host=self._host_factory() if self._host_factory is not None else None,
                 )
                 self._sessions[session_id] = harness
+            self._last_used[session_id] = monotonic()
             harness.attach(context, self._management_tools(harness))
 
     async def on_state(self, context: AgentRunContext) -> None:

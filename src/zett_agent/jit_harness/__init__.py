@@ -9,6 +9,18 @@ from .extension import (
     JITToolCompletedEvent,
     JITToolStartedEvent,
 )
+from .host import (
+    HarnessCalls,
+    HostedRepo,
+    InProcessToolHost,
+    JITHostCrashed,
+    JITHostError,
+    JITHostTimeout,
+    JITToolHost,
+    SubprocessToolHost,
+    ToolNotSerializable,
+    ToolSpec,
+)
 from .profiling import JITHarnessProfile, ToolCallProfile, ToolProfileStats
 from .repo import TextKind
 from .results import (
@@ -25,6 +37,16 @@ from .runtime import JITHarness
 __all__ = [
     "JITHarness",
     "JITHarnessExtension",
+    "HarnessCalls",
+    "HostedRepo",
+    "InProcessToolHost",
+    "JITToolHost",
+    "SubprocessToolHost",
+    "ToolSpec",
+    "JITHostError",
+    "JITHostCrashed",
+    "JITHostTimeout",
+    "ToolNotSerializable",
     "JIT_TOOL_STARTED_EVENT_NAME",
     "JIT_TOOL_COMPLETED_EVENT_NAME",
     "JITToolStartedEvent",

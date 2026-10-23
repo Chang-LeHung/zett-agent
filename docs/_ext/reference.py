@@ -181,6 +181,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "SkillExtension",
         "SkillFileParser",
     ),
+    "zett_agent.extensions.sql": ("SQLSessionExtension",),
     "zett_agent.extensions.sqlite": ("SQLiteSessionExtension",),
     "zett_agent.extensions.steering": ("STEERING_MESSAGE_EVENT_NAME", "SteeringExtension"),
     "zett_agent.extensions.refusal_replay": ("RefusalReplay", "RefusalReplayExtension"),
@@ -394,7 +395,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     "zett_agent.sandbox.windows": ("WindowsSandbox",),
     "zett_agent.resume": ("ResumeKind", "ResumePoint", "classify_resume"),
     "zett_agent.stop": ("StopInfo", "StopReason", "classify_stop"),
-    "zett_agent.storage": ("SQLiteSessionStorage",),
+    "zett_agent.storage": ("SQLSessionStorage", "SQLiteSessionStorage"),
     "zett_agent.sync": ("SyncAgent", "SyncModelAdapter", "create_agent_sync"),
     "zett_agent.sync_runtime": ("SyncContext", "SyncObject", "SyncRuntime", "SyncStream"),
     "zett_agent.tools.base": (

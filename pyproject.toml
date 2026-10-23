@@ -42,6 +42,12 @@ dependencies = [
   "json-repair>=0.54,<1",
 ]
 
+[project.optional-dependencies]
+# Server database drivers for SQLSessionStorage. SQLite needs only aiosqlite,
+# which is already a runtime dependency.
+mysql = ["aiomysql>=0.2,<1"]
+postgres = ["psycopg[binary]>=3.2,<4"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

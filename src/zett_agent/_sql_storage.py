@@ -1,10 +1,14 @@
-"""SQLite-backed session storage, imported lazily by :mod:`zett_agent.storage`.
+"""SQL-backed session storage, imported lazily by :mod:`zett_agent.storage`.
 
-Declaring the ORM models needs SQLAlchemy at import time, so this module stays
-out of ``zett_agent.storage``'s module scope. Importing the message codec, the
-message kinds, or the lazy ``SQLiteSessionStorage`` export costs nothing until
-something actually asks for SQLite.
+One schema serves SQLite, MySQL, and PostgreSQL: ids and names have explicit
+lengths, and long text columns use ``LONGTEXT`` on MySQL where ``TEXT`` would cap a
+message at 64 KiB. Declaring the ORM models needs SQLAlchemy at import time, so
+this module stays out of ``zett_agent.storage``'s module scope. Importing the
+message codec, the message kinds, or the lazy ``SQLSessionStorage`` export costs
+nothing until something actually asks for a database.
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
@@ -15,12 +19,12 @@ from pathlib import Path
 from typing import Any, cast
 from weakref import WeakKeyDictionary
 
-from sqlalchemy import Delete, Index, Integer, String, Text, delete, event, func, select
-from sqlalchemy.engine import URL, CursorResult
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import Delete, Index, Integer, String, Text, delete, event, func, inspect, select
+from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.engine import URL, Connection, CursorResult, make_url
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
-from sqlalchemy.schema import CreateIndex
 
 from ._compat import UTC
 from .extensions.compaction import CompactedMessage
@@ -32,6 +36,9 @@ from .messages import AnyMessage, AssistantMessage, ToolMessage, UserMessage
 from .model import ModelUsage
 from .storage import _DEFAULT_SESSION_TYPE, MESSAGE_TYPES, MessageKind, decode_messages, encode_messages
 from .sync_runtime import SyncMethodsMixin
+
+#: Long text that holds a whole message or context; MySQL ``TEXT`` stops at 64 KiB.
+LongText = Text().with_variant(LONGTEXT(), "mysql")
 
 
 class Base(DeclarativeBase):
@@ -65,15 +72,15 @@ class RawLogMessageModel(Base):
     __table_args__ = (Index("ux_raw_session_sequence", "session_id", "sequence", unique=True),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    session_id: Mapped[str] = mapped_column(String, index=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
     request_id: Mapped[str] = mapped_column(String(36), index=True)
     sequence: Mapped[int] = mapped_column(Integer)
     role: Mapped[int] = mapped_column(Integer)
-    content: Mapped[str] = mapped_column(Text)
-    tool_name: Mapped[str | None] = mapped_column(String)
-    message_json: Mapped[str] = mapped_column(Text)
-    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
-    tags_json: Mapped[str] = mapped_column(Text, default="{}")
+    content: Mapped[str] = mapped_column(LongText)
+    tool_name: Mapped[str | None] = mapped_column(String(200))
+    message_json: Mapped[str] = mapped_column(LongText)
+    metadata_json: Mapped[str] = mapped_column(LongText, default="{}")
+    tags_json: Mapped[str] = mapped_column(LongText, default="{}")
     # UTC start of message processing, not the later database insertion time.
     started_at: Mapped[datetime] = mapped_column()
     # UTC completion of message processing.
@@ -110,28 +117,50 @@ class ContextSnapshotModel(Base):
     __table_args__ = (Index("ux_snapshot_session_version", "session_id", "version", unique=True),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    session_id: Mapped[str] = mapped_column(String, index=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
     version: Mapped[int] = mapped_column(Integer)
     compacted_through_sequence: Mapped[int] = mapped_column(Integer)
-    message_json: Mapped[str] = mapped_column(Text)
+    message_json: Mapped[str] = mapped_column(LongText)
     created_at: Mapped[datetime] = mapped_column()
     updated_at: Mapped[datetime] = mapped_column()
 
 
-async def ensure_indexes(connection: AsyncConnection) -> None:
-    """Add indexes missing from databases created by an older application version."""
+def _create_missing_indexes(connection: Connection) -> None:
+    """Add indexes that an older application version created without, on any dialect.
+
+    ``CREATE INDEX IF NOT EXISTS`` is not portable (MySQL 8 rejects it), so the
+    catalog is inspected and only the missing ones are created.
+    """
+    inspector = inspect(connection)
+    existing = {
+        table.name: {index["name"] for index in inspector.get_indexes(table.name)}
+        for table in Base.metadata.sorted_tables
+    }
     for table in Base.metadata.sorted_tables:
         for index in table.indexes:
-            await connection.execute(CreateIndex(index, if_not_exists=True))
+            if index.name not in existing.get(table.name, set()):
+                index.create(connection)
 
 
-async def ensure_session_type_column(connection: AsyncConnection) -> None:
-    """Ensure existing session tables have the integer type column."""
-    rows = (await connection.exec_driver_sql("PRAGMA table_info(agent_sessions)")).fetchall()
-    if "session_type" not in {row[1] for row in rows}:
-        await connection.exec_driver_sql(
-            "ALTER TABLE agent_sessions ADD COLUMN session_type INTEGER NOT NULL DEFAULT 0"
+def _add_missing_columns(connection: Connection) -> None:
+    """Add columns an older database is missing, with a plain ``ALTER TABLE``.
+
+    SQLAlchemy cannot alter a table portably, and the statement below is accepted by
+    SQLite, MySQL, and PostgreSQL alike. New databases already have the column.
+    """
+    inspector = inspect(connection)
+    if not inspector.has_table(AgentSessionModel.__tablename__):
+        return
+    columns = {column["name"] for column in inspector.get_columns(AgentSessionModel.__tablename__)}
+    if "session_type" not in columns:
+        connection.exec_driver_sql(
+            f"ALTER TABLE {AgentSessionModel.__tablename__} ADD COLUMN session_type INTEGER NOT NULL DEFAULT 0"
         )
+
+
+def _table_names(connection: Connection) -> set[str]:
+    """Return the tables this schema owns, for tests and diagnostics."""
+    return {name for name in inspect(connection).get_table_names() if name in Base.metadata.tables}
 
 
 async def _deleted(session: AsyncSession, statement: Delete) -> int:
@@ -179,40 +208,77 @@ def _decode_context_data(payload: str, *, field_name: str, nonempty_keys: bool =
     return json_object(value, field_name=f"Stored {field_name}", nonempty_keys=nonempty_keys)
 
 
-class SQLiteSessionStorage(SyncMethodsMixin):
-    """Standalone SQLite session storage shipped with zett-agent.
+#: Async dialect each supported driver uses.
+DIALECT_URLS = {
+    "sqlite": "sqlite+aiosqlite",
+    "mysql": "mysql+aiomysql",
+    "postgresql": "postgresql+psycopg",
+}
+#: Extra that installs each server driver, for the error message when it is missing.
+DRIVER_EXTRAS = {"mysql": "mysql", "postgresql": "postgres"}
+#: Port each server dialect listens on when the caller does not say.
+DEFAULT_PORTS = {"mysql": 3306, "postgresql": 5432}
 
-    The first append creates session identity and history. Root sessions store
-    no parent; delegated sessions store a plain parent ID without a foreign key.
-    Message metadata and tags live in each Raw Log message JSON envelope. Only
-    compaction creates snapshots.
 
-    Every storage operation is asynchronous and runs on SQLAlchemy's asyncio
-    SQLite driver, so persistence never blocks the Agent event loop. The file
-    path is prepared during construction; ORM tables are created by the first
-    awaited call, which keeps construction usable before a loop exists.
+def _sqlite_file(url: URL) -> Path | None:
+    """Return the SQLite file a URL names, or None for another dialect or ``:memory:``."""
+    database = url.database
+    if url.get_backend_name() != "sqlite" or database is None or database == ":memory:":
+        return None
+    return Path(database).expanduser()
+
+
+class SQLSessionStorage(SyncMethodsMixin):
+    """Session storage in SQLite, MySQL, or PostgreSQL.
+
+    One schema serves every dialect. The first append creates session identity and
+    history. Root sessions store no parent; delegated sessions store a plain parent
+    ID without a foreign key. Message metadata and tags live in each Raw Log message
+    JSON envelope. Only compaction creates snapshots.
+
+    Every operation is asynchronous and runs on SQLAlchemy's asyncio driver, so
+    persistence never blocks the Agent event loop. Connection setup happens in the
+    constructor; tables are created by the first awaited call, which keeps
+    construction usable before a loop exists.
 
     Args:
-        path: SQLite file path. None uses ``~/.zett-agent/sessions.sqlite3``.
-            Parent directories are created during construction.
+        url: A SQLAlchemy URL or string, for example
+            ``postgresql+psycopg://agent:secret@db:5432/sessions``. A string without
+            a scheme is taken as a SQLite file path. None builds the URL from the
+            arguments below.
+        driver: ``sqlite``, ``mysql``, or ``postgresql``; used only when ``url`` is
+            None.
+        path: SQLite file. None uses ``~/.zett-agent/sessions.sqlite3``; parent
+            directories are created during construction.
+        host: Server host for MySQL or PostgreSQL.
+        port: Server port; the dialect default when omitted.
+        user: Database user.
+        password: Database password. Prefer an environment variable or secret store
+            over a literal in source.
+        database: Schema or database name; required for a server dialect.
+        echo: Log every statement, for debugging a new deployment.
+        pool_size: Connections kept open per process for a server dialect.
+        max_overflow: Connections opened beyond ``pool_size`` under load.
+        pool_recycle: Reconnect after this many seconds, so a server-side idle
+            timeout does not surface as a broken connection.
+        connect_args: Extra DBAPI arguments passed straight to the driver.
 
     Note:
-        Close the owned connection pool with ``await storage.close()``. Tests
-        must pass a temporary file and never use the default user database.
+        SQLite uses one connection per loop instead of a pool, because a pooled
+        SQLite connection cannot cross event loops; WAL mode keeps a second
+        runtime process from blocking the first. MySQL and PostgreSQL use a normal
+        pooled connection with ``pool_pre_ping``.
 
     Examples:
-        Use a temporary database in tests::
+        A local file, a MySQL database, and a PostgreSQL database::
 
-            from pathlib import Path
-            from tempfile import TemporaryDirectory
+            storage = SQLSessionStorage("sessions.sqlite3")
+            mysql = SQLSessionStorage.for_mysql(user="agent", password=secret, database="sessions")
+            postgres = SQLSessionStorage.for_postgres(user="agent", password=secret, database="sessions")
 
-            with TemporaryDirectory() as directory:
-                storage = SQLiteSessionStorage(Path(directory) / "sessions.sqlite3")
-                try:
-                    session = await storage.create_session(title="Documentation review")
-                    assert await storage.get_session(session.session_id) == session
-                finally:
-                    await storage.close()
+        A URL, which covers anything SQLAlchemy supports::
+
+            storage = SQLSessionStorage("mysql+aiomysql://agent:secret@db:3306/sessions")
 
     .. zett-diagram:: session-view
 
@@ -230,28 +296,172 @@ class SQLiteSessionStorage(SyncMethodsMixin):
 
     .. warning::
         The default path writes personal data. Libraries and tests should pass
-        an explicit path instead of silently using the default location.
+        an explicit path, and a server deployment should pass credentials from the
+        environment rather than source.
 
     .. seealso::
-        :class:`~zett_agent.extensions.sqlite.SQLiteSessionExtension` integrates this storage with
-        lifecycle hooks, and :doc:`/extending/storage-adapter` explains the
-        generic storage boundary.
+        :class:`~zett_agent.extensions.sql.SQLSessionExtension` integrates this
+        storage with lifecycle hooks, and :doc:`/extending/storage-adapter`
+        explains the generic storage boundary.
     """
 
-    def __init__(self, path: str | Path | None = None) -> None:
-        self.path = Path(path) if path is not None else Path.home() / ".zett-agent" / "sessions.sqlite3"
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        # NullPool keeps every connection inside the loop that opened it. One
-        # instance may therefore serve an application loop, a SyncRuntime thread,
-        # and a test portal without sharing loop-bound pooled connections.
-        self.engine = create_async_engine(
-            URL.create("sqlite+aiosqlite", database=str(self.path)),
-            poolclass=NullPool,
+    def __init__(
+        self,
+        url: str | URL | None = None,
+        *,
+        driver: str = "sqlite",
+        path: str | Path | None = None,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        database: str | None = None,
+        echo: bool = False,
+        pool_size: int = 5,
+        max_overflow: int = 10,
+        pool_recycle: int = 1800,
+        connect_args: Mapping[str, Any] | None = None,
+    ) -> None:
+        self.url = self.build_url(
+            url, driver=driver, path=path, host=host, port=port, user=user, password=password, database=database
         )
-        event.listen(self.engine.sync_engine, "connect", self._configure_sqlite_connection)
+        self.dialect = self.url.get_backend_name()
+        sqlite_file = _sqlite_file(self.url)
+        #: SQLite file this storage owns, or None for a server database.
+        self.path = sqlite_file
+        if sqlite_file is not None:
+            sqlite_file.parent.mkdir(parents=True, exist_ok=True)
+        options: dict[str, Any] = {"echo": echo, "connect_args": dict(connect_args or {})}
+        if self.dialect == "sqlite":
+            # NullPool keeps every connection inside the loop that opened it. One
+            # instance may therefore serve an application loop, a SyncRuntime
+            # thread, and a test portal without sharing loop-bound connections.
+            options["poolclass"] = NullPool
+        else:
+            options.update(
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                pool_recycle=pool_recycle,
+                pool_pre_ping=True,
+            )
+        try:
+            self.engine = create_async_engine(self.url, **options)
+        except ModuleNotFoundError as error:
+            extra = DRIVER_EXTRAS.get(self.dialect)
+            hint = f'; install it with pip install "zett-agent[{extra}]"' if extra else ""
+            raise ImportError(f"The {self.dialect} driver is not installed{hint}") from error
+        if self.dialect == "sqlite":
+            event.listen(self.engine.sync_engine, "connect", self._configure_sqlite_connection)
         self._sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         self._schema_ready = False
         self._schema_locks: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = WeakKeyDictionary()
+
+    @classmethod
+    def build_url(
+        cls,
+        url: str | URL | None = None,
+        *,
+        driver: str = "sqlite",
+        path: str | Path | None = None,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        database: str | None = None,
+    ) -> URL:
+        """Turn a URL, a file path, or connection parameters into one SQLAlchemy URL.
+
+        Args:
+            url: A URL, or a string without a scheme that is taken as a SQLite file.
+            driver: ``sqlite``, ``mysql``, or ``postgresql`` when ``url`` is None.
+            path: SQLite file for the sqlite driver.
+            host: Server host for a server driver.
+            port: Server port; the dialect default when omitted.
+            user: Database user.
+            password: Database password.
+            database: Database name for a server driver; required there.
+
+        Returns:
+            The URL the storage would connect with.
+
+        Raises:
+            ValueError: The driver is unknown, or a server driver has no database.
+        """
+        """Turn a URL, a file path, or connection parameters into one SQLAlchemy URL."""
+        """Turn a URL, a file path, or connection parameters into one SQLAlchemy URL."""
+        if isinstance(url, URL):
+            return url
+        if isinstance(url, str):
+            return (
+                make_url(url)
+                if "://" in url
+                else URL.create(DIALECT_URLS["sqlite"], database=str(Path(url).expanduser()))
+            )
+        if driver not in DIALECT_URLS:
+            supported = ", ".join(sorted(DIALECT_URLS))
+            raise ValueError(f"driver must be one of {supported}, not {driver!r}")
+        if driver == "sqlite":
+            target = Path(path) if path is not None else Path.home() / ".zett-agent" / "sessions.sqlite3"
+            return URL.create(DIALECT_URLS["sqlite"], database=str(target.expanduser()))
+        if not database or not database.strip():
+            raise ValueError(f"database is required for {driver}")
+        return URL.create(
+            DIALECT_URLS[driver],
+            username=user,
+            password=password,
+            host=host or "127.0.0.1",
+            port=port or DEFAULT_PORTS[driver],
+            database=database,
+        )
+
+    @classmethod
+    def for_sqlite(cls, path: str | Path | None = None, **options: Any) -> SQLSessionStorage:
+        """Open a SQLite file, or the default one when ``path`` is None."""
+        return cls(driver="sqlite", path=path, **options)
+
+    @classmethod
+    def for_mysql(
+        cls,
+        *,
+        user: str,
+        password: str,
+        database: str,
+        host: str = "127.0.0.1",
+        port: int = DEFAULT_PORTS["mysql"],
+        **options: Any,
+    ) -> SQLSessionStorage:
+        """Open MySQL from connection parameters instead of a URL."""
+        return cls(
+            driver="mysql",
+            user=user,
+            password=password,
+            database=database,
+            host=host,
+            port=port,
+            **options,
+        )
+
+    @classmethod
+    def for_postgres(
+        cls,
+        *,
+        user: str,
+        password: str,
+        database: str,
+        host: str = "127.0.0.1",
+        port: int = DEFAULT_PORTS["postgresql"],
+        **options: Any,
+    ) -> SQLSessionStorage:
+        """Open PostgreSQL from connection parameters instead of a URL."""
+        return cls(
+            driver="postgresql",
+            user=user,
+            password=password,
+            database=database,
+            host=host,
+            port=port,
+            **options,
+        )
 
     @staticmethod
     def _configure_sqlite_connection(dbapi_connection: object, _: object) -> None:
@@ -279,8 +489,8 @@ class SQLiteSessionStorage(SyncMethodsMixin):
                 return
             async with self.engine.begin() as connection:
                 await connection.run_sync(Base.metadata.create_all)
-                await ensure_session_type_column(connection)
-                await ensure_indexes(connection)
+                await connection.run_sync(_add_missing_columns)
+                await connection.run_sync(_create_missing_indexes)
             self._schema_ready = True
 
     @asynccontextmanager
@@ -773,3 +983,28 @@ class SQLiteSessionStorage(SyncMethodsMixin):
             session.add(row)
             await session.flush()
             return self._snapshot_record(row)
+
+
+class SQLiteSessionStorage(SQLSessionStorage):
+    """SQLite file storage; the original name, kept for existing callers.
+
+    Args:
+        path: SQLite file, or None for ``~/.zett-agent/sessions.sqlite3``.
+
+    Examples:
+        Use a temporary database in tests::
+
+            from pathlib import Path
+            from tempfile import TemporaryDirectory
+
+            with TemporaryDirectory() as directory:
+                storage = SQLiteSessionStorage(Path(directory) / "sessions.sqlite3")
+                try:
+                    session = await storage.create_session(title="Documentation review")
+                    assert await storage.get_session(session.session_id) == session
+                finally:
+                    await storage.close()
+    """
+
+    def __init__(self, path: str | Path | None = None) -> None:
+        super().__init__(driver="sqlite", path=path)

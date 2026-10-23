@@ -78,6 +78,12 @@ Start with :doc:`../learn/first-agent`, then build your own extension in
 
       Back sessions with your own storage implementation.
 
+   .. grid-item-card:: Custom storage
+      :link: custom-storage
+      :link-type: doc
+
+      Implement the storage contract from scratch in one file.
+
 Run every offline example with ``make docs-examples``. Tests disable network
 connections and use a temporary working directory for each program.
 
@@ -105,3 +111,4 @@ connections and use a temporary working directory for each program.
    Subagents <subagent>
    Background subagents <async-subagent>
    Storage adapter <storage-adapter>
+   Custom storage <custom-storage>

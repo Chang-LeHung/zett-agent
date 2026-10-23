@@ -1,0 +1,69 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C)
+# This file is distributed under the same license as the Zett Agent package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-23 19:36+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../examples/custom-storage.rst:2
+msgid "Implement session storage from scratch"
+msgstr "从零实现会话存储"
+
+#: ../../examples/custom-storage.rst:4
+msgid "Keep every session in one JSON file and let the persistence extension own the lifecycle: restore context, append the immutable Raw Log, and save a compaction checkpoint."
+msgstr "把每个会话保存在一个 JSON 文件里，让持久化扩展接管生命周期：恢复上下文、追加不可变的原始日志，以及保存压缩检查点。"
+
+#: ../../examples/custom-storage.rst:9
+msgid "Run it"
+msgstr "运行方式"
+
+#: ../../examples/custom-storage.rst:11
+msgid "From the repository root:"
+msgstr "在仓库根目录下："
+
+#: ../../examples/custom-storage.rst:17
+msgid "The output is:"
+msgstr "输出为："
+
+#: ../../examples/custom-storage.rst:23
+msgid "The program uses a deterministic offline model and a temporary directory. It requires no API key and is executed by the documentation test suite."
+msgstr "这个程序使用确定性的离线模型和临时目录，不需要 API 密钥，并由文档测试套件执行。"
+
+#: ../../examples/custom-storage.rst:27
+msgid "What the program shows"
+msgstr "这个程序展示了什么"
+
+#: ../../examples/custom-storage.rst:29
+msgid "``JsonFileStorage`` implements three asynchronous operations — ``load``, ``append``, and ``snapshot`` — over a dictionary that is written to disk after every change. ``JsonPersistence`` only passes it to the base extension, which supplies everything else: when to restore, what to append, and when to compact."
+msgstr "``JsonFileStorage``\\ 在一个字典上实现了三个异步操作 —— ``load``\\ 、``append``\\ 与 ``snapshot``\\ —— 每次变更后都会写入磁盘。\\ ``JsonPersistence``\\ 只负责把它交给基类扩展，其余一切由基类提供：何时恢复、追加什么、何时压缩。"
+
+#: ../../examples/custom-storage.rst:34
+msgid "The final assertion reopens the file with a fresh storage instance. That is the part a real deployment cares about: the next process must see the same conversation, in the same order, with the same compaction boundary."
+msgstr "最后的断言用一个全新的存储实例重新打开文件。这正是真实部署关心的部分：下一个进程必须看到同样的会话、同样的顺序，以及同样的压缩边界。"
+
+#: ../../examples/custom-storage.rst:39
+msgid "Complete source"
+msgstr "完整源码"
+
+#: ../../examples/custom-storage.rst:41
+msgid ":download:`Download custom_storage.py <../_examples/custom_storage.py>`."
+msgstr ":download:`下载 custom_storage.py <../_examples/custom_storage.py>`\\ 。"
+
+#: ../../examples/custom-storage.rst:47
+msgid "Next: :doc:`../extending/storage-adapter` explains each operation and the invariants to keep, or :doc:`../learn/storage` covers the SQLite, MySQL, and PostgreSQL storage that ships with the runtime."
+msgstr "下一步：:doc:`../extending/storage-adapter`\\ 讲解每个操作和必须保持的不变量；:doc:`../learn/storage`\\ 则介绍运行时自带的 SQLite、MySQL 与 PostgreSQL 存储。"
+

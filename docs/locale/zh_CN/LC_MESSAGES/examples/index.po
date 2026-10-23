@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 00:14+0800\n"
+"POT-Creation-Date: 2026-10-23 19:36+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -16,55 +16,59 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: ../../examples/index.rst:15 ../../examples/index.rst:84
+#: ../../examples/index.rst:15 ../../examples/index.rst:90
 msgid "Streaming tools"
 msgstr "流式工具调用"
 
-#: ../../examples/index.rst:21 ../../examples/index.rst:84
+#: ../../examples/index.rst:21 ../../examples/index.rst:90
 msgid "Sessions"
 msgstr "会话"
 
-#: ../../examples/index.rst:33 ../../examples/index.rst:84
+#: ../../examples/index.rst:33 ../../examples/index.rst:90
 msgid "Compaction"
 msgstr "压缩"
 
-#: ../../examples/index.rst:84
+#: ../../examples/index.rst:90
 msgid "Conversations"
 msgstr "对话"
 
-#: ../../examples/index.rst:39 ../../examples/index.rst:92
+#: ../../examples/index.rst:39 ../../examples/index.rst:98
 msgid "Approval"
 msgstr "审批"
 
-#: ../../examples/index.rst:63 ../../examples/index.rst:92
+#: ../../examples/index.rst:63 ../../examples/index.rst:98
 msgid "Cancellation"
 msgstr "取消"
 
-#: ../../examples/index.rst:92
+#: ../../examples/index.rst:98
 msgid "Goals"
 msgstr "目标"
 
-#: ../../examples/index.rst:92
+#: ../../examples/index.rst:98
 msgid "Control"
 msgstr "控制"
 
-#: ../../examples/index.rst:45 ../../examples/index.rst:100
+#: ../../examples/index.rst:45 ../../examples/index.rst:106
 msgid "Observability"
 msgstr "可观测性"
 
-#: ../../examples/index.rst:100
+#: ../../examples/index.rst:106
 msgid "Subagents"
 msgstr "子智能体"
 
-#: ../../examples/index.rst:57 ../../examples/index.rst:100
+#: ../../examples/index.rst:57 ../../examples/index.rst:106
 msgid "Background subagents"
 msgstr "后台子智能体"
 
-#: ../../examples/index.rst:75 ../../examples/index.rst:100
+#: ../../examples/index.rst:75 ../../examples/index.rst:106
 msgid "Storage adapter"
 msgstr "存储适配器"
 
-#: ../../examples/index.rst:100
+#: ../../examples/index.rst:81 ../../examples/index.rst:106
+msgid "Custom storage"
+msgstr "自定义存储"
+
+#: ../../examples/index.rst:106
 msgid "Systems"
 msgstr "系统"
 
@@ -136,7 +140,11 @@ msgstr "持续工作，直到评估者认可目标已达成。"
 msgid "Back sessions with your own storage implementation."
 msgstr "用你自己的存储实现为会话提供后端。"
 
-#: ../../examples/index.rst:81
+#: ../../examples/index.rst:85
+msgid "Implement the storage contract from scratch in one file."
+msgstr "在一个文件里从零实现存储契约。"
+
+#: ../../examples/index.rst:87
 msgid "Run every offline example with ``make docs-examples``. Tests disable network connections and use a temporary working directory for each program."
 msgstr "用 ``make docs-examples`` 运行所有离线示例。测试会禁用网络连接，并为每个程序使用临时工作目录。"
 

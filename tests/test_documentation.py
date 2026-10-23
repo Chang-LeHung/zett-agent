@@ -80,7 +80,7 @@ def test_examples_parameters_and_inherited_callbacks_are_rendered(documentation)
         ("AgentModel", "EchoModel", "note"),
         ("ModelEvent", "one terminal ModelResponse", "warning"),
         ("AgentEvent", "TOOL_COMPLETED/FAILED", "note"),
-        ("SQLiteSessionStorage", "SessionView", "warning"),
+        ("SQLSessionStorage", "SessionView", "warning"),
         ("OpenAIProvider", "OPENAI_API_KEY", "note"),
         ("CodingExtension", "capability bundle", "warning"),
     ],
@@ -94,7 +94,7 @@ def test_core_docstrings_render_examples_diagrams_and_admonitions(documentation,
     assert soup.select("div.highlight pre")
 
 
-@pytest.mark.parametrize("name", ["Agent", "AgentState", "AgentExtension", "ModelEvent", "SQLiteSessionStorage"])
+@pytest.mark.parametrize("name", ["Agent", "AgentState", "AgentExtension", "ModelEvent", "SQLSessionStorage"])
 def test_mermaid_diagrams_are_embedded(documentation, name):
     """Require semantic diagrams and the browser renderer on generated API pages."""
     _, output = documentation

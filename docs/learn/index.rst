@@ -162,6 +162,7 @@ If you need behavior the built-ins do not provide, follow
    Stop reasons <stop-reasons>
    Resume <resume>
    Sessions <sessions>
+   Storage <storage>
    Images <images>
    Project instructions <project-instructions>
 

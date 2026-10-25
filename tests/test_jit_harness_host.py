@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,6 +98,87 @@ def opaque() -> object:
     """Return a set."""
     return {1, 2}
 '''
+
+
+SPINNER_SOURCE = '''
+import threading
+
+from zett_agent.tools.base import tool
+
+
+@tool(guidelines="Leave a thread that never ends.")
+def start_spinner() -> str:
+    """Answer at once, leaving a non-daemon thread spinning."""
+
+    def spin() -> None:
+        while True:
+            pass
+
+    threading.Thread(target=spin).start()
+    return "started"
+'''
+
+
+#: A tool that says it is busy before it blocks, so a test never has to guess.
+HANGING_SOURCE = '''
+from zett_agent.tools.base import tool
+
+
+@tool(guidelines="Write a marker, then never return.")
+def hang(marker: str) -> int:
+    """Write the marker, then spin forever."""
+    with open(marker, "w") as handle:
+        handle.write("busy")
+    while True:
+        pass
+'''
+
+
+#: A stand-in for a pytest process: it starts a child, makes a synchronous tool hang, and
+#: then waits to be killed. It prints the child's pid before it starts waiting.
+KILLED_PARENT = """\
+import json
+import subprocess
+import sys
+import time
+
+
+def frame(**fields):
+    return json.dumps({"v": 1, **fields}).encode() + b"\\n"
+
+
+child = subprocess.Popen(
+    [sys.executable, "-m", "zett_agent.jit_harness.child"],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.DEVNULL,
+    start_new_session=True,
+)
+child.stdin.write(frame(op="load", id=1, directory=sys.argv[1]))
+child.stdin.flush()
+time.sleep(2.0)
+child.stdin.write(frame(op="invoke", id=2, name="hang", arguments={"marker": sys.argv[2]}))
+child.stdin.flush()
+print(child.pid, flush=True)
+time.sleep(600)
+"""
+
+
+def _pid_is_gone(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
+
+
+async def _wait_until_gone(pid: int, *, timeout: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _pid_is_gone(pid):
+            return
+        await asyncio.sleep(0.1)
+    os.killpg(pid, 9)
+    raise AssertionError(f"process {pid} is still alive {timeout} seconds after its parent died")
 
 
 def repository(tmp_path: Path, harness: JITHarness) -> Path:
@@ -234,6 +317,64 @@ async def test_a_tool_that_never_returns_is_stopped_at_the_limit(tmp_path):
             await harness.call_tool("hang")
     finally:
         harness.close()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process groups and reparenting are POSIX")
+async def test_a_killed_agent_leaves_no_child_spinning(tmp_path):
+    """A SIGKILLed agent runs no finally, so the child has to notice by itself.
+
+    The child is busy in a synchronous tool, which runs on a non-daemon executor thread.
+    Interpreter shutdown joins that thread, so without an explicit exit the orphan would
+    wait forever and burn a core; this asserts it disappears instead.
+    """
+    repo = tmp_path / "kit"
+    repo.mkdir()
+    (repo / "__init__.py").write_text("")
+    (repo / "tools.py").write_text(HANGING_SOURCE)
+    marker = tmp_path / "busy"
+    script = tmp_path / "parent.py"
+    script.write_text(KILLED_PARENT)
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(entry for entry in sys.path if entry)}
+    parent = subprocess.Popen(
+        [sys.executable, str(script), str(repo), str(marker)], stdout=subprocess.PIPE, env=env, text=True
+    )
+    try:
+        assert parent.stdout is not None
+        child_pid = int(parent.stdout.readline().strip())
+        # The marker says the worker thread is spinning, so an exit here is the fix, not luck.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not marker.exists():
+            await asyncio.sleep(0.05)
+        assert marker.exists(), "the tool never started, so this test would prove nothing"
+        parent.kill()
+        parent.wait(timeout=10)
+        await _wait_until_gone(child_pid)
+    finally:
+        if parent.poll() is None:  # pragma: no cover - only when the assertion above failed
+            parent.kill()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process groups are POSIX")
+async def test_a_thread_that_never_ends_does_not_delay_closing_the_child(tmp_path):
+    """Closing waits for a shutdown frame; a spinning worker must not hold it up."""
+    host = SubprocessToolHost()
+    harness = JITHarness(tmp_path / "session", tools=[add], host=host)
+    try:
+        path = Path(harness.create_repo("kit")["path"])
+        (path / "tools.py").write_text(SPINNER_SOURCE)
+        harness.load_repo()
+        await harness.call_tool("start_spinner")
+        assert host._process is not None
+        pid = host._process.pid
+        started = time.monotonic()
+        harness.close()
+        elapsed = time.monotonic() - started
+    finally:
+        harness.close()
+    # ``_stop`` waits two seconds for a shutdown handshake before it kills the group, so a
+    # child that cannot exit shows up as that wait.
+    assert elapsed < 1.5, f"closing took {elapsed:.2f}s, so the child could not exit on its own"
+    assert _pid_is_gone(pid)
 
 
 async def test_an_import_error_names_the_file_and_leaves_the_harness_usable(tmp_path):

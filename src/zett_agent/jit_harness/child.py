@@ -13,15 +13,19 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import threading
 from collections.abc import Awaitable, Iterable, Mapping
-from typing import BinaryIO, cast
+from typing import BinaryIO, NoReturn, cast
 
 from ..json_types import JsonValue
 from ..tools.base import ToolResult
 from .host import PROTOCOL_VERSION, HarnessCalls, JITHostError, ToolSpec, decode_value, encode_value
 from .repo import LoadedRepo, load_repo, scan_repo
+
+#: How often the child asks the kernel whether the agent that started it is still its parent.
+PARENT_POLL_SECONDS = 1.0
 
 
 class HarnessProxy(HarnessCalls):
@@ -98,10 +102,12 @@ class _Server:
         self._source: Iterable[bytes] = source if source is not None else sys.stdin.buffer
         self._write_lock = threading.Lock()
         self._loop = asyncio.new_event_loop()
-        self._waiters: dict[int, _Waiter] = {}
         self._next_id = 0
+        self._waiters: dict[int, _Waiter] = {}
         self._repo: LoadedRepo | None = None
         self._stopping = threading.Event()
+        #: Process exit status: 0 for a stop the agent asked for, 1 for a broken frame.
+        self.exit_status = 0
 
     # -- frames ----------------------------------------------------------------------------
 
@@ -119,8 +125,10 @@ class _Server:
                 try:
                     frame = json.loads(raw)
                 except ValueError:
+                    self.exit_status = 1
                     break
                 if not isinstance(frame, Mapping) or frame.get("v") != PROTOCOL_VERSION:
+                    self.exit_status = 1
                     break
                 self._dispatch(frame)
             if self._stopping.is_set():
@@ -149,6 +157,7 @@ class _Server:
             request_id = int(cast(int, frame.get("id", 0)))
             self._call_soon(self._invoke(request_id, frame))
         else:
+            self.exit_status = 1
             self._stopping.set()
             self._loop.call_soon_threadsafe(self._loop.stop)
 
@@ -222,13 +231,51 @@ class _Server:
             raise waiter.error
         return waiter.value
 
+    def exit_now(self) -> NoReturn:
+        """Flush what the agent still has to read and end this process immediately.
+
+        ``os._exit`` skips interpreter shutdown on purpose. A synchronous tool runs on a
+        non-daemon executor thread, and interpreter shutdown joins that thread: a tool that
+        never returns (``while True``) would keep this process alive forever, spending a
+        core while it waits. Nothing the child owns outlives it, so there is no cleanup to
+        skip beyond flushing the frames already written.
+        """
+        try:
+            self._output.flush()
+            sys.stderr.flush()
+        finally:
+            os._exit(self.exit_status)
+
+    def watch_parent(self, interval: float = PARENT_POLL_SECONDS) -> None:
+        """End this process when the agent that started it is gone.
+
+        Closing the pipe is how the agent usually says goodbye, but the write end can
+        outlive the agent: a forked child inherits it, or a supervisor process holds a
+        copy. Then no EOF ever arrives and the child would wait forever on its loop. The
+        parent's pid is the one signal that does not depend on who holds a descriptor.
+
+        A killed parent can stay a zombie for a while, and ``getppid`` keeps returning its
+        pid until it is reaped, so this compares against the pid seen at start rather than
+        testing for the init process.
+        """
+        parent = os.getppid()
+        while not self._stopping.wait(interval):
+            if os.getppid() != parent:
+                self.exit_now()
+
     def run(self) -> int:
         """Run the loop until the agent stops this process."""
         self._loop.set_exception_handler(_quiet_handler)
         reader = threading.Thread(target=self.read_forever, name="zett-jit-host", daemon=True)
         reader.start()
+        if os.name == "posix":
+            # Windows has no reparenting to notice, and ``getppid`` there does not tell
+            # the truth about a vanished process.
+            watcher = threading.Thread(target=self.watch_parent, name="zett-jit-parent", daemon=True)
+            watcher.start()
         self._loop.run_forever()
-        return 0
+        self._stopping.set()
+        return self.exit_status
 
 
 def _quiet_handler(loop: asyncio.AbstractEventLoop, context: dict[str, object]) -> None:
@@ -237,12 +284,19 @@ def _quiet_handler(loop: asyncio.AbstractEventLoop, context: dict[str, object]) 
     print(f"zett jit host: {message}", file=sys.stderr)
 
 
-def main() -> int:
-    """Run the child protocol on stdin and stdout until the agent stops it."""
+def main() -> NoReturn:
+    """Run the child protocol on stdin and stdout until the agent stops it.
+
+    Never returns: it ends the process with :meth:`_Server.exit_now`, so a tool that is
+    still spinning in a worker thread cannot hold up interpreter shutdown.
+    """
     protocol = sys.stdout
     sys.stdout = sys.stderr
-    return _Server(protocol.buffer).run()
+    server = _Server(protocol.buffer)
+    server.run()
+    protocol.flush()
+    server.exit_now()
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised through the host
-    raise SystemExit(main())
+    main()

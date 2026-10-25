@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from zett_agent.jit_harness import child
 from zett_agent.jit_harness.child import HarnessProxy, _quiet_handler, _Server, _Waiter
 from zett_agent.jit_harness.host import PROTOCOL_VERSION, JITHostError
 from zett_agent.jit_harness.repo import discard
@@ -203,3 +204,33 @@ def test_loop_errors_are_reported_instead_of_raised(capsys):
         loop.close()
     captured = capsys.readouterr()
     assert "boom" in captured.err and "plain message" in captured.err
+
+
+def test_the_child_ends_when_its_parent_is_no_longer_there(monkeypatch):
+    """The pipe can stay open in someone else's hands, so the parent pid decides."""
+    server, _ = make_server()
+    parents = iter([100, 100, 200])
+    monkeypatch.setattr(child.os, "getppid", lambda: next(parents, 200))
+    exits: list[int] = []
+    monkeypatch.setattr(server, "exit_now", lambda: (exits.append(1), server._stopping.set()))
+
+    server.watch_parent(interval=0.001)
+
+    assert exits == [1]
+
+
+def test_a_bad_frame_reports_a_failed_status():
+    server, _ = make_server()
+    server._source = [b"not json\n"]  # type: ignore[list-item]  # a stand-in for the pipe
+
+    server.read_forever()
+
+    assert server.exit_status == 1
+
+
+def test_a_stop_the_agent_asked_for_reports_success():
+    server, _ = make_server()
+
+    server.read_forever()
+
+    assert server.exit_status == 0

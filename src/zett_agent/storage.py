@@ -20,7 +20,8 @@ from .messages import AgentMessage, AnyMessage, AssistantMessage, SystemMessage,
 if TYPE_CHECKING:
     # For the type checker only: at runtime the class resolves lazily through __getattr__ below, so
     # that importing this module never imports SQLAlchemy.
-    from ._sqlite_storage import SQLiteSessionStorage as SQLiteSessionStorage
+    from ._sql_storage import SQLiteSessionStorage as SQLiteSessionStorage
+    from ._sql_storage import SQLSessionStorage as SQLSessionStorage
 
 #: Session type this runtime stores for the sessions it creates itself.
 #: Applications define every other code they need.
@@ -105,7 +106,11 @@ def __getattr__(name: str) -> object:
     on applications that actually open a database.
     """
     if name == "SQLiteSessionStorage":
-        from ._sqlite_storage import SQLiteSessionStorage
+        from ._sql_storage import SQLiteSessionStorage
 
         return SQLiteSessionStorage
+    if name == "SQLSessionStorage":
+        from ._sql_storage import SQLSessionStorage
+
+        return SQLSessionStorage
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

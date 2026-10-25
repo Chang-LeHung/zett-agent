@@ -1,0 +1,153 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C)
+# This file is distributed under the same license as the Zett Agent package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Zett Agent \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-23 19:36+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../learn/storage.rst:2
+msgid "Store sessions in a database"
+msgstr "把会话存进数据库"
+
+#: ../../learn/storage.rst:4
+msgid "A session is the conversation a later request restores: the original messages, the latest compaction checkpoint, and a little display metadata. Where that lives is an application decision, and the runtime ships one schema for SQLite, MySQL, and PostgreSQL."
+msgstr "会话就是后续请求要恢复的那段对话：原始消息、最新的压缩检查点，加上少量展示用的元数据。它们放在哪里由应用决定，运行时为 SQLite、MySQL 和 PostgreSQL 准备了一套相同的表结构。"
+
+#: ../../learn/storage.rst:10
+msgid "Choose a backend"
+msgstr "选择后端"
+
+#: ../../learn/storage.rst:16
+msgid "Backend"
+msgstr "后端"
+
+#: ../../learn/storage.rst:17
+msgid "Use it when"
+msgstr "适用场景"
+
+#: ../../learn/storage.rst:18
+msgid "What it costs"
+msgstr "代价"
+
+#: ../../learn/storage.rst:19
+msgid "SQLite"
+msgstr "SQLite"
+
+#: ../../learn/storage.rst:20
+msgid "One process owns the file, or a desktop app keeps everything local."
+msgstr "只有一个进程使用该文件，或桌面应用希望一切都在本地。"
+
+#: ../../learn/storage.rst:21
+msgid "No server; WAL lets a second process read and write, but a network filesystem is not supported."
+msgstr "无需服务端；WAL 能让第二个进程同时读写，但不支持网络文件系统。"
+
+#: ../../learn/storage.rst:23
+msgid "MySQL"
+msgstr "MySQL"
+
+#: ../../learn/storage.rst:24
+msgid "Several application processes share conversations and the team already runs MySQL."
+msgstr "多个应用进程共享会话，而且团队已经在用 MySQL。"
+
+#: ../../learn/storage.rst:26
+msgid "A server, a driver extra, credentials, and ``CREATE`` on the schema the first time."
+msgstr "需要服务端、驱动 extra、凭据，以及首次运行时的 ``CREATE``\\ 权限。"
+
+#: ../../learn/storage.rst:28
+msgid "PostgreSQL"
+msgstr "PostgreSQL"
+
+#: ../../learn/storage.rst:29
+msgid "The same, on PostgreSQL."
+msgstr "同上，只不过是 PostgreSQL。"
+
+#: ../../learn/storage.rst:30
+msgid "The same."
+msgstr "同上。"
+
+#: ../../learn/storage.rst:32
+msgid "The three share one set of tables and one behavior: appends allocate a per-session sequence, snapshots advance a version and are rejected when stale, and deleting a session removes its messages and checkpoints."
+msgstr "三者共用同一套表、同一套行为：追加时分配会话内序号；快照推进版本号，过期就拒绝；删除会话会一并移除它的消息和检查点。"
+
+#: ../../learn/storage.rst:37
+msgid "Install the driver"
+msgstr "安装驱动"
+
+#: ../../learn/storage.rst:39
+msgid "SQLite needs nothing beyond the runtime. A server dialect needs its async driver:"
+msgstr "SQLite 不需要额外依赖。服务端方言需要对应的异步驱动："
+
+#: ../../learn/storage.rst:47
+msgid "Connecting without a URL"
+msgstr "不写 URL 的连接方式"
+
+#: ../../learn/storage.rst:49
+msgid "Pass the parts; the storage builds the URL, fills in the dialect's default port, and keeps credentials out of the string you log:"
+msgstr "直接传各部分参数；存储会自己拼 URL、填上方言的默认端口，而且凭据不会出现在你打印的字符串里："
+
+#: ../../learn/storage.rst:72
+msgid "A URL works too, and covers anything SQLAlchemy supports:"
+msgstr "也可以直接传 URL，覆盖 SQLAlchemy 支持的任何数据库："
+
+#: ../../learn/storage.rst:81
+msgid "Persist with the extension"
+msgstr "通过扩展做持久化"
+
+#: ../../learn/storage.rst:95
+msgid "An explicit extension list replaces the Agent defaults, so add a history restorer such as this one, or session persistence, once. Close the extension when the application stops; it closes the storage, which releases the pool."
+msgstr "显式传入的扩展列表会替换 Agent 的默认扩展，所以像这里一样只加一个历史恢复器，或只加一个会话持久化扩展。应用停止时关闭扩展；它会关闭存储，进而释放连接池。"
+
+#: ../../learn/storage.rst:100
+msgid "What the storage creates"
+msgstr "存储会创建什么"
+
+#: ../../learn/storage.rst:102
+msgid "The first awaited call creates three tables in the schema the connection names: ``agent_sessions``, ``raw_messages``, and ``session_snapshots``, with their indexes. Nothing is created by the constructor, so a storage can be built before an event loop exists. After that first call, the database user only needs ``SELECT``, ``INSERT``, ``UPDATE``, and ``DELETE`` on those tables."
+msgstr "第一次 await 调用会在连接指定的 schema 里创建三张表及其索引：``agent_sessions``\\ 、``raw_messages``\\ 与 ``session_snapshots``\\ 。构造函数不创建任何东西，所以存储可以在事件循环存在之前就构建好。首次调用之后，数据库用户只需要这几张表的 ``SELECT``\\ 、``INSERT``\\ 、``UPDATE``\\ 与 ``DELETE``\\ 权限。"
+
+#: ../../learn/storage.rst:108
+msgid "Two upgrades also run there, on any dialect: a missing ``session_type`` column is added with ``ALTER TABLE``, and index definitions that an older release did not create are added one by one. Concurrent first connections are safe because ``CREATE TABLE`` and the index check are idempotent on all three dialects."
+msgstr "同一步还会在任何方言上做两处升级：缺少的 ``session_type``\\ 列用 ``ALTER TABLE``\\ 补上，旧版本没建的索引定义逐个补建。首次连接并发也是安全的，因为 ``CREATE TABLE``\\ 和索引检查在三种方言上都是幂等的。"
+
+#: ../../learn/storage.rst:114
+msgid "Pooling and lifetime"
+msgstr "连接池与生命周期"
+
+#: ../../learn/storage.rst:116
+msgid "SQLite uses one connection per event loop instead of a pool, because a pooled SQLite connection cannot cross loops; WAL mode and a five-second busy timeout keep a second process from blocking the first. MySQL and PostgreSQL use a pooled connection with a pre-ping before reuse:"
+msgstr "SQLite 不用连接池，而是每个事件循环一条连接——池化的 SQLite 连接不能跨循环。WAL 模式和五秒的 busy timeout 可以让第二个进程不会把第一个堵死。MySQL 与 PostgreSQL 使用连接池，并在复用前做 pre-ping："
+
+#: ../../learn/storage.rst:133
+msgid "Keep credentials out of source"
+msgstr "不要把凭据写进源码"
+
+#: ../../learn/storage.rst:135
+msgid "Read the password from the environment or a secret manager. A SQLAlchemy URL keeps the password in clear text, so do not log ``storage.url`` or a URL you built from one; log ``storage.dialect`` and the host instead. Give the application's database user rights on its own schema only."
+msgstr "密码从环境变量或密钥管理器读取。SQLAlchemy 的 URL 里密码是明文，所以不要打印 ``storage.url``\\ 或由它拼出的 URL；需要日志时打印 ``storage.dialect``\\ 和主机名。只给应用的数据库用户它自己 schema 的权限。"
+
+#: ../../learn/storage.rst:141
+msgid "Write your own storage"
+msgstr "自己实现存储"
+
+#: ../../learn/storage.rst:143
+msgid "A different database, an object store, or an encrypted file needs only three operations. :doc:`../extending/storage-adapter` builds one from scratch, with the invariants each operation must keep."
+msgstr "换一种数据库、对象存储或加密文件，也只需要三个操作。\\ :doc:`../extending/storage-adapter`\\ 从零实现了一个，并说明每个操作必须维持的不变量。"
+
+#: ../../learn/storage.rst:147
+msgid "Related API: :class:`~zett_agent.storage.SQLSessionStorage`, :class:`~zett_agent.extensions.sql.SQLSessionExtension`, :class:`~zett_agent.extensions.persistence.SessionStorage`."
+msgstr "相关 API：:class:`~zett_agent.storage.SQLSessionStorage`\\ 、:class:`~zett_agent.extensions.sql.SQLSessionExtension`\\ 、:class:`~zett_agent.extensions.persistence.SessionStorage`\\ 。"
+

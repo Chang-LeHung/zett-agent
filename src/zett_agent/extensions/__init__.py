@@ -43,6 +43,7 @@ _MODULES = {
     "session_persistence": ("SessionPersistenceExtension",),
     "shell_approval": ("ShellApprovalExtension",),
     "skill": ("SkillExtension",),
+    "sql": ("SQLSessionExtension",),
     "sqlite": ("SQLiteSessionExtension",),
     "steering": ("SteeringExtension",),
     "subagent": ("SubAgentExtension",),
@@ -86,6 +87,7 @@ if _TYPE_CHECKING:
     from .session_persistence import SessionPersistenceExtension as SessionPersistenceExtension
     from .shell_approval import ShellApprovalExtension as ShellApprovalExtension
     from .skill import SkillExtension as SkillExtension
+    from .sql import SQLSessionExtension as SQLSessionExtension
     from .sqlite import SQLiteSessionExtension as SQLiteSessionExtension
     from .steering import SteeringExtension as SteeringExtension
     from .subagent import SubAgentExtension as SubAgentExtension

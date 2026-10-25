@@ -30,6 +30,7 @@ EXPECTED = {
     "cancellation": "Cancelled request; extension state cleared",
     "goal": "Implementation and tests are complete.",
     "storage_adapter": "load, append:system, append:user, append:assistant",
+    "custom_storage": "Stored 3 messages; reopened 3 from a new instance",
     "project_instructions": "Project guidance: concise reviews",
     "images": "Received text and image in order.",
     "application": "Timeout cleaned up; session reused.",

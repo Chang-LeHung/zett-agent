@@ -51,6 +51,25 @@ description instead, which suits endpoints that surface only tool definitions:
 Only the request sent to the provider changes; registered tools and stored
 history stay as they are.
 
+A tool's return annotation is described as JSON Schema and kept on the tool, but
+it is not shown by default: most tools return text the model reads directly.
+``returns=True`` adds one line after each snippet, so the model knows the shape
+before it calls:
+
+.. code-block:: python
+
+   guidance = ToolGuidelinesExtension(returns=True)
+
+.. code-block:: text
+
+   - lookup: lookup(query="zett")
+     returns {"items":{"type":"string"},"type":"array"}
+
+The schema belongs to the snippets section, so ``snippets=False`` removes it
+too. A function without a return annotation, or with one Pydantic cannot
+describe, simply has no such line, and nothing validates a result against the
+schema.
+
 Design arguments the model can supply
 ------------------------------------------------------------
 

@@ -175,6 +175,18 @@ def test_tool_flags_must_be_boolean(keyword):
         )
 
 
+def test_a_return_schema_must_be_an_object_or_none():
+    with pytest.raises(ValueError, match="return_schema must be a JSON schema object"):
+        AgentTool(
+            name="flag",
+            description="Flagged tool",
+            parameters={"type": "object"},
+            handler=lambda: None,
+            guidelines=("Use for flag tests.",),
+            return_schema="integer",  # type: ignore[arg-type]  # the value a caller might pass
+        )
+
+
 def test_tool_docstring_supplies_description_args_snippet_and_guidelines():
     def search_knowledge(query: str, limit: int = 10) -> str:
         """Search stored knowledge.
@@ -324,3 +336,61 @@ def test_decorator_metadata_can_explicitly_override_docstring_metadata():
     assert search.name == "lookup"
     assert search.snippet == 'lookup(query="zett")'
     assert search.guidelines == ("First rule.", "Second rule.")
+
+
+def test_a_return_annotation_becomes_a_schema():
+    @tool(guidelines="Return numbers.")
+    def numbers() -> list[int]:
+        """Return a list."""
+        return []
+
+    @tool(guidelines="Return an order.")
+    def order() -> Order:
+        """Return an order."""
+        return Order(items=[])
+
+    assert numbers.return_schema == {"items": {"type": "integer"}, "type": "array"}
+    assert order.return_schema is not None
+    # A nested model is inlined, because the schema is pasted into a prompt rather than
+    # sent to a provider that could resolve ``$defs``.
+    rendered = json.dumps(order.return_schema)
+    assert "$defs" not in rendered and "$ref" not in rendered
+    assert order.return_schema["properties"]["items"]["type"] == "array"
+    # Inlining must keep constraints, not only replace references with objects.
+    amount = order.return_schema["properties"]["items"]["items"]["properties"]["amount"]
+    assert amount["exclusiveMinimum"] == 0
+    # pydantic adds a ``title`` for every class; it costs tokens and says nothing.
+    assert "title" not in rendered
+
+
+def test_a_tool_without_a_return_annotation_says_nothing_about_its_result():
+    from typing import Any
+
+    @tool(guidelines="Return an unannotated value.")
+    def unannotated():
+        """Return without a hint."""
+        return 1
+
+    @tool(guidelines="Return nothing.")
+    def nothing() -> None:
+        """Return nothing at all."""
+
+    @tool(guidelines="Return anything.")
+    def anything() -> Any:
+        """Return any value."""
+        return 1
+
+    assert unannotated.return_schema is None
+    assert nothing.return_schema == {"type": "null"}
+    # An empty schema describes nothing, and a line saying so only costs tokens.
+    assert anything.return_schema is None
+
+
+def test_a_return_annotation_pydantic_cannot_describe_is_just_no_hint():
+    @tool(guidelines="Return a class.")
+    def kind() -> type:
+        """Return a class object."""
+        return int
+
+    # ``type`` has no JSON Schema; the tool must still exist, with no schema to show.
+    assert kind.return_schema is None

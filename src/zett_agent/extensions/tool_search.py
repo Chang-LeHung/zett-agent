@@ -159,7 +159,9 @@ class SearchedToolDefinition(TypedDict):
     strict: bool | None
 
 
-def _definition(tool: AgentTool, *, snippet: bool = False, guidelines: bool = True) -> SearchedToolDefinition:
+def _definition(
+    tool: AgentTool, *, snippet: bool = False, guidelines: bool = True, returns: bool = False
+) -> SearchedToolDefinition:
     """Render one tool as the definition the model loads.
 
     A deferred tool never reaches the provider schema and
@@ -170,7 +172,7 @@ def _definition(tool: AgentTool, *, snippet: bool = False, guidelines: bool = Tr
     return SearchedToolDefinition(
         type="function",
         name=tool.name,
-        description=render_tool_description(tool, snippet=snippet, guidelines=guidelines),
+        description=render_tool_description(tool, snippet=snippet, guidelines=guidelines, returns=returns),
         parameters=tool.parameters,
         strict=None,
     )
@@ -362,16 +364,16 @@ class ToolSearchExtension(AgentExtension):
         registered = context.tools.get(definition.name)
         if registered is None or not registered.deferred:
             return definition
-        snippet, guidelines = ToolSearchExtension._guidance_parts(context)
+        snippet, guidelines, returns = ToolSearchExtension._guidance_parts(context)
         return replace(
             definition,
             description=render_tool_description(
-                registered, snippet=snippet, guidelines=guidelines, base=definition.description
+                registered, snippet=snippet, guidelines=guidelines, returns=returns, base=definition.description
             ),
         )
 
     @staticmethod
-    def _guidance_parts(context: AgentRunContext) -> tuple[bool, bool]:
+    def _guidance_parts(context: AgentRunContext) -> tuple[bool, bool, bool]:
         """Return which guidance parts a deferred tool's description carries.
 
         A deferred tool is skipped by
@@ -385,8 +387,8 @@ class ToolSearchExtension(AgentExtension):
         """
         for extension in context.extensions:
             if isinstance(extension, ToolGuidelinesExtension):
-                return extension.snippets, extension.guidelines
-        return False, True
+                return extension.snippets, extension.guidelines, extension.returns
+        return False, True, False
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Let the conversation rediscover definitions a compaction removed.
@@ -491,7 +493,7 @@ class ToolSearchExtension(AgentExtension):
             index = BM25Search(searchable, limit=self._limit, k1=self._k1, b=self._b)
             matches = index.search(queries, min_score=score)
             discovered = await self._select_new(context, matches)
-            snippet, guidelines = self._guidance_parts(context)
-            return [_definition(match, snippet=snippet, guidelines=guidelines) for match in discovered]
+            snippet, guidelines, returns = self._guidance_parts(context)
+            return [_definition(match, snippet=snippet, guidelines=guidelines, returns=returns) for match in discovered]
 
         return search

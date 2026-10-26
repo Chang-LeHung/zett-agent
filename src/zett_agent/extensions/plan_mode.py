@@ -484,7 +484,9 @@ class PlanModeExtension(ExternalEventExtension):
 
     def _replace_plan_system_messages(self, context: AgentRunContext, baseline: _RequestBaseline) -> None:
         dialogue = [message for message in context.state.messages if not isinstance(message, SystemMessage)]
-        guidance = render_tool_guidance((*self._filesystem_tools, baseline.exit_tool))
+        guidance = render_tool_guidance(
+            (*self._filesystem_tools, baseline.exit_tool), **self._guidance_options(context)
+        )
         prompt = self.system_prompt if not guidance else f"{self.system_prompt}\n\n{guidance}"
         context.replace_messages([SystemMessage(content=prompt), *dialogue])
 
@@ -501,14 +503,13 @@ class PlanModeExtension(ExternalEventExtension):
             raise AgentProtocolError("Plan Mode request was not initialized by on_tool")
         return baseline
 
-    def _normal_system_messages(
-        self,
-        context: AgentRunContext,
-        baseline: _RequestBaseline,
-    ) -> tuple[SystemMessage, ...]:
-        instructions = [message for message in context.state.messages if isinstance(message, SystemMessage)]
-        if not self.is_plan_mode(context.session_id):
-            return tuple(instructions)
+    @staticmethod
+    def _guidance_options(context: AgentRunContext) -> dict[str, bool]:
+        """Mirror the switches of the system-prompt guidance extension, when it is registered.
+
+        Both plan-mode blocks render the same options, so turning a part off turns it off
+        in the block the model reads now and in the one restored on exit.
+        """
         guidance = next(
             (
                 extension
@@ -517,11 +518,23 @@ class PlanModeExtension(ExternalEventExtension):
             ),
             None,
         )
-        options = {"snippets": guidance.snippets, "guidelines": guidance.guidelines} if guidance else {}
+        if guidance is None:
+            return {}
+        return {"snippets": guidance.snippets, "guidelines": guidance.guidelines, "returns": guidance.returns}
+
+    def _normal_system_messages(
+        self,
+        context: AgentRunContext,
+        baseline: _RequestBaseline,
+    ) -> tuple[SystemMessage, ...]:
+        instructions = [message for message in context.state.messages if isinstance(message, SystemMessage)]
+        if not self.is_plan_mode(context.session_id):
+            return tuple(instructions)
+        options = self._guidance_options(context)
         plan_guidance = render_tool_guidance((*self._filesystem_tools, baseline.exit_tool), **options)
         if plan_guidance:
             instructions = [message for message in instructions if message.content != plan_guidance]
-        if guidance is not None:
+        if options:
             normal_guidance = render_tool_guidance((*baseline.tools.values(), baseline.enter_tool), **options)
             if normal_guidance:
                 instructions.append(SystemMessage(content=normal_guidance))

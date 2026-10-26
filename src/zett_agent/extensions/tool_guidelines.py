@@ -43,6 +43,9 @@ class ToolGuidelinesExtension(AgentExtension):
         snippets: Include each tool's ``Snippet`` section.
         guidelines: Include each tool's ``Guidelines`` section. Placement into
             descriptions renders only the parts enabled here.
+        returns: Describe each tool's return value in its snippet, as JSON Schema.
+            Off by default: most tools return text the model reads directly, and the
+            schema costs a line per tool in every request.
 
     Examples:
         Keep guidance in the tool definitions::
@@ -67,10 +70,12 @@ class ToolGuidelinesExtension(AgentExtension):
         placement: ToolGuidancePlacement = ToolGuidancePlacement.SYSTEM_PROMPT,
         snippets: bool = True,
         guidelines: bool = True,
+        returns: bool = False,
     ) -> None:
         self.placement = ToolGuidancePlacement(placement)
         self.snippets = snippets
         self.guidelines = guidelines
+        self.returns = returns
 
     @property
     def in_system_prompt(self) -> bool:
@@ -84,7 +89,9 @@ class ToolGuidelinesExtension(AgentExtension):
         state = context.state
         visible = tuple(candidate for candidate in context.tools.values() if not candidate.deferred)
         message = SystemMessage(
-            content=render_tool_guidance(visible, snippets=self.snippets, guidelines=self.guidelines),
+            content=render_tool_guidance(
+                visible, snippets=self.snippets, guidelines=self.guidelines, returns=self.returns
+            ),
             attributes={"tool_guidelines": True},
         )
         if message.content and message not in state.messages:
@@ -115,6 +122,10 @@ class ToolGuidelinesExtension(AgentExtension):
         # extension (tool search adds a catalog to its own tool) may have
         # appended to it, and replacing it would discard that text.
         description = render_tool_description(
-            registered, snippet=self.snippets, guidelines=self.guidelines, base=definition.description
+            registered,
+            snippet=self.snippets,
+            guidelines=self.guidelines,
+            returns=self.returns,
+            base=definition.description,
         )
         return replace(definition, description=description)

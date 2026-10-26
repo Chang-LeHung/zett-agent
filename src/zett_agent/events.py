@@ -262,11 +262,15 @@ class ModelOutputTracker:
     """Validate and publish output boundaries for one model call.
 
     Nonempty deltas open a segment once. Content or local tool arguments close
-    reasoning; reasoning cannot resume afterwards. Provider-hosted tools remain
-    inside one model generation and may be followed by more reasoning, so their
-    lifecycle does not close that segment. The final response closes content and
-    seals the tracker. Completion requires a matching open segment. Failure and
-    cancellation do not synthesize successful completion events.
+    reasoning, but a later reasoning delta opens a new one: a service may answer,
+    run a hosted tool, and then think again, and the order is the same one DeepSeek
+    produces through a Messages gateway. Each segment publishes its own started and
+    completed boundary, so a reader can follow the alternation; ``reasoning_started``
+    keeps the first start and ``reasoning_completed`` the last end, which is the span
+    thinking covered. Provider-hosted tools remain inside one model generation and do
+    not close reasoning by themselves. The final response closes content and seals the
+    tracker. Completion requires a matching open segment. Failure and cancellation do
+    not synthesize successful completion events.
     """
 
     reasoning_started: ReasoningStartedEvent | None = None
@@ -274,7 +278,7 @@ class ModelOutputTracker:
     content_started: ContentStartedEvent | None = None
     content_completed: ContentCompletedEvent | None = None
     _finished: bool = False
-    _tools_started: bool = False
+    _reasoning_open: bool = False
     _server_tools: dict[str, ServerToolCall] = field(default_factory=dict)
 
     async def observe(self, context: PhaseContext, event: ModelEvent) -> tuple[AgentEventType, ...]:
@@ -290,16 +294,17 @@ class ModelOutputTracker:
         boundaries: list[AgentEventType] = []
         match event.type:
             case ModelEventType.REASONING_DELTA if event.delta:
-                if self.reasoning_completed is not None or self.content_started is not None or self._tools_started:
-                    raise AgentProtocolError("Reasoning cannot start or resume after content or tool arguments")
-                if self.reasoning_started is None:
-                    self.reasoning_started = ReasoningStartedEvent.now()
-                    await context.publish(self.reasoning_started)
+                if not self._reasoning_open:
+                    self._reasoning_open = True
+                    started = ReasoningStartedEvent.now()
+                    if self.reasoning_started is None:
+                        self.reasoning_started = started
+                    await context.publish(started)
                     boundaries.append(AgentEventType.REASONING_STARTED)
             case ModelEventType.TEXT_DELTA if event.delta:
                 if self.content_completed is not None:
                     raise AgentProtocolError("Content cannot resume after completion")
-                if self.reasoning_started is not None and self.reasoning_completed is None:
+                if self._reasoning_open:
                     await self._complete_reasoning(context)
                     boundaries.append(AgentEventType.REASONING_COMPLETED)
                 if self.content_started is None:
@@ -309,8 +314,7 @@ class ModelOutputTracker:
             case ModelEventType.TOOL_CALL_DELTA:
                 if event.tool_call_delta is None:
                     raise AgentProtocolError("Missing tool-call delta")
-                self._tools_started = True
-                if self.reasoning_started is not None and self.reasoning_completed is None:
+                if self._reasoning_open:
                     await self._complete_reasoning(context)
                     boundaries.append(AgentEventType.REASONING_COMPLETED)
             case ModelEventType.SERVER_TOOL_STARTED:
@@ -336,7 +340,7 @@ class ModelOutputTracker:
                 if self._server_tools:
                     pending = ", ".join(sorted(self._server_tools))
                     raise AgentProtocolError(f"Model response arrived before server tools completed: {pending}")
-                if self.reasoning_started is not None and self.reasoning_completed is None:
+                if self._reasoning_open:
                     await self._complete_reasoning(context)
                     boundaries.append(AgentEventType.REASONING_COMPLETED)
                 if self.content_started is not None and self.content_completed is None:
@@ -351,8 +355,9 @@ class ModelOutputTracker:
         from .extensions.events import ReasoningCompletedEvent
 
         AgentPhaseTransitionMixin._require_phase(context.state, AgentPhase.GENERATING)
-        if self.reasoning_started is None or self.reasoning_completed is not None:
+        if not self._reasoning_open:
             raise AgentProtocolError("Reasoning completion requires an open reasoning segment")
+        self._reasoning_open = False
         self.reasoning_completed = ReasoningCompletedEvent.now()
         await context.publish(self.reasoning_completed)
 

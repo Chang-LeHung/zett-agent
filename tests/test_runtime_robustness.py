@@ -207,19 +207,78 @@ async def test_output_completion_requires_an_open_segment(segment):
 
 
 @pytest.mark.parametrize("prefix", ["content", "tool", "reasoning-content", "reasoning-tool"])
-async def test_reasoning_cannot_resume_after_other_output(prefix):
+async def test_reasoning_can_resume_after_other_output_and_opens_a_new_segment(prefix):
+    """A service may answer or call a tool and then think again, as DeepSeek does."""
     context = AgentRunContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
     tracker = ModelOutputTracker()
+    boundaries: list[AgentEventType] = []
     if prefix.startswith("reasoning-"):
-        await tracker.observe(context, ModelEvent.reasoning("thinking"))
+        boundaries.extend(await tracker.observe(context, ModelEvent.reasoning("thinking")))
+        first = tracker.reasoning_started
+    else:
+        first = None
     delta = (
         ModelEvent.text("answer")
         if prefix.endswith("content")
         else ModelEvent.tool_call(ToolCallDelta(index=0, id_delta="call-1", name_delta="read"))
     )
-    await tracker.observe(context, delta)
-    with pytest.raises(AgentProtocolError, match="cannot start or resume"):
-        await tracker.observe(context, ModelEvent.reasoning("late thinking"))
+    boundaries.extend(await tracker.observe(context, delta))
+    first_completed = tracker.reasoning_completed
+    started_before = boundaries.count(AgentEventType.REASONING_STARTED)
+    completed_before = boundaries.count(AgentEventType.REASONING_COMPLETED)
+
+    boundaries.extend(await tracker.observe(context, ModelEvent.reasoning("late thinking")))
+
+    # The resumed segment opens its own boundary pair, whatever came before it.
+    assert boundaries.count(AgentEventType.REASONING_STARTED) == started_before + 1
+    assert tracker.reasoning_started is not None
+    # While a segment is open, the last recorded end is still the previous one.
+    assert tracker.reasoning_completed is first_completed
+    assert first is None or tracker.reasoning_started is first
+    # The resumed segment closes on the next non-reasoning output, like any other.
+    boundaries.extend(await tracker.observe(context, ModelEvent.text("more")))
+    assert boundaries.count(AgentEventType.REASONING_COMPLETED) == completed_before + 1
+    # Timing keeps the first start and the last end, so the span covers every segment.
+    assert tracker.reasoning_completed is not None and tracker.reasoning_completed is not first_completed
+    assert tracker.reasoning_completed.monotonic_ns > tracker.reasoning_started.monotonic_ns
+
+
+async def test_thinking_that_resumes_after_content_and_a_hosted_tool_is_accepted():
+    """The order DeepSeek produced through a Messages gateway: think, answer, search, think, answer."""
+    from zett_agent.model import ServerToolCall, ServerToolResult
+
+    class Model:
+        async def stream(self, request):
+            call = ServerToolCall("hosted-1", "web_search", {"query": "zettelkasten"})
+            yield ModelEvent.reasoning("Search first. ")
+            yield ModelEvent.text("Let me look. ")
+            yield ModelEvent.server_tool_started(call)
+            yield ModelEvent.server_tool_completed(ServerToolResult(call.id, call.name, {"results": []}))
+            yield ModelEvent.reasoning("Now read the results. ")
+            yield ModelEvent.text("Done")
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Done", reasoning="Everything")))
+
+    events = [event async for event in (await Agent.create(Model(), config=CONFIG)).stream("Research")]
+    boundaries = [
+        event.type
+        for event in events
+        if event.type
+        in {
+            AgentEventType.REASONING_STARTED,
+            AgentEventType.REASONING_COMPLETED,
+            AgentEventType.CONTENT_STARTED,
+            AgentEventType.CONTENT_COMPLETED,
+        }
+    ]
+
+    assert boundaries == [
+        AgentEventType.REASONING_STARTED,
+        AgentEventType.REASONING_COMPLETED,
+        AgentEventType.CONTENT_STARTED,
+        AgentEventType.REASONING_STARTED,
+        AgentEventType.REASONING_COMPLETED,
+        AgentEventType.CONTENT_COMPLETED,
+    ]
 
 
 @pytest.mark.parametrize("phase", [phase for phase in AgentPhase if phase != AgentPhase.GENERATING])

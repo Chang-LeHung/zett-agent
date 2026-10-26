@@ -34,7 +34,9 @@ Emit an ``AgentEvent`` for anything a person should see. A custom event carries 
 ``on_custom_event``; the name is data, not a Python method.
 
 Streamed output arrives in a predictable order, so a UI can open and close
-loading states:
+loading states. A model call can think, answer, run a hosted tool and think
+again, so the reasoning pair may repeat; keep each indicator tied to its own
+pair rather than to the call:
 
 .. code-block:: text
 

@@ -325,6 +325,9 @@ class JITHarnessExtension(AgentExtension):
             Args:
                 repo: Directory name, 1–64 letters, digits, underscores, or hyphens.
 
+            Snippet:
+                repo_create(repo="kit")
+
             Guidelines:
                 - Reuse existing capabilities; create tools only for missing functionality or worthwhile workflow savings.
                 - Keep every reusable tool and note in this one repository.
@@ -340,6 +343,9 @@ class JITHarnessExtension(AgentExtension):
             notes are the Markdown files under resources/, listed with kind, description and path;
             open one with your file tools when its description fits the task.
 
+            Snippet:
+                repo_load()
+
             Guidelines:
                 - Call after every edit; a failed load keeps the previous version and names the file and line.
                 - Call it first in a resumed session to see which tools and notes already exist.
@@ -349,6 +355,9 @@ class JITHarnessExtension(AgentExtension):
         @tool(execution_mode=ToolExecutionMode.SERIAL)
         async def repo_unload() -> RepoResult:
             """Hide every tool of the repository; the files stay on disk.
+
+            Snippet:
+                repo_unload()
 
             Guidelines:
                 - Unload when the tools are no longer needed; repo_load restores them.
@@ -364,6 +373,10 @@ class JITHarnessExtension(AgentExtension):
             Args:
                 names: Up to 10 tool names to inspect, each with its recent errors. Omit it to
                     see the repository's tools and every tool called so far.
+
+            Snippet:
+                profile_tools()
+                profile_tools(names=["twice"])
 
             Guidelines:
                 - Read it before building or changing a tool, and when deciding what to unload or delete.

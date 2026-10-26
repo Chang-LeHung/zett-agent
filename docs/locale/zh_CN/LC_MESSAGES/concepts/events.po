@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 21:08+0800\n"
+"POT-Creation-Date: 2026-10-26 23:45+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -68,7 +68,7 @@ msgstr "``await context.publish(...)``"
 msgid "Other extensions' ``on_event``"
 msgstr "其他扩展的 ``on_event``"
 
-#: ../../concepts/events.rst:23 ../../concepts/events.rst:50
+#: ../../concepts/events.rst:23 ../../concepts/events.rst:53
 msgid "Coordination between extensions"
 msgstr "扩展之间的协调"
 
@@ -97,26 +97,29 @@ msgid "Emit an ``AgentEvent`` for anything a person should see. A custom event c
 msgstr "只要是人应该看到的内容，就发出一个 ``AgentEvent``\\ 。自定义事件会带上你自己定义的 ``name`` 和 ``payload``，分发器会调用 ``on_custom_event``；这个名称是数据，不是 Python 方法。"
 
 #: ../../concepts/events.rst:36
-msgid "Streamed output arrives in a predictable order, so a UI can open and close loading states:"
-msgstr "流式输出的到达顺序是可预期的，因此 UI 可以据此开启和结束加载状态："
+msgid "Streamed output arrives in a predictable order, so a UI can open and close loading states. A model call can think, answer, run a hosted tool and think again, so the reasoning pair may repeat; keep each indicator tied to its own pair rather than to the call:"
+msgstr "流式输出的到达顺序是可预期的，因此 UI 可以据此开启和结束加载状态。一次模型调用可能先思考、再回答、运行托管工具，然后再思考，所以 reasoning 的那对事件可能重复出现；请让每个指示器绑定各自的那一对事件，而不是整次调用："
 
-#: ../../concepts/events.rst:46
+#: ../../concepts/events.rst:49
 msgid "An empty delta does not open a segment, and a failure or cancellation leaves the open segment without a completion — close your indicator in a ``finally`` block."
 msgstr "空的增量不会开启一个片段；失败或取消会让已开启的片段没有结束事件——请在 ``finally`` 块里关闭你的指示器。"
 
-#: ../../concepts/events.rst:52
+#: ../../concepts/events.rst:55
 msgid "``context.publish`` notifies extensions, not the UI. Use it for things like \"history was compacted\" (:class:`~zett_agent.extensions.events.CompactionEvent`) or \"a message was appended\". Pass ``target=\"Name\"`` to reach one extension, or omit it to broadcast. An internal notification is never shown to the user automatically."
 msgstr "``context.publish`` 通知的是扩展，不是 UI。它适合用来表示“历史记录已被压缩”（:class:`~zett_agent.extensions.events.CompactionEvent`）或“追加了一条消息”这类事情。传入 ``target=\"Name\"`` 可以只通知某一个扩展，省略它则广播。内部通知绝不会自动展示给用户。"
 
-#: ../../concepts/events.rst:59
+#: ../../concepts/events.rst:62
 msgid "Input from your UI"
 msgstr "来自 UI 的输入"
 
-#: ../../concepts/events.rst:61
+#: ../../concepts/events.rst:64
 msgid "When the model asks a question or requests approval, the request pauses and your application replies with ``emit_external_event``. The reply must match the request's session ID and the expected event name and payload. If no extension accepts it, nothing happens and the request keeps waiting."
 msgstr "当模型提出问题或请求审批时，请求会暂停，由你的应用用 ``emit_external_event`` 回复。这个应答必须与请求的会话 ID、预期的事件名称和负载相匹配。如果没有扩展接受它，什么都不会发生，请求会继续等待。"
 
-#: ../../concepts/events.rst:66
+#: ../../concepts/events.rst:69
 msgid "See :doc:`../extending/events` to implement all three, or run the :doc:`approval round trip <../examples/approval>`."
 msgstr "要自己实现这三类事件，参见\\ :doc:`../extending/events`；想跑一遍完整的审批流程，参见\\ :doc:`审批往返 <../examples/approval>`\\ 。"
+
+#~ msgid "Streamed output arrives in a predictable order, so a UI can open and close loading states:"
+#~ msgstr "流式输出的到达顺序是可预期的，因此 UI 可以据此开启和结束加载状态："
 

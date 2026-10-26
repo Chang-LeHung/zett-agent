@@ -36,10 +36,13 @@ class MessageTiming:
     #: UTC arrival time of the first non-empty reasoning delta. None when the
     #: model did not stream reasoning for this message.
     reasoning_started_at: datetime | None = None
-    #: UTC time when reasoning gave way to content, a tool call, or the final
-    #: response. None when no reasoning segment was observed.
+    #: UTC time when the last reasoning segment ended, by giving way to content,
+    #: a tool call, or the final response. None when no reasoning segment was
+    #: observed.
     reasoning_completed_at: datetime | None = None
-    #: Elapsed reasoning time in nanoseconds measured with a monotonic clock.
+    #: Elapsed time from the first reasoning delta to the end of the last segment,
+    #: in nanoseconds on a monotonic clock. A service may think, answer, run a
+    #: hosted tool and think again, so this span can include content and tool work;
     #: None when no complete reasoning segment was observed.
     reasoning_duration_ns: int | None = None
     #: UTC arrival time of the first non-empty answer-content delta. None for
@@ -179,12 +182,16 @@ class ModelOutputLifecycleEvent(ExtensionEvent):
 
 @dataclass(frozen=True, slots=True)
 class ReasoningStartedEvent(ModelOutputLifecycleEvent):
-    """The first non-empty reasoning delta of one model call arrived."""
+    """A non-empty reasoning delta opened a reasoning segment.
+
+    One model call can produce several segments: a service may answer, run a hosted
+    tool, and then think again, so this event is published once per segment.
+    """
 
 
 @dataclass(frozen=True, slots=True)
 class ReasoningCompletedEvent(ModelOutputLifecycleEvent):
-    """The reasoning segment of one model call ended."""
+    """A reasoning segment of one model call ended, by giving way to content, a tool call, or the response."""
 
 
 @dataclass(frozen=True, slots=True)

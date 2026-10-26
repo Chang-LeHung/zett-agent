@@ -21,24 +21,24 @@ trips, because the child may ask the agent to run a loaded tool while it runs:
 
 .. code-block:: text
 
-    agent process                                child process
-         |                                            |
-         |  spawn: python -m zett_agent.jit_harness.child
-         |------------------------------------------->|
-         |  {"op":"load","directory":"/.../kit"}        |
-         |------------------------------------------->|  import the package
-         |  {"reply_to":1,"ok":true,"tools":[...]}      |  collect @tool
-         |<-------------------------------------------|
-         |                                            |
-         |  {"op":"invoke","name":"twice","value":21}  |
-         |------------------------------------------->|  await twice(21)
-         |      {"op":"call","name":"add","arguments"...}
-         |<-------------------------------------------|  harness.call_tool
-         |  agent runs "add": hooks, events, profile    |
-         |  {"reply_to":2,"ok":true,"value":42}        |
-         |------------------------------------------->|  twice returns
-         |  {"reply_to":1,"ok":true,"value":42}        |
-         |<-------------------------------------------|
+    agent process                                           child process
+    |                                                       |
+    |  spawn: python -m zett_agent.jit_harness.child        |
+    |-------------------------------------------------------|  start, then import
+    |  {"op":"load","directory":"/.../kit"}                 |
+    |-------------------------------------------------------|  import the package
+    |  {"reply_to":1,"ok":true,"tools":[...]}               |
+    |<------------------------------------------------------|  collect @tool
+    |                                                       |
+    |  {"op":"invoke","name":"twice","value":21}            |
+    |-------------------------------------------------------|  await twice(21)
+    |        {"op":"call","name":"add","arguments":...}     |
+    |<------------------------------------------------------|  harness.call_tool
+    |  agent runs "add": hooks, events, profile             |
+    |  {"reply_to":2,"ok":true,"value":42}                  |
+    |-------------------------------------------------------|  the nested call returns
+    |  {"reply_to":1,"ok":true,"value":42}                  |
+    |<------------------------------------------------------|  twice returns
 
 Frames are JSON with ``v``, an ``id`` on each request, and ``reply_to`` on each answer;
 the two directions keep separate id spaces, so neither side can answer its own

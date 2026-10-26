@@ -709,6 +709,21 @@ def test_the_extension_offers_exactly_four_tools_in_serial_mode(tmp_path):
     assert {item.name for item in management} == MANAGEMENT_NAMES
 
 
+def test_every_management_tool_shows_an_example_call(tmp_path):
+    """The snippets section is where the model reads call shapes; a missing one hides the tool."""
+    from zett_agent.extensions.tool_guidelines import render_tool_guidance
+
+    management = JITHarnessExtension(tmp_path)._management_tools(JITHarness(tmp_path))
+    guidance = render_tool_guidance(management)
+    snippets = guidance.split("# Tool guidelines")[0]
+
+    assert all(item.snippet for item in management)
+    assert "# Tool snippets" in snippets
+    for item in management:
+        assert f"- {item.name}:" in snippets
+    assert 'repo_create(repo="kit")' in snippets and "repo_load()" in snippets
+
+
 STATS = dedent('''\
     @tool(guidelines="Fails on request.")
     def flaky(fail: bool) -> int:

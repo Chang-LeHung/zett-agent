@@ -157,6 +157,17 @@ async def test_catalog_switches_are_independent_of_the_tool_guidelines_switches(
     assert "Guidelines:" not in descriptions["echo"]
 
 
+async def test_the_returns_switch_reaches_a_deferred_tools_description():
+    """ToolGuidelinesExtension skips deferred tools, so tool search is their only channel."""
+    _, _, with_returns = await anthropic_request(
+        [ToolGuidelinesExtension(placement=IN_DESCRIPTION, returns=True), ToolSearchExtension()]
+    )
+    _, _, plain = await anthropic_request([ToolGuidelinesExtension(placement=IN_DESCRIPTION), ToolSearchExtension()])
+
+    assert 'returns {"type":"string"}' in with_returns["stock_lookup"]
+    assert "returns" not in plain["stock_lookup"]
+
+
 async def test_nothing_is_added_when_no_tool_is_deferred():
     search, system, _ = await anthropic_request([ToolSearchExtension()], tools=(echo,))
     assert search == "Search registered tools by BM25 keyword relevance."

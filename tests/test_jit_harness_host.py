@@ -218,6 +218,8 @@ def test_a_tool_spec_round_trips_through_json():
     spec = ToolSpec.of(add)
     again = ToolSpec.from_json(spec.to_json())
     assert again == spec
+    assert again.return_schema == {"type": "integer"}
+    assert again.build(lambda arguments: _never()).return_schema == {"type": "integer"}
     assert again.build(lambda arguments: _never()).name == "add"
 
 
@@ -487,9 +489,18 @@ def test_a_host_rejects_a_broken_tool_description():
     from zett_agent.jit_harness.host import PROTOCOL_VERSION, _Pending
 
     spec = ToolSpec.of(add).to_json()
-    for broken in ({**spec, "name": 3}, {**spec, "parameters": []}, {**spec, "guidelines": "text"}):
+    for broken in (
+        {**spec, "name": 3},
+        {**spec, "parameters": []},
+        {**spec, "guidelines": "text"},
+        {**spec, "return_schema": "integer"},
+    ):
         with pytest.raises(JITHostError):
             ToolSpec.from_json(broken)
+    # An older child does not send the key at all, and that must stay a working tool.
+    assert (
+        ToolSpec.from_json({key: value for key, value in spec.items() if key != "return_schema"}).return_schema is None
+    )
     with pytest.raises(JITHostError, match="parameters"):
         ToolSpec.from_json({key: value for key, value in spec.items() if key != "parameters"})
     with pytest.raises(JITHostError, match="guidelines"):

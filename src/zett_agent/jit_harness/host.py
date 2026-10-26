@@ -133,6 +133,7 @@ class ToolSpec:
     guidelines: tuple[str, ...]
     snippet: str
     execution_mode: ToolExecutionMode
+    return_schema: dict[str, JsonValue] | None = None
 
     @classmethod
     def of(cls, tool: AgentTool) -> ToolSpec:
@@ -144,6 +145,11 @@ class ToolSpec:
             guidelines=tuple(tool.guidelines),
             snippet=tool.snippet,
             execution_mode=tool.execution_mode,
+            return_schema=(
+                None
+                if tool.return_schema is None
+                else cast("dict[str, JsonValue]", json.loads(json.dumps(tool.return_schema)))
+            ),
         )
 
     def to_json(self) -> dict[str, JsonValue]:
@@ -155,6 +161,7 @@ class ToolSpec:
             "guidelines": list(self.guidelines),
             "snippet": self.snippet,
             "execution_mode": self.execution_mode.value,
+            "return_schema": self.return_schema,
         }
 
     @classmethod
@@ -167,6 +174,7 @@ class ToolSpec:
             guidelines = payload["guidelines"]
             snippet = payload["snippet"]
             execution_mode = payload["execution_mode"]
+            return_schema = payload.get("return_schema")
         except KeyError as missing:
             raise JITHostError(f"The repository process sent a tool without {missing.args[0]}") from None
         if (
@@ -175,6 +183,7 @@ class ToolSpec:
             or not isinstance(parameters, dict)
             or not isinstance(snippet, str)
             or not isinstance(execution_mode, str)
+            or (return_schema is not None and not isinstance(return_schema, dict))
         ):
             raise JITHostError("The repository process sent a malformed tool description")
         if not isinstance(guidelines, list) or not all(isinstance(item, str) for item in guidelines):
@@ -186,6 +195,7 @@ class ToolSpec:
             tuple(cast("list[str]", guidelines)),
             snippet,
             ToolExecutionMode(execution_mode),
+            return_schema,
         )
 
     def build(self, invoke: Callable[[dict[str, JsonValue]], Awaitable[ToolResult]]) -> AgentTool:
@@ -202,6 +212,9 @@ class ToolSpec:
             guidelines=self.guidelines,
             snippet=self.snippet,
             execution_mode=self.execution_mode,
+            return_schema=None
+            if self.return_schema is None
+            else cast("dict[str, JsonValue]", json.loads(json.dumps(self.return_schema))),
         )
 
 

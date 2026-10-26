@@ -84,6 +84,11 @@ class AgentTool(SyncMethodsMixin):
     guidelines: tuple[str, ...]
     #: Optional invocation examples rendered into prompt guidance.
     snippet: str = ""
+    #: JSON Schema describing this tool's return value, when its function has a return
+    #: annotation that can be described. ``None`` means the tool says nothing about its
+    #: result. The value is never validated against a result; it only tells the model what
+    #: to expect, and only when a renderer asks for it.
+    return_schema: dict[str, Any] | None = None
     #: Whether this local handler runs serially or may run in parallel.
     execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL
     #: Whether Responses API providers may defer loading this tool's schema
@@ -108,6 +113,8 @@ class AgentTool(SyncMethodsMixin):
             raise ValueError("deferred must be a boolean")
         if not isinstance(self.local_tool_search, bool):
             raise ValueError("local_tool_search must be a boolean")
+        if self.return_schema is not None and not isinstance(self.return_schema, dict):
+            raise ValueError("return_schema must be a JSON schema object or None")
         if self.local_tool_search and self.deferred:
             raise ValueError("A local tool search tool cannot also defer its own schema")
 
@@ -280,8 +287,14 @@ def _inline_schema_references(schema: dict[str, Any]) -> dict[str, Any]:
 
 def _build_input_schema(
     function: Callable[..., Any], documentation: _ToolDocumentation
-) -> tuple[type[Any], tuple[str, ...], dict[str, Any]]:
-    """Build the validator and JSON schema for one typed function."""
+) -> tuple[type[Any], tuple[str, ...], dict[str, Any], dict[str, Any]]:
+    """Build the validator and JSON schema for one typed function.
+
+    The resolved type hints come back with the schema, so the return annotation can be
+    described from the same lookup instead of a second ``get_type_hints`` call. That
+    call resolves every annotation at once, so a broken one fails here, with the
+    arguments' error, whoever asks about the return value.
+    """
     from pydantic import ConfigDict, create_model
 
     hints = get_type_hints(function, include_extras=True)
@@ -309,7 +322,7 @@ def _build_input_schema(
         raise ValueError(f"Docstring Args contains unknown parameters: {unknown}")
     for described, description in documentation.parameter_descriptions.items():
         parameters["properties"][described]["description"] = description
-    return inputs, tuple(fields), parameters
+    return inputs, tuple(fields), parameters, hints
 
 
 def _resolve_guidelines(documentation: _ToolDocumentation, configured: str | Sequence[str] | None) -> tuple[str, ...]:
@@ -335,7 +348,7 @@ def _build_agent_tool(
 ) -> AgentTool:
     """Create an AgentTool from one function and decorator overrides."""
     documentation = _parse_tool_docstring(function)
-    inputs, field_names, parameters = _build_input_schema(function, documentation)
+    inputs, field_names, parameters, hints = _build_input_schema(function, documentation)
 
     async def invoke(**arguments: Any) -> Any:
         parsed = inputs.model_validate(arguments)
@@ -360,10 +373,47 @@ def _build_agent_tool(
         handler=invoke,
         guidelines=resolved_guidelines,
         snippet=snippet if snippet is not None else documentation.snippet,
+        return_schema=_build_return_schema(hints),
         execution_mode=execution_mode,
         deferred=deferred,
         local_tool_search=local_tool_search,
     )
+
+
+def _build_return_schema(hints: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Describe a tool's return value as JSON Schema, or None when it cannot be described.
+
+    The hint is optional metadata, and nothing validates a result against it, so every
+    way of failing to describe it ends in None rather than in an error that would keep
+    a working tool from being registered: no return annotation, an annotation Pydantic
+    cannot build a schema for, a recursive model the inliner refuses, or a schema with
+    nothing in it (``-> object`` and ``-> Any`` describe nothing). Titles are dropped
+    because they cost prompt tokens on every request and say only the class name.
+    """
+    hint = hints.get("return")
+    if hint is None:
+        return None
+    from pydantic import TypeAdapter
+
+    try:
+        schema = _without_titles(TypeAdapter(hint).json_schema())
+    except Exception:  # an annotation pydantic cannot describe is simply no hint
+        return None
+    if not schema:
+        return None
+    try:
+        return _inline_schema_references(schema)
+    except Exception:  # a recursive model cannot be inlined, and the return is optional
+        return None
+
+
+def _without_titles(value: Any) -> Any:
+    """Drop ``title`` keys from a schema, keeping every other field."""
+    if isinstance(value, Mapping):
+        return {key: _without_titles(item) for key, item in value.items() if key != "title"}
+    if isinstance(value, list):
+        return [_without_titles(item) for item in value]
+    return value
 
 
 @overload
@@ -472,15 +522,23 @@ def tool(
     return decorate(function) if function is not None else decorate
 
 
-def render_tool_guidance(tools: Sequence[AgentTool], *, snippets: bool = True, guidelines: bool = True) -> str:
+def render_tool_guidance(
+    tools: Sequence[AgentTool], *, snippets: bool = True, guidelines: bool = True, returns: bool = False
+) -> str:
     """Render grouped tool metadata for insertion into a system prompt.
 
     Snippets are presented together so the model can scan the available call
     shapes first. Guidelines follow in one named group per tool, which avoids
     repeating a tool name for every rule. ``snippets`` and ``guidelines`` switch
-    either section off.
+    either section off. ``returns`` adds one line after each snippet describing
+    the tool's return value as JSON Schema; it is off by default, because most
+    tools return plain text the model already reads.
     """
-    rendered_snippets = [_render_tool_snippet(registered) for registered in tools if snippets and registered.snippet]
+    rendered_snippets = [
+        _render_tool_snippet(registered, returns=returns)
+        for registered in tools
+        if snippets and (registered.snippet or (returns and registered.return_schema is not None))
+    ]
     guideline_groups = [
         f"## {registered.name}\n" + "\n".join(f"- {guideline}" for guideline in registered.guidelines)
         for registered in tools
@@ -495,7 +553,7 @@ def render_tool_guidance(tools: Sequence[AgentTool], *, snippets: bool = True, g
 
 
 def render_tool_description(
-    tool: AgentTool, *, snippet: bool = True, guidelines: bool = True, base: str | None = None
+    tool: AgentTool, *, snippet: bool = True, guidelines: bool = True, returns: bool = False, base: str | None = None
 ) -> str:
     """Return a tool description that carries its snippet and guidelines.
 
@@ -509,6 +567,7 @@ def render_tool_description(
         tool: Tool whose metadata is rendered.
         snippet: Include the ``Snippet`` section when the tool has one.
         guidelines: Include the ``Guidelines`` section when the tool has any.
+        returns: Add the tool's return value schema to the snippet section.
         base: Text to put the sections after, instead of ``tool.description``.
             Extensions that each add to a request's descriptions pass the text
             they received, so one does not overwrite what another appended.
@@ -519,8 +578,11 @@ def render_tool_description(
             text = render_tool_description(read_file)
     """
     sections = [tool.description if base is None else base]
-    if snippet and tool.snippet:
-        sections.append("Snippet:\n" + "\n".join(f"- {line}" for line in tool.snippet.splitlines() if line.strip()))
+    if snippet and (tool.snippet or (returns and tool.return_schema is not None)):
+        bullets = [f"- {line}" for line in tool.snippet.splitlines() if line.strip()]
+        if returns and tool.return_schema is not None:
+            bullets.append(f"- returns {_schema_text(tool.return_schema)}")
+        sections.append("Snippet:\n" + "\n".join(bullets))
     if guidelines and tool.guidelines:
         sections.append("Guidelines:\n" + "\n".join(f"- {guideline}" for guideline in tool.guidelines))
     return "\n\n".join(sections)
@@ -551,10 +613,24 @@ def render_tool_search_text(tool: AgentTool) -> str:
     )
 
 
-def _render_tool_snippet(tool: AgentTool) -> str:
-    """Keep every line of a multiline snippet inside its tool bullet."""
-    lines = tool.snippet.splitlines()
+def _schema_text(schema: Mapping[str, Any]) -> str:
+    """Render a JSON schema on one line, so it stays inside its tool bullet."""
+    return json.dumps(schema, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _render_tool_snippet(tool: AgentTool, *, returns: bool = False) -> str:
+    """Keep every line of a multiline snippet inside its tool bullet.
+
+    Blank lines are dropped: a snippet is a handful of call shapes, and the gesture
+    between two of them says nothing to the model.
+    """
+    lines = [line for line in tool.snippet.splitlines() if line.strip()]
+    suffix = ""
+    if returns and tool.return_schema is not None:
+        suffix = f"\n  returns {_schema_text(tool.return_schema)}"
     if len(lines) == 1:
-        return f"- {tool.name}: {lines[0]}"
-    body = "\n".join(f"  {line}" if line else "" for line in lines)
-    return f"- {tool.name}:\n{body}"
+        return f"- {tool.name}: {lines[0]}{suffix}"
+    if not lines:
+        return f"- {tool.name}:{suffix}"
+    body = "\n".join(f"  {line}" for line in lines)
+    return f"- {tool.name}:\n{body}{suffix}"

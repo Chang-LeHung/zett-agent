@@ -308,16 +308,19 @@ write a second loop. See
 
 ```bash
 uv sync
-uv run pytest
+uv run pytest                        # the full suite
+uv run pytest tests/test_agent.py    # one file while you iterate
 uv run ruff check src tests examples
 make docs-live         # preview the manual with live reload at http://127.0.0.1:8000
 make docs-serve        # build once, then serve the static HTML
 make check             # lint, tests with coverage, and documentation checks
 ```
 
-`make docs-live` rebuilds on every edit under `docs/` or `src/`, and reloads the
-open browser page. Pass `DOCS_PORT=8080` to change the port and `DOCS_OPEN=`
-to skip opening a browser. `make docs` builds once without serving.
+The suite runs offline: provider tests answer from local fakes, so no API key
+and no network access are needed. `make docs-live` rebuilds on every edit under
+`docs/` or `src/`, and reloads the open browser page. Pass `DOCS_PORT=8080` to
+change the port and `DOCS_OPEN=` to skip opening a browser. `make docs` builds
+once without serving.
 
 The repository layout:
 

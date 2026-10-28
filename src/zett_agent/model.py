@@ -140,9 +140,19 @@ class ServerToolInputDelta:
             raise ValueError("Server tool input delta cannot be empty")
 
 
+#: Output status an adapter sets when a hosted tool ended without a reported result.
+NOT_REPORTED_STATUS = "not_reported"
+
+
 @dataclass(frozen=True, slots=True)
 class ServerToolResult:
-    """Terminal output from a tool executed inside the provider."""
+    """Terminal output from a tool executed inside the provider.
+
+    An adapter may close a call whose terminal result never arrived with
+    ``output={"status": NOT_REPORTED_STATUS}``. That status is the adapter's
+    marker that the generation ended without a provider payload; it is not a
+    provider result shape, and the call's success is unknown.
+    """
 
     #: Invocation identifier matching :attr:`ServerToolCall.id`.
     call_id: str

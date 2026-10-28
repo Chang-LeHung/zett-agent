@@ -198,3 +198,8 @@ def classify_stop(
         recommended_model=recommended_model,
         detail=dict(detail) if detail else {},
     )
+
+
+def continues_pause(stop: StopInfo | None, *, may_pause: bool, has_tool_calls: bool) -> bool:
+    """Whether a paused step will be sent again rather than ended."""
+    return may_pause and stop is not None and stop.reason is StopReason.PAUSED and not has_tool_calls

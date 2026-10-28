@@ -276,6 +276,7 @@ async def stream_responses(
     refusal_text = ""
     terminal: JsonObject | None = None
     server_calls: dict[str, ServerToolCall] = {}
+    closed_server_ids: set[str] = set()
     #: Output items by ``output_index``: opened by ``output_item.added``, closed by ``.done``.
     open_items: set[int] = set()
     done_items: dict[int, JsonObject] = {}
@@ -346,6 +347,7 @@ async def stream_responses(
                         output=item,
                         error_code=_server_tool_error(item),
                     )
+                    closed_server_ids.add(original.id)
                     if result.error_code:
                         yield ModelEvent.server_tool_failed(result)
                     else:
@@ -374,6 +376,7 @@ async def stream_responses(
                 # understood as the service explaining itself rather than a dropped connection.
                 open_items.discard(read_int(event.get("output_index")))
                 server_ended = True
+                closed_server_ids.add(read_str(event.get("item_id")))
                 yield ModelEvent.server_tool_failed(
                     ServerToolResult(
                         call_id=read_str(event.get("item_id")),
@@ -415,6 +418,30 @@ async def stream_responses(
     if refusal_text and stop.ok:
         # A refusal content block arrives in a response whose status is ``completed``.
         stop = StopInfo(StopReason.REFUSAL, raw=reason, category="refusal", message=refusal_text)
+    if terminal is not None and server_calls:
+        by_id = {read_str(item.get("id")): item for item in output}
+        for call in server_calls.values():
+            if call.id in closed_server_ids:
+                continue
+            terminal_item = by_id.get(call.id)
+            status = read_str(terminal_item.get("status")) if terminal_item is not None else "incomplete"
+            if status == "completed":
+                yield ModelEvent.server_tool_completed(ServerToolResult(call.id, call.name, terminal_item))
+                continue
+            logger.warning(
+                "Responses terminal response left hosted call %s (%s) open; reporting it as incomplete",
+                call.name,
+                call.id,
+            )
+            error_code = _server_tool_error(terminal_item) if terminal_item is not None else "incomplete"
+            yield ModelEvent.server_tool_failed(
+                ServerToolResult(
+                    call.id,
+                    call.name,
+                    terminal_item or {"status": "incomplete"},
+                    error_code or "incomplete",
+                )
+            )
     replay: tuple[Mapping[str, JsonValue], ...] = tuple(output)
     if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
         # The calls are withheld from the message, so the provider's record of them goes too.

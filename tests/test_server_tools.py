@@ -14,6 +14,8 @@ from zett_agent.agent import (
 )
 from zett_agent.events import AgentEventType
 from zett_agent.exceptions import AgentProtocolError
+from zett_agent.extensions.server_tools.anthropic import AnthropicServerToolExtension
+from zett_agent.extensions.server_tools.openai import OpenAIServerToolExtension
 from zett_agent.messages import (
     AssistantMessage,
     UserMessage,
@@ -116,6 +118,52 @@ async def test_openai_compatible_provider_combines_local_and_server_tools() -> N
     assert [event.type for event in events] == [ModelEventType.RESPONSE]
     assert events[0].response is not None
     assert events[0].response.message.tool_calls == ()
+
+
+async def test_openai_terminal_response_closes_an_open_hosted_item() -> None:
+    started = {
+        "id": "ws_1",
+        "type": "web_search_call",
+        "status": "in_progress",
+        "action": {"type": "search", "query": "news"},
+    }
+    unfinished = {"id": "ws_1", "type": "web_search_call", "status": "incomplete"}
+    terminal = {
+        "id": "resp_1",
+        "object": "response",
+        "created_at": 0,
+        "model": "gpt-5",
+        "status": "incomplete",
+        "output": [unfinished],
+        "parallel_tool_calls": True,
+        "tool_choice": "auto",
+        "tools": [],
+        "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+        "incomplete_details": {"reason": "max_output_tokens"},
+    }
+    events = [
+        {"type": "response.output_item.added", "output_index": 0, "sequence_number": 1, "item": started},
+        {"type": "response.incomplete", "sequence_number": 2, "response": terminal},
+    ]
+    content = "".join(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events).encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=content, headers={"content-type": "text/event-stream"})
+
+    provider = OpenAIProvider("gpt-5", "key", transport=httpx.MockTransport(handler), response=True)
+    extension = OpenAIServerToolExtension([ServerToolDefinition("web_search")])
+    agent = await Agent.create(provider, extensions=[extension], config=AgentRunConfig("openai-open-item"))
+    try:
+        reported = [event async for event in agent.stream("Search")]
+    finally:
+        await provider.aclose()
+
+    failed = [event for event in reported if event.type is AgentEventType.SERVER_TOOL_FAILED]
+    assert len(failed) == 1
+    result = failed[0].server_tool_result
+    assert result is not None
+    assert (result.call_id, result.name, result.error_code) == ("ws_1", "web_search", "incomplete")
+    assert reported[-1].type is AgentEventType.RUN_COMPLETED
 
 
 async def test_anthropic_provider_sends_versioned_server_tool_unchanged() -> None:
@@ -252,6 +300,365 @@ async def test_anthropic_provider_streams_server_tool_lifecycle_without_local_to
     )
     assert events[-1].response is not None
     assert events[-1].response.message.tool_calls == ()
+
+
+async def test_anthropic_provider_drops_a_server_tool_start_without_a_result_from_replay() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_anthropic_sse(
+                [
+                    {"type": "message_start", "message": {"usage": {"input_tokens": 3, "output_tokens": 0}}},
+                    {
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {
+                            "type": "server_tool_use",
+                            "id": "srvtoolu_1",
+                            "name": "web_search",
+                            "input": {},
+                        },
+                    },
+                    {"type": "content_block_stop", "index": 0},
+                    {"type": "message_delta", "delta": {"stop_reason": "max_tokens"}, "usage": {"output_tokens": 1}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler), max_tokens=64)
+    request = ModelRequest(
+        messages=(UserMessage(content="Search"),),
+        server_tools=(ServerToolDefinition("web_search_20250305", {"name": "web_search"}),),
+    )
+    try:
+        events = [event async for event in provider.stream(request)]
+    finally:
+        await provider.aclose()
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_COMPLETED,
+        ModelEventType.RESPONSE,
+    ]
+    assert events[1].server_tool_result == ServerToolResult("srvtoolu_1", "web_search", {"status": "not_reported"})
+    response = events[-1].response
+    assert response is not None
+    assert response.finish_reason == "max_tokens"
+    # Replaying a server_tool_use without its matching result is rejected by the API.
+    assert response.message.replay_blocks == ()
+
+
+async def test_a_paused_search_resumes_with_a_result_that_has_no_new_start() -> None:
+    calls = 0
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        bodies.append(json.loads(request.content))
+        if calls == 1:
+            events = [
+                {"type": "message_start", "message": {"usage": {"input_tokens": 3, "output_tokens": 0}}},
+                {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {
+                        "type": "server_tool_use",
+                        "id": "srvtoolu_1",
+                        "name": "web_search",
+                        "input": {},
+                    },
+                },
+                {"type": "content_block_stop", "index": 0},
+                {"type": "message_delta", "delta": {"stop_reason": "pause_turn"}, "usage": {"output_tokens": 1}},
+                {"type": "message_stop"},
+            ]
+        else:
+            events = [
+                {"type": "message_start", "message": {"usage": {"input_tokens": 3, "output_tokens": 0}}},
+                {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {"type": "web_search_tool_result", "tool_use_id": "srvtoolu_1", "content": []},
+                },
+                {"type": "content_block_stop", "index": 0},
+                {"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}},
+                {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "done"}},
+                {"type": "content_block_stop", "index": 1},
+                {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+                {"type": "message_stop"},
+            ]
+        return httpx.Response(200, content=_anthropic_sse(events), headers={"content-type": "text/event-stream"})
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler))
+    extension = AnthropicServerToolExtension([ServerToolDefinition("web_search_20250305", {"name": "web_search"})])
+    agent = await Agent.create(provider, extensions=[extension], config=AgentRunConfig("pause-resume"))
+    agent.max_pause_continuations = 1
+    try:
+        events = [event async for event in agent.stream("Search")]
+    finally:
+        await provider.aclose()
+
+    assert calls == 2
+    assert events[-1].type is AgentEventType.RUN_COMPLETED
+    assert events[-1].message is not None and events[-1].message.content == "done"
+    assert [event.type for event in events if event.type is AgentEventType.SERVER_TOOL_STARTED] == [
+        AgentEventType.SERVER_TOOL_STARTED
+    ]
+    assert [event.type for event in events if event.type is AgentEventType.SERVER_TOOL_COMPLETED] == [
+        AgentEventType.SERVER_TOOL_COMPLETED
+    ]
+    paused_blocks = [
+        block
+        for message in bodies[1]["messages"]
+        if message.get("role") == "assistant"
+        for block in message.get("content", [])
+        if block.get("type") == "server_tool_use"
+    ]
+    assert [block.get("id") for block in paused_blocks] == ["srvtoolu_1"]
+
+
+async def test_a_continued_pause_that_never_reports_closes_its_open_call() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            events = [
+                {"type": "message_start", "message": {"usage": {"input_tokens": 3, "output_tokens": 0}}},
+                {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {
+                        "type": "server_tool_use",
+                        "id": "srvtoolu_1",
+                        "name": "web_search",
+                        "input": {},
+                    },
+                },
+                {"type": "content_block_stop", "index": 0},
+                {"type": "message_delta", "delta": {"stop_reason": "pause_turn"}, "usage": {"output_tokens": 1}},
+                {"type": "message_stop"},
+            ]
+        else:
+            events = [
+                {"type": "message_start", "message": {"usage": {"input_tokens": 3, "output_tokens": 0}}},
+                {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+                {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "done"}},
+                {"type": "content_block_stop", "index": 0},
+                {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+                {"type": "message_stop"},
+            ]
+        return httpx.Response(200, content=_anthropic_sse(events), headers={"content-type": "text/event-stream"})
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler))
+    extension = AnthropicServerToolExtension([ServerToolDefinition("web_search_20250305", {"name": "web_search"})])
+    session = "pause-abandoned"
+    agent = await Agent.create(provider, extensions=[extension], config=AgentRunConfig(session))
+    agent.max_pause_continuations = 1
+    try:
+        events = [event async for event in agent.stream("Search")]
+    finally:
+        await provider.aclose()
+
+    assert calls == 2
+    assert events[-1].type is AgentEventType.RUN_COMPLETED
+    completed = [event for event in events if event.type is AgentEventType.SERVER_TOOL_COMPLETED]
+    assert len(completed) == 1
+    result = completed[0].server_tool_result
+    assert result is not None
+    assert (result.call_id, result.name, result.error_code) == ("srvtoolu_1", "web_search", None)
+    assert result.output == {"status": "not_reported"}
+
+    state = agent.get_state(session)
+    assert state is not None
+    for message in state.messages:
+        if isinstance(message, AssistantMessage):
+            assert all(block.get("id") != "srvtoolu_1" for block in message.replay_blocks)
+
+
+async def test_anthropic_provider_invents_a_start_for_a_resumed_server_result() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_anthropic_sse(
+                [
+                    {"type": "message_start", "message": {"usage": {"input_tokens": 3, "output_tokens": 0}}},
+                    {
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {
+                            "type": "web_search_tool_result",
+                            "tool_use_id": "srvtoolu_1",
+                            "content": [],
+                        },
+                    },
+                    {"type": "content_block_stop", "index": 0},
+                    {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler))
+    request = ModelRequest(
+        messages=(UserMessage(content="Continue"),),
+        server_tools=(ServerToolDefinition("web_search_20250305", {"name": "web_search"}),),
+    )
+    try:
+        events = [event async for event in provider.stream(request)]
+    finally:
+        await provider.aclose()
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_COMPLETED,
+        ModelEventType.RESPONSE,
+    ]
+    assert events[0].server_tool_call == ServerToolCall("srvtoolu_1", "web_search")
+    assert events[1].server_tool_result == ServerToolResult("srvtoolu_1", "web_search", [])
+
+
+async def test_anthropic_provider_keeps_a_paused_server_tool_for_resumption() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_anthropic_sse(
+                [
+                    {"type": "message_start", "message": {"usage": {"input_tokens": 3, "output_tokens": 0}}},
+                    {
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {
+                            "type": "server_tool_use",
+                            "id": "srvtoolu_1",
+                            "name": "web_search",
+                            "input": {},
+                        },
+                    },
+                    {"type": "content_block_stop", "index": 0},
+                    {"type": "message_delta", "delta": {"stop_reason": "pause_turn"}, "usage": {"output_tokens": 1}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler), max_tokens=64)
+    request = ModelRequest(
+        messages=(UserMessage(content="Search"),),
+        server_tools=(ServerToolDefinition("web_search_20250305", {"name": "web_search"}),),
+    )
+    try:
+        events = [event async for event in provider.stream(request)]
+    finally:
+        await provider.aclose()
+
+    assert [event.type for event in events] == [ModelEventType.SERVER_TOOL_STARTED, ModelEventType.RESPONSE]
+    response = events[-1].response
+    assert response is not None
+    assert response.finish_reason == "pause_turn"
+    # A paused turn hands the open block back to the client so the next request can resume it.
+    assert [block.get("type") for block in response.message.replay_blocks] == ["server_tool_use"]
+
+
+async def test_anthropic_provider_drops_an_unresolved_server_tool_from_restored_history() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            content=_anthropic_sse(
+                [
+                    {"type": "message_start", "message": {"usage": {}}},
+                    {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+                    {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}},
+                    {"type": "content_block_stop", "index": 0},
+                    {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler))
+    assistant = AssistantMessage(
+        provider="anthropic",
+        model="claude",
+        replay_blocks=(({"type": "server_tool_use", "id": "srvtoolu_1"}),),
+    )
+    request = ModelRequest(
+        messages=(assistant, UserMessage(content="next")),
+        server_tools=(ServerToolDefinition("web_search_20250305", {"name": "web_search"}),),
+    )
+    try:
+        _ = [event async for event in provider.stream(request)]
+    finally:
+        await provider.aclose()
+
+    sent = captured["body"]["messages"]
+    assert all(
+        block.get("type") != "server_tool_use"
+        for message in sent
+        for block in message.get("content", [])
+        if isinstance(block, dict)
+    )
+
+
+@pytest.mark.parametrize(
+    ("start_type", "result_type"),
+    [
+        ("server_tool_use", "web_search_tool_result"),
+        ("mcp_tool_use", "mcp_tool_result"),
+    ],
+)
+async def test_anthropic_provider_keeps_a_completed_server_tool_pair_in_history(
+    start_type: str, result_type: str
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            content=_anthropic_sse(
+                [
+                    {"type": "message_start", "message": {"usage": {}}},
+                    {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider("claude", "key", transport=httpx.MockTransport(handler))
+    assistant = AssistantMessage(
+        provider="anthropic",
+        model="claude",
+        replay_blocks=(
+            {"type": start_type, "id": "srvtoolu_1"},
+            {"type": result_type, "tool_use_id": "srvtoolu_1", "content": []},
+        ),
+    )
+    request = ModelRequest(messages=(assistant, UserMessage(content="next")))
+    try:
+        _ = [event async for event in provider.stream(request)]
+    finally:
+        await provider.aclose()
+
+    blocks = [
+        block
+        for message in captured["body"]["messages"]
+        if message.get("role") == "assistant"
+        for block in message.get("content", [])
+        if isinstance(block, dict)
+    ]
+    assert [block.get("type") for block in blocks] == [start_type, result_type]
 
 
 async def test_anthropic_provider_exposes_server_tool_result_error_as_event() -> None:
@@ -455,6 +862,31 @@ async def test_agent_rejects_invalid_server_tool_lifecycle(
 
     with pytest.raises(AgentProtocolError, match=message):
         _ = [event async for event in agent.stream("Fetch it")]
+
+
+async def test_an_uncontinued_pause_drops_the_open_server_tool_block() -> None:
+    class Model:
+        async def stream(self, request: ModelRequest):
+            yield ModelEvent.server_tool_started(ServerToolCall("hosted-1", "web_search"))
+            yield ModelEvent.completed(
+                ModelResponse(
+                    AssistantMessage(
+                        content="paused",
+                        replay_blocks=(({"type": "server_tool_use", "id": "hosted-1"}),),
+                    ),
+                    finish_reason="pause_turn",
+                )
+            )
+
+    agent = await Agent.create(Model(), config=AgentRunConfig(session_id="paused-server-tool"))
+    agent.max_pause_continuations = 0
+
+    events = [event async for event in agent.stream("Search it")]
+
+    assert events[-1].type is AgentEventType.RUN_COMPLETED
+    assert events[-1].message is not None
+    assert events[-1].message.replay_blocks == ()
+    assert any(event.type is AgentEventType.MODEL_STOPPED for event in events)
 
 
 async def test_ollama_provider_rejects_server_tools_without_network_io() -> None:

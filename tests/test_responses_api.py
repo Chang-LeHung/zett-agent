@@ -834,6 +834,96 @@ async def test_responses_emits_start_before_an_unannounced_failed_server_tool_re
     assert events[1].server_tool_result.error_code == "search_unavailable"
 
 
+async def test_responses_closes_a_hosted_item_the_terminal_response_left_open() -> None:
+    started = {
+        "id": "ws_1",
+        "type": "web_search_call",
+        "status": "in_progress",
+        "action": {"type": "search", "query": "news"},
+    }
+    unfinished = {"id": "ws_1", "type": "web_search_call", "status": "incomplete"}
+    terminal_response = _response([unfinished], model="gpt-5")
+    terminal_response["status"] = "incomplete"
+    terminal_response["incomplete_details"] = {"reason": "max_output_tokens"}
+    added = dict(type="response.output_item.added", output_index=0, sequence_number=1, item=started)
+    terminal = dict(type="response.incomplete", sequence_number=2, response=terminal_response)
+
+    events = [event async for event in stream_responses(_objects(added, terminal), provider="openai", model="gpt-5")]
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_FAILED,
+        ModelEventType.RESPONSE,
+    ]
+    assert events[1].server_tool_result is not None
+    assert events[1].server_tool_result.error_code == "incomplete"
+    assert events[-1].response is not None
+    # The terminal item is kept: OpenAI accepts a non-completed hosted item in replay.
+    assert events[-1].response.message.replay_blocks == (unfinished,)
+
+
+async def test_responses_closes_a_hosted_item_announced_after_the_terminal_event() -> None:
+    started = {"id": "ws_1", "type": "web_search_call", "status": "in_progress"}
+    unfinished = {"id": "ws_1", "type": "web_search_call", "status": "incomplete"}
+    terminal_response = _response([unfinished], model="gpt-5")
+    terminal_response["status"] = "incomplete"
+    terminal_response["incomplete_details"] = {"reason": "max_output_tokens"}
+    terminal = dict(type="response.incomplete", sequence_number=1, response=terminal_response)
+    added = dict(type="response.output_item.added", output_index=0, sequence_number=2, item=started)
+
+    events = [event async for event in stream_responses(_objects(terminal, added), provider="openai", model="gpt-5")]
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_FAILED,
+        ModelEventType.RESPONSE,
+    ]
+    assert events[-1].response is not None
+    assert events[-1].response.message.replay_blocks == (unfinished,)
+
+
+async def test_responses_completes_a_hosted_item_reported_by_the_terminal_event() -> None:
+    started = {"id": "ws_1", "type": "web_search_call", "status": "in_progress"}
+    finished = {"id": "ws_1", "type": "web_search_call", "status": "completed"}
+    terminal_response = _response([finished], model="gpt-5")
+    added = dict(type="response.output_item.added", output_index=0, sequence_number=1, item=started)
+    terminal = dict(type="response.completed", sequence_number=2, response=terminal_response)
+
+    events = [event async for event in stream_responses(_objects(added, terminal), provider="openai", model="gpt-5")]
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_COMPLETED,
+        ModelEventType.RESPONSE,
+    ]
+    assert events[1].server_tool_result is not None
+    assert events[1].server_tool_result.output == finished
+    assert events[-1].response is not None
+    assert events[-1].response.message.replay_blocks == (finished,)
+
+
+async def test_responses_closes_a_hosted_item_absent_from_the_terminal_output() -> None:
+    started = {"id": "ws_1", "type": "web_search_call", "status": "in_progress"}
+    terminal_response = _response([], model="gpt-5")
+    terminal_response["status"] = "incomplete"
+    terminal_response["incomplete_details"] = {"reason": "max_output_tokens"}
+    added = dict(type="response.output_item.added", output_index=0, sequence_number=1, item=started)
+    terminal = dict(type="response.incomplete", sequence_number=2, response=terminal_response)
+
+    events = [event async for event in stream_responses(_objects(added, terminal), provider="openai", model="gpt-5")]
+
+    assert [event.type for event in events] == [
+        ModelEventType.SERVER_TOOL_STARTED,
+        ModelEventType.SERVER_TOOL_FAILED,
+        ModelEventType.RESPONSE,
+    ]
+    assert events[1].server_tool_result is not None
+    assert events[1].server_tool_result.error_code == "incomplete"
+    assert events[1].server_tool_result.output == {"status": "incomplete"}
+    assert events[-1].response is not None
+    assert events[-1].response.message.replay_blocks == ()
+
+
 async def test_responses_accepts_a_hosted_item_failing_without_a_terminal_response() -> None:
     opened = dict(
         type="response.output_item.added",

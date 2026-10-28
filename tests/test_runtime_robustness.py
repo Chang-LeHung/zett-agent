@@ -35,6 +35,7 @@ from zett_agent.model import (
     ModelEvent,
     ModelEventType,
     ModelResponse,
+    ServerToolCall,
     ToolCallDelta,
 )
 
@@ -298,6 +299,18 @@ async def test_malformed_events_do_not_complete_reasoning(kind):
     with pytest.raises(AgentProtocolError, match="Missing"):
         await tracker.observe(context, ModelEvent(kind))
     assert tracker.reasoning_completed is None
+
+
+async def test_output_tracker_accepts_a_paused_turn_with_an_open_server_tool():
+    context = AgentRunContext(CONFIG, AgentState(phase=AgentPhase.GENERATING), {}, ())
+    tracker = ModelOutputTracker()
+    await tracker.observe(context, ModelEvent.server_tool_started(ServerToolCall("hosted-1", "web_search")))
+    await tracker.observe(
+        context,
+        ModelEvent.completed(ModelResponse(AssistantMessage(content="paused"), finish_reason="pause_turn")),
+    )
+
+    assert tracker.content_started is None
 
 
 @pytest.mark.parametrize("output", ["empty", "reasoning", "content", "both"])

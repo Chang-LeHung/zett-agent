@@ -18,7 +18,7 @@ from .model import (
     ServerToolResult,
     ToolCallDelta,
 )
-from .stop import StopInfo
+from .stop import StopInfo, StopReason
 
 if TYPE_CHECKING:
     from .extensions.events import (
@@ -270,7 +270,9 @@ class ModelOutputTracker:
     thinking covered. Provider-hosted tools remain inside one model generation and do
     not close reasoning by themselves. The final response closes content and seals the
     tracker. Completion requires a matching open segment. Failure and cancellation do
-    not synthesize successful completion events.
+    not synthesize successful completion events. A paused turn is the one exception
+    to the matching-pair rule: it hands control back mid-tool so the next request
+    can resend the open call and continue it.
     """
 
     reasoning_started: ReasoningStartedEvent | None = None
@@ -280,6 +282,9 @@ class ModelOutputTracker:
     _finished: bool = False
     _reasoning_open: bool = False
     _server_tools: dict[str, ServerToolCall] = field(default_factory=dict)
+    _carried_server_tool_ids: set[str] = field(default_factory=set)
+    _paused_server_tools: tuple[ServerToolCall, ...] = ()
+    _abandoned_server_tools: tuple[ServerToolCall, ...] = ()
 
     async def observe(self, context: PhaseContext, event: ModelEvent) -> tuple[AgentEventType, ...]:
         """Publish extension boundaries and return their ordered UI event types."""
@@ -321,8 +326,10 @@ class ModelOutputTracker:
                 if event.server_tool_call is None:
                     raise AgentProtocolError("Missing server-tool call")
                 if event.server_tool_call.id in self._server_tools:
-                    raise AgentProtocolError(f"Server tool {event.server_tool_call.id!r} started more than once")
-                self._server_tools[event.server_tool_call.id] = event.server_tool_call
+                    if event.server_tool_call.id not in self._carried_server_tool_ids:
+                        raise AgentProtocolError(f"Server tool {event.server_tool_call.id!r} started more than once")
+                else:
+                    self._server_tools[event.server_tool_call.id] = event.server_tool_call
             case ModelEventType.SERVER_TOOL_INPUT_DELTA:
                 if event.server_tool_input_delta is None:
                     raise AgentProtocolError("Missing server-tool input delta")
@@ -338,8 +345,27 @@ class ModelOutputTracker:
                 if event.response is None:
                     raise AgentProtocolError("Missing model response")
                 if self._server_tools:
-                    pending = ", ".join(sorted(self._server_tools))
-                    raise AgentProtocolError(f"Model response arrived before server tools completed: {pending}")
+                    if event.response.stop is not None and event.response.stop.reason is StopReason.PAUSED:
+                        # A paused turn hands control back mid-tool; the adapter keeps the open
+                        # blocks in the message so the continuation request can resume them. The
+                        # runtime decides whether that continuation actually happens.
+                        self._paused_server_tools = tuple(self._server_tools.values())
+                    else:
+                        carried = {
+                            call_id: call
+                            for call_id, call in self._server_tools.items()
+                            if call_id in self._carried_server_tool_ids
+                        }
+                        current = {
+                            call_id: call
+                            for call_id, call in self._server_tools.items()
+                            if call_id not in self._carried_server_tool_ids
+                        }
+                        if current:
+                            pending = ", ".join(sorted(current))
+                            raise AgentProtocolError(f"Model response arrived before server tools completed: {pending}")
+                        self._abandoned_server_tools = tuple(carried.values())
+                    self._server_tools.clear()
                 if self._reasoning_open:
                     await self._complete_reasoning(context)
                     boundaries.append(AgentEventType.REASONING_COMPLETED)
@@ -350,6 +376,24 @@ class ModelOutputTracker:
             case _:
                 pass
         return tuple(boundaries)
+
+    def take_paused_server_tools(self) -> tuple[ServerToolCall, ...]:
+        """Return hosted calls a paused turn left open, and forget them."""
+        paused = self._paused_server_tools
+        self._paused_server_tools = ()
+        return paused
+
+    def take_abandoned_server_tools(self) -> tuple[ServerToolCall, ...]:
+        """Return carried calls a non-paused response left open, and forget them."""
+        abandoned = self._abandoned_server_tools
+        self._abandoned_server_tools = ()
+        return abandoned
+
+    def seed_server_tools(self, calls: Collection[ServerToolCall]) -> None:
+        """Record calls a paused step already announced, so a continuation can close them."""
+        for call in calls:
+            self._server_tools[call.id] = call
+            self._carried_server_tool_ids.add(call.id)
 
     async def _complete_reasoning(self, context: PhaseContext) -> None:
         from .extensions.events import ReasoningCompletedEvent
@@ -425,6 +469,10 @@ class AgentEvent:
         MODEL_STOPPED              stop, response, message
         RUN_COMPLETED              message
         CUSTOM                     name, payload
+
+    A hosted tool that ends without a provider result is closed by its adapter with
+    ``SERVER_TOOL_COMPLETED`` and ``output["status"] == "not_reported"``. That status
+    is synthetic: the call ended, but its success is unknown.
 
     Examples:
         Handle a mixed stream with structural pattern matching::

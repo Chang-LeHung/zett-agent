@@ -24,6 +24,7 @@ from .model import (
     AgentModel,
     ModelUsage,
     ReasoningEffort,
+    ServerToolCall,
     ServerToolDefinition,
 )
 from .resume import ResumePoint
@@ -228,6 +229,10 @@ class AgentRunContext:
     # Provider-hosted tools registered for this request, keyed by wire type.
     # They are sent to the model but never dispatched by the local tool loop.
     server_tools: dict[str, ServerToolDefinition] = field(default_factory=dict)
+    # Hosted calls a paused step left open, carried until the continuation resolves them.
+    # Invariant: each call here has a server_tool_use block in a stored assistant message and
+    # no matching result; it is either carried to the next request or closed before one is built.
+    _paused_server_tools: list[ServerToolCall] = field(default_factory=list, repr=False)
     # One request-owned channel. Internal code emits here; only Agent.stream
     # consumes it and exposes an async iterator to callers.
     event_queue: AgentEventQueue = field(default_factory=AgentEventQueue)

@@ -49,6 +49,7 @@ from ..messages import (
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
     DEFAULT_TIMEOUT_OPTIONS,
+    NOT_REPORTED_STATUS,
     ModelEvent,
     ModelRequest,
     ModelResponse,
@@ -368,9 +369,44 @@ class _Turn:
     streams: dict[int, ToolCallAccumulator] = field(default_factory=dict)
     #: Calls the provider runs itself, by content block index.
     server_streams: dict[int, ToolCallAccumulator] = field(default_factory=dict)
+    #: Hosted call ids already announced in this stream, including synthesized starts.
+    started_server_ids: set[str] = field(default_factory=set)
     server_inputs: dict[int, JsonObject] = field(default_factory=dict)
     #: Every content block as it must be sent back, by index.
     replay: dict[int, JsonObject] = field(default_factory=dict)
+
+
+def _without_unresolved_server_tools(message: AssistantMessage, *, keep_open: bool) -> AssistantMessage:
+    """Drop hosted calls that cannot be replayed from one assistant message.
+
+    A hosted ``*_tool_use`` (``server_tool_use``, ``mcp_tool_use``, ...) needs its
+    ``*_tool_result`` in the same message. An open call survives only in the last
+    assistant message, where it is the pause being continued; every other message
+    loses unmatched starts and orphan results. A start and its result in different
+    messages are treated as unpaired, which favors a history the endpoint accepts
+    over keeping a split result the model would otherwise see.
+    """
+    blocks = message.replay_blocks
+    starts = {read_str(block.get("id")) for block in blocks if read_str(block.get("type")).endswith("_tool_use")}
+    results = {
+        read_str(block.get("tool_use_id")) for block in blocks if read_str(block.get("type")).endswith("_tool_result")
+    }
+    kept = tuple(
+        block
+        for block in blocks
+        if not (
+            (
+                read_str(block.get("type")).endswith("_tool_use")
+                and not keep_open
+                and read_str(block.get("id")) not in results
+            )
+            or (
+                read_str(block.get("type")).endswith("_tool_result")
+                and read_str(block.get("tool_use_id")) not in starts
+            )
+        )
+    )
+    return replace(message, replay_blocks=kept) if len(kept) != len(blocks) else message
 
 
 # --- the provider ---------------------------------------------------------------------------------
@@ -585,7 +621,10 @@ class AnthropicCompatibleProvider(RetryingProvider):
         messages: list[JsonValue] = []
         system: list[str] = []
         search_tool = local_tool_search_name(request.tools) if self.native_deferred_tools else None
-        for message in expand_tool_images(request.messages):
+        expanded = list(expand_tool_images(request.messages))
+        for index, message in enumerate(expanded):
+            if isinstance(message, AssistantMessage) and message.replay_blocks:
+                message = _without_unresolved_server_tools(message, keep_open=index == len(expanded) - 1)
             if isinstance(message, SystemMessage):
                 system.append(message.content)
                 continue
@@ -750,17 +789,21 @@ class AnthropicCompatibleProvider(RetryingProvider):
                         call_id, name = read_str(block.get("id")), read_str(block.get("name"))
                         initial = read_object(block.get("input"))
                         turn.server_streams[index] = ToolCallAccumulator(index=index, call_id=call_id, name=name)
+                        turn.started_server_ids.add(call_id)
                         turn.server_inputs[index] = initial
                         events.append(ModelEvent.server_tool_started(ServerToolCall(call_id, name, initial or None)))
                     case str(block_type) if block_type.endswith("_tool_result"):
+                        call_id = read_str(block.get("tool_use_id"))
+                        name = block_type.removesuffix("_tool_result")
+                        if call_id and call_id not in turn.started_server_ids:
+                            # A paused turn resumes with the result of a call whose start was sent in
+                            # the previous step. The tracker is per step, so expose the start again;
+                            # the runtime suppresses it when it already carried the call.
+                            events.append(ModelEvent.server_tool_started(ServerToolCall(call_id, name, None)))
+                            turn.started_server_ids.add(call_id)
                         output = block.get("content")
                         error_code = _server_tool_error(output)
-                        result = ServerToolResult(
-                            read_str(block.get("tool_use_id")),
-                            block_type.removesuffix("_tool_result"),
-                            output,
-                            error_code,
-                        )
+                        result = ServerToolResult(call_id, name, output, error_code)
                         events.append(
                             ModelEvent.server_tool_failed(result)
                             if error_code is not None
@@ -831,6 +874,34 @@ class AnthropicCompatibleProvider(RetryingProvider):
         else:
             stop = self.message_stop(turn.finish_reason, turn.stop_details, has_tool_calls=bool(tool_calls))
         blocks: tuple[Mapping[str, JsonValue], ...] = tuple(turn.replay[index] for index in sorted(turn.replay))
+        reported = {
+            read_str(block.get("tool_use_id"))
+            for block in blocks
+            if read_str(block.get("type")).endswith("_tool_result")
+        }
+        if stop.reason is not StopReason.PAUSED:
+            closed = set(reported)
+            for server in turn.server_streams.values():
+                if server.call_id in closed:
+                    continue
+                closed.add(server.call_id)
+                logger.warning(
+                    "%s ended with an open server tool %s (%s); reporting it without a result",
+                    self.provider_name,
+                    server.name,
+                    server.call_id,
+                )
+                yield ModelEvent.server_tool_completed(
+                    ServerToolResult(server.call_id, server.name, {"status": NOT_REPORTED_STATUS})
+                )
+            # A server tool that started but never reported a result cannot be replayed: the API
+            # rejects a ``server_tool_use`` block without its matching ``*_tool_result``. Drop the
+            # open start instead of persisting a history the next turn refuses.
+            blocks = tuple(
+                block
+                for block in blocks
+                if not (read_str(block.get("type")) == "server_tool_use" and read_str(block.get("id")) not in reported)
+            )
         if stop.reason in (StopReason.REFUSAL, StopReason.INTERRUPTED):
             # A refusal can arrive after a complete ``tool_use`` was streamed. The call is withheld from
             # the message, and a ``tool_use`` block replayed without a result would be rejected, so the

@@ -10,7 +10,7 @@ from ..events import AgentEventType
 from ..exceptions import AgentIterationLimitError
 from ..messages import AgentMessage, AssistantMessage, ToolCall, ToolMessage, UserMessage
 from ..model import ReasoningEffort
-from ..stop import StopReason
+from ..stop import continues_pause
 from .contract import AgentContract, mixin_api
 
 if TYPE_CHECKING:
@@ -63,7 +63,7 @@ class TurnLoopMixin(AgentContract):
             may_pause = loop.pauses < self.max_pause_continuations
             response = await self._run_model_step(context, reasoning_effort, parallel_tool_call, may_pause=may_pause)
             stop = response.stop
-            if may_pause and stop is not None and stop.reason is StopReason.PAUSED and not response.message.tool_calls:
+            if continues_pause(stop, may_pause=may_pause, has_tool_calls=bool(response.message.tool_calls)):
                 loop.pauses += 1
                 loop.continuing = True
                 continue

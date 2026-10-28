@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .._compat import aclosing_stream
 from ..events import AgentEventType, ModelOutputTracker
 from ..exceptions import AgentProtocolError
-from ..model import ModelEvent, ModelEventType, ModelRequest, ModelResponse, ReasoningEffort
-from ..stop import StopReason
+from ..messages import AssistantMessage
+from ..model import (
+    NOT_REPORTED_STATUS,
+    ModelEvent,
+    ModelEventType,
+    ModelRequest,
+    ModelResponse,
+    ReasoningEffort,
+    ServerToolResult,
+)
+from ..stop import StopReason, continues_pause
 from .contract import AgentContract, mixin_api
 
 if TYPE_CHECKING:
@@ -62,8 +72,10 @@ class ModelStepMixin(AgentContract):
         request = self._refresh_model_request(context, request)
         model_started = await self._start_model_generation(context)
         output_tracker = ModelOutputTracker()
+        output_tracker.seed_server_tools(context._paused_server_tools)
         await context._emit_event(AgentEventType.MODEL_STARTED)
         response = None
+        closed_server_calls: set[str] = set()
         model = context.model
         if model is None:
             raise AgentProtocolError("The request context has no model")
@@ -71,6 +83,13 @@ class ModelStepMixin(AgentContract):
             async for event in events:
                 if response is not None:
                     raise AgentProtocolError("Model emitted events after its final response")
+                if (
+                    event.type is ModelEventType.SERVER_TOOL_STARTED
+                    and event.server_tool_call is not None
+                    and any(call.id == event.server_tool_call.id for call in context._paused_server_tools)
+                ):
+                    # The paused step already announced this call; do not show a second start card.
+                    continue
                 for boundary in await output_tracker.observe(context, event):
                     await context._emit_event(boundary)
                 if event.type is ModelEventType.RESPONSE:
@@ -79,10 +98,16 @@ class ModelStepMixin(AgentContract):
                     response = event.response
                 else:
                     await self._relay_model_event(context, event)
+                    if event.type in (ModelEventType.SERVER_TOOL_COMPLETED, ModelEventType.SERVER_TOOL_FAILED):
+                        if event.server_tool_result is not None:
+                            closed_server_calls.add(event.server_tool_result.call_id)
         if response is None:
             raise AgentProtocolError("Model stream ended without a response")
 
         response = self._settle_stop(response, may_pause=may_pause)
+        response = await self._settle_paused_server_tools(
+            context, response, output_tracker, may_pause, closed_server_calls
+        )
         model_completed = await self._finish_model_generation(context)
         await context.append_message(
             response.message,
@@ -145,10 +170,59 @@ class ModelStepMixin(AgentContract):
         # Only an abnormal stop is written to the message. A message that ended normally is
         # left exactly as the model produced it, so stored history and every comparison
         # against it are unchanged; the stop of a normal step is still on the response.
-        continued = may_pause and stop.reason is StopReason.PAUSED and not message.tool_calls
+        continued = continues_pause(stop, may_pause=may_pause, has_tool_calls=bool(message.tool_calls))
         if not stop.ok and not continued:
             message = replace(message, stop=stop)
         return replace(response, message=message, stop=stop)
+
+    async def _settle_paused_server_tools(
+        self,
+        context: AgentRunContext,
+        response: ModelResponse,
+        tracker: ModelOutputTracker,
+        may_pause: bool,
+        closed: set[str],
+    ) -> ModelResponse:
+        """Carry hosted calls through a pause, or close the ones the pause chain abandoned.
+
+        A paused step keeps its open calls so the next request can resume them. When the chain
+        ends without a result, the blocks are removed from history and the host gets a terminal
+        completion; otherwise the next turn would send a ``server_tool_use`` with no result.
+        """
+        opened = tracker.take_paused_server_tools()
+        dropped = tracker.take_abandoned_server_tools()
+        continued = continues_pause(
+            response.stop, may_pause=may_pause, has_tool_calls=bool(response.message.tool_calls)
+        )
+        carried = tuple(context._paused_server_tools)
+        if continued:
+            merged = {call.id: call for call in carried}
+            for call in opened:
+                merged.setdefault(call.id, call)
+            context._paused_server_tools[:] = list(merged.values())
+            return response
+
+        abandoned = {call.id: call for call in carried if call.id not in closed}
+        for call in (*dropped, *opened):
+            if call.id not in closed:
+                abandoned.setdefault(call.id, call)
+        context._paused_server_tools.clear()
+        if not abandoned:
+            return response
+
+        ids = set(abandoned)
+        response = replace(response, message=_without_server_tool_blocks(response.message, ids))
+        _drop_server_tool_blocks(context, ids)
+        for call in abandoned.values():
+            await context._emit_event(
+                AgentEventType.SERVER_TOOL_COMPLETED,
+                server_tool_result=ServerToolResult(
+                    call_id=call.id,
+                    name=call.name,
+                    output={"status": NOT_REPORTED_STATUS},
+                ),
+            )
+        return response
 
     @mixin_api
     async def _announce_stop(self, context: AgentRunContext, response: ModelResponse) -> None:
@@ -162,3 +236,33 @@ class ModelStepMixin(AgentContract):
             stop=stop,
             message=response.message,
         )
+
+
+def _replay_block_id(block: Mapping[str, Any]) -> str | None:
+    """Return the provider item id a replay block carries, when it has one.
+
+    Hosted items name it ``id`` in the protocols seen so far; ``call_id`` covers an
+    adapter that uses that spelling instead.
+    """
+    value = block.get("id", block.get("call_id"))
+    return value if isinstance(value, str) else None
+
+
+def _without_server_tool_blocks(message: AssistantMessage, ids: set[str]) -> AssistantMessage:
+    """Return ``message`` without the replay blocks of the given hosted calls."""
+    blocks = tuple(block for block in message.replay_blocks if _replay_block_id(block) not in ids)
+    return replace(message, replay_blocks=blocks) if len(blocks) != len(message.replay_blocks) else message
+
+
+def _drop_server_tool_blocks(context: AgentRunContext, ids: set[str]) -> None:
+    """Remove abandoned hosted calls from stored assistant history."""
+    messages = list(context.state.messages)
+    changed = False
+    for index, message in enumerate(messages):
+        if isinstance(message, AssistantMessage):
+            updated = _without_server_tool_blocks(message, ids)
+            if updated is not message:
+                messages[index] = updated
+                changed = True
+    if changed:
+        context.replace_messages(messages, emit_new=False)

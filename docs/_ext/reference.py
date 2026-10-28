@@ -280,6 +280,7 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "ModelRequest",
         "ModelResponse",
         "ModelUsage",
+        "NOT_REPORTED_STATUS",
         "NativeDeferredToolsModel",
         "ReasoningEffort",
         "RetryOptions",

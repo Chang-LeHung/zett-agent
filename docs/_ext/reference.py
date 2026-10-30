@@ -238,6 +238,17 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "ToolStatus",
     ),
     "zett_agent.jit_harness.repo": ("TextKind",),
+    "zett_agent.jit_harness.manifest": (
+        "BAN_TOOLS_FILE",
+        "MANIFEST_FILE",
+        "Manifest",
+        "RepositoryPolicy",
+        "inspect_repository",
+        "is_repository_name",
+        "is_tool_name",
+        "read_banned_tools",
+        "read_manifest",
+    ),
     "zett_agent.jit_harness.host": (
         "HarnessCalls",
         "HostedRepo",

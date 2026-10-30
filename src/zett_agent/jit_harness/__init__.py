@@ -4,6 +4,11 @@ The common names import straight from the package, for example
 ``from zett_agent.jit_harness import JITHarnessExtension``. A name loads its defining
 module the first time it is used, so importing this package imports neither the runtime
 nor a provisioning class until one is needed.
+
+A repository declares itself in ``MANIFEST`` (name, version, description, and optionally
+the tools it promises) and may list forbidden tool names in ``BAN_TOOLS``. Both are
+ordinary files the model reads and writes; :func:`inspect_repository` checks them without
+importing anything or starting a session.
 """
 
 from typing import TYPE_CHECKING as _TYPE_CHECKING
@@ -33,6 +38,17 @@ _MODULES = {
         "ToolSpec",
     ),
     "profiling": ("JITHarnessProfile", "ToolCallProfile", "ToolProfileStats"),
+    "manifest": (
+        "BAN_TOOLS_FILE",
+        "MANIFEST_FILE",
+        "Manifest",
+        "RepositoryPolicy",
+        "inspect_repository",
+        "is_repository_name",
+        "is_tool_name",
+        "read_banned_tools",
+        "read_manifest",
+    ),
     "repo": ("TextKind",),
     "results": (
         "RepoResult",
@@ -70,6 +86,15 @@ if _TYPE_CHECKING:
     from .host import SubprocessToolHost as SubprocessToolHost
     from .host import ToolNotSerializable as ToolNotSerializable
     from .host import ToolSpec as ToolSpec
+    from .manifest import BAN_TOOLS_FILE as BAN_TOOLS_FILE
+    from .manifest import MANIFEST_FILE as MANIFEST_FILE
+    from .manifest import Manifest as Manifest
+    from .manifest import RepositoryPolicy as RepositoryPolicy
+    from .manifest import inspect_repository as inspect_repository
+    from .manifest import is_repository_name as is_repository_name
+    from .manifest import is_tool_name as is_tool_name
+    from .manifest import read_banned_tools as read_banned_tools
+    from .manifest import read_manifest as read_manifest
     from .profiling import JITHarnessProfile as JITHarnessProfile
     from .profiling import ToolCallProfile as ToolCallProfile
     from .profiling import ToolProfileStats as ToolProfileStats

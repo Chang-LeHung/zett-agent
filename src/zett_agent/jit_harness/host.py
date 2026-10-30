@@ -359,6 +359,10 @@ class SubprocessToolHost(JITToolHost):
     A crash, a hang, or a runaway allocation stays in the child; :meth:`invoke` gives up
     after ``call_timeout`` and kills it. The next :meth:`load` starts a fresh one.
 
+    One host backs one repository: it owns a single child, so create one host per
+    session. Sharing an instance between harnesses routes every version into whichever
+    child the last load started.
+
     Lifecycle, and when a process exists:
 
     .. code-block:: text
@@ -422,6 +426,10 @@ class SubprocessToolHost(JITToolHost):
         self.load_timeout = load_timeout
         self.env = dict(env or {})
         self._process: subprocess.Popen[bytes] | None = None
+        #: The child process that finished a load. Only that process has the repository the
+        #: last fingerprint describes; one that is still starting, or whose import failed, has
+        #: not, so ``needs_reload`` must not trust it.
+        self._repo_process: subprocess.Popen[bytes] | None = None
         self._pending: dict[int, _Pending] = {}
         self._next_id = 0
         self._write_lock = threading.Lock()
@@ -445,19 +453,41 @@ class SubprocessToolHost(JITToolHost):
         discarding its old package.
         """
         self._stop()
-        self._start(directory)
-        reply = self._request_sync({"op": "load", "directory": str(directory)}, self.load_timeout)
-        specs = self._specs_of(reply)
+        process = self._start(directory)
+        try:
+            reply = self._request_sync({"op": "load", "directory": str(directory)}, self.load_timeout)
+            specs = self._specs_of(reply)
+        except BaseException:
+            # A child that never imported anything must not outlive this call, or the next
+            # load would find a live process holding no repository.
+            self._stop_if(process)
+            raise
         tools = {spec.name: spec.build(self._invoker(spec.name)) for spec in specs}
-        return HostedRepo(f"subprocess:{directory.name}", tools, scan.fingerprint, directory)
+        self._repo_process = process
+        # The version can still be refused by the harness (a clashing name, a declaration
+        # the repository breaks). Releasing it then stops this child, so the tools of the
+        # version that stays registered fail fast instead of running the refused code.
+        return HostedRepo(
+            f"subprocess:{directory.name}", tools, scan.fingerprint, directory, close=lambda: self._stop_if(process)
+        )
 
     def close(self) -> None:
         """Stop the child process, failing anything still waiting on it."""
         self._stop()
 
-    def _start(self, directory: Path) -> None:
-        if self._process is not None and self._process.poll() is None:
-            return
+    def _stop_if(self, process: subprocess.Popen[bytes]) -> None:
+        """Stop the child only while it is still the current one.
+
+        A successful reload makes the previous version's closer run after the new child
+        started, so this is a no-op there; a refused version still owns the process, and
+        releasing it takes that process down.
+        """
+        if self._process is process:
+            self._stop()
+
+    def _start(self, directory: Path) -> subprocess.Popen[bytes]:
+        """Start a new child and return it; the caller has stopped any earlier one."""
+        assert self._process is None, "a load stops the previous child before it starts one"
         argv = [self.python, "-m", "zett_agent.jit_harness.child"]
         env = {**self._child_env(), **self.env}
         cwd = str(directory)
@@ -480,11 +510,19 @@ class SubprocessToolHost(JITToolHost):
         )
         self._reader = threading.Thread(target=self._read_frames, name="zett-jit-child", daemon=True)
         self._reader.start()
+        return self._process
 
     @property
     def needs_reload(self) -> bool:
-        """Whether the child must be started again because it is gone."""
-        return self._process is None or self._process.poll() is not None
+        """Whether the child must import the repository again.
+
+        A live child is not enough: only a child that finished a load holds the version the
+        parent's fingerprint describes. One still starting, or one whose import failed, holds
+        nothing, and trusting the fingerprint would report the old tools as loaded while calls
+        fail in a process that does not have them.
+        """
+        process = self._process
+        return process is None or process.poll() is not None or process is not self._repo_process
 
     def _child_env(self) -> dict[str, str]:
         """Pass the agent's import path, so the child can import the application's modules."""
@@ -498,6 +536,7 @@ class SubprocessToolHost(JITToolHost):
 
     def _stop(self) -> None:
         process, self._process = self._process, None
+        self._repo_process = None
         if process is None:
             return
         try:
@@ -683,6 +722,7 @@ class SubprocessToolHost(JITToolHost):
 
     def _kill(self, reason: str) -> None:
         process, self._process = self._process, None
+        self._repo_process = None
         if process is not None and process.poll() is None:
             _terminate_tree(process)
         for pending in list(self._pending.values()):

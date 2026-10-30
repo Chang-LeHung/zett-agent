@@ -40,6 +40,12 @@ def add(left: int, right: int) -> int:
     return left + right
 
 
+@tool(guidelines="A base tool whose name a repository may clash with.")
+def taken() -> int:
+    """Occupy a name."""
+    return 0
+
+
 SOURCE = '''
 from zett_agent.tools.base import tool
 
@@ -332,6 +338,7 @@ async def test_a_killed_agent_leaves_no_child_spinning(tmp_path):
     repo = tmp_path / "kit"
     repo.mkdir()
     (repo / "__init__.py").write_text("")
+    (repo / "MANIFEST").write_text('name = "kit"\nversion = "0.1.0"\ndescription = "Hangs."\n')
     (repo / "tools.py").write_text(HANGING_SOURCE)
     marker = tmp_path / "busy"
     script = tmp_path / "parent.py"
@@ -689,6 +696,120 @@ def pid() -> int:
     """Return the process that ran this."""
     return os.getpid()
 '''
+
+
+async def test_a_failed_reload_does_not_leave_a_stale_child_claiming_the_old_version(tmp_path):
+    """Restoring the old source after a failed import must reload, not trust the fingerprint."""
+    harness = subprocess_harness(tmp_path / "session")
+    try:
+        path = Path(harness.create_repo("kit")["path"])
+        good = (
+            "from zett_agent.tools.base import tool\n\n\n"
+            '@tool(guidelines="Double it.")\ndef twice(value: int) -> int:\n    """Double."""\n    return value * 2\n'
+        )
+        (path / "tools.py").write_text(good)
+        assert harness.load_repo()["tools"] == ["twice"]
+        assert await harness.call_tool("twice", value=2) == 4
+
+        (path / "tools.py").write_text('raise RuntimeError("broken")\n')
+        with pytest.raises(ValueError, match="broken"):
+            harness.load_repo()
+
+        # Same content as the version the parent still remembers: a fast path here would
+        # report the old tools while the live child holds no repository at all.
+        (path / "tools.py").write_text(good)
+        assert harness.load_repo()["tools"] == ["twice"]
+        assert await harness.call_tool("twice", value=2) == 4
+    finally:
+        harness.close()
+
+
+async def test_a_load_without_changes_keeps_the_same_child(tmp_path):
+    """The fast path must not turn every call into a new process."""
+    harness = subprocess_harness(tmp_path / "session")
+    try:
+        path = Path(harness.create_repo("kit")["path"])
+        (path / "tools.py").write_text(PID_TOOL)
+        harness.load_repo()
+        first = await harness.call_tool("pid")
+
+        harness.load_repo()
+
+        assert await harness.call_tool("pid") == first
+    finally:
+        harness.close()
+
+
+async def test_a_parent_side_refusal_stops_the_child_that_imported_it(tmp_path):
+    """A version refused after the import must not keep running behind the old tools."""
+    host = SubprocessToolHost()
+    harness = JITHarness(tmp_path / "session", tools=[taken], host=host)
+    try:
+        path = Path(harness.create_repo("kit")["path"])
+        good = (
+            "from zett_agent.tools.base import tool\n\n\n"
+            '@tool(guidelines="Double it.")\ndef twice(value: int) -> int:\n    """Double."""\n    return value * 2\n'
+        )
+        (path / "tools.py").write_text(good)
+        assert harness.load_repo()["tools"] == ["twice"]
+        assert await harness.call_tool("twice", value=2) == 4
+
+        clash = good + ('\n\n@tool(guidelines="Clash.")\ndef taken() -> int:\n    """Clash."""\n    return 999\n')
+        (path / "tools.py").write_text(clash)
+        with pytest.raises(ValueError, match="already an application tool"):
+            harness.load_repo()
+
+        # The refused child is gone, so the old tool fails instead of running new code.
+        with pytest.raises(JITHostCrashed):
+            await harness.call_tool("twice", value=2)
+        assert host._process is None
+
+        (path / "tools.py").write_text(good)
+        assert harness.load_repo()["tools"] == ["twice"]
+        assert await harness.call_tool("twice", value=2) == 4
+    finally:
+        harness.close()
+
+
+async def test_close_then_load_starts_a_new_child(tmp_path):
+    """Closing releases the child; the next load starts another one that works."""
+    harness = subprocess_harness(tmp_path / "session")
+    try:
+        path = Path(harness.create_repo("kit")["path"])
+        (path / "tools.py").write_text(PID_TOOL)
+        harness.load_repo()
+        first = await harness.call_tool("pid")
+
+        harness.close()
+        harness.load_repo()
+
+        assert await harness.call_tool("pid") != first
+    finally:
+        harness.close()
+
+
+async def test_two_failed_loads_leave_no_child_and_recover(tmp_path):
+    harness = subprocess_harness(tmp_path / "session")
+    try:
+        path = Path(harness.create_repo("kit")["path"])
+        good = (
+            "from zett_agent.tools.base import tool\n\n\n"
+            '@tool(guidelines="Double it.")\ndef twice(value: int) -> int:\n    """Double."""\n    return value * 2\n'
+        )
+        (path / "tools.py").write_text(good)
+        harness.load_repo()
+
+        (path / "tools.py").write_text('raise RuntimeError("broken")\n')
+        for _ in range(2):
+            with pytest.raises(ValueError, match="broken"):
+                harness.load_repo()
+        assert harness._host._process is None
+
+        (path / "tools.py").write_text(good)
+        assert harness.load_repo()["tools"] == ["twice"]
+        assert await harness.call_tool("twice", value=2) == 4
+    finally:
+        harness.close()
 
 
 async def test_a_reload_starts_a_new_child_and_forgets_the_old_state(tmp_path):

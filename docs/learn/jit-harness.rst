@@ -71,9 +71,9 @@ The model's four tools
    * - Tool
      - Behavior
    * - ``repo_create(repo)``
-     - Create the session's repository, a package with an empty ``__init__.py``, and return its ``path``. Asking again returns the existing one.
+     - Create the session's repository, a package with an empty ``__init__.py`` and a starter ``MANIFEST``, and return its ``path``. Asking again returns the existing one.
    * - ``repo_load()``
-     - Load the package and list what it provides: the names of its tools, and each Markdown note with its kind, description and path. Call it after each edit, or first in a resumed session. Calling it again changes nothing unless a Python file changed; see :ref:`jit-load`.
+     - Load the package and list what it provides: the names of its tools, and each Markdown note with its kind, description and path. Refuses a repository that ``MANIFEST`` or ``BAN_TOOLS`` rules out. Call it after each edit, or first in a resumed session. Calling it again changes nothing unless a Python file changed; see :ref:`jit-load`.
    * - ``repo_unload()``
      - Hide every tool. The files, and the notes, stay on disk until the next ``repo_load``.
    * - ``profile_tools(names=None)``
@@ -115,6 +115,63 @@ Loading imports the package under a throwaway name, so a repository called
 two quick edits of the same size are never served stale. The package stays
 imported while it is loaded, which means a tool may import a sibling lazily
 inside its body too.
+
+.. _jit-manifest:
+
+Declare the repository
+----------------------
+
+``repo_create`` writes a starter ``MANIFEST`` beside ``__init__.py``, and
+``repo_load`` refuses a repository without a valid one:
+
+.. code-block:: toml
+
+   name = "kit"
+   version = "0.1.0"
+   description = "Tools for this session."
+
+``name`` must match the directory, ``version`` looks like ``1`` or ``1.2.3``, and
+``description`` is 1–512 characters. ``tools`` is optional; when present it names
+the tools the repository promises, and then every declared tool must exist and no
+other tool may be defined. An unknown key is an error, so a typo cannot silently
+weaken the declaration.
+
+``BAN_TOOLS`` names tools the repository may not define, one per line:
+
+.. code-block:: text
+
+   run_shell
+   fetch_url
+
+Blank lines are ignored. A banned name that the repository defines, or that
+``MANIFEST`` declares, stops the load. Both files are ordinary files the model
+writes with its file tools, and the check runs on every ``repo_load``, including
+the loads that skip the import because no Python file changed.
+
+What this is, and is not: the files are read before the import, but the names a
+repository defines are only known afterwards, so the loader judges the
+declarations it read against what the import produced. A refused load keeps the
+previous version registered. A declaration the file check rejects — a missing or
+malformed ``MANIFEST`` or ``BAN_TOOLS`` — never reaches the host, so the loaded
+tools still work in either host. A refusal that follows a re-import keeps the old
+modules in the in-process host, while a subprocess host has already stopped the
+previous child, so calls fail until a load succeeds. The files are text the model
+writes, so this is a recorded refusal and a consistency check, not a sandbox, and
+not a policy the application controls: an application that must forbid a tool
+keeps its own list. ``version`` and ``description`` are the repository's
+declaration — they are checked, and ``repo_load`` does not repeat them.
+
+Reading them needs no session.
+:func:`~zett_agent.jit_harness.manifest.inspect_repository` takes a directory and
+returns the parsed manifest, the ban list, and one message per problem:
+
+.. code-block:: python
+
+   from zett_agent.jit_harness import inspect_repository
+
+   policy = inspect_repository("/path/to/kit", tools=("twice",))
+   if not policy.ok:
+       print("\n".join(policy.problems))
 
 .. _where-the-code-runs:
 
@@ -199,7 +256,8 @@ Changes are found by comparing the content of every Python file, the package
 root included, so an edit of the same length is seen and a file that was added or
 removed counts too. Notes are read again on every call and never need importing.
 If anything fails, the previous version stays registered and the error names the
-file and line, relative to the repository:
+file and line, relative to the repository; a declaration it rejects is named
+instead, as in ``MANIFEST declares 'twice', …``.
 
 .. code-block:: text
 
@@ -329,9 +387,14 @@ model the error. Several candidate directories are not guessed between.
 
 Release an idle session with ``jit.forget_session(session_id)``. It removes the
 repository's modules and import hook from the interpreter and keeps the files.
+
 ``harness.close()`` does the same for a standalone harness. Back up, move, or
 delete a repository like any directory; deleting the session directory forgets
 what the model learned.
+
+A repository saved before ``MANIFEST`` existed fails to load until one is written;
+:meth:`~zett_agent.jit_harness.runtime.JITHarness.create_repo` adds it to an older
+repository without touching anything else. See :ref:`jit-manifest`.
 
 Choose whether to manage base tools
 -----------------------------------

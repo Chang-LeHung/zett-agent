@@ -74,6 +74,7 @@ async def test_jit_example_lifecycle_is_repeatable_and_does_not_write_outside_de
 
     assert tree(first) == tree(second)
     assert sorted(tree(first)) == [
+        "kit/MANIFEST",
         "kit/__init__.py",
         "kit/pipeline.py",
         "kit/resources/sum_workflow.md",

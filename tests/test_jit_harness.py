@@ -135,7 +135,7 @@ def test_repository_tool_docstrings_preserve_guidelines_and_serial_execution(tmp
             "Keep every reusable tool and note in this one repository.",
         ),
         "repo_load": (
-            "Call after every edit; a failed load keeps the previous version and names the file and line.",
+            "Call after every edit; a failed load keeps the previous version and names the file and line, or the declaration it rejects.",
             "Call it first in a resumed session to see which tools and notes already exist.",
         ),
         "repo_unload": ("Unload when the tools are no longer needed; repo_load restores them.",),

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 22:49+0800\n"
+"POT-Creation-Date: 2026-10-30 00:15+0800\n"
 "PO-Revision-Date: 2026-10-13 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -65,16 +65,16 @@ msgid "``repo_create(repo)``"
 msgstr "``repo_create(repo)``"
 
 #: ../../learn/jit-harness.rst:74
-msgid "Create the session's repository, a package with an empty ``__init__.py``, and return its ``path``. Asking again returns the existing one."
-msgstr "创建会话的仓库（一个带有空 ``__init__.py`` 的包），并返回它的 ``path``\\ 。再次调用会返回已有的那个。"
+msgid "Create the session's repository, a package with an empty ``__init__.py`` and a starter ``MANIFEST``, and return its ``path``. Asking again returns the existing one."
+msgstr "创建会话的仓库（一个带有空 ``__init__.py`` 和初始 ``MANIFEST`` 的包），并返回它的 ``path``\\ 。再次调用会返回已有的那个。"
 
 #: ../../learn/jit-harness.rst:75
 msgid "``repo_load()``"
 msgstr "``repo_load()``"
 
 #: ../../learn/jit-harness.rst:76
-msgid "Load the package and list what it provides: the names of its tools, and each Markdown note with its kind, description and path. Call it after each edit, or first in a resumed session. Calling it again changes nothing unless a Python file changed; see :ref:`jit-load`."
-msgstr "加载这个包并列出它提供的内容：工具的名字，以及每份 Markdown 笔记的 kind、描述和路径。每次编辑之后调用，或在恢复的会话中最先调用。再次调用不会改变任何东西，除非有 Python 文件变了；参见 :ref:`jit-load`\\ 。"
+msgid "Load the package and list what it provides: the names of its tools, and each Markdown note with its kind, description and path. Refuses a repository that ``MANIFEST`` or ``BAN_TOOLS`` rules out. Call it after each edit, or first in a resumed session. Calling it again changes nothing unless a Python file changed; see :ref:`jit-load`."
+msgstr "加载这个包并列出它提供的内容：工具的名字，以及每份 Markdown 笔记的 kind、描述和路径。被 ``MANIFEST`` 或 ``BAN_TOOLS``\\ 判定为不合法的仓库会被拒绝。每次编辑之后调用，或在恢复的会话中最先调用。再次调用不会改变任何东西，除非有 Python 文件变了；参见 :ref:`jit-load`\\ 。"
 
 #: ../../learn/jit-harness.rst:77
 msgid "``repo_unload()``"
@@ -117,402 +117,441 @@ msgid "Loading imports the package under a throwaway name, so a repository calle
 msgstr "加载时会用一个一次性的名称导入这个包，因此名为 ``json`` 的仓库不会遮蔽标准库。不会缓存任何字节码，所以大小相同的两次快速编辑也不会读到过期内容。包在加载期间一直保持已导入状态，这意味着工具也可以在函数体里惰性导入同级模块。"
 
 #: ../../learn/jit-harness.rst:122
+msgid "Declare the repository"
+msgstr "声明仓库"
+
+#: ../../learn/jit-harness.rst:124
+msgid "``repo_create`` writes a starter ``MANIFEST`` beside ``__init__.py``, and ``repo_load`` refuses a repository without a valid one:"
+msgstr "``repo_create`` 会写一个初始的 ``MANIFEST``\\ ，放在 ``__init__.py``\\ 旁边；而 ``repo_load``\\ 会拒绝没有合法 MANIFEST 的仓库："
+
+#: ../../learn/jit-harness.rst:133
+msgid "``name`` must match the directory, ``version`` looks like ``1`` or ``1.2.3``, and ``description`` is 1–512 characters. ``tools`` is optional; when present it names the tools the repository promises, and then every declared tool must exist and no other tool may be defined. An unknown key is an error, so a typo cannot silently weaken the declaration."
+msgstr "``name``\\ 必须与目录同名，``version``\\ 形如 ``1``\\ 或 ``1.2.3``\\ ，``description``\\ 为 1–512 个字符。\\ ``tools``\\ 是可选的；一旦提供，它声明仓库承诺提供的工具，此时声明的每个工具都必须存在，也不能定义其他工具。出现未知的键会被视为错误，因此拼写错误不会悄悄削弱声明。"
+
+#: ../../learn/jit-harness.rst:139
+msgid "``BAN_TOOLS`` names tools the repository may not define, one per line:"
+msgstr "``BAN_TOOLS``\\ 列出仓库不得定义的工具名，每行一个："
+
+#: ../../learn/jit-harness.rst:146
+msgid "Blank lines are ignored. A banned name that the repository defines, or that ``MANIFEST`` declares, stops the load. Both files are ordinary files the model writes with its file tools, and the check runs on every ``repo_load``, including the loads that skip the import because no Python file changed."
+msgstr "空行会被忽略。仓库定义了某个被禁的名字，或 ``MANIFEST``\\ 声明了它，都会让加载停止。这两个文件都是普通文件，模型用自己的文件工具写入；每次 ``repo_load``\\ 都会检查，包括因为 Python 文件未变而跳过导入的那些加载。"
+
+#: ../../learn/jit-harness.rst:151
+msgid "What this is, and is not: the files are read before the import, but the names a repository defines are only known afterwards, so the loader judges the declarations it read against what the import produced. A refused load keeps the previous version registered. A declaration the file check rejects — a missing or malformed ``MANIFEST`` or ``BAN_TOOLS`` — never reaches the host, so the loaded tools still work in either host. A refusal that follows a re-import keeps the old modules in the in-process host, while a subprocess host has already stopped the previous child, so calls fail until a load succeeds. The files are text the model writes, so this is a recorded refusal and a consistency check, not a sandbox, and not a policy the application controls: an application that must forbid a tool keeps its own list. ``version`` and ``description`` are the repository's declaration — they are checked, and ``repo_load`` does not repeat them."
+msgstr "它是什么、不是什么：文件在导入之前读取，但仓库定义了哪些名字要等导入之后才知道，所以加载器拿它读到的声明去对照导入产生的结果。被拒绝的加载会保留上一版：在文件检查阶段就被拒的（缺失或格式错误的 ``MANIFEST``\\ 或 ``BAN_TOOLS``\\ ）根本不会到达宿主，因此在两种宿主里已加载的工具都照常可用。而在重新导入之后才被拒的，进程内宿主仍保留旧模块，子进程宿主则已经停掉旧的子进程，所以在下次成功加载之前调用会失败。文件是模型写的文本，所以这是一次留痕的拒绝加一次一致性检查，不是沙箱，也不是应用掌控的策略：如果应用必须禁止某个工具，应当自己持有名单。\\ ``version``\\ 和 ``description``\\ 是仓库的声明——它们会被校验，而 ``repo_load``\\ 不会把它们列出来。"
+
+#: ../../learn/jit-harness.rst:164
+msgid "Reading them needs no session. :func:`~zett_agent.jit_harness.manifest.inspect_repository` takes a directory and returns the parsed manifest, the ban list, and one message per problem:"
+msgstr "读取它们不需要会话。\\ :func:`~zett_agent.jit_harness.manifest.inspect_repository`\\ 接收一个目录，返回解析出的 manifest、禁用列表，以及每个问题一条消息："
+
+#: ../../learn/jit-harness.rst:179
 msgid "Where the code runs"
 msgstr "代码在哪里运行"
 
-#: ../../learn/jit-harness.rst:124
+#: ../../learn/jit-harness.rst:181
 msgid "A repository's Python runs in one of two hosts. Both register the same tools and answer ``harness.call_tool`` the same way; they differ in where the code lives."
 msgstr "仓库的 Python 运行在两种宿主之一。两者的注册工具和 ``harness.call_tool``\\ 行为完全一致，区别只在代码住在哪里。"
 
-#: ../../learn/jit-harness.rst:131
+#: ../../learn/jit-harness.rst:188
 msgid "Host"
 msgstr "宿主"
 
-#: ../../learn/jit-harness.rst:132
+#: ../../learn/jit-harness.rst:189
 msgid "What it isolates"
 msgstr "隔离什么"
 
-#: ../../learn/jit-harness.rst:133
+#: ../../learn/jit-harness.rst:190
 msgid "What it costs"
 msgstr "代价"
 
-#: ../../learn/jit-harness.rst:134
+#: ../../learn/jit-harness.rst:191
 msgid ":class:`~zett_agent.jit_harness.host.InProcessToolHost` (default)"
 msgstr ":class:`~zett_agent.jit_harness.host.InProcessToolHost`\\ （默认）"
 
-#: ../../learn/jit-harness.rst:135
+#: ../../learn/jit-harness.rst:192
 msgid "Nothing. A tool is an ordinary call in your process."
 msgstr "不隔离任何东西。工具就是你进程里的一次普通调用。"
 
-#: ../../learn/jit-harness.rst:136
+#: ../../learn/jit-harness.rst:193
 msgid "A tool may return any Python value, and a tool cannot crash the run."
 msgstr "工具可以返回任意 Python 值；工具出错也不会让本次运行崩溃。"
 
-#: ../../learn/jit-harness.rst:137
+#: ../../learn/jit-harness.rst:194
 msgid ":class:`~zett_agent.jit_harness.host.SubprocessToolHost`"
 msgstr ":class:`~zett_agent.jit_harness.host.SubprocessToolHost`"
 
-#: ../../learn/jit-harness.rst:138
+#: ../../learn/jit-harness.rst:195
 msgid "A crash, an exit, a hang, and memory growth stay in the child, which is killed at ``call_timeout``."
 msgstr "崩溃、直接退出、挂起和内存膨胀都留在子进程里，子进程会在 ``call_timeout``\\ 时被杀死。"
 
-#: ../../learn/jit-harness.rst:140
+#: ../../learn/jit-harness.rst:197
 msgid "Tool results cross a pipe: JSON values only, ``call_timeout`` adds a limit to slow tools, and the child starts slower than an import."
 msgstr "工具结果要经过管道：只能是 JSON 值；``call_timeout``\\ 给慢工具加上限；子进程启动比一次导入更慢。"
 
-#: ../../learn/jit-harness.rst:143
+#: ../../learn/jit-harness.rst:200
 msgid "A child does not run as a different user. It is not a security boundary by itself; pass a sandbox to bound what it may read, write, and connect to::"
 msgstr "子进程并不是以另一个用户身份运行，它本身不是安全边界；传入一个 sandbox 来限制它能读取、写入和连接的范围::"
 
-#: ../../learn/jit-harness.rst:155
+#: ../../learn/jit-harness.rst:212
 msgid "The host is built once per session. Inside the child, ``harness.call_tool`` and ``harness.call_tool_sync`` become frames to the agent, which runs the loaded tool there. Nested calls therefore still pass through extensions, events, and profiling, and a repository tool can compose base tools exactly as it does in process. Two limits follow from the pipe:"
 msgstr "宿主每个会话创建一次。在子进程里，``harness.call_tool``\\ 和 ``harness.call_tool_sync``\\ 会变成发给 agent 的帧，由 agent 在那一边运行已加载的工具。因此嵌套调用仍然会经过扩展、事件和剖析，仓库工具也能像在进程内一样组合基础工具。管道带来两点限制："
 
-#: ../../learn/jit-harness.rst:161
+#: ../../learn/jit-harness.rst:218
 msgid "A tool returns ``None``, booleans, numbers, strings, lists, and dictionaries of those. Anything else raises :class:`~zett_agent.jit_harness.host.ToolNotSerializable` rather than being turned into a string."
 msgstr "工具只能返回 ``None``\\ 、布尔值、数字、字符串，以及由它们组成的列表和字典。其他值会抛出 :class:`~zett_agent.jit_harness.host.ToolNotSerializable`\\ ，而不是被转成字符串。"
 
-#: ../../learn/jit-harness.rst:164
+#: ../../learn/jit-harness.rst:221
 msgid "``print`` in a tool goes to standard error, so it never corrupts the protocol."
 msgstr "工具里的 ``print``\\ 输出到标准错误，因此不会破坏协议。"
 
-#: ../../learn/jit-harness.rst:166
+#: ../../learn/jit-harness.rst:223
 msgid "If the child exits, the call raises :class:`~zett_agent.jit_harness.host.JITHostCrashed` and the next ``repo_load`` starts a fresh one, even when no file changed. A tool that runs longer than ``call_timeout`` raises :class:`~zett_agent.jit_harness.host.JITHostTimeout` and the child is killed."
 msgstr "如果子进程退出，调用会抛出 :class:`~zett_agent.jit_harness.host.JITHostCrashed`\\ ，下一次 ``repo_load``\\ 会启动一个新的子进程，即使文件没有变化。运行时间超过 ``call_timeout``\\ 的工具会抛出 :class:`~zett_agent.jit_harness.host.JITHostTimeout`\\ ，子进程会被杀死。"
 
-#: ../../learn/jit-harness.rst:172
+#: ../../learn/jit-harness.rst:229
 msgid "A child is created by ``repo_load``, never by a tool call, and it stays alive between turns so module state survives. Reloading after a source change starts a new interpreter rather than importing again into the old one, so the previous version's modules and their globals are gone. Closing the session (``forget_session``) or exceeding ``max_sessions`` shuts the child down, and the kill sweeps its whole process group, so a process a tool started does not outlive it. ``JITHarnessExtension(root, max_sessions=8)`` is the default: a new session releases the least recently used session that has no request in flight."
 msgstr "子进程由 ``repo_load``\\ 创建，而不是由工具调用创建；它在两轮之间保持存活，所以模块状态能保留下来。源码变动后重新加载会启动新的解释器，而不是在旧解释器里再导入一次，因此上一版的模块及其全局变量都会被丢掉。关闭会话（``forget_session``\\ ）或超出 ``max_sessions``\\ 会关掉子进程，而且这次终止会扫掉它的整个进程组，所以工具启动的进程不会比它活得更久。\\ ``JITHarnessExtension(root, max_sessions=8)``\\ 是默认值：新会话会释放最久未使用、且当前没有请求在跑的会话。"
 
-#: ../../learn/jit-harness.rst:184
+#: ../../learn/jit-harness.rst:241
 msgid "Load, and load again"
 msgstr "加载，以及再次加载"
 
-#: ../../learn/jit-harness.rst:186
+#: ../../learn/jit-harness.rst:243
 msgid "``repo_load`` is safe to call whenever the model likes, and it always answers with the tool names and the notes. What it does depends on what is on disk:"
 msgstr "``repo_load``\\ 可以在任何时候安全调用，它总是返回工具名字和笔记。具体做什么取决于磁盘上的内容："
 
-#: ../../learn/jit-harness.rst:189
+#: ../../learn/jit-harness.rst:246
 msgid "**Not loaded yet.** It imports every module and registers each tool."
 msgstr "**尚未加载。** 导入每个模块并注册每个工具。"
 
-#: ../../learn/jit-harness.rst:190
+#: ../../learn/jit-harness.rst:247
 msgid "**Loaded, and no Python file changed.** It imports nothing again. Importing would only run the module bodies a second time, with their side effects. Tools hidden by ``repo_unload`` become callable again, so calling it twice leaves the same state as calling it once."
 msgstr "**已加载，且没有 Python 文件变化。** 不会再次导入任何东西。再导入一次只会让模块体连同它们的副作用再运行一遍。被 ``repo_unload`` 隐藏的工具会重新变为可调用，所以调用两次与调用一次的状态相同。"
 
-#: ../../learn/jit-harness.rst:194
+#: ../../learn/jit-harness.rst:251
 msgid "**Loaded, and a Python file changed.** It imports the whole package afresh and replaces the previous version in one step, so an edit to any file takes effect together with every other."
 msgstr "**已加载，且有 Python 文件变化。** 整个包会被重新导入，并一次性替换上一版本，因此对任何文件的编辑会与其他所有文件一起生效。"
 
-#: ../../learn/jit-harness.rst:198
-msgid "Changes are found by comparing the content of every Python file, the package root included, so an edit of the same length is seen and a file that was added or removed counts too. Notes are read again on every call and never need importing. If anything fails, the previous version stays registered and the error names the file and line, relative to the repository:"
-msgstr "变化是通过比较每个 Python 文件（包括包的根文件）的内容发现的，所以长度相同的编辑也能被发现，新增或删除文件同样算作变化。笔记在每次调用时都会重新读取，不需要导入。只要有任何失败，上一版本就保持注册，错误信息会指出相对于仓库的文件和行号："
+#: ../../learn/jit-harness.rst:255
+msgid "Changes are found by comparing the content of every Python file, the package root included, so an edit of the same length is seen and a file that was added or removed counts too. Notes are read again on every call and never need importing. If anything fails, the previous version stays registered and the error names the file and line, relative to the repository; a declaration it rejects is named instead, as in ``MANIFEST declares 'twice', …``."
+msgstr "变化是通过比较每个 Python 文件（包括包的根文件）的内容发现的，所以长度相同的编辑也能被发现，新增或删除文件同样算作变化。笔记在每次调用时都会重新读取，不需要导入。只要有任何失败，上一版本就保持注册，错误信息会指出相对于仓库的文件和行号；如果是声明被拒，则改为指出它拒绝的那条声明，例如 ``MANIFEST declares 'twice', …``\\ 。"
 
-#: ../../learn/jit-harness.rst:209
+#: ../../learn/jit-harness.rst:267
 msgid "A failed load always raises ``ValueError``, whatever went wrong inside; the model reads the location and repairs the file with its own file tool. Module bodies and imports run on load, so their external side effects cannot be rolled back. Executions already started keep their original implementation; later calls use the new one. Loading also clears the unloaded state of the repository."
 msgstr "无论内部出了什么问题，失败的加载总是抛出 ``ValueError``；模型读取位置信息，再用自己的文件工具修复文件。模块体和导入语句在加载时运行，所以它们的外部副作用无法回滚。已经开始的执行会保留它们原来的实现；之后的调用使用新实现。加载还会清除仓库的已卸载状态。"
 
-#: ../../learn/jit-harness.rst:216
+#: ../../learn/jit-harness.rst:274
 msgid "Compose with the harness"
 msgstr "通过 harness 组合"
 
-#: ../../learn/jit-harness.rst:218
+#: ../../learn/jit-harness.rst:276
 msgid "Use ``await harness.call_tool(name, **arguments)`` in async tools. For ordinary ``def`` functions, use the blocking composition entry point:"
 msgstr "在异步工具中使用 ``await harness.call_tool(name, **arguments)``\\ 。对于普通的 ``def`` 函数，请使用阻塞式的组合入口："
 
-#: ../../learn/jit-harness.rst:228
+#: ../../learn/jit-harness.rst:286
 msgid "Both paths check the current registration and execute parameter validation, middleware, and necessary tool hooks. Dependencies return Python values, not JSON strings, unless a result hook deliberately transforms them. Exceptions propagate to the outer tool unless your Python catches them. Only the outer call's result is recorded in the model conversation; no nested execution trace is emitted. A dependency that requests user input or approval still performs that interaction."
 msgstr "两条路径都会检查当前的注册，并执行参数校验、中间件和必要的工具钩子。依赖返回的是 Python 值，而不是 JSON 字符串，除非某个结果钩子有意对它做了转换。除非你的 Python 代码捕获了异常，否则异常会向上传播到外层工具。只有外层调用的结果会记录到模型对话中；不会产生嵌套的执行轨迹。请求用户输入或审批的依赖仍然会执行那次交互。"
 
-#: ../../learn/jit-harness.rst:236
+#: ../../learn/jit-harness.rst:294
 msgid "Synchronous code runs off the event loop. Do not call ``call_tool_sync`` from async code, or use it outside a running synchronous tool. Composition depth is bounded by ``max_call_depth`` (32 by default). Cancellation cannot forcibly stop arbitrary synchronous Python or undo side effects; give blocking I/O its own timeouts and avoid detached background work. While a module body runs, it cannot dispatch tools or change the harness."
 msgstr "同步代码会在事件循环之外运行。不要在异步代码中调用 ``call_tool_sync``，也不要在没有正在运行的同步工具时调用它。组合深度受 ``max_call_depth`` 限制（默认 32）。取消无法强制停止任意的同步 Python 代码，也无法撤销副作用；请为阻塞式 I/O 单独设置超时，并避免游离在外的后台任务。模块体运行期间，它不能分发工具，也不能修改 harness。"
 
-#: ../../learn/jit-harness.rst:243
+#: ../../learn/jit-harness.rst:301
 msgid "Composition inside a tool is programmatic tool calling: the model writes code that calls tools, instead of asking for one call per model turn. A single outer call can replace dozens of turns, nested results stay in Python and never reach the conversation, and every nested call still reaches profiling and events. Dependencies must be loaded, hooks and argument validation still apply, and the returned value should be JSON-friendly because it is what the model reads."
 msgstr "工具内部的组合就是程序化工具调用：模型编写调用工具的代码，而不是每个模型回合只请求一次调用。一次外层调用可以替代几十个回合，嵌套的结果留在 Python 中，永远不会进入对话，而每次嵌套调用依然会进入性能分析和事件。依赖必须已加载，钩子和参数校验依然生效，返回值应当对 JSON 友好，因为它就是模型读到的内容。"
 
-#: ../../learn/jit-harness.rst:251
+#: ../../learn/jit-harness.rst:309
 msgid "Save a note"
 msgstr "保存笔记"
 
-#: ../../learn/jit-harness.rst:253
+#: ../../learn/jit-harness.rst:311
 msgid "When a task takes many exploratory steps, the guidance asks the model to consider keeping what worked. Choose a tool when the steps are fixed, and a Markdown note when the path still needs judgment. A note is a Markdown file, similar to a ``SKILL``, at ``resources/<name>.md``:"
 msgstr "当任务包含很多探索性步骤时，guidelines 会请模型考虑把有效的做法保留下来。步骤固定时选择工具；路径仍需要判断时选择 Markdown 笔记。笔记是 ``resources/<name>.md`` 处的一个 Markdown 文件，类似于 ``SKILL``："
 
-#: ../../learn/jit-harness.rst:270
+#: ../../learn/jit-harness.rst:328
 msgid "The front matter takes ``description``, a hint of up to 512 characters, and ``kind``, which says what the text is for and how the model should treat it:"
 msgstr "front matter 接受 ``description``\\ （最多 512 个字符的提示）和 ``kind``\\ 。后者说明这段文本的用途，以及模型应当如何对待它："
 
-#: ../../learn/jit-harness.rst:277
+#: ../../learn/jit-harness.rst:335
 msgid "``kind``"
 msgstr "``kind``"
 
-#: ../../learn/jit-harness.rst:278
+#: ../../learn/jit-harness.rst:336
 msgid "Meaning"
 msgstr "含义"
 
-#: ../../learn/jit-harness.rst:279
+#: ../../learn/jit-harness.rst:337
 msgid "``workflow``"
 msgstr "``workflow``"
 
-#: ../../learn/jit-harness.rst:280
+#: ../../learn/jit-harness.rst:338
 msgid "An ordered procedure that worked, followed step by step once the model has checked that it applies. The default when ``kind`` is omitted."
 msgstr "一段行之有效的有序流程；模型确认它适用之后，按步骤逐一执行。省略 ``kind`` 时的默认值。"
 
-#: ../../learn/jit-harness.rst:282
+#: ../../learn/jit-harness.rst:340
 msgid "``skill``"
 msgstr "``skill``"
 
-#: ../../learn/jit-harness.rst:283
+#: ../../learn/jit-harness.rst:341
 msgid "Know-how for a tool, library, or technique: how to use it well and which mistakes to avoid. Applied where it fits."
 msgstr "关于某个工具、库或技巧的诀窍：怎样用好它，以及要避开哪些错误。在适合的地方应用即可。"
 
-#: ../../learn/jit-harness.rst:285
+#: ../../learn/jit-harness.rst:343
 msgid "``instruction``"
 msgstr "``instruction``"
 
-#: ../../learn/jit-harness.rst:286
+#: ../../learn/jit-harness.rst:344
 msgid "A standing rule or preference to honor whenever its description matches the work at hand."
 msgstr "一条长期有效的规则或偏好；只要它的描述与手头的工作相符，就应当遵守。"
 
-#: ../../learn/jit-harness.rst:288
+#: ../../learn/jit-harness.rst:346
 msgid "``memory``"
 msgstr "``memory``"
 
-#: ../../learn/jit-harness.rst:289
+#: ../../learn/jit-harness.rst:347
 msgid "Distilled facts and key points from earlier work, such as findings, decisions, and locations. It can be out of date, so the model verifies it before relying on it."
 msgstr "从先前工作中提炼出的事实和要点，例如发现、决定和位置。它可能已经过时，所以模型在依赖它之前要先核实。"
 
-#: ../../learn/jit-harness.rst:293
+#: ../../learn/jit-harness.rst:351
 msgid "A note is not a tool. ``repo_load`` lists each one as a :class:`~zett_agent.jit_harness.results.ResourceInfo`, which has no body:"
 msgstr "笔记不是工具。 ``repo_load`` 把每份笔记列为一个 :class:`~zett_agent.jit_harness.results.ResourceInfo`\\ ，其中没有正文："
 
-#: ../../learn/jit-harness.rst:305
+#: ../../learn/jit-harness.rst:363
 msgid "The model opens the file with its own file tools when a description fits the task, and reads only what it needs. Nothing about the body is registered or injected into a request, and the harness never reads it past the front matter. Follow a workflow only after checking that it applies and is safe: it cannot grant permissions or make an unloaded dependency available. A note may share a name with a tool, because only one of them is a tool. Every description is repeated in each ``repo_load`` answer, so a repository lists at most 50 notes; more fails the load, and so does an unknown ``kind`` (the error lists the valid ones) or a note with no front matter."
 msgstr "模型在某份描述符合任务时，用自己的文件工具打开该文件，并只读需要的部分。正文不会被注册，也不会被注入请求，harness 除了 front matter 之外也不会读取它。只有在确认工作流适用且安全之后才去遵循它：它不能授予权限，也不能让已卸载的依赖变得可用。笔记可以和工具同名，因为二者之中只有一个是工具。每条描述都会在每次 ``repo_load`` 的返回中重复出现，因此一个仓库最多列出 50 份笔记；超过会让加载失败，未知的 ``kind``\\ （错误信息会列出有效的取值）或没有 front matter 的笔记也会。"
 
-#: ../../learn/jit-harness.rst:315
+#: ../../learn/jit-harness.rst:373
 msgid "Validate a proposed optimization against representative tasks and account for the cost of creating and testing it. Guidance encourages this behavior; it does not guarantee that a model will learn, or that a saved path is globally optimal."
 msgstr "请用有代表性的任务验证所提出的优化，并把创建和测试它的成本计算在内。guidelines 鼓励这种行为，但并不保证模型一定能学会，也不保证保存下来的路径全局最优。"
 
-#: ../../learn/jit-harness.rst:320
+#: ../../learn/jit-harness.rst:378
 msgid "Resume a session"
 msgstr "恢复会话"
 
-#: ../../learn/jit-harness.rst:322
+#: ../../learn/jit-harness.rst:380
 msgid "The files are the saved state. The harness keeps nothing else: there is no snapshot to write, and module globals, profiles, and recent errors are not saved. When a session's first request finds exactly one repository in its directory, the extension adopts it, loads it, and tells the model its name and path in the guidance, so a resumed session has its tools without asking. A repository that fails to load is still adopted, so ``repo_load`` can show the model the error. Several candidate directories are not guessed between."
 msgstr "文件就是保存下来的状态。harness 不保留其他任何东西：没有快照可写，模块全局变量、性能分析和近期错误都不会被保存。当某个会话的首次请求在它的目录里恰好找到一个仓库时，扩展会接管并加载它，并在 guidelines 中告诉模型它的名称和路径，因此恢复的会话无需询问就拥有自己的工具。加载失败的仓库同样会被接管，这样 ``repo_load`` 就能把错误展示给模型。如果有多个候选目录，则不会去猜测选哪一个。"
 
-#: ../../learn/jit-harness.rst:330
-msgid "Release an idle session with ``jit.forget_session(session_id)``. It removes the repository's modules and import hook from the interpreter and keeps the files. ``harness.close()`` does the same for a standalone harness. Back up, move, or delete a repository like any directory; deleting the session directory forgets what the model learned."
-msgstr "用 ``jit.forget_session(session_id)`` 释放空闲的会话。它会把仓库的模块和导入钩子从解释器中移除，并保留文件。独立使用的 harness 用 ``harness.close()`` 完成同样的事。像对待任何目录一样备份、移动或删除仓库；删除会话目录就等于忘掉模型学到的内容。"
+#: ../../learn/jit-harness.rst:388
+msgid "Release an idle session with ``jit.forget_session(session_id)``. It removes the repository's modules and import hook from the interpreter and keeps the files."
+msgstr "用 ``jit.forget_session(session_id)`` 释放空闲的会话。它会把仓库的模块和导入钩子从解释器中移除，并保留文件。"
 
-#: ../../learn/jit-harness.rst:337
+#: ../../learn/jit-harness.rst:391
+msgid "``harness.close()`` does the same for a standalone harness. Back up, move, or delete a repository like any directory; deleting the session directory forgets what the model learned."
+msgstr "``harness.close()``\\ 对独立的 harness 做同样的事。备份、移动或删除仓库就像处理普通目录；删除会话目录会丢掉模型学到的东西。"
+
+#: ../../learn/jit-harness.rst:395
+msgid "A repository saved before ``MANIFEST`` existed fails to load until one is written; :meth:`~zett_agent.jit_harness.runtime.JITHarness.create_repo` adds it to an older repository without touching anything else. See :ref:`jit-manifest`."
+msgstr "在 ``MANIFEST``\\ 出现之前保存的仓库会一直加载失败，直到补上这个文件；:meth:`~zett_agent.jit_harness.runtime.JITHarness.create_repo` 会给旧仓库补上它，不动其他内容。参见 :ref:`jit-manifest`\\ 。"
+
+#: ../../learn/jit-harness.rst:400
 msgid "Choose whether to manage base tools"
 msgstr "选择是否管理基础工具"
 
-#: ../../learn/jit-harness.rst:339
+#: ../../learn/jit-harness.rst:402
 msgid "``manage_base_tools=True`` (the default) lets the harness unload/reload and profile application-owned local tools, including tools supplied by extensions. Tools registered later during setup or replaced by a policy hook are adopted before model/tool dispatch. Synchronization does not restore tools removed by a policy."
 msgstr "``manage_base_tools=True``\\ （默认值）允许 harness 卸载/重新加载并分析应用自有的本地工具，也包括由扩展提供的工具。在初始化过程中稍后注册的工具，或被某个策略钩子替换的工具，都会在模型/工具分发之前被接管。同步操作不会恢复被策略移除的工具。"
 
-#: ../../learn/jit-harness.rst:344
+#: ../../learn/jit-harness.rst:407
 msgid "To protect the base toolbox and opt out of its profiling:"
 msgstr "如果想保护基础工具箱，并选择不对它做性能分析："
 
-#: ../../learn/jit-harness.rst:351
+#: ../../learn/jit-harness.rst:414
 msgid "In this mode base tools keep their normal request handlers, ``unload_tool`` and ``load_tool`` reject base names, and no base-call measurements or recent base errors are collected. Repository tools can still compose currently registered base tools, with validation, middleware, and hooks intact, and keep their own profiling. A parent tool's elapsed time still includes time spent in base dependencies. Calling an original application ``AgentTool`` directly bypasses the harness, so it cannot be counted or prevented by unloading a request registration."
 msgstr "在这种模式下，基础工具保留它们正常的请求处理函数， ``unload_tool`` 和 ``load_tool`` 会拒绝基础工具的名称，也不会收集基础工具的调用测量数据或近期错误。仓库中的工具仍然可以组合当前已注册的基础工具，参数校验、中间件和钩子都保持有效，并保留各自的性能分析。父工具记录的耗时仍然包含花在基础依赖上的时间。直接调用原始的应用 ``AgentTool`` 会绕过 harness，因此无法被统计，也无法靠卸载请求注册来阻止。"
 
-#: ../../learn/jit-harness.rst:360
+#: ../../learn/jit-harness.rst:423
 msgid "The Python API"
 msgstr "Python API"
 
-#: ../../learn/jit-harness.rst:362
+#: ../../learn/jit-harness.rst:425
 msgid "``JITHarness`` is the same toolbox without the model: ``JITHarness(directory, tools=[...])`` with ``create_repo(name)``, ``load_repo()``, ``unload_repo()`` and ``close()``, plus ``repo`` and ``repo_path``. ``unload_tool(name)`` and ``load_tool(name)`` hide or restore one tool, base or repository, from your own code; the model has no tool for them. ``list_tools()`` and ``describe(name)`` read a compact catalog of names, origins, states, and descriptions. Measurements stay on their own methods: ``profile_stats(name)``, ``profile(name)``, and ``tool_errors(name)``."
 msgstr "``JITHarness`` 就是没有模型参与的同一个工具箱： ``JITHarness(directory, tools=[...])``，提供 ``create_repo(name)``、 ``load_repo()``、 ``unload_repo()`` 和 ``close()``，以及 ``repo`` 和 ``repo_path``\\ 。 ``unload_tool(name)`` 和 ``load_tool(name)`` 让你从自己的代码里隐藏或恢复单个工具（基础工具或仓库工具）；模型没有对应的工具。 ``list_tools()`` 和 ``describe(name)`` 读取由名称、来源、状态和描述组成的紧凑目录。测量数据留在各自的方法上： ``profile_stats(name)``、 ``profile(name)`` 和 ``tool_errors(name)``\\ 。"
 
-#: ../../learn/jit-harness.rst:384
+#: ../../learn/jit-harness.rst:447
 msgid "Use profiling to build useful tools"
 msgstr "借助性能分析构建有用的工具"
 
-#: ../../learn/jit-harness.rst:386
+#: ../../learn/jit-harness.rst:449
 msgid "Every harness records session-local measurements for base, repository, and management tools. Guidance asks the model to complete the user's task with minimal total token usage and end-to-end time, while preserving correctness, completeness, safety, and answer quality, and to count the costs of creating and testing a tool in that trade-off. To make that trade-off the model can read the summary below through ``profile_tools``; your application reads the full measurements."
 msgstr "每个 harness 都会为基础工具、仓库工具和管理工具记录会话本地的测量数据。guidelines 要求模型在保证正确性、完整性、安全性和回答质量的前提下，以尽可能少的总 token 用量和端到端时间完成用户的任务，并把创建和测试工具的成本也计入这一权衡。为了做这个权衡，模型可以通过 ``profile_tools``\\ 读取下面的摘要；完整的测量数据由你的应用读取。"
 
-#: ../../learn/jit-harness.rst:397
+#: ../../learn/jit-harness.rst:460
 msgid "What the model sees"
 msgstr "模型能看到什么"
 
-#: ../../learn/jit-harness.rst:399
+#: ../../learn/jit-harness.rst:462
 msgid "``profile_tools(names)`` takes the names of up to 10 tools and answers with one row for each, in the order asked. It works for any tool, the application's as well as the ones the model wrote, so the model can compare a tool it would replace with its own. A tool that was never called gets a row of zeros: unused is an answer. Notes are not tools and have no row."
 msgstr "``profile_tools(names)``\\ 接收最多 10 个工具的名字，并按提问的顺序为每个工具返回一行。它对任何工具都有效，既包括应用的工具，也包括模型自己写的工具，因此模型可以把打算替换的工具和自己的工具比较。从未被调用过的工具会得到全零的一行：“未使用”也是一个答案。笔记不是工具，没有对应的行。"
 
-#: ../../learn/jit-harness.rst:405
+#: ../../learn/jit-harness.rst:468
 msgid "Without ``names`` it answers with an overview: every tool of the repository, called or not, and every application tool that has been called, most called first, at most 20 rows; ``omitted`` counts the rest. The management tools are never measured, and asking for one is an error."
 msgstr "不传 ``names`` 时返回概览：仓库中的每个工具（无论是否被调用过），以及每个被调用过的应用工具，调用最多的排在前面，最多 20 行； ``omitted`` 表示被省略的数量。管理工具永远不会被测量，查询它们会报错。"
 
-#: ../../learn/jit-harness.rst:421
+#: ../../learn/jit-harness.rst:484
 msgid "``success_rate`` is completed over completed plus failed; rejected and cancelled attempts say nothing about the tool and are left out. ``avg_output_chars`` is what a call handed back, and the message of a failed call counts because the model reads it too. A tool asked for by name carries up to three recent distinct errors, which is where to look before fixing it; in the overview each carries one. The numbers live in memory and start again from zero with the process, and a few calls are thin evidence, which the guidance says. Application tools are measured only with ``manage_base_tools=True``; with it off, asking for one is an error rather than a row of zeros that would read as unused. The same summary is :meth:`~zett_agent.jit_harness.runtime.JITHarness.profile_tools` in Python."
 msgstr "``success_rate`` 是 completed 除以 completed 加 failed；被拒绝和被取消的尝试说明不了工具本身的好坏，因此不计入。 ``avg_output_chars`` 是一次调用交回的内容大小，失败调用的错误信息也计入，因为模型同样要读它。按名字查询的工具会附上最多三条最近的不同错误，修复之前就该看这里；概览中每个工具只带一条。这些数字保存在内存里，随进程重启而从零开始，而且寥寥几次调用只是薄弱的证据，guidelines 中也这样写了。应用工具只有在 ``manage_base_tools=True`` 时才会被测量；关闭之后，查询它会报错，而不是返回一行会被误读为“未使用”的零。同样的摘要在 Python 中是 :meth:`~zett_agent.jit_harness.runtime.JITHarness.profile_tools`\\ 。"
 
-#: ../../learn/jit-harness.rst:433
+#: ../../learn/jit-harness.rst:496
 msgid "What your application sees"
 msgstr "你的应用能看到什么"
 
-#: ../../learn/jit-harness.rst:445
+#: ../../learn/jit-harness.rst:508
 msgid "Aggregate statistics count finished calls per outcome plus mean duration and mean input and output characters. Each finished record carries its invocation id, tool name, origin, outcome, elapsed time, measured sizes, the composing caller when the call was nested, and an error type when it failed. Lifetime totals are not reset by a reload or unload. Look for repeated caller/dependency relationships a focused tool could compose, large outputs that can be reduced, and slow or failure-prone implementations. Profiling is evidence about execution, not a quality score."
 msgstr "聚合统计按结果统计已完成的调用次数，并给出平均耗时以及平均输入和输出字符数。每条已完成的记录都带有它的调用 ID、工具名、来源、结果、耗时、测量到的长度，以及嵌套调用时的组合方调用者，失败时还带有错误类型。生命周期累计值不会因重新加载或卸载而重置。留意重复出现的调用方/依赖关系（专注的工具可以把它们组合起来）、可以缩减的大输出，以及缓慢或容易失败的实现。性能分析是关于执行的证据，而不是质量评分。"
 
-#: ../../learn/jit-harness.rst:454
+#: ../../learn/jit-harness.rst:517
 msgid "Every record also carries a :class:`~zett_agent.jit_harness.enums.ToolOrigin`:"
 msgstr "每条记录还带有一个 :class:`~zett_agent.jit_harness.enums.ToolOrigin`："
 
-#: ../../learn/jit-harness.rst:456
+#: ../../learn/jit-harness.rst:519
 msgid "``base`` — an application-owned tool from ``tools=[...]`` or a tool-providing extension. It can be unloaded and profiled when base management is enabled."
 msgstr "``base`` —— 来自 ``tools=[...]`` 的应用自有工具，或由某个提供工具的扩展提供。在启用基础工具管理时，它可以被卸载并接受性能分析。"
 
-#: ../../learn/jit-harness.rst:458
+#: ../../learn/jit-harness.rst:521
 msgid "``python`` — a tool the model defined in its repository with ``@tool``. An unloaded tool keeps ``python``; its call status becomes ``rejected``."
 msgstr "``python`` —— 模型在自己的仓库中用 ``@tool`` 定义的工具。已卸载的工具仍然保持 ``python``；它的调用状态会变成 ``rejected``\\ 。"
 
-#: ../../learn/jit-harness.rst:460
+#: ../../learn/jit-harness.rst:523
 msgid "``text`` — a Markdown resource of any kind. Calls measure reading a page, not acting on its content."
 msgstr "``text`` —— 任意类型的 Markdown 资源。调用测量的是读取某一页，而不是依据其内容采取行动。"
 
-#: ../../learn/jit-harness.rst:462
+#: ../../learn/jit-harness.rst:525
 msgid "``management`` — ``repo_create``, ``repo_load``, ``repo_unload``, or ``profile_tools``."
 msgstr "``management`` —— ``repo_create``、 ``repo_load``、 ``repo_unload`` 或 ``profile_tools``\\ 。"
 
-#: ../../learn/jit-harness.rst:463
+#: ../../learn/jit-harness.rst:526
 msgid "``unknown`` — a defensive fallback for a name that was in no registry when the attempt was recorded. Normal dispatch does not produce it."
 msgstr "``unknown`` —— 一种防御性兜底值，用于记录该次尝试时不在任何注册表中的名称。正常分发不会产生它。"
 
-#: ../../learn/jit-harness.rst:466
+#: ../../learn/jit-harness.rst:529
 msgid "The ``status`` field is a :class:`~zett_agent.jit_harness.enums.ToolCallStatus`:"
 msgstr "``status`` 字段是一个 :class:`~zett_agent.jit_harness.enums.ToolCallStatus`："
 
-#: ../../learn/jit-harness.rst:468
+#: ../../learn/jit-harness.rst:531
 msgid "``completed`` — the handler returned. A later serialization or lifecycle-hook failure does not change the record, so ``completed`` means the tool itself ran."
 msgstr "``completed`` —— 处理函数正常返回。之后出现的序列化或生命周期钩子失败不会改变该记录，因此 ``completed`` 表示工具本身已经运行过。"
 
-#: ../../learn/jit-harness.rst:470
+#: ../../learn/jit-harness.rst:533
 msgid "``failed`` — the tool started and raised: argument validation, handler code, or an uncaught nested dependency error."
 msgstr "``failed`` —— 工具已启动并抛出异常：可能是参数校验、处理函数代码，或未捕获的嵌套依赖错误。"
 
-#: ../../learn/jit-harness.rst:472
+#: ../../learn/jit-harness.rst:535
 msgid "``cancelled`` — the awaiting caller was cancelled. A synchronous worker may still be running, because Python cannot forcibly stop it."
 msgstr "``cancelled`` —— 等待的调用方被取消。同步工作线程可能仍在运行，因为 Python 无法强制停止它。"
 
-#: ../../learn/jit-harness.rst:474
+#: ../../learn/jit-harness.rst:537
 msgid "``rejected`` — the harness refused the call before any handler body ran: the tool is unloaded, missing its base binding, no longer registered in the current request, or the nested call exceeded ``max_call_depth``."
 msgstr "``rejected`` —— harness 在任何处理函数主体运行之前就拒绝了该调用：工具已卸载、缺少它的基础工具绑定、在当前请求中已不再注册，或者嵌套调用超过了 ``max_call_depth``\\ 。"
 
-#: ../../learn/jit-harness.rst:478
+#: ../../learn/jit-harness.rst:541
 msgid "Use these measurement rules when interpreting results:"
 msgstr "解读结果时请遵循这些测量规则："
 
-#: ../../learn/jit-harness.rst:480
+#: ../../learn/jit-harness.rst:543
 msgid "Input length is compact Unicode JSON, including property names and punctuation. Text output uses plain string length; structured output uses compact JSON. Multimodal output counts text blocks only, excluding image bytes and URLs. These are characters, not bytes, tokens, or exact provider payload sizes."
 msgstr "输入长度按紧凑的 Unicode JSON 计算，包含属性名和标点。文本输出使用普通字符串长度；结构化输出使用紧凑 JSON。多模态输出只统计文本块，不含图像字节和 URL。这些数字是字符数，而不是字节数、token 数，也不是模型提供商载荷的精确大小。"
 
-#: ../../learn/jit-harness.rst:484
+#: ../../learn/jit-harness.rst:547
 msgid "A missing measurement is ``None``, not zero. Character averages use measured samples only. Error output counts the error-message length; cancellation has no output measurement."
 msgstr "缺失的测量值是 ``None``，而不是零。字符平均值只使用有测量数据的样本。错误输出统计的是错误消息的长度；取消没有输出测量值。"
 
-#: ../../learn/jit-harness.rst:487
+#: ../../learn/jit-harness.rst:550
 msgid "Measurements stop at 8,000 characters, so a reported 8,000 means \"at least this many\"."
 msgstr "测量在 8,000 个字符处截止，所以报告的 8,000 表示“至少这么多”。"
 
-#: ../../learn/jit-harness.rst:489
+#: ../../learn/jit-harness.rst:552
 msgid "Duration is elapsed dispatch time, including validation, synchronous worker dispatch, and nested calls. Surrounding middleware, lifecycle hooks, and user approval waits are outside the boundary. A parent includes its children, so summing both double-counts nested work."
 msgstr "耗时是分发过程的实际用时，其中包括校验、同步工作线程分发和嵌套调用。外层的中间件、生命周期钩子和用户审批等待都不在这个边界之内。父调用包含它的子调用，因此把两者相加会重复计算嵌套工作。"
 
-#: ../../learn/jit-harness.rst:493
+#: ../../learn/jit-harness.rst:556
 msgid "A middleware short-circuit is not counted, because the tool never executed. Unknown names, stale request references, and rejected module-loading calls also create no record."
 msgstr "中间件的短路不会被计入，因为工具从未执行。未知名称、失效的请求引用，以及被拒绝的模块加载调用也不会产生记录。"
 
-#: ../../learn/jit-harness.rst:497
+#: ../../learn/jit-harness.rst:560
 msgid "The profile retains a bounded window of finished attempts in memory, not their input/output contents or exception messages: the newest ``call_capacity`` records (2,000 by default) survive, oldest dispatch first, while lifetime aggregates keep counting every attempt. Profiles survive later requests in the same in-memory harness but are not saved: a new process starts fresh. Export a page with ``report.model_dump_json()`` and read it back with ``JITHarnessProfile.model_validate_json(...)``."
 msgstr "性能分析在内存中只保留一个有界的已完成尝试窗口，而不保留它们的输入/输出内容或异常消息：最新的 ``call_capacity`` 条记录（默认 2,000）会保留下来，最先被分发的先淘汰，同时生命周期聚合数据会继续统计每一次尝试。性能分析在同一个内存中的 harness 里能跨后续请求保留，但不会被保存：新进程会重新开始。用 ``report.model_dump_json()`` 导出一页，再用 ``JITHarnessProfile.model_validate_json(...)`` 读回来。"
 
-#: ../../learn/jit-harness.rst:506
+#: ../../learn/jit-harness.rst:569
 msgid "Diagnose recent errors"
 msgstr "诊断近期错误"
 
-#: ../../learn/jit-harness.rst:508
+#: ../../learn/jit-harness.rst:571
 msgid "Each session has a separate LRU cache of distinct errors, read by your application with ``harness.tool_errors``. The defaults retain 100 entries and at most 4,000 characters of each message:"
 msgstr "每个会话都有一个独立的、用于存放不同错误的 LRU 缓存，由你的应用通过 ``harness.tool_errors`` 读取。默认保留 100 条条目，每条消息最多 4,000 个字符："
 
-#: ../../learn/jit-harness.rst:521
+#: ../../learn/jit-harness.rst:584
 msgid "Both configuration values must be positive integers. Capacity is global to one harness, not a separate allowance for every tool. Errors deduplicate by tool name, exception type, and complete error message. A repeated error increments ``occurrences`` and moves that entry to the most recent position; when the cache is full, the least recently occurring entry is evicted. Reads do not refresh recency, and successful calls do not clear old evidence."
 msgstr "这两个配置值都必须是正整数。容量对整个 harness 生效，而不是为每个工具单独分配。错误按工具名、异常类型和完整的错误消息去重。重复出现的错误会增加 ``occurrences``，并把该条目移到最近的位置；缓存满时，最近最少出现的条目会被淘汰。读取不会刷新新旧顺序，成功的调用也不会清除旧的证据。"
 
-#: ../../learn/jit-harness.rst:528
+#: ../../learn/jit-harness.rst:591
 msgid "Records include the error type, bounded message, last occurrence time, count, and the latest invocation's caller and call ID. ``message_truncated`` indicates whether only a prefix was retained. ``occurrences`` covers the entry's current cache residence; lifetime failed/rejected counts remain available through profiling. An empty report is not proof that a tool never failed. Cancellations are recorded in profiling rather than the error cache. A failed ``repo_load`` is retained too. ``harness.tool_errors`` follows ``next_offset`` and takes ``limit`` from 1 to 1000, defaulting to 5."
 msgstr "记录包括错误类型、有界的消息、最近一次发生的时间、次数，以及最近一次调用的组合方和调用 ID。 ``message_truncated`` 表示是否只保留了前缀。 ``occurrences`` 只覆盖该条目当前在缓存中停留期间；生命周期的失败/拒绝计数仍可通过性能分析获得。空报告并不能证明某个工具从未失败过。取消被记录在性能分析中，而不是错误缓存里。失败的 ``repo_load`` 同样会被保留。 ``harness.tool_errors`` 通过 ``next_offset`` 继续翻页， ``limit`` 取值 1 到 1000，默认 5。"
 
-#: ../../learn/jit-harness.rst:539
+#: ../../learn/jit-harness.rst:602
 msgid "Exception messages may include sensitive application data. Arguments, tracebacks, and exception objects are not stored, but the error text itself is retained. Use applications and tools that redact secrets in their error messages."
 msgstr "异常消息可能包含应用中的敏感数据。参数、回溯信息和异常对象不会被存储，但错误文本本身会被保留。请使用会在错误消息中抹去机密的应用程序和工具。"
 
-#: ../../learn/jit-harness.rst:545
+#: ../../learn/jit-harness.rst:608
 msgid "Observe repository and tool calls"
 msgstr "观察仓库和工具的调用"
 
-#: ../../learn/jit-harness.rst:547
+#: ../../learn/jit-harness.rst:610
 msgid "``JITHarnessExtension`` publishes two CUSTOM events so a UI or log can follow the harness as it works, including calls that never surface as ``TOOL_STARTED``:"
 msgstr "``JITHarnessExtension`` 会发布两个 CUSTOM 事件，让 UI 或日志可以跟进 harness 的工作过程，其中包括那些从未以 ``TOOL_STARTED`` 形式出现过的调用："
 
-#: ../../learn/jit-harness.rst:554
+#: ../../learn/jit-harness.rst:617
 msgid "Event name"
 msgstr "事件名称"
 
-#: ../../learn/jit-harness.rst:555
+#: ../../learn/jit-harness.rst:618
 msgid "Emitted when"
 msgstr "触发时机"
 
-#: ../../learn/jit-harness.rst:556
+#: ../../learn/jit-harness.rst:619
 msgid "``jit_tool_started``"
 msgstr "``jit_tool_started``"
 
-#: ../../learn/jit-harness.rst:557
+#: ../../learn/jit-harness.rst:620
 msgid "A repository tool or ``repo_*`` call is about to run."
 msgstr "仓库中的某个工具或 ``repo_*`` 调用即将运行。"
 
-#: ../../learn/jit-harness.rst:558
+#: ../../learn/jit-harness.rst:621
 msgid "``jit_tool_completed``"
 msgstr "``jit_tool_completed``"
 
-#: ../../learn/jit-harness.rst:559
+#: ../../learn/jit-harness.rst:622
 msgid "That call returned or raised, adding ``success`` and ``error_type``."
 msgstr "该调用返回或抛出异常时，会附带 ``success`` 和 ``error_type``\\ 。"
 
-#: ../../learn/jit-harness.rst:561
+#: ../../learn/jit-harness.rst:624
 msgid "Both events fire for calls the model requested and for calls one repository tool composes through ``harness.call_tool``, so a composed dependency is visible even though its result never reaches the conversation. Application base tools are skipped: the runtime already publishes ``TOOL_STARTED`` and ``TOOL_COMPLETED`` when the model requests them."
 msgstr "无论是模型请求的调用，还是某个仓库工具通过 ``harness.call_tool`` 组合出的调用，都会触发这两个事件，因此即使组合出的依赖结果从未进入对话，它也是可见的。应用的基础工具会跳过：当模型请求它们时，运行时已经会发布 ``TOOL_STARTED`` 和 ``TOOL_COMPLETED``\\ 。"
 
-#: ../../learn/jit-harness.rst:577
+#: ../../learn/jit-harness.rst:640
 msgid "Each payload carries ``session_id``, ``tool_call_id``, ``tool_name``, and ``origin``; the completed event adds ``success`` and ``error_type``. The event stays small on purpose: arguments, results, and error messages are not copied into it. ``tool_call_id`` is the join key, matching both the conversation's ``ToolCall`` and the ``call_id`` of the record in :meth:`~zett_agent.jit_harness.runtime.JITHarness.profile`."
 msgstr "每个 payload 都带有 ``session_id``、 ``tool_call_id``、 ``tool_name`` 和 ``origin``；完成事件还会增加 ``success`` 和 ``error_type``\\ 。事件刻意保持很小：参数、结果和错误消息都不会复制进去。 ``tool_call_id`` 是关联键，既对应对话中的 ``ToolCall``，也对应 :meth:`~zett_agent.jit_harness.runtime.JITHarness.profile` 中记录的 ``call_id``\\ 。"
 
-#: ../../learn/jit-harness.rst:584
+#: ../../learn/jit-harness.rst:647
 msgid "Events pair up for calls that reach dispatch. A call the harness rejects before running any handler emits no pair of its own; read ``profile()`` for its ``rejected`` record and ``tool_errors()`` for the message. Names this harness has never seen are ignored rather than reported as JIT calls."
 msgstr "事件会为进入分发的调用成对出现。harness 在运行任何处理函数之前就拒绝的调用不会自己发出一对事件；请读取 ``profile()`` 获取它的 ``rejected`` 记录，读取 ``tool_errors()`` 获取相应消息。这个 harness 从未见过的名称会被忽略，而不会作为 JIT 调用上报。"
 
-#: ../../learn/jit-harness.rst:590
+#: ../../learn/jit-harness.rst:653
 msgid "Try the complete offline example"
 msgstr "试用完整的离线示例"
 
-#: ../../learn/jit-harness.rst:592
+#: ../../learn/jit-harness.rst:655
 msgid "The scripted model creates a repository, writes ``twice.py`` through a file tool, loads it, and invokes ``twice``. A second extension with the same root and session id then adopts the files and uses the tool again. The program also checks a synchronous → asynchronous → base-tool pipeline, empty inputs, a failed reload that keeps the previous version, dependency unload, a listed note, and a restart from the files alone. It uses a temporary directory and makes no network requests:"
 msgstr "脚本化的模型会创建一个仓库，通过文件工具写入 ``twice.py``，加载它并调用 ``twice``\\ 。随后，使用相同根目录和会话 ID 的第二个扩展会接管这些文件，再次使用该工具。程序还会检查同步 → 异步 → 基础工具的流水线、空输入、保留上一版本的失败重新加载、依赖卸载、一份被列出的笔记，以及仅凭文件重启。它使用临时目录，不发起任何网络请求："
 
-#: ../../learn/jit-harness.rst:608
+#: ../../learn/jit-harness.rst:671
 msgid "Expected output:"
 msgstr "预期输出："
 
-#: ../../learn/jit-harness.rst:617
+#: ../../learn/jit-harness.rst:680
 msgid "Download :download:`the complete program <../_examples/jit_harness.py>`. For exact contracts, see :class:`~zett_agent.jit_harness.runtime.JITHarness` and :class:`~zett_agent.jit_harness.extension.JITHarnessExtension`."
 msgstr "下载 :download:`完整程序 <../_examples/jit_harness.py>`\\ 。若需精确的契约，请参阅 :class:`~zett_agent.jit_harness.runtime.JITHarness` 和 :class:`~zett_agent.jit_harness.extension.JITHarnessExtension`\\ 。"
+
+#~ msgid "A repository saved before ``MANIFEST`` existed fails to load until one is written; :meth:`~zett_agent.jit_harness.runtime.JITHarness.create_repo` adds it to an older repository without touching anything else. See :ref:`jit-manifest`. ``harness.close()`` does the same for a standalone harness. Back up, move, or delete a repository like any directory; deleting the session directory forgets what the model learned."
+#~ msgstr ""
 

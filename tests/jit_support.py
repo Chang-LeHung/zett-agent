@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from zett_agent.jit_harness import JITHarness
-from zett_agent.jit_harness.repo import SKELETON, session_directory_name
+from zett_agent.jit_harness.repo import MANIFEST_SKELETON, SKELETON, session_directory_name
 
 #: Test sources use ``@tool`` and ``ToolExecutionMode`` without importing them.
 HEADER = "from zett_agent.tools.base import ToolExecutionMode, tool\n"
@@ -21,6 +21,7 @@ def seed_repo(root: Path, session: str, modules: Mapping[str, str], name: str = 
     directory = Path(root) / session_directory_name(session) / name
     directory.mkdir(parents=True)
     (directory / "__init__.py").write_text(SKELETON, encoding="utf-8")
+    (directory / "MANIFEST").write_text(MANIFEST_SKELETON.format(name=name), encoding="utf-8")
     for module, source in modules.items():
         (directory / f"{module}.py").write_text(HEADER + source, encoding="utf-8")
     return directory

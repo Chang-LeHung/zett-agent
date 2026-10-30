@@ -28,14 +28,23 @@ from typing import TYPE_CHECKING, Any
 from .._compat import StrEnum
 from ..ids import new_uuid7
 from ..tools.base import AgentTool
+from .manifest import (
+    MANAGEMENT_NAMES,
+    TOOL_NAME,
+    RepositoryPolicy,
+    _tool_problems,
+    inspect_repository,
+    is_repository_name,
+    is_tool_name,
+)
 
 if TYPE_CHECKING:
     from .host import HarnessCalls
 
-#: Names the harness reserves for its model-facing management tools.
-MANAGEMENT_NAMES = frozenset({"repo_create", "repo_load", "repo_unload", "profile_tools"})
+#: Names the harness reserves for its model-facing management tools, re-exported here.
+# (no reassignment: the import above puts the name in this module's namespace)
 
-_NAME = re.compile(r"[a-zA-Z0-9_-]{1,64}\Z")
+_NAME = TOOL_NAME
 _REPO_NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\Z")
 _SESSION_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_-])?\Z")
 
@@ -59,11 +68,18 @@ MAX_FAILURE_FRAMES = 5
 _LOAD_LOCK = RLock()
 
 SKELETON = '"""Reusable tools for this session. ``repo_load`` registers every ``@tool`` defined in this package."""\n'
+#: A new repository starts with a manifest that loads: the model rewrites it as the
+#: repository grows, and ``repo_load`` refuses a repository without one.
+MANIFEST_SKELETON = 'name = "{name}"\nversion = "0.1.0"\ndescription = "Reusable tools for this session."\n'
 
 
 def validate_name(name: str) -> str:
-    """Check a tool name and keep the reserved ones free."""
-    if not _NAME.fullmatch(name):
+    """Check a tool name and keep the reserved ones free.
+
+    The pattern lives in :mod:`~zett_agent.jit_harness.manifest`, so a name the loader
+    accepts is also a name a manifest can declare and a ban list can forbid.
+    """
+    if not is_tool_name(name):
         raise ValueError("Tool names need 1–64 letters, digits, underscores, or hyphens")
     if name in MANAGEMENT_NAMES:
         raise ValueError(f"Tool name {name!r} is reserved for JIT management")
@@ -72,8 +88,10 @@ def validate_name(name: str) -> str:
 
 def validate_repo_name(repo: str) -> str:
     """Check a repository directory name chosen by the model."""
-    if not isinstance(repo, str) or not _REPO_NAME.fullmatch(repo):
-        raise ValueError("Repository names need 1–64 letters, digits, underscores, or hyphens, starting with a letter")
+    if not is_repository_name(repo):
+        raise ValueError(
+            "Repository names need 1–64 letters, digits, underscores, or hyphens, starting with a letter or digit"
+        )
     return repo
 
 
@@ -347,21 +365,33 @@ def _read_resources(directory: Path) -> dict[str, TextResource]:
 
 @dataclass(frozen=True)
 class RepoScan:
-    """What the files of a repository say right now, found without importing anything."""
+    """What the files of a repository say right now, found without importing anything.
+
+    ``policy`` is the declaration read in this scan. The loader compares it with the tools
+    the import produces instead of reading the files again, so a module body that rewrites
+    them changes the next load and not the one it is part of.
+    """
 
     modules: list[str]
     fingerprint: str
     resources: dict[str, TextResource]
+    policy: RepositoryPolicy
 
 
 def scan_repo(directory: Path) -> RepoScan:
     """Check the files of a repository and describe them.
 
     Raises:
-        ValueError: If a file is too large, misnamed, or a resource has bad front matter.
+        ValueError: If a file is too large, misnamed, a resource has bad front matter, the
+            manifest is missing, or either policy file is malformed. A missing ban list is
+            allowed and bans nothing. Nothing is imported here, so a repository that cannot
+            declare itself never runs a line of its code.
     """
     modules, fingerprint = _scan_modules(directory)
-    return RepoScan(modules, fingerprint, _read_resources(directory))
+    policy = inspect_repository(directory)
+    if not policy.ok:
+        raise ValueError("; ".join(policy.problems))
+    return RepoScan(modules, fingerprint, _read_resources(directory), policy)
 
 
 def _collect_tools(alias: str) -> dict[str, AgentTool]:
@@ -405,7 +435,8 @@ def load_repo(directory: Path, harness: HarnessCalls, scan: RepoScan) -> LoadedR
 
     Module bodies run here, with the application's privileges. On any failure
     the half-imported package is removed and a ``ValueError`` names the file and
-    line, so a caller can keep serving the previous version.
+    line when the error is in Python, or the declaration it rejects, so a caller can
+    keep serving the previous version.
 
     Args:
         directory: The repository root.
@@ -420,6 +451,14 @@ def load_repo(directory: Path, harness: HarnessCalls, scan: RepoScan) -> LoadedR
             for dotted in scan.modules:
                 import_module(f"{alias}.{dotted}")
             tools = _collect_tools(alias)
+            # Judged against the declarations this scan read, never against the disk again:
+            # a module body that rewrites MANIFEST or BAN_TOOLS changes the next load.
+            # ``scan_repo`` refuses a file without a manifest, so the policy always has one;
+            # the assert states that for a caller that built a ``RepoScan`` by hand.
+            assert scan.policy.manifest is not None
+            problems = _tool_problems(scan.policy.manifest, scan.policy.banned, tools)
+            if problems:
+                raise ValueError("; ".join(problems))
         except BaseException as failure:
             discard(alias)
             if isinstance(failure, Exception):

@@ -27,11 +27,14 @@ from ..tools.invocation import invoke_tool
 from .enums import ToolCallStatus, ToolOrigin
 from .errors import ToolErrorReport
 from .host import HarnessCalls, HostedRepo, InProcessToolHost, JITToolHost
+from .manifest import MANIFEST_FILE, _tool_problems
 from .profiling import MAX_RETAINED_CALLS, ActiveToolCall, JITHarnessProfile, ToolProfiler, ToolProfileStats
 from .repo import (
     INIT_FILE,
     MANAGEMENT_NAMES,
+    MANIFEST_SKELETON,
     SKELETON,
+    RepoScan,
     TextResource,
     scan_repo,
     validate_name,
@@ -552,8 +555,11 @@ class JITHarness(HarnessCalls):
 
         The repository is a Python package in a subdirectory named ``repo``. There
         is one per harness: asking again for the same name returns it unchanged,
-        and asking for another name is an error. Write modules into the returned
-        path with ordinary file tools, then call :meth:`load_repo`.
+        and asking for another name is an error. A new repository starts with an empty
+        ``__init__.py`` and a starter ``MANIFEST`` (its name, a version and a
+        description); a missing ``MANIFEST`` is added to an older repository too, and an
+        existing one is never overwritten. Write modules into the returned path with
+        ordinary file tools, then call :meth:`load_repo`.
 
         Args:
             repo: Directory name, 1–64 letters, digits, underscores, or hyphens.
@@ -566,11 +572,29 @@ class JITHarness(HarnessCalls):
                 raise ValueError(f"This session already has the repository {self._repo!r}; keep using it")
             path = self._directory / repo
             existed = (path / INIT_FILE).is_file()
+            path.mkdir(parents=True, exist_ok=True)
+            # Each skeleton is written only when its file is absent, so a MANIFEST the model
+            # wrote before calling repo_create is kept, and an older repository without one
+            # gains it here.
             if not existed:
-                path.mkdir(parents=True, exist_ok=True)
                 (path / INIT_FILE).write_text(SKELETON, encoding="utf-8")
+            if not (path / MANIFEST_FILE).is_file():
+                (path / MANIFEST_FILE).write_text(MANIFEST_SKELETON.format(name=repo), encoding="utf-8")
             self._repo = repo
             return self._result(None if existed else "created")
+
+    def _require_tools(self, scan: RepoScan) -> None:
+        """Judge the tools of an existing version against the declarations just read.
+
+        Used when the import is skipped, because that version is what the next request
+        would see. A load that imports checks in the loader instead, against what the
+        import produced; judging there with the previous version's names would refuse
+        every edit that adds or removes a declared tool.
+        """
+        assert self._loaded is not None and scan.policy.manifest is not None
+        problems = _tool_problems(scan.policy.manifest, scan.policy.banned, self._loaded.tools)
+        if problems:
+            raise ValueError("; ".join(problems))
 
     def _load(self) -> None:
         """Make the repository's tools current and list its notes.
@@ -578,16 +602,19 @@ class JITHarness(HarnessCalls):
         The files are checked first, so a bad one fails the call before anything
         changes. When no Python source differs from what is imported, nothing is
         imported again: the modules are resident, and importing them would only run
-        their bodies a second time. Otherwise the new package is imported before
-        anything changes, so a failure keeps the previous version registered. Module
-        bodies run with ``_compiling`` set, which stops them from mutating the
-        harness or dispatching tools. The host decides where the import happens.
+        their bodies a second time, so the tools on record are the ones the declarations
+        must agree with. Otherwise the new package is imported before anything changes,
+        and the loader judges the tools that import produced against the declarations
+        this scan read, so a failure keeps the previous version registered. Module
+        bodies run with ``_compiling`` set, which stops them from mutating the harness
+        or dispatching tools. The host decides where the import happens.
         """
         assert self._repo is not None
         directory = self._directory / self._repo
         scan = scan_repo(directory)
-        self._resources = scan.resources
         if self._loaded is not None and self._loaded.fingerprint == scan.fingerprint and not self._host.needs_reload:
+            self._require_tools(scan)
+            self._resources = scan.resources
             self._reveal()
             return
         self._compiling = True
@@ -599,6 +626,14 @@ class JITHarness(HarnessCalls):
         if clash:
             loaded.close()
             raise ValueError(f"Tool {clash[0]!r} is already an application tool; choose another name")
+        # A third-party host may import without going through ``repo.load_repo``, so the
+        # declarations are enforced here too, against the same snapshot.
+        assert scan.policy.manifest is not None
+        problems = _tool_problems(scan.policy.manifest, scan.policy.banned, loaded.tools)
+        if problems:
+            loaded.close()
+            raise ValueError("; ".join(problems))
+        self._resources = scan.resources
         previous, previous_names = self._loaded, set(self._dynamic)
         self._loaded = loaded
         self._dynamic = dict(loaded.tools)
@@ -639,9 +674,16 @@ class JITHarness(HarnessCalls):
           replaces the previous version in one step. Changes are found by content, so
           even an edit of the same length is seen.
 
+        Every call also checks the declarations: ``MANIFEST`` (name, version,
+        description, and the tools it announces) and ``BAN_TOOLS`` (names the repository
+        may not define). They are read before the import and compared with the tools it
+        produced, so a repository that breaks them is refused, and the names are read
+        from the declaration this call saw rather than from the files again.
+
         A failure leaves the previous version in place and raises a ``ValueError``
-        naming the file and line. Module bodies run with the application's
-        privileges; their side effects cannot be rolled back.
+        naming the file and line when the error is in Python, or the declaration it
+        rejects. Module bodies run with the application's privileges; their side effects
+        cannot be rolled back.
         """
         with self._lock:
             self._check_mutation()

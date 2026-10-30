@@ -58,6 +58,28 @@ a tool whose output is large; and consider unloading one that was never called.
 The numbers are kept in memory, so they restart from zero when the process does,
 and a handful of calls is thin evidence.
 
+A repository loads only when `MANIFEST` sits beside `__init__.py` and declares it:
+
+```toml
+name = "kit"
+version = "0.1.0"
+description = "Tools for this session."
+```
+
+`name` is the repository directory, `version` looks like `1` or `1.2.3`, and
+`description` is 1–512 characters. Add `tools = ["twice"]` to promise exactly the
+tools you define; with that list, a tool you forgot to declare or a declared tool
+you removed both stop the load. Edit the list in the same step that adds or removes
+a tool: the loader compares it with what the repository defines. `repo_create`
+writes a starter file, so edit it when the repository's purpose or tools change.
+
+`BAN_TOOLS`, in the same directory, lists tool names you may not define, one per
+line. Blank lines are ignored. A banned name you define, or declare in the
+manifest, stops the load. A refused load keeps the previous version: if only the
+files were wrong, the tools you already have still work; if the code was
+re-imported before the refusal, a child process has already replaced the old one,
+so calls fail until a load succeeds. Fix the file and load again either way.
+
 Write a tool as a top-level `@tool` function in any module of the package. A
 module defining several tools is fine, and so are helper modules; imported tools
 from elsewhere are not registered. Use typed parameters, a descriptive

@@ -319,8 +319,10 @@ class JITHarnessExtension(AgentExtension):
         async def repo_create(repo: str) -> RepoResult:
             """Create this session's tool repository, a Python package on disk, and return its path.
 
-            An existing repository is returned unchanged. Write modules into the
-            path with your file tools, then call repo_load.
+            An existing repository is returned as it is; if it has no MANIFEST, a starter
+            one is written. A new one carries a starter MANIFEST too; edit it as the
+            repository grows, and add BAN_TOOLS to forbid tool names. Write modules into
+            the path with your file tools, then call repo_load.
 
             Args:
                 repo: Directory name, 1–64 letters, digits, underscores, or hyphens.
@@ -341,13 +343,14 @@ class JITHarnessExtension(AgentExtension):
             Not loaded yet: imports every module and registers each tool. Already loaded: imports
             nothing again unless a Python file changed, and just returns the tools and notes. The
             notes are the Markdown files under resources/, listed with kind, description and path;
-            open one with your file tools when its description fits the task.
+            open one with your file tools when its description fits the task. A repository whose
+            MANIFEST or BAN_TOOLS rules it out is refused with the reasons.
 
             Snippet:
                 repo_load()
 
             Guidelines:
-                - Call after every edit; a failed load keeps the previous version and names the file and line.
+                - Call after every edit; a failed load keeps the previous version and names the file and line, or the declaration it rejects.
                 - Call it first in a resumed session to see which tools and notes already exist.
             """
             return harness.load_repo()

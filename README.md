@@ -179,7 +179,8 @@ The model writes it with the file tools it already has and calls `repo_load`. Th
 harness imports the package, registers every `@tool`, and lists the notes with
 their kind, description and path; the model opens a note itself when it applies.
 Calling `repo_load` again is harmless and imports nothing unless a Python file
-changed.
+changed. A repository loads only when its `MANIFEST` declares its name, version
+and description; `repo_create` writes a starter one.
 Both Responses and Chat Completions are supported on function-calling models.
 
 ```python
@@ -206,7 +207,7 @@ resumed session finds its tools again; the files are the saved state. Tool code
 can call other loaded tools directly through `harness`, so one model call can
 loop over dozens of tool calls while only the final result enters the
 conversation. A failed reload keeps the previous version and reports the file and
-line. Session-local profiling records call counts, latency, and input/output
+line, or the declaration it rejects. Session-local profiling records call counts, latency, and input/output
 character sizes, and LRU-bounded recent errors. `profile_tools` gives the model a
 short summary of them for any tool, its own or the application's (success rate,
 time, output size, latest errors), so it can decide whether to fix, drop, or build

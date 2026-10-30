@@ -54,6 +54,7 @@ def repository(tmp_path: Path) -> Path:
     root = tmp_path / "kit"
     root.mkdir()
     (root / "__init__.py").write_text("")
+    (root / "MANIFEST").write_text('name = "kit"\nversion = "0.1.0"\ndescription = "Doubling."\n')
     (root / "tools.py").write_text(
         "from zett_agent.tools.base import tool\n\n"
         '@tool(guidelines="Double it.")\ndef double(value: int) -> int:\n'

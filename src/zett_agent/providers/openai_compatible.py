@@ -55,6 +55,7 @@ from ..messages import (
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
     DEFAULT_TIMEOUT_OPTIONS,
+    CacheMode,
     ModelEvent,
     ModelRequest,
     ModelResponse,
@@ -565,7 +566,7 @@ class OpenAICompatibleProvider(RetryingProvider):
             fields["temperature"] = self.temperature
         if request.tool_choice:
             fields["tool_choice"] = {"type": "function", "function": {"name": request.tool_choice}}
-        if self.send_prompt_cache_key and request.cache_key:
+        if self.send_prompt_cache_key and request.cache_key and request.cache_mode is not CacheMode.OFF:
             fields["prompt_cache_key"] = request.cache_key
         if extra_body := {**self.request_fields(request), **self.extra_body}:
             fields["extra_body"] = extra_body

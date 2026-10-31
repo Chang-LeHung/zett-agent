@@ -22,10 +22,12 @@ from .json_types import JsonValue
 from .messages import AnyMessage, AssistantMessage, UserMessage
 from .model import (
     AgentModel,
+    CacheMode,
     ModelUsage,
     ReasoningEffort,
     ServerToolCall,
     ServerToolDefinition,
+    _coerce_cache_mode,
 )
 from .resume import ResumePoint
 from .sync_runtime import SyncMethodsMixin
@@ -52,6 +54,12 @@ class AgentRunConfig:
             reuses session_id, which keeps every step of one conversation on the
             same cached prefix; set it to route several conversations onto one
             prefix instead.
+        cache_mode: How this request may use the provider's prompt cache.
+            ``READ`` reuses a cached prefix without marking this request's new
+            content; ``READ_WRITE`` also extends the cache; ``OFF`` sends no
+            cache directive. Providers that cache automatically have no
+            client-side write control, so they treat ``READ`` and
+            ``READ_WRITE`` alike. See :class:`~zett_agent.model.CacheMode`.
 
     Raises:
         ValueError: If an identity is empty or a session references itself.
@@ -82,6 +90,7 @@ class AgentRunConfig:
     request_id: str | None = None
     parent_session_id: str | None = None
     cache_key: str | None = None
+    cache_mode: CacheMode = CacheMode.READ_WRITE
 
     def __post_init__(self) -> None:
         if self.session_id is not None:
@@ -107,6 +116,9 @@ class AgentRunConfig:
                 object.__setattr__(self, "cache_key", None)
             elif normalized_cache_key != self.cache_key:
                 object.__setattr__(self, "cache_key", normalized_cache_key)
+        cache_mode = _coerce_cache_mode(self.cache_mode)
+        if cache_mode is not self.cache_mode:
+            object.__setattr__(self, "cache_mode", cache_mode)
 
 
 @dataclass(slots=True)

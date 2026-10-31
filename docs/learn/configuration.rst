@@ -113,6 +113,8 @@ For an application that needs to store and reopen the ID, choose it explicitly.
 Sending the same ID twice does not deduplicate work or tool side effects.
 ``parent_session_id`` identifies a delegated conversation, while ``cache_key``
 is a provider cache-routing hint, not history storage or tenant isolation.
+``cache_mode`` controls whether the request may extend the provider's prompt
+cache; see :doc:`providers` for how each adapter maps it.
 See :doc:`sessions` for durable conversations.
 
 Metadata is not a prompt

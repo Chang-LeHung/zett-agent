@@ -27,6 +27,7 @@ from ..json_types import JsonValue
 from ..model import (
     DEFAULT_RETRY_OPTIONS,
     DEFAULT_TIMEOUT_OPTIONS,
+    CacheMode,
     ModelRequest,
     ModelUsage,
     ReasoningEffort,
@@ -212,7 +213,7 @@ class KimiAnthropicProvider(AnthropicCompatibleProvider):
         fields: JsonObject = {}
         if self.model.startswith("kimi-k3") and request.reasoning_effort != ReasoningEffort.OFF:
             fields["output_config"] = {"effort": _k3_effort(request.reasoning_effort)}
-        if self.send_cache_key and request.cache_key:
+        if self.send_cache_key and request.cache_key and request.cache_mode is not CacheMode.OFF:
             fields["metadata"] = {"user_id": request.cache_key}
         return fields
 

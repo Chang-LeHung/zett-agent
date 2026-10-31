@@ -218,6 +218,7 @@ class CompactionExtension(AgentExtension):
                 UserMessage(content="Produce the checkpoint now."),
             ),
             reasoning_effort=reasoning_effort,
+            cache_mode=context.config.cache_mode,
         )
         response: ModelResponse | None = None
         # aclosing needs aclose(); the protocol widens stream to AsyncIterator.

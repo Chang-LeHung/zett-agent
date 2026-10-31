@@ -27,6 +27,7 @@ from zett_agent.messages import (
     UserMessage,
 )
 from zett_agent.model import (
+    CacheMode,
     ModelEvent,
     ModelEventType,
     ModelRequest,
@@ -56,9 +57,9 @@ class Collector(AgentExtension):
             self.events.append(event)
 
 
-def context(messages):
+def context(messages, config=None):
     return AgentRunContext(
-        AgentRunConfig(session_id="test"),
+        config or AgentRunConfig(session_id="test"),
         AgentState(_messages=messages, phase=AgentPhase.READY),
         {},
         (Collector(),),
@@ -127,6 +128,23 @@ async def test_compaction_can_reuse_the_request_model():
     assert model.requests
     assert events[0].type is AgentEventType.COMPACTION_STARTED
     assert events[-1].type is AgentEventType.COMPACTION_COMPLETED
+
+
+async def test_compaction_inherits_the_run_cache_mode():
+    model = SummaryModel()
+    state = context(
+        [
+            UserMessage(content="Old " * 100),
+            AssistantMessage(content="Old answer"),
+            UserMessage(content="Current"),
+        ],
+        AgentRunConfig(session_id="test", cache_mode=CacheMode.OFF),
+    )
+    state.model = model
+
+    await compact(CompactionExtension(max_tokens=1, keep_recent_tokens=1), state)
+
+    assert model.requests[0].cache_mode is CacheMode.OFF
 
 
 @pytest.mark.parametrize("limit,recent", [(100000, 1), (1, 20)])

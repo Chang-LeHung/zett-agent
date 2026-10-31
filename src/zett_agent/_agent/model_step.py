@@ -63,6 +63,7 @@ class ModelStepMixin(AgentContract):
             reasoning_effort=reasoning_effort,
             parallel_tool_call=parallel_tool_call,
             cache_key=context.config.cache_key or context.session_id,
+            cache_mode=context.config.cache_mode,
         )
         await self._notify_before_model(context, request)
         # before_model hooks may add or replace instructions; publish those

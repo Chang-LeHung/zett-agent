@@ -18,6 +18,7 @@ import pytest
 from zett_agent.json_types import JsonValue
 from zett_agent.messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage, UserMessage
 from zett_agent.model import (
+    CacheMode,
     ModelEvent,
     ModelEventType,
     ModelRequest,
@@ -172,6 +173,42 @@ async def test_every_hook_is_called_and_what_it_returns_is_used():
     assert "thinking" not in body  # request_fields replaced the default wholesale
     assert (response.usage.input_tokens, response.usage.output_tokens) == (70, 30)
     assert response.stop.reason is StopReason.MAX_OUTPUT
+
+
+class TwoCacheHooks(AnthropicCompatibleProvider):
+    """Record which cache hook the request mode dispatches to."""
+
+    provider_name = "two-cache-hooks"
+
+    def __init__(self, transport) -> None:
+        super().__init__(model="m", api_key="k", base_url="https://hooks.example", transport=transport)
+        self.calls: list[str] = []
+
+    def mark_cache(self, body: JsonObject, client_tools: list[JsonObject]) -> None:
+        self.calls.append("mark_cache")
+        body["system"] = "full"
+
+    def mark_stable_cache(self, body: JsonObject, client_tools: list[JsonObject]) -> None:
+        self.calls.append("mark_stable_cache")
+        body["system"] = "stable"
+
+
+async def test_cache_mode_dispatches_to_the_matching_cache_hook():
+    for mode, calls, system in (
+        (CacheMode.READ, ["mark_stable_cache"], "stable"),
+        (CacheMode.READ_WRITE, ["mark_cache"], "full"),
+        (CacheMode.OFF, [], None),
+    ):
+        wire = Wire(answer())
+        provider = TwoCacheHooks(wire.transport)
+
+        await run(provider, cache_mode=mode)
+
+        assert provider.calls == calls, mode
+        if system is None:
+            assert "system" not in wire.sent(), mode
+        else:
+            assert wire.sent()["system"] == system, mode
 
 
 async def test_a_subclass_can_turn_an_http_failure_into_its_own_error():
@@ -396,6 +433,14 @@ async def test_kimi_sends_no_thinking_field_and_no_message_level_cache_marker():
 async def test_kimi_cache_key_can_be_withheld():
     wire = Wire(answer())
     await run(KimiAnthropicProvider("kimi-k3", "k", transport=wire.transport, send_cache_key=False), cache_key="s-1")
+    assert "metadata" not in wire.sent()
+
+
+async def test_kimi_off_mode_withholds_the_cache_key():
+    wire = Wire(answer())
+    await run(
+        KimiAnthropicProvider("kimi-k3", "k", transport=wire.transport), cache_key="s-1", cache_mode=CacheMode.OFF
+    )
     assert "metadata" not in wire.sent()
 
 

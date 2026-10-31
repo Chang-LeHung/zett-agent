@@ -9,6 +9,7 @@ for assertions.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any
 
 import httpx
@@ -32,6 +33,7 @@ from zett_agent.messages import (
     UserMessage,
 )
 from zett_agent.model import (
+    CacheMode,
     ModelEventType,
     ModelRequest,
     ModelUsage,
@@ -164,6 +166,20 @@ async def test_openai_chat_can_suppress_the_prompt_cache_key() -> None:
     await _collect(provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42")))
 
     assert "prompt_cache_key" not in captured["body"]
+
+
+@pytest.mark.parametrize(
+    "mode, present", [(CacheMode.READ, True), (CacheMode.READ_WRITE, True), (CacheMode.OFF, False)]
+)
+async def test_openai_chat_cache_mode_controls_the_routing_key(mode, present) -> None:
+    captured, transport = _chat_capture()
+    provider = OpenAIProvider(model="gpt-4o", api_key="sk-test", transport=transport)
+
+    await _collect(
+        provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42", cache_mode=mode))
+    )
+
+    assert ("prompt_cache_key" in captured["body"]) is present
 
 
 async def test_deepseek_chat_routes_on_the_cache_key_only_when_asked() -> None:
@@ -761,6 +777,7 @@ async def test_anthropic_provider_streams_text_and_tool_use() -> None:
     assert "input_schema" in captured["body"]["tools"][0]
     assert captured["body"]["tools"][0]["cache_control"] == {"type": "ephemeral"}
     assert "cache_control" not in captured["body"]["messages"][0]["content"][0]
+    assert json.dumps(captured["body"]).count("cache_control") == 3
     # display is left unset: the API documents summarized as its default. The level travels as an
     # effort, not as a token budget, so max_tokens is the configured value.
     assert captured["body"]["thinking"] == {"type": "adaptive"}
@@ -811,6 +828,46 @@ async def test_anthropic_provider_can_disable_prompt_cache() -> None:
 
     assert captured["body"]["system"] == "Be concise."
     assert "cache_control" not in json.dumps(captured["body"])
+
+
+@pytest.mark.parametrize("mode", [CacheMode.READ, CacheMode.OFF])
+async def test_anthropic_provider_cache_mode_narrows_the_breakpoints(mode) -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            content=_anthropic_sse_body(
+                [
+                    {"type": "message_start", "message": {"id": "msg_1", "usage": {"input_tokens": 5}}},
+                    {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+                    {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hi"}},
+                    {"type": "content_block_stop", "index": 0},
+                    {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+                    {"type": "message_stop"},
+                ]
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    provider = AnthropicProvider(
+        model="claude-3-5-sonnet",
+        api_key="sk-ant",
+        base_url="https://api.anthropic.com",
+        transport=_mock_transport(handler),
+    )
+    await _collect(provider.stream(replace(_request_with_text_and_tools(), cache_mode=mode)))
+
+    body = captured["body"]
+    if mode is CacheMode.OFF:
+        assert "cache_control" not in json.dumps(body)
+    else:
+        # Exactly the stable prefix stays readable; the new turn is not marked.
+        assert json.dumps(body).count("cache_control") == 2
+        assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
+        assert body["tools"][0]["cache_control"] == {"type": "ephemeral"}
+        assert "cache_control" not in body["messages"][-1]["content"][-1]
 
 
 async def test_anthropic_provider_streams_thinking_delta() -> None:

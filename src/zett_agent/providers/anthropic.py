@@ -28,7 +28,8 @@ class AnthropicProvider(AnthropicCompatibleProvider):
         prompt_cache: Mark cache breakpoints on the tool definitions, the system
             prompt, and the conversation so far. Anthropic caches only what a
             marker asks for, so disabling this trades prompt-cache reads for a
-            payload without ``cache_control``.
+            payload without ``cache_control``. A request's ``cache_mode`` can
+            narrow this to the stable tool and system prefix.
         max_tokens: Output budget for one response, thinking included. A tool
             call that writes a large file must fit in it: a response cut off by
             this limit leaves the call's JSON incomplete, and the model is then

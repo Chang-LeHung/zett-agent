@@ -169,8 +169,8 @@ msgid "Reuse ``session_id`` to address the same conversation. Omit ``config`` to
 msgstr "复用 ``session_id`` 即可指向同一个对话。省略 ``config`` 会使用创建客户端时选定的会话；如果你从未指定过，运行时会生成一个 UUIDv7 ID，可以在事件流中通过 ``event.session_id`` 读取。如果应用需要存储并重新打开这个 ID，请显式选定它。"
 
 #: ../../learn/configuration.rst:112
-msgid "``request_id`` is an application correlation ID, **not an idempotency key**. Sending the same ID twice does not deduplicate work or tool side effects. ``parent_session_id`` identifies a delegated conversation, while ``cache_key`` is a provider cache-routing hint, not history storage or tenant isolation. See :doc:`sessions` for durable conversations."
-msgstr "``request_id`` 是应用层的关联 ID，**而不是幂等键**\\ 。同一个 ID 发送两次不会对工作或工具副作用去重。\\ ``parent_session_id`` 标识被委派的对话，而 ``cache_key`` 只是提供商缓存路由的提示，既不是历史记录存储，也不是租户隔离。关于持久对话，参见 :doc:`sessions`\\ 。"
+msgid "``request_id`` is an application correlation ID, **not an idempotency key**. Sending the same ID twice does not deduplicate work or tool side effects. ``parent_session_id`` identifies a delegated conversation, while ``cache_key`` is a provider cache-routing hint, not history storage or tenant isolation. ``cache_mode`` controls whether the request may extend the provider's prompt cache; see :doc:`providers` for how each adapter maps it. See :doc:`sessions` for durable conversations."
+msgstr "``request_id`` 是应用层的关联 ID，**而不是幂等键**\\ 。同一个 ID 发送两次不会对工作或工具副作用去重。\\ ``parent_session_id`` 标识被委派的对话，而 ``cache_key`` 只是提供商缓存路由的提示，既不是历史记录存储，也不是租户隔离。\\ ``cache_mode`` 控制该请求是否可以扩展提供商的提示缓存；各适配器如何映射见 :doc:`providers`\\ 。关于持久对话，参见 :doc:`sessions`\\ 。"
 
 #: ../../learn/configuration.rst:119
 msgid "Metadata is not a prompt"

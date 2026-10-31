@@ -61,8 +61,8 @@ msgid "Raise on transport/protocol failure; do not disguise failure as a success
 msgstr "传输或协议失败时请抛出异常；不要把失败伪装成成功的空回答。"
 
 #: ../../extending/model-adapter.rst:56
-msgid "ModelRequest contains the complete context for this step. Support the applicable message roles and typed image parts explicitly. AgentMessage is internal input, not assistant output; built-in adapters map it to user input for vendor APIs. Declare :attr:`~zett_agent.model.ModelRequest.cache_key` to the endpoint when its protocol caches prompt prefixes; the OpenAI adapter sends it as ``prompt_cache_key`` on both of its protocols."
-msgstr "ModelRequest 包含这一步所需的完整上下文。请显式支持适用的消息角色和带类型的图像部分。AgentMessage 是内部输入，不是助手输出；内置适配器会把它映射成面向厂商 API 的用户输入。如果端点协议会缓存提示词前缀，请把\\ :attr:`~zett_agent.model.ModelRequest.cache_key`\\ 声明给它；OpenAI 适配器在它的两种协议上都会把它作为 ``prompt_cache_key``\\ 发送。"
+msgid "ModelRequest contains the complete context for this step. Support the applicable message roles and typed image parts explicitly. AgentMessage is internal input, not assistant output; built-in adapters map it to user input for vendor APIs. Declare :attr:`~zett_agent.model.ModelRequest.cache_key` to the endpoint when its protocol caches prompt prefixes; the OpenAI adapter sends it as ``prompt_cache_key`` on both of its protocols. Honor :attr:`~zett_agent.model.ModelRequest.cache_mode` where the protocol allows it: ``OFF`` sends no routing key and no cache markers, ``READ`` marks only the stable prefix where explicit breakpoints exist, and ``READ_WRITE`` extends the cache. Protocols with automatic caching may ignore the mode; document that limitation instead of pretending to control server-side writes."
+msgstr "ModelRequest 包含这一步所需的完整上下文。请显式支持适用的消息角色和带类型的图像部分。AgentMessage 是内部输入，不是助手输出；内置适配器会把它映射成面向厂商 API 的用户输入。如果端点协议会缓存提示词前缀，请把\\ :attr:`~zett_agent.model.ModelRequest.cache_key`\\ 声明给它；OpenAI 适配器在它的两种协议上都会把它作为 ``prompt_cache_key``\\ 发送。在协议允许的地方请遵循 :attr:`~zett_agent.model.ModelRequest.cache_mode`\\ ：\\ ``OFF`` 不发送路由键，也不发送缓存标记；\\ ``READ`` 只标记存在显式断点的稳定前缀；\\ ``READ_WRITE`` 则扩展缓存。采用自动缓存的协议可以忽略该模式；请记录这一限制，而不要假装能控制服务端写入。"
 
 #: ../../extending/model-adapter.rst:64
 msgid "Tool calls and usage"

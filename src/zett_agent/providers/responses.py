@@ -29,6 +29,7 @@ from ..messages import (
     UserMessage,
 )
 from ..model import (
+    CacheMode,
     ModelEvent,
     ModelRequest,
     ModelResponse,
@@ -238,7 +239,7 @@ def responses_request(
         # chain of thought when it is requested, and the replayed reasoning items are worthless
         # without it.
         fields["include"] = ["reasoning.encrypted_content"]
-    if send_prompt_cache_key and request.cache_key:
+    if send_prompt_cache_key and request.cache_key and request.cache_mode is not CacheMode.OFF:
         fields["prompt_cache_key"] = request.cache_key
     if extra_body:
         fields["extra_body"] = dict(extra_body)

@@ -11,6 +11,7 @@ way :mod:`~zett_agent.providers.openai_compatible` does for Chat Completions::
         |    vendor_headers()        headers the service wants on every request
         |    request_fields()        reasoning and output-budget fields of this request
         |    mark_cache()            where, and whether, to put cache markers
+        |    mark_stable_cache()     the stable prefix alone, for CacheMode.READ
         |    start_usage()           token counts at the start of the response
         |    finish_usage()          token counts at its end
         |    message_stop()          why the response ended
@@ -50,6 +51,7 @@ from ..model import (
     DEFAULT_RETRY_OPTIONS,
     DEFAULT_TIMEOUT_OPTIONS,
     NOT_REPORTED_STATUS,
+    CacheMode,
     ModelEvent,
     ModelRequest,
     ModelResponse,
@@ -423,6 +425,7 @@ class AnthropicCompatibleProvider(RetryingProvider):
     * :meth:`vendor_headers` -- headers sent on every request.
     * :meth:`request_fields` -- the reasoning and output-budget fields of one request.
     * :meth:`mark_cache` -- cache markers.
+    * :meth:`mark_stable_cache` -- the stable tool and system prefix used by ``CacheMode.READ``.
     * :meth:`start_usage` and :meth:`finish_usage` -- token counts.
     * :meth:`message_stop` -- why the response ended.
     * :meth:`status_error` -- what an HTTP failure means.
@@ -443,6 +446,7 @@ class AnthropicCompatibleProvider(RetryingProvider):
         timeout: How long the provider may stay silent before the request is given up on. See
             :class:`~zett_agent.model.TimeoutOptions`.
         prompt_cache: Mark cache breakpoints, for a service that reads them. Off by default.
+            A request's ``cache_mode`` can narrow this to the stable prefix or turn it off.
         max_tokens: Output budget for one response. Thinking is paid out of it.
         extra_headers: HTTP headers sent on every request after the adapter's own.
         extra_query: URL query parameters sent on every request.
@@ -551,7 +555,25 @@ class AnthropicCompatibleProvider(RetryingProvider):
         definitions, the whole system prompt, and the conversation so far. Anthropic caches only
         what a ``cache_control`` marker asks for, then reads each cached prefix at a fraction of the
         input price. A prefix shorter than the model's minimum cacheable length is ignored silently.
-        Nothing is marked unless ``prompt_cache`` is on.
+        Nothing is marked unless ``prompt_cache`` is on. Called only for ``CacheMode.READ_WRITE``;
+        ``CacheMode.READ`` calls :meth:`mark_stable_cache` instead.
+        """
+        if not self.prompt_cache:
+            return
+        self.mark_stable_cache(body, client_tools)
+        messages = body.get("messages")
+        if isinstance(messages, list) and messages and isinstance(last := messages[-1], dict):
+            content = last.get("content")
+            if isinstance(content, list) and content and isinstance(final := content[-1], dict):
+                final["cache_control"] = {"type": "ephemeral"}
+
+    def mark_stable_cache(self, body: JsonObject, client_tools: list[JsonObject]) -> None:
+        """Mark only the stable tool and system prefix, for ``CacheMode.READ``.
+
+        Override this hook when a service needs different stable-prefix markers. The base version
+        marks the last loaded tool definition and the system prompt, and nothing newer; the newest
+        turn is left unmarked so a one-off request can reuse a warm prefix without writing its new
+        content.
         """
         if not self.prompt_cache:
             return
@@ -563,11 +585,6 @@ class AnthropicCompatibleProvider(RetryingProvider):
         system = body.get("system")
         if isinstance(system, str) and system:
             body["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
-        messages = body.get("messages")
-        if isinstance(messages, list) and messages and isinstance(last := messages[-1], dict):
-            content = last.get("content")
-            if isinstance(content, list) and content and isinstance(final := content[-1], dict):
-                final["cache_control"] = {"type": "ephemeral"}
 
     def start_usage(self, usage: Mapping[str, JsonValue]) -> ModelUsage:
         """Read the ``usage`` object of the ``message_start`` event.
@@ -662,7 +679,10 @@ class AnthropicCompatibleProvider(RetryingProvider):
             }
         elif not request.parallel_tool_call and (request.tools or request.server_tools):
             body["tool_choice"] = {"type": "auto", "disable_parallel_tool_use": True}
-        self.mark_cache(body, client_tools)
+        if request.cache_mode is CacheMode.READ:
+            self.mark_stable_cache(body, client_tools)
+        elif request.cache_mode is CacheMode.READ_WRITE:
+            self.mark_cache(body, client_tools)
         return body
 
     def _forget_thinking(self, error: AnthropicError, body: JsonObject) -> bool:

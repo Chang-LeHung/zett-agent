@@ -456,6 +456,11 @@ hook does when it is not overridden:
    * - ``status_error``
      - The service explains an HTTP failure in a body of its own.
 
+``mark_stable_cache`` is the narrower hook that ``CacheMode.READ`` calls. Override
+it when the service's stable prefix needs different markers; the default marks
+the last loaded tool and the system prompt. If you override ``mark_cache``,
+override this hook too, or ``READ`` falls back to the base markers.
+
 Two class attributes cover the rest: ``bearer_auth = True`` also sends the key as
 ``Authorization: Bearer``, for a service that takes only that, and
 ``native_deferred_tools`` stays ``False`` unless the service itself loads a
@@ -685,6 +690,17 @@ conversations onto one prefix, or construct a provider with
 OpenAI sends the key by default. DeepSeek omits it by default because its
 first-party service caches automatically; enable it only for a gateway that
 expects it. Other adapters may not expose cache routing.
+
+``cache_mode`` on the run narrows what one request may cache. ``CacheMode.READ``
+reuses a cached prefix without marking this request's new content for caching;
+``READ_WRITE`` (the default) also extends the cache to the conversation so far;
+``OFF`` sends no cache directive. Anthropic has explicit breakpoints, so
+``READ`` there marks the tool and system prefix but not the newest turn.
+OpenAI-style endpoints cache automatically and have no client-side write
+control: ``READ`` and ``READ_WRITE`` behave the same, and ``OFF`` only suppresses
+``prompt_cache_key``. Google caches automatically and ignores the mode. No
+provider offers strictly read-only cache access: a warm prefix is read without
+writing, but a cold prefix is written on a miss.
 
 When a provider reports cache hits, ``ModelUsage.cache_read_tokens`` and
 ``cache_hit_rate`` expose them. Requests through gateways that translate

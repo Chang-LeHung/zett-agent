@@ -59,7 +59,12 @@ message roles and typed image parts explicitly. AgentMessage is internal input,
 not assistant output; built-in adapters map it to user input for vendor APIs.
 Declare :attr:`~zett_agent.model.ModelRequest.cache_key` to the endpoint when its
 protocol caches prompt prefixes; the OpenAI adapter sends it as
-``prompt_cache_key`` on both of its protocols.
+``prompt_cache_key`` on both of its protocols. Honor
+:attr:`~zett_agent.model.ModelRequest.cache_mode` where the protocol allows it:
+``OFF`` sends no routing key and no cache markers, ``READ`` marks only the
+stable prefix where explicit breakpoints exist, and ``READ_WRITE`` extends the
+cache. Protocols with automatic caching may ignore the mode; document that
+limitation instead of pretending to control server-side writes.
 
 Tool calls and usage
 ------------------------

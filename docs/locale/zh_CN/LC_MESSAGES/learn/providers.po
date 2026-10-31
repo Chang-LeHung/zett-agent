@@ -792,6 +792,15 @@ msgstr "``message_stop``"
 msgid "The service has stop reasons of its own."
 msgstr "服务有自己专用的停止原因。"
 
+#: ../../learn/providers.rst:455
+msgid ""
+"``mark_stable_cache`` is the narrower hook that ``CacheMode.READ`` calls. "
+"Override it when the service's stable prefix needs different markers; the "
+"default marks the last loaded tool and the system prompt. If you override "
+"``mark_cache``, override this hook too, or ``READ`` falls back to the base "
+"markers."
+msgstr "``mark_stable_cache`` 是 ``CacheMode.READ`` 调用的更窄钩子。当服务端的稳定前缀需要不同的标记时覆盖它；默认会标记最后一个加载的工具和 system prompt。如果覆盖了\\ ``mark_cache``\\ ，也请覆盖这个钩子，否则 ``READ`` 会退回基础标记。"
+
 #: ../../learn/providers.rst:459
 msgid ""
 "Two class attributes cover the rest: ``bearer_auth = True`` also sends "
@@ -1194,6 +1203,20 @@ msgid ""
 msgstr "OpenAI 默认会发送该键。DeepSeek 默认省略它，因为其自有服务会自动缓存；只有网关需要时才应启用。其他适配器可能不提供缓存路由。"
 
 #: ../../learn/providers.rst:689
+msgid ""
+"``cache_mode`` on the run narrows what one request may cache. "
+"``CacheMode.READ`` reuses a cached prefix without marking this request's new "
+"content for caching; ``READ_WRITE`` (the default) also extends the cache to "
+"the conversation so far; ``OFF`` sends no cache directive. Anthropic has "
+"explicit breakpoints, so ``READ`` there marks the tool and system prefix but "
+"not the newest turn. OpenAI-style endpoints cache automatically and have no "
+"client-side write control: ``READ`` and ``READ_WRITE`` behave the same, and "
+"``OFF`` only suppresses ``prompt_cache_key``. Google caches automatically and "
+"ignores the mode. No provider offers strictly read-only cache access: a warm "
+"prefix is read without writing, but a cold prefix is written on a miss."
+msgstr "运行配置里的 ``cache_mode`` 可以收窄单个请求允许使用缓存的范围。\\ ``CacheMode.READ`` 复用已缓存的前缀，但不把本次请求的新内容标记为缓存；``READ_WRITE``\\ （默认值）还会把缓存扩展到当前对话；``OFF`` 不发送任何缓存指令。Anthropic 使用显式断点，因此 ``READ`` 只标记工具和 system 前缀，不标记最新一轮。OpenAI 风格的端点会自动缓存，客户端无法控制写入：``READ`` 与 ``READ_WRITE`` 行为相同，``OFF`` 只会省略 ``prompt_cache_key``\\ 。Google 自动缓存并忽略该模式。没有提供商提供严格只读的缓存访问：前缀已暖时只读不写，但前缀未命中时仍会写入。"
+
+#: ../../learn/providers.rst:699
 msgid ""
 "When a provider reports cache hits, ``ModelUsage.cache_read_tokens`` and "
 "``cache_hit_rate`` expose them. Requests through gateways that translate "

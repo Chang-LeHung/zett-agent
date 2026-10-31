@@ -26,6 +26,7 @@ from zett_agent.messages import (
     UserMessage,
 )
 from zett_agent.model import (
+    CacheMode,
     ModelEventType,
     ModelRequest,
     ReasoningEffort,
@@ -120,6 +121,16 @@ async def test_openai_responses_can_suppress_the_prompt_cache_key() -> None:
     captured, transport = _responses_capture()
     provider = OpenAIProvider("gpt-5", "key", transport=transport, response=True, send_prompt_cache_key=False)
     request = ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42")
+
+    await _collect(provider.stream(request))
+
+    assert "prompt_cache_key" not in captured["body"]
+
+
+async def test_openai_responses_off_mode_omits_the_prompt_cache_key() -> None:
+    captured, transport = _responses_capture()
+    provider = OpenAIProvider("gpt-5", "key", transport=transport, response=True)
+    request = ModelRequest(messages=(UserMessage(content="Hello"),), cache_key="chat-42", cache_mode=CacheMode.OFF)
 
     await _collect(provider.stream(request))
 

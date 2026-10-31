@@ -27,6 +27,35 @@ class ReasoningEffort(StrEnum):
     ULTRA = "ultra"
 
 
+class CacheMode(StrEnum):
+    """How one request may use the provider's prompt cache.
+
+    ``READ`` reuses a cached prefix without marking this request's new content
+    for caching. ``READ_WRITE`` also extends the cache to the conversation so
+    far. ``OFF`` sends no cache directive at all.
+
+    Adapters map the modes their protocol can express. Providers that cache
+    automatically, such as OpenAI and Google, have no client-side write
+    control: ``READ`` and ``READ_WRITE`` behave the same, and ``OFF`` only
+    suppresses a routing key where one exists. Anthropic marks a stable prefix
+    in ``READ`` mode but can still write that prefix on a cache miss; no
+    provider exposes strictly read-only cache access.
+    """
+
+    OFF = "off"
+    READ = "read"
+    READ_WRITE = "read_write"
+
+
+def _coerce_cache_mode(value: CacheMode | str) -> CacheMode:
+    """Return a cache mode, rejecting a value outside the enum with one message."""
+    try:
+        return CacheMode(value)
+    except ValueError as error:
+        allowed = ", ".join(mode.value for mode in CacheMode)
+        raise ValueError(f"cache_mode must be one of {allowed}") from error
+
+
 @dataclass(frozen=True, slots=True)
 class ToolDefinition:
     """Provider-neutral tool metadata supplied with a model request."""
@@ -228,12 +257,22 @@ class ModelRequest:
     #: ``prompt_cache_key``. None declares no key and leaves routing to the
     #: endpoint.
     cache_key: str | None = None
+    #: How this request may use the provider's prompt cache.
+    #:
+    #: ``READ`` reuses a cached prefix without asking the provider to cache this
+    #: request's new content; ``READ_WRITE`` also extends the cache. ``OFF``
+    #: sends no cache directive. Adapters honor what their protocol exposes;
+    #: see :class:`CacheMode` for the limits.
+    cache_mode: CacheMode = CacheMode.READ_WRITE
 
     def __post_init__(self) -> None:
         if not isinstance(self.parallel_tool_call, bool):
             raise ValueError("parallel_tool_call must be a boolean")
         if self.cache_key is not None and not self.cache_key.strip():
             raise ValueError("cache_key must be a non-empty string when supplied")
+        cache_mode = _coerce_cache_mode(self.cache_mode)
+        if cache_mode is not self.cache_mode:
+            object.__setattr__(self, "cache_mode", cache_mode)
 
 
 @dataclass(frozen=True, slots=True)

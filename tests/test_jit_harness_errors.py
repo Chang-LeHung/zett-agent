@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from jit_support import HEADER, put_tool, seed_repo, write_module
 from zett_agent.agent import Agent, AgentRunConfig, AgentRunContext, AgentState
 from zett_agent.jit_harness import JITHarness, JITHarnessExtension, ToolCallStatus, ToolErrorRecord, ToolErrorReport
-from zett_agent.messages import AssistantMessage, ToolCall, ToolMessage
+from zett_agent.messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage
 from zett_agent.model import ModelEvent, ModelResponse, RetryOptions
 from zett_agent.tools.base import tool
 
@@ -373,7 +373,9 @@ async def test_model_diagnoses_a_failure_and_repairs_the_repository_without_auto
             offered = {definition.name for definition in request.tools}
             assert {"repo_create", "repo_load", "repo_unload", "put", "value"} <= offered
             assert "inspect_tool_errors" not in offered and "update_tool" not in offered
-            assert "repo_load" in request.messages[0].content
+            assert request.messages[0].content == "APP INSTRUCTIONS"
+            assert "repo_load" in request.messages[1].content
+            assert sum(isinstance(message, SystemMessage) for message in request.messages) == 2
             if index == 0:
                 message = AssistantMessage(tool_calls=(ToolCall("bad", "value", {}),))
             elif index == 1:
@@ -392,7 +394,7 @@ async def test_model_diagnoses_a_failure_and_repairs_the_repository_without_auto
             steps.append(request)
             yield ModelEvent.completed(ModelResponse(message))
 
-    agent = await Agent.create(Model(), tools=[put], extensions=[jit])
+    agent = await Agent.create(Model(), tools=[put], extensions=[jit], system_prompt="APP INSTRUCTIONS")
     assert (await agent.run("repair the failed tool", config=AgentRunConfig("one"))).content == "fixed"
     harness = jit.get_harness("one")
     assert harness.profile("value").stats[0].call_count == 2

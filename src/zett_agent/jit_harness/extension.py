@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
@@ -14,7 +14,7 @@ from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType, AgentPhase
 from ..extensions.base import AgentExtension, ModelRequestNext, ToolCallNext
 from ..extensions.events import ExtensionEvent, PhaseTransitionEvent, RunCancelledEvent
-from ..messages import AssistantMessage, SystemMessage, ToolCall, ToolMessage
+from ..messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage
 from ..model import ModelEvent, ModelRequest
 from ..tools.base import AgentTool, ToolExecutionMode, ToolResult, render_tool_guidance, tool
 from .enums import ToolOrigin
@@ -32,6 +32,23 @@ _GUIDANCE_KEY = "jit_harness:guidance"
 #: already publishes TOOL_STARTED/TOOL_COMPLETED when the model requests them.
 _OBSERVED_ORIGINS = (ToolOrigin.MANAGEMENT, ToolOrigin.PYTHON)
 _INSTRUCTIONS = files("zett_agent.jit_harness").joinpath("instructions.md").read_text(encoding="utf-8")
+
+
+def _system_section_end(messages: Sequence[AnyMessage]) -> int:
+    """Return the index just past the leading run of system instructions.
+
+    Guidance belongs inside that run, after the request's leading system
+    instructions and before the first dialogue message. A system message that
+    appears later in the history stays where it is: only the leading run is the
+    request's system section. The caller separately drops stale guidance wherever
+    it sits.
+    """
+    index = 0
+    for message in messages:
+        if not isinstance(message, SystemMessage):
+            break
+        index += 1
+    return index
 
 
 class JITToolStartedEvent(AgentEvent):
@@ -392,7 +409,7 @@ class JITHarnessExtension(AgentExtension):
     async def on_model_request(
         self, context: AgentRunContext, request: ModelRequest, call_next: ModelRequestNext
     ) -> AsyncIterator[ModelEvent]:
-        """Render current guidance afresh, without persisting stale definitions."""
+        """Place current guidance after the request's leading system instructions and before dialogue."""
         harness = self.get_harness(context.session_id)
         harness.sync_tools(context)
         # Preserve a caller's request-level tool subset; synchronization must
@@ -424,7 +441,11 @@ class JITHarnessExtension(AgentExtension):
                 persist=False,
                 attributes={_GUIDANCE_KEY: True},
             )
-            filtered = replace(request, messages=(instructions, *messages))
+            # Close the leading system run before the dialogue. The application's
+            # own instructions stay first, and the block stays out of the
+            # persisted history.
+            index = _system_section_end(messages)
+            filtered = replace(request, messages=(*messages[:index], instructions, *messages[index:]))
         async with aclosing_stream(call_next(filtered)) as events:
             async for event in events:
                 yield event
@@ -433,8 +454,10 @@ class JITHarnessExtension(AgentExtension):
         """Assemble the prompt block: instructions, this session's repository, tool guidance.
 
         The repository line tells a resumed session where its tools already live,
-        so the model need not rediscover the path. Tool guidance stays last so the
-        stable instruction prefix remains cacheable between requests.
+        so the model need not rediscover the path. The block follows the request's
+        leading system instructions, and tool guidance stays last inside the
+        block, so providers that join system texts in order keep the stable
+        instructions at the front of the joined prompt.
         """
         parts = [_INSTRUCTIONS]
         if (path := harness.repo_path) is not None:

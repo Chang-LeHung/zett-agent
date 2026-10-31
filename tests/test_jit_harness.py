@@ -816,7 +816,12 @@ async def test_forget_active_session_and_policy_filtered_guidance(tmp_path):
 
     assert [event async for event in extension.on_model_request(ctx, request, next_)]
     assert "stale" not in "\n".join(item.content for item in recorded[-1].messages)
-    assert "## add" not in recorded[-1].messages[0].content
+    guidance = next(
+        message
+        for message in recorded[-1].messages
+        if isinstance(message, SystemMessage) and message.attributes.get("jit_harness:guidance")
+    )
+    assert "## add" not in guidance.content
     filtered = replace(request, tools=())
     assert [event async for event in extension.on_model_request(ctx, filtered, next_)]
     assert recorded[-1] is filtered

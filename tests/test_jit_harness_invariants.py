@@ -23,7 +23,7 @@ from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
 from zett_agent.jit_harness import JITHarness, JITHarnessExtension
 from zett_agent.jit_harness.repo import MANAGEMENT_NAMES
 from zett_agent.jit_harness.runtime import _BINDING, _CALL_STACK
-from zett_agent.messages import AssistantMessage, SystemMessage, TextContent, ToolCall, ToolMessage
+from zett_agent.messages import AssistantMessage, SystemMessage, TextContent, ToolCall, ToolMessage, UserMessage
 from zett_agent.model import ModelEvent, ModelRequest, ModelResponse, RetryOptions
 from zett_agent.tools.base import _SYNC_TOOL_RUNNER, current_tool_call_id, tool
 
@@ -951,8 +951,10 @@ def test_a_module_body_cannot_dispatch_a_tool_while_it_loads(make_harness):
 async def test_dynamic_guidance_has_only_current_definitions_and_never_mutates_input_request(tmp_path):
     jit = JITHarnessExtension(tmp_path)
     ctx = context(add)
+    ctx.add_message(SystemMessage(content="APPLICATION INSTRUCTIONS"))
     await jit.on_tool(ctx)
     await ToolGuidelinesExtension().on_state(ctx)
+    ctx.add_message(UserMessage(content="go"))
     harness = jit.get_harness("invariants")
     recorded = []
     source = PURE_SOURCE.replace("Compose exact addition.", "FIRST_VERSION_GUIDANCE")
@@ -968,14 +970,16 @@ async def test_dynamic_guidance_has_only_current_definitions_and_never_mutates_i
         assert [event async for event in jit.on_model_request(ctx, request, next_)]
         assert request.messages is before and ctx.state.messages == before
         emitted = recorded[-1]
-        assert (
-            sum(
-                isinstance(item, SystemMessage) and item.attributes.get("jit_harness:guidance", False)
-                for item in emitted.messages
-            )
-            == 1
-        )
-        assert not emitted.messages[0].persist
+        guidance_positions = [
+            index
+            for index, item in enumerate(emitted.messages)
+            if isinstance(item, SystemMessage) and item.attributes.get("jit_harness:guidance", False)
+        ]
+        # After every application system message, before the dialogue.
+        assert guidance_positions == [1]
+        assert emitted.messages[0].content == "APPLICATION INSTRUCTIONS"
+        assert isinstance(emitted.messages[2], UserMessage)
+        assert not emitted.messages[guidance_positions[0]].persist
         return "\n".join(item.content for item in emitted.messages if isinstance(item, SystemMessage))
 
     try:
@@ -998,6 +1002,47 @@ async def test_dynamic_guidance_has_only_current_definitions_and_never_mutates_i
         harness.load_tool("twice")
         assert "SECOND_VERSION_GUIDANCE" in await render()
         assert "SECOND_VERSION_GUIDANCE" not in "\n".join(item.content for item in ctx.state.messages)
+    finally:
+        jit._request_finished(ctx)
+        close_sessions(jit, "invariants")
+
+
+async def test_guidance_closes_the_leading_system_run_and_leaves_later_instructions(tmp_path):
+    """A system message after the dialogue must not pull the block into the dialogue."""
+    jit = JITHarnessExtension(tmp_path)
+    ctx = context(add)
+    await jit.on_tool(ctx)
+    late = SystemMessage(content="LATE INSTRUCTION")
+    request = ModelRequest(
+        messages=(
+            SystemMessage(content="FIRST"),
+            SystemMessage(content="SECOND"),
+            UserMessage(content="go"),
+            late,
+            UserMessage(content="again"),
+        ),
+        tools=tuple(item.definition for item in ctx.tools.values()),
+    )
+    recorded = []
+
+    async def next_(request):
+        recorded.append(request)
+        yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done")))
+
+    try:
+        assert [event async for event in jit.on_model_request(ctx, request, next_)]
+        messages = recorded[-1].messages
+        guidance = [
+            index
+            for index, item in enumerate(messages)
+            if isinstance(item, SystemMessage) and item.attributes.get("jit_harness:guidance")
+        ]
+        # Counting every system message would insert at 3: after `go`, immediately
+        # above `late`, i.e. inside the dialogue.
+        assert guidance == [2]
+        assert isinstance(messages[3], UserMessage)
+        assert messages[3].content == "go"
+        assert messages[4] is late
     finally:
         jit._request_finished(ctx)
         close_sessions(jit, "invariants")

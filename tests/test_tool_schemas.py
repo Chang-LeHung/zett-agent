@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Annotated, Literal
 
 import pytest
 from pydantic import BaseModel, Field, create_model
 
-from zett_agent.tools.base import _inline_schema_references, tool
+from zett_agent.tools.base import _inline_schema_references, _strip_schema_keywords, tool
 
 
 class Leaf(BaseModel):
@@ -83,11 +84,91 @@ def assert_self_contained(schema: dict) -> None:
     assert "#/$defs/" not in text
 
 
-def test_flat_schemas_are_untouched():
+def test_a_flat_schema_keeps_its_properties_and_loses_pydantic_titles():
     schema = flat.parameters
     assert_self_contained(schema)
-    assert schema["properties"]["name"] == {"title": "Name", "type": "string"}
+    # The only thing removed is pydantic's auto title, which repeats the key.
+    assert schema["properties"]["name"] == {"type": "string"}
     assert schema["required"] == ["name"]
+    # The model's own ``title`` goes too, while the object keywords stay.
+    assert "title" not in schema
+    assert schema["additionalProperties"] is False
+
+
+class Chapter(BaseModel):
+    title: str
+    pages: int
+    summary: str | None = None
+
+
+@tool(guidelines="Accept a title argument.")
+def titled(title: str, body: str) -> int:
+    """Store a title."""
+    return 0
+
+
+@tool(guidelines="Accept a chapter.")
+def chapter(chapter: Chapter) -> int:
+    """Accept one chapter."""
+    return 0
+
+
+@tool(guidelines="Accept a documented title.")
+def documented_title(title: str) -> int:
+    """Store a title.
+
+    Args:
+        title: The name to show.
+    """
+    return 0
+
+
+def test_a_property_named_title_is_kept_as_a_name():
+    schema = titled.parameters
+    assert set(schema["properties"]) == {"title", "body"}
+    assert schema["properties"]["title"] == {"type": "string"}
+    assert schema["required"] == ["title", "body"]
+
+
+def test_a_documented_property_named_title_keeps_its_description():
+    # The docstring merge addresses one property by name; a name-aware strip is what
+    # keeps it from raising ``KeyError`` here.
+    assert documented_title.parameters["properties"]["title"] == {
+        "type": "string",
+        "description": "The name to show.",
+    }
+
+
+def test_a_nested_model_keeps_a_field_named_title():
+    chapter_schema = chapter.parameters["properties"]["chapter"]
+    assert set(chapter_schema["properties"]) == {"title", "pages", "summary"}
+    assert chapter_schema["required"] == ["title", "pages"]
+    assert chapter_schema["properties"]["title"] == {"type": "string"}
+    assert "title" not in chapter_schema
+
+
+def test_an_explicit_field_title_is_dropped_and_the_description_keeps_the_meaning():
+    @tool(guidelines="Accept a titled argument.")
+    def explicit(name: str = Field(title="Display name", description="The name to show.")) -> int:
+        """Store a name."""
+        return 0
+
+    # After ``model_json_schema`` an author's ``title`` and pydantic's automatic one
+    # look alike, so the runtime drops both and the description carries the meaning.
+    assert explicit.parameters["properties"]["name"] == {"type": "string", "description": "The name to show."}
+
+
+def test_union_and_enum_branches_lose_only_the_title_annotation():
+    @tool(guidelines="Accept a choice.")
+    def chosen(kind: Literal["a", "b"], extra: str | None = None) -> int:
+        """Pick one."""
+        return 0
+
+    kind = chosen.parameters["properties"]["kind"]
+    assert kind == {"enum": ["a", "b"], "type": "string"}
+    # A branch of ``anyOf`` is a schema, so the strip reaches inside it too.
+    extra = chosen.parameters["properties"]["extra"]
+    assert extra == {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}
 
 
 def test_deeply_nested_models_are_expanded_at_every_position():
@@ -163,3 +244,53 @@ def test_mutually_recursive_models_are_rejected():
         def cycle(start: Ping) -> int:
             """Follow a cycle."""
             return 0
+
+
+def test_the_strip_walks_applicator_schemas_and_leaves_names_and_data_alone():
+    schema = {
+        "title": "ToolInput",
+        "properties": {"title": {"title": "Title", "type": "string"}},
+        "$defs": {"Title": {"title": "Title", "type": "object"}},
+        "dependentSchemas": {"title": {"title": "Title", "required": ["title"]}},
+        "dependencies": {"title": {"title": "Title"}, "other": ["a", "b"]},
+        "items": {"title": "Item", "type": "integer"},
+        # ``additionalItems`` is a single schema: only ``items`` may hold a list in
+        # draft-07, and the case at the end of this test covers that list form.
+        "additionalItems": {"title": "Extra", "type": "boolean"},
+        "prefixItems": [{"title": "First", "type": "string"}, {"title": "Second", "type": "integer"}],
+        "anyOf": [{"title": "A", "type": "string"}],
+        "allOf": [{"title": "B", "type": "integer"}],
+        "propertyNames": {"title": "Name", "pattern": "^[a-z]+$"},
+        "if": {"title": "If", "required": ["a"]},
+        "then": {"title": "Then", "required": ["b"]},
+        "additionalProperties": False,
+        "examples": [{"title": "data, not an annotation"}],
+    }
+
+    before = deepcopy(schema)
+    assert _strip_schema_keywords(schema, {"title"}) == {
+        "properties": {"title": {"type": "string"}},
+        "$defs": {"Title": {"type": "object"}},
+        "dependentSchemas": {"title": {"required": ["title"]}},
+        "dependencies": {"title": {}, "other": ["a", "b"]},
+        "items": {"type": "integer"},
+        "additionalItems": {"type": "boolean"},
+        "prefixItems": [{"type": "string"}, {"type": "integer"}],
+        "anyOf": [{"type": "string"}],
+        "allOf": [{"type": "integer"}],
+        "propertyNames": {"pattern": "^[a-z]+$"},
+        "if": {"required": ["a"]},
+        "then": {"required": ["b"]},
+        "additionalProperties": False,
+        "examples": [{"title": "data, not an annotation"}],
+    }
+    # The walk copies schema nodes and leaves the input untouched, while data values
+    # stay the caller's own objects.
+    assert schema == before
+    stripped = _strip_schema_keywords(schema, {"title"})
+    assert stripped["examples"] is schema["examples"]
+
+    # Draft-07 also allows a list of schemas directly under ``items``.
+    assert _strip_schema_keywords({"items": [{"title": "Left", "type": "string"}]}, {"title"}) == {
+        "items": [{"type": "string"}]
+    }

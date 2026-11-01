@@ -3,11 +3,11 @@
 import asyncio
 import inspect
 import json
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, ParamSpec, Protocol, TypeVar, get_type_hints, overload
+from typing import Any, ParamSpec, Protocol, TypeVar, cast, get_type_hints, overload
 
 from .._compat import StrEnum, TypeAliasType
 from ..model import ToolDefinition
@@ -315,7 +315,7 @@ def _build_input_schema(
         __module__=getattr(function, "__module__", __name__),
         **fields,
     )
-    parameters = _inline_schema_references(inputs.model_json_schema())
+    parameters = _strip_schema_keywords(_inline_schema_references(inputs.model_json_schema()), _TITLE_KEYWORDS)
     unknown_parameters = documentation.parameter_descriptions.keys() - fields.keys()
     if unknown_parameters:
         unknown = ", ".join(sorted(unknown_parameters))
@@ -387,8 +387,9 @@ def _build_return_schema(hints: Mapping[str, Any]) -> dict[str, Any] | None:
     way of failing to describe it ends in None rather than in an error that would keep
     a working tool from being registered: no return annotation, an annotation Pydantic
     cannot build a schema for, a recursive model the inliner refuses, or a schema with
-    nothing in it (``-> object`` and ``-> Any`` describe nothing). Titles are dropped
-    because they cost prompt tokens on every request and say only the class name.
+    nothing in it (``-> object`` and ``-> Any`` describe nothing). Title annotations
+    are dropped because they cost prompt tokens on every request and say only the
+    class name; a field named ``title`` is a name and stays.
     """
     hint = hints.get("return")
     if hint is None:
@@ -396,24 +397,81 @@ def _build_return_schema(hints: Mapping[str, Any]) -> dict[str, Any] | None:
     from pydantic import TypeAdapter
 
     try:
-        schema = _without_titles(TypeAdapter(hint).json_schema())
+        schema = TypeAdapter(hint).json_schema()
     except Exception:  # an annotation pydantic cannot describe is simply no hint
         return None
     if not schema:
         return None
     try:
-        return _inline_schema_references(schema)
+        return _strip_schema_keywords(_inline_schema_references(schema), _TITLE_KEYWORDS)
     except Exception:  # a recursive model cannot be inlined, and the return is optional
         return None
 
 
-def _without_titles(value: Any) -> Any:
-    """Drop ``title`` keys from a schema, keeping every other field."""
-    if isinstance(value, Mapping):
-        return {key: _without_titles(item) for key, item in value.items() if key != "title"}
-    if isinstance(value, list):
-        return [_without_titles(item) for item in value]
-    return value
+# JSON Schema applicator keywords whose value holds sub-schemas: one, a list of them,
+# or a map of them keyed by names. The walk decides how to descend by the value's own
+# shape, so a keyword stays in one set no matter whether a draft lets it hold a single
+# schema, a list, or both. The keys of a name map are property, definition, or schema
+# names, so the walk recurses into their values instead of filtering their keys.
+# ``dependencies`` also accepts a list of property names, which ``clean`` passes through,
+# and ``dependentRequired`` maps names to names, so it holds no annotations at all.
+_NAME_MAPS = frozenset({"properties", "patternProperties", "dependentSchemas", "$defs", "definitions", "dependencies"})
+_SUBSCHEMA_KEYWORDS = frozenset(
+    {
+        "items",
+        "additionalItems",
+        "unevaluatedItems",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "not",
+        "if",
+        "then",
+        "else",
+        "contains",
+        "propertyNames",
+        "contentSchema",
+        "anyOf",
+        "oneOf",
+        "allOf",
+        "prefixItems",
+    }
+)
+# Pydantic titles every model and property with the name the property already has as
+# its key, so the annotation repeats the contract instead of adding to it.
+_TITLE_KEYWORDS = frozenset({"title"})
+
+
+def _strip_schema_keywords(schema: Mapping[str, Any], keywords: Collection[str]) -> dict[str, Any]:
+    """Drop annotation keywords from a schema while keeping every name it declares.
+
+    Pydantic titles every model and property with its own name, and a model sees the
+    property name as the argument's key already, so ``title`` only costs prompt tokens.
+    A property *called* ``title`` is a name, not an annotation: it survives with its
+    own entry, and only the ``title`` annotation beside it goes. The caller owns
+    ``keywords`` because MCP schemas also carry a ``$schema`` URL to drop.
+
+    Schema nodes are copied; data values such as ``examples``, ``enum``, and
+    ``required`` are shared with the input.
+    """
+
+    def clean(node: Any) -> Any:
+        if not isinstance(node, Mapping):
+            return node
+        result: dict[str, Any] = {}
+        for key, value in node.items():
+            if key in keywords:
+                continue
+            if key in _NAME_MAPS and isinstance(value, Mapping):
+                result[key] = {name: clean(child) for name, child in value.items()}
+            elif key in _SUBSCHEMA_KEYWORDS:
+                # One keyword holds a single schema in some drafts and a list of them in
+                # others, so the value's shape picks the descent.
+                result[key] = [clean(item) for item in value] if isinstance(value, list) else clean(value)
+            else:
+                result[key] = value
+        return result
+
+    return cast(dict[str, Any], clean(schema))
 
 
 @overload

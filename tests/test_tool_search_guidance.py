@@ -30,8 +30,8 @@ async def stock_lookup(sku: str) -> str:
     return sku
 
 
-SNIPPET = 'Snippet:\n- stock_lookup(sku="A1")'
-GUIDELINES = "Guidelines:\n- Use for stock questions."
+SNIPPET = 'stock_lookup(sku="A1")'
+GUIDELINES = "Use for stock questions."
 
 CASES = [
     # (guidelines extension options, expected parts of the deferred description)
@@ -47,7 +47,7 @@ CASES = [
 
 
 def expected(snippet: bool, guidelines: bool) -> str:
-    return "\n\n".join(["Look up stock.", *([SNIPPET] if snippet else []), *([GUIDELINES] if guidelines else [])])
+    return " ".join(["Look up stock.", *([SNIPPET] if snippet else []), *([GUIDELINES] if guidelines else [])])
 
 
 @pytest.mark.parametrize("guidelines_first", [True, False])
@@ -73,7 +73,7 @@ async def test_anthropic_deferred_description_follows_the_guidelines_extension(
     assert declared["stock_lookup"]["description"] == expected(snippet, guidelines)
     assert declared["stock_lookup"]["defer_loading"] is True
     # The guidance appears once, whichever extension rewrote the request first.
-    assert declared["stock_lookup"]["description"].count("Guidelines:") == int(guidelines)
+    assert declared["stock_lookup"]["description"].count("Use for stock questions.") == int(guidelines)
     # Deferred guidance never leaks into the system prompt, where the tool is not callable yet.
     system = server.bodies[0].get("system") or []
     assert "stock_lookup" not in "".join(block["text"] for block in system)

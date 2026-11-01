@@ -618,15 +618,25 @@ def render_tool_description(
     Some endpoints show the model only a tool's ``description``, and a deferred
     tool reaches the model through tool search with no system prompt beside it.
     Folding the guidance into the description keeps it next to the tool in both
-    cases. The result is the plain description when the tool has nothing to add,
-    so it is safe to call for every tool.
+    cases.
+
+    The result keeps the guidance on one line of plain prose: no section
+    headings, no bullets, and no line breaks. Snippet lines follow the
+    description as call shapes, and each guideline follows as a sentence, all
+    separated by spaces. A guideline gets a full stop unless it already ends
+    with sentence punctuation; text ending in a CJK ideograph or kana gets
+    ``。`` instead of ``.``.
+    When ``base`` already spans lines, as a tool-search catalog does, the
+    guidance starts on its own line instead of continuing the base's last one,
+    and the base keeps its formatting. The result is the plain description when
+    the tool has nothing to add, so it is safe to call for every tool.
 
     Args:
         tool: Tool whose metadata is rendered.
-        snippet: Include the ``Snippet`` section when the tool has one.
-        guidelines: Include the ``Guidelines`` section when the tool has any.
-        returns: Add the tool's return value schema to the snippet section.
-        base: Text to put the sections after, instead of ``tool.description``.
+        snippet: Include the tool's snippet when it has one.
+        guidelines: Include the tool's guidelines when it has any.
+        returns: Add the tool's return value schema after the snippet.
+        base: Text to put before the guidance, instead of ``tool.description``.
             Extensions that each add to a request's descriptions pass the text
             they received, so one does not overwrite what another appended.
 
@@ -635,15 +645,44 @@ def render_tool_description(
 
             text = render_tool_description(read_file)
     """
-    sections = [tool.description if base is None else base]
+    head = (tool.description if base is None else base).rstrip()
+    guidance_parts = []
     if snippet and (tool.snippet or (returns and tool.return_schema is not None)):
-        bullets = [f"- {line}" for line in tool.snippet.splitlines() if line.strip()]
+        calls = [line.strip() for line in tool.snippet.splitlines() if line.strip()]
         if returns and tool.return_schema is not None:
-            bullets.append(f"- returns {_schema_text(tool.return_schema)}")
-        sections.append("Snippet:\n" + "\n".join(bullets))
+            calls.append(f"returns {_schema_text(tool.return_schema)}")
+        if calls:
+            guidance_parts.append(" ".join(calls))
     if guidelines and tool.guidelines:
-        sections.append("Guidelines:\n" + "\n".join(f"- {guideline}" for guideline in tool.guidelines))
-    return "\n\n".join(sections)
+        guidance_parts.append(" ".join(_as_sentence(guideline) for guideline in tool.guidelines))
+    guidance = " ".join(guidance_parts)
+    if not head:
+        return guidance
+    if not guidance:
+        return head
+    return ("\n" if "\n" in head else " ").join((head, guidance))
+
+
+#: Characters that may follow a sentence's final punctuation and must not attract another stop.
+_CLOSERS = ")]}\"'”’）】」』》〉〕｝"
+_SENTENCE_ENDINGS = (".", "!", "?", "。", "！", "？", "…")
+
+
+def _as_sentence(guideline: str) -> str:
+    """End one guideline like a sentence, without doubling its punctuation or breaking the line."""
+    text = " ".join(guideline.split())
+    core = text.rstrip(_CLOSERS)
+    if core.endswith(_SENTENCE_ENDINGS):
+        return text
+    return f"{text}{'。' if _is_cjk(core[-1:]) else '.'}"
+
+
+def _is_cjk(text: str) -> bool:
+    """Whether the last character is a CJK ideograph or kana, whose prose ends with ``。``."""
+    if not text:
+        return False
+    character = text[-1]
+    return "\u3400" <= character <= "\u9fff" or "\u3040" <= character <= "\u30ff"
 
 
 def render_tool_search_text(tool: AgentTool) -> str:

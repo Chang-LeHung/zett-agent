@@ -18,7 +18,10 @@ class ToolGuidancePlacement(StrEnum):
 
     #: Two sections of the system instructions: ``# Tool snippets`` and ``# Tool guidelines``.
     SYSTEM_PROMPT = "system_prompt"
-    #: Appended to each tool's own ``description`` in the request's tool definitions.
+    #: Appended to each tool's own ``description`` as one line of plain prose:
+    #: snippet call shapes followed by guideline sentences, with no headings or
+    #: bullets. When the description already spans lines, the guidance starts on
+    #: a new line instead of continuing the last one.
     DESCRIPTION = "description"
 
 
@@ -29,9 +32,12 @@ class ToolGuidelinesExtension(AgentExtension):
     can scan every call shape first. Set ``placement`` to
     :attr:`ToolGuidancePlacement.DESCRIPTION` to attach each tool's snippet and
     guidelines to that tool's own description instead; the system prompt then
-    carries nothing. Use it for endpoints and gateways that surface only tool
-    definitions, or when the guidance should travel with the tool wherever the
-    definition goes.
+    carries nothing. There the guidance stays one line of prose: snippet lines
+    appear as bare call shapes and guidelines as sentences, with no headings or
+    bullets. A description that already spans lines, such as the tool-search
+    catalog, keeps its own formatting and gets the guidance on a new line.
+    Use it for endpoints and gateways that surface only tool definitions, or
+    when the guidance should travel with the tool wherever the definition goes.
 
     Tools marked ``deferred=True`` are skipped in both modes: their definitions
     reach the model through tool search, so rendering their guidance would

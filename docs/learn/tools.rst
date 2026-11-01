@@ -47,6 +47,14 @@ description instead, which suits endpoints that surface only tool definitions:
 
    guidance = ToolGuidelinesExtension(placement=ToolGuidancePlacement.DESCRIPTION)
 
+In that mode the guidance forms one line of prose: no ``Snippet:`` or
+``Guidelines:`` labels, no bullets, and no line breaks of its own. Snippet lines
+appear as bare call shapes, and each guideline follows as a sentence, all
+separated by spaces. A full stop is added unless the guideline already ends with
+sentence punctuation; text ending in a CJK ideograph or kana gets
+``。``. A description that already spans lines, such as the tool-search catalog,
+keeps its formatting and receives the guidance on a new line.
+
 ``snippets=False`` or ``guidelines=False`` drops either part in both modes.
 Only the request sent to the provider changes; registered tools and stored
 history stay as they are.

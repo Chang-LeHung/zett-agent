@@ -127,13 +127,17 @@ async def test_the_catalog_and_tool_guidelines_combine_in_every_placement_and_or
     own_guidance = "Use to discover deferred tools that are not listed in the tool definitions."
     assert (own_guidance in search) is (guidance_placement is IN_DESCRIPTION)
     assert (own_guidance in system) is (guidance_placement is IN_SYSTEM)
-    assert descriptions["echo"].count("Guidelines:") == int(guidance_placement is IN_DESCRIPTION)
+    assert descriptions["echo"].count("Use to repeat text.") == int(guidance_placement is IN_DESCRIPTION)
     # One extension never discards what the other wrote: both sit in the same description.
     if catalog_placement is SEARCH and guidance_placement is IN_DESCRIPTION:
         assert (
             search.count("Searchable tools (not loaded yet") == 1
-            and search.count("Guidelines:\n- Use to discover") == 1
+            and search.count("Use to discover deferred tools that are not listed in the tool definitions.") == 1
         )
+        # The search tool's guidance must not continue the catalog's last bullet,
+        # where a model would read it as part of that deferred tool's rule.
+        assert "  - Use for invoices. tool_search(" not in search
+        assert "  - Use for invoices. Use to discover" not in search
     # Tool guidelines still skips deferred tools, so their rules appear once, in the catalog.
     if catalog_placement is not NONE:
         assert (search + system).count("- Check the SKU format first.") == 1
@@ -154,7 +158,7 @@ async def test_catalog_switches_are_independent_of_the_tool_guidelines_switches(
     )
 
     assert "Check the SKU format first." in search and "snippet:" not in search
-    assert "Guidelines:" not in descriptions["echo"]
+    assert "Use to repeat text." not in descriptions["echo"]
 
 
 async def test_the_returns_switch_reaches_a_deferred_tools_description():
@@ -252,7 +256,7 @@ def test_render_tool_catalog_formats_multiline_descriptions_and_handles_no_tools
 def test_render_tool_description_builds_on_a_supplied_base():
     text = render_tool_description(stock_lookup, base="Prefix.")
 
-    assert text.startswith("Prefix.\n\nSnippet:") and "Look up stock." not in text
+    assert text == 'Prefix. stock_lookup(sku="A1") Use for stock. Check the SKU format first.'
 
 
 def test_the_placement_is_validated():

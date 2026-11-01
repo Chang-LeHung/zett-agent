@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Zett Agent \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-01 16:27+0800\n"
+"POT-Creation-Date: 2026-11-01 20:59+0800\n"
 "PO-Revision-Date: 2026-10-26 00:00+0800\n"
 "Last-Translator: Zett Agent contributors\n"
 "Language: zh_CN\n"
@@ -49,143 +49,147 @@ msgid "By default :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesE
 msgstr "默认情况下，:class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` 会把每个工具的 snippet 和 guidelines 写入系统指令。传入 ``placement=ToolGuidancePlacement.DESCRIPTION`` 则会把它们追加到每个工具自己的描述里，适合只展示工具定义的端点："
 
 #: ../../learn/tools.rst:50
+msgid "In that mode the guidance forms one line of prose: no ``Snippet:`` or ``Guidelines:`` labels, no bullets, and no line breaks of its own. Snippet lines appear as bare call shapes, and each guideline follows as a sentence, all separated by spaces. A full stop is added unless the guideline already ends with sentence punctuation; text ending in a CJK ideograph or kana gets ``。``. A description that already spans lines, such as the tool-search catalog, keeps its formatting and receives the guidance on a new line."
+msgstr "在该模式下，guidance 形成一行纯文本：没有 ``Snippet:`` 或 ``Guidelines:`` 标签，没有项目符号，也不会自己引入换行。snippet 的各行以裸调用形式出现，每条 guideline 作为一句话跟在后面，全部用空格分隔。除非 guideline 已以句末标点结尾，否则会补上句号；以 CJK 表意文字或假名结尾的文本则使用全角的 ``。`` 作为句号。本身已跨行的 description（例如 tool search 的目录）保持原有格式，guidance 另起一行。"
+
+#: ../../learn/tools.rst:58
 msgid "``snippets=False`` or ``guidelines=False`` drops either part in both modes. Only the request sent to the provider changes; registered tools and stored history stay as they are."
 msgstr "``snippets=False`` 或 ``guidelines=False`` 会在两种模式下去掉相应的部分。只有发送给提供商的请求会改变；已注册的工具和已保存的历史保持原样。"
 
-#: ../../learn/tools.rst:54
+#: ../../learn/tools.rst:62
 msgid "A tool's return annotation is described as JSON Schema and kept on the tool, but it is not shown by default: most tools return text the model reads directly. ``returns=True`` adds one line after each snippet, so the model knows the shape before it calls:"
 msgstr "工具的返回注解会被描述成 JSON Schema 并保存在工具上，但默认不会展示：大多数工具返回的是模型直接阅读的文本。\\ ``returns=True``\\ 会在每个 snippet 之后加一行，让模型在调用之前就知道返回值的结构："
 
-#: ../../learn/tools.rst:68
+#: ../../learn/tools.rst:76
 msgid "The schema belongs to the snippets section, so ``snippets=False`` removes it too. A function without a return annotation, or with one Pydantic cannot describe, simply has no such line, and nothing validates a result against the schema."
 msgstr "schema 属于 snippets 段，所以 ``snippets=False``\\ 也会把它一并去掉。函数没有返回注解，或者注解无法被 Pydantic 描述时，就不会有这一行；也不会有任何逻辑用这个 schema 去校验结果。"
 
-#: ../../learn/tools.rst:74
+#: ../../learn/tools.rst:82
 msgid "Design arguments the model can supply"
 msgstr "设计模型可提供的参数"
 
-#: ../../learn/tools.rst:76
+#: ../../learn/tools.rst:84
 msgid "Every parameter needs a type annotation. Named positional-or-keyword and keyword-only parameters work; positional-only arguments, ``*args``, and ``**kwargs`` do not. Defaults make arguments optional, and Pydantic-supported types such as ``Literal``, lists, and nested models can express constraints."
 msgstr "每个参数都需要类型注解。支持具名的位置或关键字参数以及仅限关键字的参数；不支持仅限位置的参数、``*args`` 和 ``**kwargs``\\ 。默认值可以让参数变为可选，而 Pydantic 支持的类型（例如 ``Literal``、列表和嵌套模型）可以表达各种约束。"
 
-#: ../../learn/tools.rst:90
+#: ../../learn/tools.rst:98
 msgid "Validation rejects unknown fields and invalid inputs before the function runs, but it follows Pydantic's normal coercion rules rather than guaranteeing strict JSON types. Add explicit constraints or checks when conversions are unsafe. Names must be unique across both static and extension-registered tools. Keep them stable because they are the model-facing API, not just implementation names."
 msgstr "校验会在函数运行之前拒绝未知字段和无效输入，但它遵循 Pydantic 常规的强制转换规则，而不保证严格的 JSON 类型。当转换不安全时，请添加显式约束或检查。名称在静态工具和由扩展注册的工具之间必须唯一。请保持名称稳定，因为它们是对外暴露给模型的 API，而不只是实现层面的名称。"
 
-#: ../../learn/tools.rst:96
+#: ../../learn/tools.rst:104
 msgid "Pydantic's ``title`` annotation never reaches the provider, because the property name is already the key the model fills in. Describe an argument in the docstring's ``Args:`` section, or with ``Field(description=...)``, which travels with the schema; when both are given, ``Args:`` overwrites the field description."
 msgstr "Pydantic 的 ``title`` 注解不会发送给提供商，因为属性名本身就是模型填写时使用的键。请在文档字符串的 ``Args:`` 段中描述参数，或者使用会随 schema 一起发送的 ``Field(description=...)``；两者都给出时，``Args:`` 会覆盖字段描述。"
 
-#: ../../learn/tools.rst:102
+#: ../../learn/tools.rst:110
 msgid "Register it"
 msgstr "注册工具"
 
-#: ../../learn/tools.rst:104
+#: ../../learn/tools.rst:112
 msgid "Pass tools to the client; the model can now request them."
 msgstr "把工具传给客户端，模型现在就能请求它们了。"
 
-#: ../../learn/tools.rst:110
+#: ../../learn/tools.rst:118
 msgid "The model requests the call, the runtime executes it, and the model answers using the result. Run :doc:`../examples/streaming-tools` to watch reasoning, arguments, the result, and the final answer in order."
 msgstr "模型请求调用，运行时执行调用，模型再根据结果作答。运行\\ :doc:`../examples/streaming-tools`，按顺序观察推理、参数、结果和最终回答。"
 
-#: ../../learn/tools.rst:115
+#: ../../learn/tools.rst:123
 msgid "Calling a tool from Python"
 msgstr "从 Python 中调用工具"
 
-#: ../../learn/tools.rst:117
+#: ../../learn/tools.rst:125
 msgid "Decoration returns an :class:`~zett_agent.tools.base.AgentTool`, which is invoked with a mapping of arguments:"
 msgstr "装饰后会返回一个\\ :class:`~zett_agent.tools.base.AgentTool`，调用它时需要传入一个参数映射："
 
-#: ../../learn/tools.rst:124
+#: ../../learn/tools.rst:132
 msgid "Synchronous functions run in a worker thread; ``async def`` tools are awaited on the event loop. Invalid arguments fail schema validation before your code runs."
 msgstr "同步函数在工作线程中运行；``async def`` 工具则在事件循环上被等待执行。无效的参数会在你的代码运行之前就通不过模式校验。"
 
-#: ../../learn/tools.rst:128
+#: ../../learn/tools.rst:136
 msgid "Choose a result type"
 msgstr "选择结果类型"
 
-#: ../../learn/tools.rst:130
+#: ../../learn/tools.rst:138
 msgid "Strings reach the model as plain text without extra JSON quoting."
 msgstr "字符串以纯文本形式到达模型，不带额外的 JSON 引号。"
 
-#: ../../learn/tools.rst:131
+#: ../../learn/tools.rst:139
 msgid "JSON-compatible values, Pydantic models, and dataclasses are serialized to JSON."
 msgstr "兼容 JSON 的值、Pydantic 模型和数据类都会被序列化为 JSON。"
 
-#: ../../learn/tools.rst:132
+#: ../../learn/tools.rst:140
 msgid "``TextContent``, ``ImageContent``, or a nonempty list of these becomes typed multimodal tool content; the selected model must support images."
 msgstr "``TextContent``、``ImageContent`` 或它们的非空列表会变成带类型的多模态工具内容；所选的模型必须支持图像。"
 
-#: ../../learn/tools.rst:135
+#: ../../learn/tools.rst:143
 msgid "Return a useful, bounded result instead of an open file, client object, or arbitrary exception. Include the facts the model needs for its next step, and avoid leaking secrets or returning unnecessarily large data. A return annotation documents the function; the decorator does not enforce an output schema for your result."
 msgstr "请返回有用且大小可控的结果，而不是打开的文件、客户端对象或任意异常。要包含模型下一步所需的事实，并避免泄露密钥或返回不必要的大块数据。返回类型注解只是为函数提供说明；装饰器不会对你的结果强制检查输出模式。"
 
-#: ../../learn/tools.rst:142
+#: ../../learn/tools.rst:150
 msgid "Handle tool failures safely"
 msgstr "安全地处理工具失败"
 
-#: ../../learn/tools.rst:144
+#: ../../learn/tools.rst:152
 msgid "An ordinary exception from a handler or argument validation becomes an unsuccessful ``ToolMessage`` and a ``TOOL_FAILED`` event. The next model call sees ``str(exception)`` and may retry with better arguments or explain the failure. The original exception is available to callbacks and after-tool hooks. Cancellation and other ``BaseException`` subclasses are not converted into recoverable tool results."
 msgstr "处理函数抛出的普通异常，或者参数校验失败，都会变成一个失败的\\ ``ToolMessage``\\ 和一个\\ ``TOOL_FAILED``\\ 事件。下一次模型调用会看到\\ ``str(exception)``，并可能用更好的参数重试，或者解释失败原因。原始异常可以在回调和工具执行后的钩子中获取。取消操作以及其他\\ ``BaseException``\\ 子类不会被转换成可恢复的工具结果。"
 
-#: ../../learn/tools.rst:151
+#: ../../learn/tools.rst:159
 msgid "A call whose arguments the provider could not decode, usually because the response was cut off, never reaches the handler. ``ToolCall.error`` holds the reason and the model receives it as a failed result, so it can retry."
 msgstr "如果模型提供商无法解码某次调用的参数（通常是因为响应被截断），这次调用就永远不会到达处理函数。\\ ``ToolCall.error`` 中保存着原因，模型会把它作为失败的结果收到，因此可以重试。"
 
-#: ../../learn/tools.rst:155
+#: ../../learn/tools.rst:163
 #, python-brace-format
 msgid "Direct Python calls such as ``await add({...})`` still raise the exception. Sanitize integration errors yourself: exception text from a tool can expose credentials, paths, or service responses to the model. An exception in a ``before_tool`` lifecycle hook fails the whole request; use tool middleware when you want a recoverable rejection. See :doc:`../extending/middleware`."
 msgstr "直接使用 Python 调用（例如\\ ``await add({...})``）仍然会抛出异常。集成错误需要你自己清理：来自工具的异常文本可能把凭据、路径或服务响应暴露给模型。\\ ``before_tool``\\ 生命周期钩子中抛出的异常会让整个请求失败；如果你希望拒绝时可以恢复，请使用工具中间件。参见\\ :doc:`../extending/middleware`\\ 。"
 
-#: ../../learn/tools.rst:162
+#: ../../learn/tools.rst:170
 msgid "Control concurrent execution"
 msgstr "控制并发执行"
 
-#: ../../learn/tools.rst:164
+#: ../../learn/tools.rst:172
 msgid "Tools default to ``ToolExecutionMode.PARALLEL``. A model response with several parallel tools can execute them concurrently; their result events arrive as each handler finishes. For an operation that needs exclusive local execution, mark it serial:"
 msgstr "工具默认使用\\ ``ToolExecutionMode.PARALLEL``\\ 。如果一个模型响应中包含多个可并行执行的工具，它们就可以并发执行；每个处理函数完成后，对应的事件就会到达。对于需要在本地独占执行的操作，把它标记为串行："
 
-#: ../../learn/tools.rst:181
+#: ../../learn/tools.rst:189
 msgid "The runtime finishes the parallel batch before running serial tools one at a time. ``SERIAL`` is not a global lock across sessions or workers. To preserve the model's call order for the whole response, set ``parallel_tool_call=False`` on the agent or request. Shared mutable resources still need application-level synchronization and authorization."
 msgstr "运行时会先完成这一批并行调用，然后逐个运行串行工具。\\ ``SERIAL``\\ 不是跨会话或跨工作进程的全局锁。如果要让整个响应都保持模型的调用顺序，请在智能体或请求上设置\\ ``parallel_tool_call=False``\\ 。共享的可变资源仍然需要应用层面的同步和授权。"
 
-#: ../../learn/tools.rst:188
+#: ../../learn/tools.rst:196
 msgid "Filesystem and shell tools"
 msgstr "文件系统工具与 shell 工具"
 
-#: ../../learn/tools.rst:190
+#: ../../learn/tools.rst:198
 msgid "``FileSystemExtension(read_only=True)`` adds ``read_file``, ``view_image``, ``glob``, and ``grep``. Writable mode also adds ``write_file``, ``edit``, and ``delete_file``; ``CodingExtension`` adds ``bash``, whose ``timeout_seconds`` defaults to 60."
 msgstr "``FileSystemExtension(read_only=True)`` 会添加 ``read_file``、``view_image``、``glob`` 和 ``grep``\\ 。可写模式还会添加 ``write_file``、``edit`` 和 ``delete_file``；``CodingExtension`` 会添加 ``bash``，其 ``timeout_seconds`` 默认为 60。"
 
-#: ../../learn/tools.rst:195
+#: ../../learn/tools.rst:203
 msgid "``read_file`` returns UTF-8 text as a line range. The separate ``read`` tool (add it with ``ReadExtension``) does the same for text and also returns a PNG, JPEG, GIF, or WebP file as an image with a one-line description, so one tool covers both. ``view_image`` remains for HTTP(S) image URLs."
 msgstr "``read_file`` 以行范围的形式返回 UTF-8 文本。另一个独立的 ``read`` 工具（通过 ``ReadExtension`` 添加）对文本的处理相同，并且遇到 PNG、JPEG、GIF 或 WebP 文件时会返回图像和一行描述，因此一个工具就能同时处理两种情况。\\ ``view_image`` 仍用于 HTTP(S) 图像 URL。"
 
-#: ../../learn/tools.rst:200
+#: ../../learn/tools.rst:208
 msgid "Each tool also has its own extension, so an application can offer exactly the ones it wants:"
 msgstr "每个工具也有自己的扩展，应用可以只提供自己想要的那些："
 
-#: ../../learn/tools.rst:210
+#: ../../learn/tools.rst:218
 msgid ":class:`~zett_agent.extensions.tool.ToolExtension` wraps any ``@tool`` function the same way."
 msgstr ":class:`~zett_agent.extensions.tool.ToolExtension` 可以用同样的方式封装任何 ``@tool`` 函数。"
 
-#: ../../learn/tools.rst:213
+#: ../../learn/tools.rst:221
 msgid "These tools run with the permissions of your process, relative to its working directory. They are not a security sandbox: restrict the process or container, and add approval rules before enabling write or shell access for untrusted input. Long outputs are bounded so a single command cannot consume the whole context; full output is preserved in a reported file when truncated."
 msgstr "这些工具以你的进程权限运行，路径相对于进程的工作目录。它们不是安全沙箱：请限制进程或容器，并在为非受信任的输入启用写入或 shell 访问之前添加审批规则。过长的输出会受到限制，因此单条命令无法占用整个上下文；被截断时，完整输出会保存在一个会上报给模型的文件中。"
 
-#: ../../learn/tools.rst:220
+#: ../../learn/tools.rst:228
 msgid "Load optional tools on demand"
 msgstr "按需加载可选工具"
 
-#: ../../learn/tools.rst:222
+#: ../../learn/tools.rst:230
 msgid "For a large toolbox, :class:`~zett_agent.extensions.tool_search.ToolSearchExtension` keeps tools marked ``deferred=True`` out of the model's context and lets it search for their definitions. This requires a compatible Responses endpoint or the Anthropic Messages API; ordinary tool calling works with all built-in providers."
 msgstr "对于规模较大的工具集，:class:`~zett_agent.extensions.tool_search.ToolSearchExtension` 会把标记为 ``deferred=True`` 的工具排除在模型上下文之外，并让模型可以搜索它们的定义。这需要兼容的 Responses 端点或 Anthropic Messages API；普通工具调用在所有内置提供商上都能正常工作。"
 
-#: ../../learn/tools.rst:228
+#: ../../learn/tools.rst:236
 msgid "See :doc:`on-demand` for setup, a skill-loading example, and the distinction between loading instructions and executing tools."
 msgstr "关于配置方法、加载技能的示例，以及加载指令和执行工具之间的区别，请参见\\ :doc:`on-demand`\\ 。"
 
-#: ../../learn/tools.rst:231
+#: ../../learn/tools.rst:239
 msgid "Next: :doc:`sessions` to keep the conversation, or :doc:`../extending/first-extension` to register tools dynamically."
 msgstr "下一步：:doc:`sessions`\\ 用于保存对话，或者用\\ :doc:`../extending/first-extension`\\ 动态注册工具。"
 

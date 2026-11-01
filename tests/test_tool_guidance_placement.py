@@ -76,12 +76,10 @@ async def test_description_placement_moves_guidance_into_each_tools_description(
 
     assert "Tool snippets" not in system_text(request) and "Tool guidelines" not in system_text(request)
     assert descriptions(request)["lookup"] == (
-        "Look a key up.\n\n"
-        'Snippet:\n- lookup(key="a")\n- lookup(key="b")\n\n'
-        "Guidelines:\n- Use for lookups.\n- Never guess."
+        'Look a key up. lookup(key="a") lookup(key="b") Use for lookups. Never guess.'
     )
-    # A tool with no snippet only gets the section it has.
-    assert descriptions(request)["bare"] == "Has guidelines but no snippet.\n\nGuidelines:\n- Bare."
+    # A tool with no snippet only gets the guidance it has.
+    assert descriptions(request)["bare"] == "Has guidelines but no snippet. Bare."
 
 
 async def test_description_placement_skips_deferred_tools():
@@ -104,7 +102,8 @@ async def test_each_part_can_be_switched_off_in_either_placement(options, has_sn
     )["lookup"]
     in_system = system_text(await request_for(ToolGuidelinesExtension(**options)))
 
-    assert ("Snippet:" in in_description) is has_snippet and ("Guidelines:" in in_description) is has_guidelines
+    assert ('lookup(key="a")' in in_description) is has_snippet
+    assert ("Use for lookups." in in_description) is has_guidelines
     assert ("# Tool snippets" in in_system) is has_snippet and ("# Tool guidelines" in in_system) is has_guidelines
 
 
@@ -132,8 +131,10 @@ async def test_builtin_tools_carry_their_guidance_in_description_mode():
         CodingExtension(), ToolGuidelinesExtension(placement=ToolGuidancePlacement.DESCRIPTION), tools=()
     )
 
-    assert "Guidelines:" in descriptions(request)["edit"]
-    assert "Read the target lines with read_file first" in descriptions(request)["edit"]
+    description = descriptions(request)["edit"]
+    assert description.startswith(edit.description + " ")
+    assert "Read the target lines with read_file first" in description
+    assert "Guidelines:" not in description and "Snippet:" not in description
     assert "Tool guidelines" not in system_text(request)
 
 
@@ -146,7 +147,8 @@ async def test_plan_mode_keeps_guidance_out_of_the_system_prompt_in_description_
     )
 
     assert "Tool guidelines" not in system_text(request) and "Tool snippets" not in system_text(request)
-    assert "Guidelines:" in descriptions(request)["edit"]
+    assert "Read the target lines with read_file first" in descriptions(request)["edit"]
+    assert "Guidelines:" not in descriptions(request)["edit"]
 
 
 async def test_plan_mode_honors_the_snippet_switch_in_the_system_prompt():
@@ -165,8 +167,74 @@ def test_render_tool_description_is_the_plain_description_when_there_is_nothing_
         return ""
 
     assert render_tool_description(quiet, guidelines=False, snippet=False) == "Quiet."
-    assert render_tool_description(read_file, snippet=False).startswith(read_file.description + "\n\nGuidelines:\n- ")
-    assert "Snippet:\n- read_file(" in render_tool_description(read_file)
+    without_snippet = render_tool_description(read_file, snippet=False)
+    assert without_snippet.startswith(read_file.description + " Use line ranges for large files.")
+    assert "Guidelines:" not in without_snippet and "- " not in without_snippet
+    assert 'read_file(path="src/app.py", start_line=1, line_count=200)' in render_tool_description(read_file)
+
+
+@pytest.mark.parametrize("ending", [".", "!", "?", "。", "！", "？", "…"])
+def test_description_guidelines_keep_their_terminal_punctuation(ending):
+    @tool(guidelines=f"Done{ending}", snippet="")
+    async def punctuated() -> str:
+        """Punctuated."""
+        return ""
+
+    assert render_tool_description(punctuated) == f"Punctuated. Done{ending}"
+
+
+def test_a_guideline_without_a_terminal_mark_gets_one_in_its_script():
+    @tool(guidelines=("No stop", "用于库存查询", "（可选）"), snippet="")
+    async def unstoppable() -> str:
+        """Unstoppable."""
+        return ""
+
+    assert render_tool_description(unstoppable) == "Unstoppable. No stop. 用于库存查询。 （可选）。"
+
+
+@pytest.mark.parametrize(
+    ("guideline", "expected"),
+    [
+        ('Done.")', 'Done.")'),
+        ("「使用。」", "「使用。」"),
+        ("Do it (now.)", "Do it (now.)"),
+        ("(done)", "(done)."),
+        ("한국어", "한국어."),
+    ],
+)
+def test_a_closer_after_a_sentence_mark_does_not_attract_another_stop(guideline, expected):
+    @tool(guidelines=guideline, snippet="")
+    async def one_rule() -> str:
+        """One rule."""
+        return ""
+
+    assert render_tool_description(one_rule) == f"One rule. {expected}"
+
+
+def test_a_rendered_description_has_no_line_breaks():
+    assert "\n" not in render_tool_description(lookup)
+
+
+def test_a_decorator_guideline_with_a_newline_is_collapsed():
+    @tool(guidelines="First rule.\nSecond rule.", snippet="")
+    async def wrapped() -> str:
+        """Wrapped."""
+        return ""
+
+    assert render_tool_description(wrapped) == "Wrapped. First rule. Second rule."
+
+
+def test_guidance_cannot_continue_the_last_line_of_a_multiline_base():
+    assert render_tool_description(lookup, base="Catalog:\n- last rule.") == (
+        'Catalog:\n- last rule.\nlookup(key="a") lookup(key="b") Use for lookups. Never guess.'
+    )
+
+
+def test_an_empty_or_trailing_newline_base_does_not_add_a_leading_space():
+    expected = 'lookup(key="a") lookup(key="b") Use for lookups. Never guess.'
+
+    assert render_tool_description(lookup, base="") == expected
+    assert render_tool_description(lookup, base="Head.\n") == f"Head. {expected}"
 
 
 def test_render_tool_guidance_switches_are_independent():
@@ -203,7 +271,7 @@ def test_a_return_schema_follows_its_snippet_in_the_system_prompt():
 def test_a_return_schema_is_rendered_in_description_placement_too():
     text = render_tool_description(answer, returns=True)
 
-    assert 'Snippet:\n- answer(value=1)\n- returns {"type":"integer"}' in text
+    assert 'answer(value=1) returns {"type":"integer"}' in text
 
 
 def test_a_tool_without_a_return_hint_gains_no_line():

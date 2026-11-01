@@ -174,7 +174,7 @@ async def test_deferred_tool_guidelines_travel_with_the_definition():
     _, server = await run_search_conversation()
 
     declared = {item["name"]: item for item in server.bodies[0]["tools"]}
-    assert "Guidelines:\n- Use for warehouse stock questions." in declared["warehouse_stock"]["description"]
+    assert declared["warehouse_stock"]["description"].endswith("Use for warehouse stock questions.")
     assert declared["warehouse_stock"]["description"].startswith("Look up the stock level of one SKU")
     # A tool that is not deferred keeps its plain description.
     assert declared["echo"]["description"] == "Echo text back."
@@ -192,8 +192,8 @@ async def test_tool_search_composes_with_description_placement():
 
     declared = {item["name"]: item for item in server.bodies[0]["tools"]}
     assert "Snippet:" not in declared["warehouse_stock"]["description"]  # deferred tools carry guidelines only
-    assert declared["warehouse_stock"]["description"].count("Guidelines:") == 1
-    assert "Guidelines:" in declared["tool_search"]["description"]
+    assert declared["warehouse_stock"]["description"].count("Use for warehouse stock questions.") == 1
+    assert "Use to discover deferred tools" in declared["tool_search"]["description"]
 
 
 def test_deferred_and_search_definitions_render_as_anthropic_tools():
@@ -353,4 +353,4 @@ async def test_a_custom_adapter_that_sets_the_flag_gets_deferred_definitions():
     declared = {item.name: item for item in seen[0].tools}
     assert set(declared) == {"echo", "warehouse_stock", "tool_search"}
     assert declared["warehouse_stock"].deferred is True
-    assert "Guidelines:" in declared["warehouse_stock"].description
+    assert "Use for warehouse stock questions." in declared["warehouse_stock"].description

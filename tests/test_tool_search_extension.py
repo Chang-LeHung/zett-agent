@@ -466,7 +466,7 @@ async def test_agent_discovers_and_runs_a_catalog_tool() -> None:
     assert searched["type"] == "tool_search_output"
     assert [candidate["name"] for candidate in searched["tools"]] == ["stock"]
     # A deferred tool's guidelines can only reach the model through this result.
-    assert searched["tools"][0]["description"].endswith("Guidelines:\n- Use for stock questions.")
+    assert searched["tools"][0]["description"].endswith("Use for stock questions.")
     assert requests[2]["input"][-2:] == [
         function,
         {"type": "function_call_output", "call_id": "call_1", "output": "shanghai:42"},

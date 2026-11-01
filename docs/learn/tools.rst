@@ -93,6 +93,11 @@ JSON types. Add explicit constraints or checks when conversions are unsafe.
 Names must be unique across both static and extension-registered tools. Keep
 them stable because they are the model-facing API, not just implementation names.
 
+Pydantic's ``title`` annotation never reaches the provider, because the property
+name is already the key the model fills in. Describe an argument in the
+docstring's ``Args:`` section, or with ``Field(description=...)``, which travels
+with the schema; when both are given, ``Args:`` overwrites the field description.
+
 Register it
 -----------
 

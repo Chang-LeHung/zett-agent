@@ -47,7 +47,12 @@ def test_nested_models_export_a_self_contained_schema():
     assert "$defs" not in schema
     assert "$ref" not in json.dumps(schema)
     order = schema["properties"]["order"]
-    assert order["title"] == "Order"
+    # pydantic titles every model and property with its own name, which only repeats
+    # the argument key the model already sees.
+    assert "title" not in schema
+    assert "title" not in order
+    assert set(order["properties"]) == {"items"}
+    assert set(order["properties"]["items"]["items"]["properties"]) == {"amount"}
     assert order["properties"]["items"]["items"]["properties"]["amount"]["exclusiveMinimum"] == 0
 
 
@@ -360,7 +365,25 @@ def test_a_return_annotation_becomes_a_schema():
     amount = order.return_schema["properties"]["items"]["items"]["properties"]["amount"]
     assert amount["exclusiveMinimum"] == 0
     # pydantic adds a ``title`` for every class; it costs tokens and says nothing.
-    assert "title" not in rendered
+    assert "title" not in order.return_schema
+    assert "title" not in order.return_schema["properties"]["items"]["items"]
+
+
+def test_a_returned_model_keeps_a_field_named_title():
+    class Card(BaseModel):
+        title: str
+        body: str
+
+    @tool(guidelines="Return a card.")
+    def card() -> Card:
+        """Return a card."""
+        return Card(title="One", body="Two")
+
+    assert card.return_schema is not None
+    assert set(card.return_schema["properties"]) == {"title", "body"}
+    assert card.return_schema["properties"]["title"] == {"type": "string"}
+    # The ``title`` annotation that named the model itself is still gone.
+    assert "title" not in card.return_schema
 
 
 def test_a_tool_without_a_return_annotation_says_nothing_about_its_result():

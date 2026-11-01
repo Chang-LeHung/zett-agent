@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 from .._compat import TypeAliasType
 from ..agent import AgentRunContext
 from ..messages import AssistantMessage, SystemMessage
-from ..tools.base import AgentTool
+from ..tools.base import AgentTool, _strip_schema_keywords
 from .base import AgentExtension
 from .events import ExtensionEvent, RunCancelledEvent
 
@@ -653,42 +653,20 @@ async def _collect_tools(client: McpClient) -> tuple[Tool, ...]:
     raise RuntimeError(f"MCP server returned more than {_MAX_TOOL_PAGES} tools/list pages")
 
 
-# JSON Schema keywords whose value is one sub-schema, a list of them, or a map of them.
-_SCHEMA_VALUE = frozenset({"items", "additionalProperties", "not", "if", "then", "else", "contains", "propertyNames"})
-_SCHEMA_LIST = frozenset({"anyOf", "oneOf", "allOf", "prefixItems"})
-_SCHEMA_MAP = frozenset({"properties", "patternProperties", "$defs", "definitions"})
 # Annotations that cost prompt tokens without helping a model fill arguments:
-# `title` merely repeats the property name in prose.
+# `title` merely repeats the property name in prose, and `$schema` is a URL.
 _NOISE_KEYWORDS = frozenset({"$schema", "title"})
 
 
 def _compact_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
-    """Drop schema keywords that only repeat what the model already sees.
+    """Drop the annotations MCP servers repeat on every tool.
 
-    MCP servers generated from typed code (pydantic, zod) attach a ``title`` to
-    every property and a ``$schema`` URL to every tool. Across dozens of tools
-    that is a large block of identical-looking text with no validation value.
-    Property *names* are never touched, only the annotation keywords.
+    Servers generated from typed code (pydantic, zod) attach a ``title`` to every
+    property and a ``$schema`` URL to every tool. Across dozens of tools that is a
+    large block of identical-looking text with no validation value; property names
+    are not annotations and stay as they are.
     """
-
-    def clean(node: Any) -> Any:
-        if not isinstance(node, Mapping):
-            return node
-        result: dict[str, Any] = {}
-        for key, value in node.items():
-            if key in _NOISE_KEYWORDS:
-                continue
-            if key in _SCHEMA_MAP and isinstance(value, Mapping):
-                result[key] = {name: clean(child) for name, child in value.items()}
-            elif key in _SCHEMA_LIST and isinstance(value, list):
-                result[key] = [clean(child) for child in value]
-            elif key in _SCHEMA_VALUE:
-                result[key] = clean(value)
-            else:
-                result[key] = value
-        return result
-
-    return clean(schema)
+    return _strip_schema_keywords(schema, _NOISE_KEYWORDS)
 
 
 def _provider_safe_name(name: str) -> str:

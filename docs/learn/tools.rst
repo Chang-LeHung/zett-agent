@@ -49,7 +49,7 @@ description instead, which suits endpoints that surface only tool definitions:
 
 In that mode the guidance forms one line of prose: no ``Snippet:`` or
 ``Guidelines:`` labels, no bullets, and no line breaks of its own. Snippet lines
-appear as bare call shapes, and each guideline follows as a sentence, all
+appear after ``You can call it as`` and each guideline follows as a sentence, all
 separated by spaces. A full stop is added unless the guideline already ends with
 sentence punctuation; text ending in a CJK ideograph or kana gets
 ``。``. A description that already spans lines, such as the tool-search catalog,
@@ -61,8 +61,8 @@ history stay as they are.
 
 A tool's return annotation is described as JSON Schema and kept on the tool, but
 it is not shown by default: most tools return text the model reads directly.
-``returns=True`` adds one line after each snippet, so the model knows the shape
-before it calls:
+``returns=True`` adds one sentence after each snippet, so the model knows the
+shape before it calls:
 
 .. code-block:: python
 
@@ -70,12 +70,11 @@ before it calls:
 
 .. code-block:: text
 
-   - lookup: lookup(query="zett")
-     returns {"items":{"type":"string"},"type":"array"}
+   - lookup: You can call it as lookup(query="zett"). It returns {"items":{"type":"string"},"type":"array"}.
 
 The schema belongs to the snippets section, so ``snippets=False`` removes it
 too. A function without a return annotation, or with one Pydantic cannot
-describe, simply has no such line, and nothing validates a result against the
+describe, simply has no such sentence, and nothing validates a result against the
 schema.
 
 Design arguments the model can supply

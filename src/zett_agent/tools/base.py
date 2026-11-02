@@ -588,8 +588,8 @@ def render_tool_guidance(
     Snippets are presented together so the model can scan the available call
     shapes first. Guidelines follow in one named group per tool, which avoids
     repeating a tool name for every rule. ``snippets`` and ``guidelines`` switch
-    either section off. ``returns`` adds one line after each snippet describing
-    the tool's return value as JSON Schema; it is off by default, because most
+    either section off. ``returns`` adds one sentence after each snippet saying
+    what the tool returns, as JSON Schema; it is off by default, because most
     tools return plain text the model already reads.
     """
     rendered_snippets = [
@@ -622,10 +622,12 @@ def render_tool_description(
 
     The result keeps the guidance on one line of plain prose: no section
     headings, no bullets, and no line breaks. Snippet lines follow the
-    description as call shapes, and each guideline follows as a sentence, all
-    separated by spaces. A guideline gets a full stop unless it already ends
-    with sentence punctuation; text ending in a CJK ideograph or kana gets
-    ``。`` instead of ``.``.
+    description as call shapes after ``You can call it as``, with every line of a
+    multi-line snippet listed and joined by ``or``, and each guideline follows as
+    a sentence, all separated by spaces. A guideline gets a full stop unless it
+    already ends with sentence punctuation; text ending in a CJK ideograph or
+    kana gets ``。`` instead of ``.``. When ``returns`` is on, one more sentence
+    says what the tool returns.
     When ``base`` already spans lines, as a tool-search catalog does, the
     guidance starts on its own line instead of continuing the base's last one,
     and the base keeps its formatting. The result is the plain description when
@@ -635,7 +637,7 @@ def render_tool_description(
         tool: Tool whose metadata is rendered.
         snippet: Include the tool's snippet when it has one.
         guidelines: Include the tool's guidelines when it has any.
-        returns: Add the tool's return value schema after the snippet.
+        returns: Add one sentence saying what the tool returns, after the snippet.
         base: Text to put before the guidance, instead of ``tool.description``.
             Extensions that each add to a request's descriptions pass the text
             they received, so one does not overwrite what another appended.
@@ -649,10 +651,10 @@ def render_tool_description(
     guidance_parts = []
     if snippet and (tool.snippet or (returns and tool.return_schema is not None)):
         calls = [line.strip() for line in tool.snippet.splitlines() if line.strip()]
-        if returns and tool.return_schema is not None:
-            calls.append(f"returns {_schema_text(tool.return_schema)}")
         if calls:
-            guidance_parts.append(" ".join(calls))
+            guidance_parts.append(f"You can call it as {_or_list(calls)}.")
+        if returns and tool.return_schema is not None:
+            guidance_parts.append(f"It returns {_schema_text(tool.return_schema)}.")
     if guidelines and tool.guidelines:
         guidance_parts.append(" ".join(_as_sentence(guideline) for guideline in tool.guidelines))
     guidance = " ".join(guidance_parts)
@@ -666,6 +668,15 @@ def render_tool_description(
 #: Characters that may follow a sentence's final punctuation and must not attract another stop.
 _CLOSERS = ")]}\"'”’）】」』》〉〕｝"
 _SENTENCE_ENDINGS = (".", "!", "?", "。", "！", "？", "…")
+
+
+def _or_list(items: Sequence[str]) -> str:
+    """Join call shapes the way an English sentence lists alternatives."""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} or {items[1]}"
+    return f"{', '.join(items[:-1])}, or {items[-1]}"
 
 
 def _as_sentence(guideline: str) -> str:
@@ -719,15 +730,18 @@ def _render_tool_snippet(tool: AgentTool, *, returns: bool = False) -> str:
     """Keep every line of a multiline snippet inside its tool bullet.
 
     Blank lines are dropped: a snippet is a handful of call shapes, and the gesture
-    between two of them says nothing to the model.
+    between two of them says nothing to the model. A single shape stays on the tool's
+    line; several are listed one per line, each introduced as a way to call the tool.
+    The return hint is one sentence after them, so its schema cannot run into the
+    next tool's bullet.
     """
     lines = [line for line in tool.snippet.splitlines() if line.strip()]
-    suffix = ""
-    if returns and tool.return_schema is not None:
-        suffix = f"\n  returns {_schema_text(tool.return_schema)}"
-    if len(lines) == 1:
-        return f"- {tool.name}: {lines[0]}{suffix}"
+    hint = f"It returns {_schema_text(tool.return_schema)}." if returns and tool.return_schema is not None else ""
     if not lines:
-        return f"- {tool.name}:{suffix}"
-    body = "\n".join(f"  {line}" for line in lines)
-    return f"- {tool.name}:\n{body}{suffix}"
+        return f"- {tool.name}:" + (f" {hint}" if hint else "")
+    if len(lines) == 1:
+        text = f"- {tool.name}: You can call it as {lines[0]}."
+        return f"{text} {hint}" if hint else text
+    body = "\n".join(f"    {line}" for line in lines)
+    text = f"- {tool.name}:\n  You can call it as:\n{body}"
+    return f"{text}\n  {hint}" if hint else text

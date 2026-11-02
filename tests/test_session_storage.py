@@ -26,15 +26,18 @@ from zett_agent.messages import (
     UserMessage,
 )
 from zett_agent.model import (
+    FIRST_CHUNK_LIMIT,
     ModelEvent,
     ModelResponse,
     ModelUsage,
+    ToolCallDelta,
 )
 from zett_agent.storage import (
     SQLiteSessionStorage,
     decode_messages,
     encode_messages,
 )
+from zett_agent.tools.base import tool
 
 
 @contextmanager
@@ -56,6 +59,11 @@ def sqlite_file(path: Path) -> Iterator[sqlite3.Connection]:
 def table_columns(path: Path, table: str) -> set[str]:
     with sqlite_file(path) as connection:
         return {row[1] for row in connection.execute(f"pragma table_info({table})")}
+
+
+def column_type(path: Path, table: str, column: str) -> str:
+    with sqlite_file(path) as connection:
+        return next(row[2] for row in connection.execute(f"pragma table_info({table})") if row[1] == column)
 
 
 @pytest.fixture
@@ -128,6 +136,61 @@ async def test_reopening_old_database_adds_session_type_column(tmp_path):
 
     assert summaries[0].session_type == 0
     assert "session_type" in table_columns(path, "agent_sessions")
+
+
+async def test_reopening_old_database_adds_stream_timing_columns(tmp_path):
+    path = tmp_path / "agent.sqlite3"
+    storage = SQLiteSessionStorage(path)
+    await storage.append("session", "request", UserMessage(content="Persisted"))
+    await storage.append(
+        "session",
+        "request",
+        AssistantMessage(content="Measured"),
+        usage=ModelUsage(
+            input_tokens=7,
+            output_tokens=3,
+            ttft_any_ns=10,
+            ttft_content_ns=20,
+            first_chunk="a",
+            first_content_chunk="b",
+        ),
+    )
+    await storage.close()
+    with sqlite_file(path) as connection:
+        for column in ("ttft_any_ns", "ttft_content_ns", "first_chunk", "first_content_chunk"):
+            connection.execute(f"alter table raw_messages drop column {column}")
+
+    def schema():
+        with sqlite_file(path) as connection:
+            row = connection.execute("select sql from sqlite_master where name = 'raw_messages'").fetchone()
+            return row[0]
+
+    reopened = SQLiteSessionStorage(path)
+    try:
+        first = await reopened.list_raw_messages("session")
+    finally:
+        await reopened.close()
+    after_first_open = schema()
+
+    reopened = SQLiteSessionStorage(path)
+    try:
+        second = await reopened.list_raw_messages("session")
+    finally:
+        await reopened.close()
+
+    assert len(first) == len(second) == 2
+    # A second open must not issue the ALTER again: that would rewrite the table SQL.
+    assert schema() == after_first_open
+    assistant = second[-1]
+    assert assistant.ttft_any_ns is None
+    assert assistant.first_content_chunk is None
+    # The columns dropped beside the new ones must come back with their data intact.
+    assert (assistant.input_tokens, assistant.output_tokens) == (7, 3)
+    assert {"ttft_any_ns", "ttft_content_ns", "first_chunk", "first_content_chunk"} <= table_columns(
+        path, "raw_messages"
+    )
+    # The migration writes its own DDL, so its width needs the same guard as the model.
+    assert column_type(path, "raw_messages", "first_chunk") == f"VARCHAR({FIRST_CHUNK_LIMIT})"
 
 
 async def test_storage_persists_parent_identity_and_message_metadata(storage):
@@ -237,6 +300,233 @@ async def test_agent_persists_provider_usage_on_each_assistant_raw_message(stora
         "cache_write_tokens",
         "reasoning_tokens",
     } <= table_columns(storage.path, "raw_messages")
+
+
+async def test_agent_records_time_to_first_token_and_first_chunk(storage):
+    class StreamingModel:
+        async def stream(self, request):
+            yield ModelEvent.reasoning("Planning")
+            yield ModelEvent.text("Hello")
+            yield ModelEvent.text(" world")
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Hello world", provider="test")))
+
+    agent = await Agent.create(
+        StreamingModel(),
+        config=AgentRunConfig("ttft-session"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("Measure the stream")
+
+    records = await storage.list_raw_messages("ttft-session")
+    assistant = records[-1]
+    assert assistant.first_chunk == "Planning"
+    assert assistant.first_content_chunk == "Hello"
+    assert assistant.ttft_any_ns is not None
+    assert assistant.ttft_content_ns is not None
+    assert 0 <= assistant.ttft_any_ns <= assistant.ttft_content_ns
+    assert {record.ttft_any_ns for record in records[:-1]} == {None}
+    assert {
+        "ttft_any_ns",
+        "ttft_content_ns",
+        "first_chunk",
+        "first_content_chunk",
+    } <= table_columns(storage.path, "raw_messages")
+
+
+async def test_a_stored_message_without_a_delta_reports_no_time_to_first_token(storage):
+    class SilentModel:
+        async def stream(self, request):
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="Complete", provider="test")))
+
+    agent = await Agent.create(
+        SilentModel(),
+        config=AgentRunConfig("silent-session"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("Do not stream anything")
+
+    assistant = (await storage.list_raw_messages("silent-session"))[-1]
+    assert assistant.ttft_any_ns is None
+    assert assistant.ttft_content_ns is None
+    assert assistant.first_chunk is None
+    assert assistant.first_content_chunk is None
+
+
+async def test_the_first_chunk_is_clipped_to_the_column_width(storage):
+    class LongModel:
+        async def stream(self, request):
+            yield ModelEvent.text("x" * (FIRST_CHUNK_LIMIT + 100))
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done", provider="test")))
+
+    agent = await Agent.create(
+        LongModel(),
+        config=AgentRunConfig("long-session"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("go")
+
+    assistant = (await storage.list_raw_messages("long-session"))[-1]
+    assert assistant.first_chunk == "x" * FIRST_CHUNK_LIMIT
+    assert assistant.first_content_chunk == "x" * FIRST_CHUNK_LIMIT
+    # The column must hold exactly what the runtime clips, so a narrower backend
+    # cannot reject the stored value.
+    assert column_type(storage.path, "raw_messages", "first_chunk") == f"VARCHAR({FIRST_CHUNK_LIMIT})"
+    assert column_type(storage.path, "raw_messages", "first_content_chunk") == f"VARCHAR({FIRST_CHUNK_LIMIT})"
+
+
+async def test_a_tool_only_stream_times_the_call_fragment_as_the_first_chunk(storage):
+    @tool(guidelines="Read a file when the test asks for one.")
+    async def read_file(path: str) -> str:
+        """Read a file."""
+        return "content"
+
+    class ToolModel:
+        def __init__(self):
+            self.calls = 0
+
+        async def stream(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                yield ModelEvent.tool_call(ToolCallDelta(index=0, id_delta="call-1", name_delta="read_file"))
+                yield ModelEvent.completed(
+                    ModelResponse(
+                        AssistantMessage(
+                            content="",
+                            tool_calls=(ToolCall("call-1", "read_file", {"path": "a.py"}),),
+                            provider="test",
+                        )
+                    )
+                )
+                return
+            yield ModelEvent.text("done")
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done", provider="test")))
+
+    agent = await Agent.create(
+        ToolModel(),
+        config=AgentRunConfig("tool-session"),
+        tools=[read_file],
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("read it")
+
+    answers = [
+        record
+        for record in await storage.list_raw_messages("tool-session")
+        if isinstance(record.message, AssistantMessage)
+    ]
+    assert answers[0].first_chunk == "read_file"
+    assert answers[0].first_content_chunk is None
+    assert answers[0].ttft_any_ns is not None
+    assert answers[0].ttft_content_ns is None
+    assert answers[-1].first_content_chunk == "done"
+
+
+async def test_an_id_only_fragment_starts_the_clock_without_becoming_the_excerpt(storage):
+    class IdFirstModel:
+        def __init__(self):
+            self.calls = 0
+
+        async def stream(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                yield ModelEvent.tool_call(ToolCallDelta(index=0, id_delta="call-1"))
+                yield ModelEvent.tool_call(ToolCallDelta(index=0, name_delta="read_file"))
+                yield ModelEvent.completed(
+                    ModelResponse(
+                        AssistantMessage(
+                            content="",
+                            tool_calls=(ToolCall("call-1", "read_file", {"path": "a.py"}),),
+                            provider="test",
+                        )
+                    )
+                )
+                return
+            yield ModelEvent.text("done")
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done", provider="test")))
+
+    @tool(guidelines="Read a file when the test asks for one.")
+    async def read_file(path: str) -> str:
+        """Read a file."""
+        return "content"
+
+    agent = await Agent.create(
+        IdFirstModel(),
+        config=AgentRunConfig("id-first"),
+        tools=[read_file],
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("read it")
+
+    first = [
+        record for record in await storage.list_raw_messages("id-first") if isinstance(record.message, AssistantMessage)
+    ][0]
+    # The id fragment proves the stream started, but the excerpt waits for text.
+    assert first.ttft_any_ns is not None
+    assert first.first_chunk == "read_file"
+
+
+async def test_a_stream_that_only_sends_an_id_keeps_the_excerpt_empty(storage):
+    class IdOnlyModel:
+        async def stream(self, request):
+            yield ModelEvent.tool_call(ToolCallDelta(index=0, id_delta="call-1"))
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content="done", provider="test")))
+
+    agent = await Agent.create(
+        IdOnlyModel(),
+        config=AgentRunConfig("id-only"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("go")
+
+    assistant = (await storage.list_raw_messages("id-only"))[-1]
+    # The clock started, but nothing readable arrived before the response did.
+    assert assistant.ttft_any_ns is not None
+    assert assistant.first_chunk is None
+    assert assistant.ttft_content_ns is None
+
+
+async def test_each_model_step_measures_its_own_first_chunk(storage):
+    class TwoStepModel:
+        def __init__(self):
+            self.calls = 0
+
+        async def stream(self, request):
+            self.calls += 1
+            text = "first" if self.calls == 1 else "second"
+            yield ModelEvent.text(text)
+            yield ModelEvent.completed(ModelResponse(AssistantMessage(content=text, provider="test")))
+
+    agent = await Agent.create(
+        TwoStepModel(),
+        config=AgentRunConfig("two-step"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    await agent.run("one")
+    await agent.run("two")
+
+    answers = [
+        record for record in await storage.list_raw_messages("two-step") if isinstance(record.message, AssistantMessage)
+    ]
+    assert [answer.first_content_chunk for answer in answers] == ["first", "second"]
+
+
+async def test_a_failed_stream_stores_no_partial_measurement(storage):
+    class BrokenModel:
+        async def stream(self, request):
+            yield ModelEvent.text("partial")
+            raise RuntimeError("connection dropped")
+
+    agent = await Agent.create(
+        BrokenModel(),
+        config=AgentRunConfig("broken-session"),
+        extensions=[SessionPersistenceExtension(storage)],
+    )
+    with pytest.raises(RuntimeError, match="connection dropped"):
+        await agent.run("fail")
+
+    records = await storage.list_raw_messages("broken-session")
+    assert any(isinstance(record.message, UserMessage) for record in records)
+    assert not any(isinstance(record.message, AssistantMessage) for record in records)
 
 
 async def test_storage_rejects_model_usage_on_non_assistant_messages(storage):

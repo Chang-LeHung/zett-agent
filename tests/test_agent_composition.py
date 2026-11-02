@@ -30,7 +30,15 @@ from zett_agent.exceptions import AgentProtocolError
 from zett_agent.extensions.base import AgentExtension
 from zett_agent.extensions.external import ExternalEvent
 from zett_agent.messages import AssistantMessage, ImageContent, ImageUrlSource, TextContent, ToolCall, ToolMessage
-from zett_agent.model import ModelEvent, ModelEventType, ModelResponse, ModelUsage, RetryOptions
+from zett_agent.model import (
+    ModelEvent,
+    ModelEventType,
+    ModelResponse,
+    ModelUsage,
+    RetryOptions,
+    ServerToolInputDelta,
+    ToolCallDelta,
+)
 from zett_agent.tools.base import ToolExecutionMode, tool
 
 SOURCE = Path(__file__).resolve().parents[1] / "src" / "zett_agent"
@@ -273,6 +281,36 @@ async def test_an_event_type_the_runtime_does_not_know_is_ignored():
     await ModelStepMixin._relay_model_event(Context(), SimpleNamespace(type="from_the_future"))
 
     assert shown == []
+
+
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        (ModelEvent.text("a"), "a"),
+        (ModelEvent.reasoning("thinking"), "thinking"),
+        (ModelEvent.tool_call(ToolCallDelta(index=0, name_delta="read_file")), "read_file"),
+        (ModelEvent.tool_call(ToolCallDelta(index=0, arguments_delta='{"path":')), '{"path":'),
+        (ModelEvent.tool_call(ToolCallDelta(index=0, id_delta="call-1")), ""),
+        (ModelEvent.server_tool_input(ServerToolInputDelta("s1", '{"query":')), '{"query":'),
+        (ModelEvent.completed(ModelResponse(AssistantMessage(content="done"))), None),
+    ],
+)
+def test_a_stream_fragment_reports_its_text_or_none_when_it_is_not_a_fragment(event, expected):
+    assert ModelStepMixin._delta_fragment(event) == expected
+
+
+def test_every_delta_event_type_is_recognized_as_a_stream_fragment():
+    samples = {
+        ModelEventType.TEXT_DELTA: ModelEvent.text("a"),
+        ModelEventType.REASONING_DELTA: ModelEvent.reasoning("r"),
+        ModelEventType.TOOL_CALL_DELTA: ModelEvent.tool_call(ToolCallDelta(index=0, id_delta="call-1")),
+        ModelEventType.SERVER_TOOL_INPUT_DELTA: ModelEvent.server_tool_input(ServerToolInputDelta("s1", "{")),
+    }
+    # A new delta type must be added here by whoever adds it to the enum, or the
+    # clock starts late for it without any test noticing.
+    assert set(samples) == {kind for kind in ModelEventType if kind.name.endswith("_DELTA")}
+    for event in samples.values():
+        assert ModelStepMixin._delta_fragment(event) is not None
 
 
 # ----------------------------------------------------------------- tools

@@ -61,6 +61,20 @@ class RawMessageRecord:
     reasoning_tokens: int | None
     created_at: datetime
     updated_at: datetime
+    #: Nanoseconds from the request starting to the first streamed delta of any
+    #: kind; None when the runtime observed no delta. This one is new information:
+    #: no timing span covers a tool-call delta.
+    ttft_any_ns: int | None = None
+    #: Nanoseconds from the request starting to the first answer-content delta;
+    #: None when the stream carried no answer content. For a streamed answer this
+    #: duplicates ``content_started_at - started_at`` on a monotonic clock; it is
+    #: stored so a reader compares like with like across both time-to-first-token
+    #: measurements instead of mixing wall-clock and monotonic readings.
+    ttft_content_ns: int | None = None
+    #: First non-empty delta of any kind, clipped for storage.
+    first_chunk: str | None = None
+    #: First non-empty answer-content delta, clipped for storage.
+    first_content_chunk: str | None = None
 
     @property
     def total_tokens(self) -> int | None:

@@ -375,6 +375,12 @@ def validate_response(response: bool) -> None:
         raise ValueError("response must be a boolean")
 
 
+#: Longest first-delta excerpt kept on :class:`ModelUsage`, in characters. A tool-call
+#: delta can carry a long argument fragment; the point is to show how a stream opened,
+#: not to keep a second copy of the message.
+FIRST_CHUNK_LIMIT = 200
+
+
 @dataclass(frozen=True, slots=True)
 class ModelUsage:
     """Normalized token and cache measurements reported by a provider adapter.
@@ -387,6 +393,23 @@ class ModelUsage:
     never reports cache counters. Compatible gateways often relay one protocol
     through another and drop those counters on the way, so a zero without
     ``cache_reported`` means unknown rather than measured.
+
+    The streaming measurements are not provider-reported. They are filled in by
+    the runtime after the stream ends, because only the runtime sees when each
+    delta arrived: a provider adapter sees usage counters in the final payload,
+    not the arrival time of the first token. ``ttft_any_ns`` measures the first
+    delta of any kind, which for a reasoning model is usually a reasoning chunk,
+    while ``ttft_content_ns`` measures the first answer-content delta. Measuring
+    both keeps "the model started talking" apart from "the user saw a word".
+
+    The clock starts when the runtime starts the generation, so an adapter that
+    retries internally is inside the measurement on purpose. A step that never
+    streams, or that fails before its first delta, leaves the fields None rather
+    than zero; a failed step stores no message, so a reader cannot confuse "no
+    measurement" with "measured as instant". ``ttft_content_ns`` repeats the
+    information ``content_started_at - started_at`` already holds for streamed
+    content; it is stored so both time-to-first-token values share one monotonic
+    clock and one unit, and a reader never mixes a wall-clock subtraction with it.
     """
 
     #: Total input tokens, including cached input and cache writes.
@@ -401,6 +424,19 @@ class ModelUsage:
     cache_reported: bool = True
     #: Reasoning subset of output_tokens; zero when not reported.
     reasoning_tokens: int = 0
+    #: Nanoseconds from the request starting to the first streamed delta of any
+    #: kind; None when the runtime observed no delta, as with a non-streaming
+    #: provider or a request that failed before the first chunk.
+    ttft_any_ns: int | None = None
+    #: Nanoseconds from the request starting to the first answer-content delta;
+    #: None when the stream carried no answer content, including tool-only calls.
+    ttft_content_ns: int | None = None
+    #: First non-empty delta of any kind, clipped to ``FIRST_CHUNK_LIMIT``
+    #: characters; None when no delta arrived.
+    first_chunk: str | None = None
+    #: First non-empty answer-content delta, clipped the same way; None when the
+    #: stream carried no answer content.
+    first_content_chunk: str | None = None
 
     def __post_init__(self) -> None:
         values = (
@@ -418,6 +454,10 @@ class ModelUsage:
             raise ValueError("cache_write_tokens cannot exceed input_tokens")
         if self.reasoning_tokens > self.output_tokens:
             raise ValueError("reasoning_tokens cannot exceed output_tokens")
+        if (self.ttft_any_ns is not None and self.ttft_any_ns < 0) or (
+            self.ttft_content_ns is not None and self.ttft_content_ns < 0
+        ):
+            raise ValueError("Time to first token cannot be negative")
 
     @property
     def total_tokens(self) -> int:

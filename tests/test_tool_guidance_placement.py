@@ -76,7 +76,7 @@ async def test_description_placement_moves_guidance_into_each_tools_description(
 
     assert "Tool snippets" not in system_text(request) and "Tool guidelines" not in system_text(request)
     assert descriptions(request)["lookup"] == (
-        'Look a key up. lookup(key="a") lookup(key="b") Use for lookups. Never guess.'
+        'Look a key up. You can call it as lookup(key="a") or lookup(key="b"). Use for lookups. Never guess.'
     )
     # A tool with no snippet only gets the guidance it has.
     assert descriptions(request)["bare"] == "Has guidelines but no snippet. Bare."
@@ -226,12 +226,12 @@ def test_a_decorator_guideline_with_a_newline_is_collapsed():
 
 def test_guidance_cannot_continue_the_last_line_of_a_multiline_base():
     assert render_tool_description(lookup, base="Catalog:\n- last rule.") == (
-        'Catalog:\n- last rule.\nlookup(key="a") lookup(key="b") Use for lookups. Never guess.'
+        'Catalog:\n- last rule.\nYou can call it as lookup(key="a") or lookup(key="b"). Use for lookups. Never guess.'
     )
 
 
 def test_an_empty_or_trailing_newline_base_does_not_add_a_leading_space():
-    expected = 'lookup(key="a") lookup(key="b") Use for lookups. Never guess.'
+    expected = 'You can call it as lookup(key="a") or lookup(key="b"). Use for lookups. Never guess.'
 
     assert render_tool_description(lookup, base="") == expected
     assert render_tool_description(lookup, base="Head.\n") == f"Head. {expected}"
@@ -265,22 +265,23 @@ def test_a_return_schema_is_left_out_by_default():
 def test_a_return_schema_follows_its_snippet_in_the_system_prompt():
     text = render_tool_guidance([answer], returns=True)
 
-    assert '- answer: answer(value=1)\n  returns {"type":"integer"}' in text
+    assert '- answer: You can call it as answer(value=1). It returns {"type":"integer"}.' in text
 
 
 def test_a_return_schema_is_rendered_in_description_placement_too():
     text = render_tool_description(answer, returns=True)
 
-    assert 'answer(value=1) returns {"type":"integer"}' in text
+    assert 'You can call it as answer(value=1). It returns {"type":"integer"}.' in text
 
 
-def test_a_tool_without_a_return_hint_gains_no_line():
+def test_a_tool_without_a_return_hint_gains_no_sentence():
     @tool(guidelines="Say nothing about the result.", snippet="mystery()")
     def mystery():
         """Return without a hint."""
 
     assert render_tool_guidance([mystery], returns=True) == (
-        "# Tool snippets\n- mystery: mystery()\n\n# Tool guidelines\n## mystery\n- Say nothing about the result."
+        "# Tool snippets\n- mystery: You can call it as mystery()."
+        "\n\n# Tool guidelines\n## mystery\n- Say nothing about the result."
     )
 
 
@@ -302,29 +303,32 @@ def test_a_recursive_return_model_is_left_undescribed_instead_of_failing():
     assert "returns" not in render_tool_guidance([tree], returns=True)
 
 
-def test_a_multi_line_snippet_keeps_the_return_line_aligned():
+def test_a_multi_line_snippet_lists_every_call_then_the_return_sentence():
     @tool(guidelines="Two calls.", snippet="twice(1)\ntwice(2)")
     def twice(value: int) -> int:
         """Call twice."""
         return value * 2
 
     assert render_tool_guidance([twice], returns=True) == (
-        '# Tool snippets\n- twice:\n  twice(1)\n  twice(2)\n  returns {"type":"integer"}'
+        "# Tool snippets\n- twice:\n  You can call it as:\n    twice(1)\n    twice(2)"
+        '\n  It returns {"type":"integer"}.'
         "\n\n# Tool guidelines\n## twice\n- Two calls."
     )
 
 
-def test_the_return_line_matches_the_documented_example():
+def test_the_return_sentence_matches_the_documented_example():
     @tool(guidelines="Look up names.", snippet='lookup(query="zett")')
     def lookup_names(query: str) -> list[str]:
         """Look up names."""
         return []
 
     # docs/learn/tools.rst shows this exact line; sorting the keys makes it reproducible.
-    assert '  returns {"items":{"type":"string"},"type":"array"}' in render_tool_guidance([lookup_names], returns=True)
+    assert 'It returns {"items":{"type":"string"},"type":"array"}.' in render_tool_guidance(
+        [lookup_names], returns=True
+    )
 
 
-def test_the_return_line_needs_the_snippet_section():
+def test_the_return_sentence_needs_the_snippet_section():
     assert "returns" not in render_tool_guidance([answer], snippets=False, returns=True)
 
 
@@ -335,7 +339,8 @@ def test_blank_lines_in_a_snippet_are_dropped():
         return one + two
 
     assert render_tool_guidance([blanks]) == (
-        "# Tool snippets\n- blanks:\n  one(1)\n  two(2)\n\n# Tool guidelines\n## blanks\n- Two shapes."
+        "# Tool snippets\n- blanks:\n  You can call it as:\n    one(1)\n    two(2)"
+        "\n\n# Tool guidelines\n## blanks\n- Two shapes."
     )
 
 
@@ -349,7 +354,9 @@ def test_a_searched_deferred_tool_carries_the_return_schema():
 async def test_the_returns_switch_reaches_the_system_prompt():
     request = await request_for(ToolGuidelinesExtension(returns=True))
 
-    assert '- lookup:\n  lookup(key="a")\n  lookup(key="b")\n  returns {"type":"string"}' in system_text(request)
+    assert (
+        '- lookup:\n  You can call it as:\n    lookup(key="a")\n    lookup(key="b")\n  It returns {"type":"string"}.'
+    ) in system_text(request)
     assert "returns" not in system_text(await request_for(ToolGuidelinesExtension()))
 
 

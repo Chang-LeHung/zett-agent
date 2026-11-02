@@ -256,7 +256,7 @@ def test_render_tool_catalog_formats_multiline_descriptions_and_handles_no_tools
 def test_render_tool_description_builds_on_a_supplied_base():
     text = render_tool_description(stock_lookup, base="Prefix.")
 
-    assert text == 'Prefix. stock_lookup(sku="A1") Use for stock. Check the SKU format first.'
+    assert text == 'Prefix. You can call it as stock_lookup(sku="A1"). Use for stock. Check the SKU format first.'
 
 
 def test_the_placement_is_validated():

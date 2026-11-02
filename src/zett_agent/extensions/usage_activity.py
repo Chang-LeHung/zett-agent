@@ -29,6 +29,16 @@ class ModelUsageActivityRecord(BaseModel):
     cache_read_tokens: int = Field(ge=0)
     cache_write_tokens: int = Field(ge=0)
     reasoning_tokens: int = Field(ge=0)
+    #: Nanoseconds from the request starting to the first streamed delta of any
+    #: kind; None when the runtime observed no delta.
+    ttft_any_ns: int | None = Field(default=None, ge=0)
+    #: Nanoseconds from the request starting to the first answer-content delta;
+    #: None when the stream carried no answer content.
+    ttft_content_ns: int | None = Field(default=None, ge=0)
+    #: First streamed delta of any kind, clipped by the runtime before the call.
+    first_chunk: str | None = None
+    #: First streamed answer-content delta, clipped the same way.
+    first_content_chunk: str | None = None
 
     @property
     def total_tokens(self) -> int:
@@ -93,6 +103,10 @@ class UsageActivityExtension(AgentExtension):
                 cache_read_tokens=usage.cache_read_tokens,
                 cache_write_tokens=usage.cache_write_tokens,
                 reasoning_tokens=usage.reasoning_tokens,
+                ttft_any_ns=usage.ttft_any_ns,
+                ttft_content_ns=usage.ttft_content_ns,
+                first_chunk=usage.first_chunk,
+                first_content_chunk=usage.first_content_chunk,
             )
         )
 

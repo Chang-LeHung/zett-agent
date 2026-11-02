@@ -19,9 +19,10 @@ class ToolGuidancePlacement(StrEnum):
     #: Two sections of the system instructions: ``# Tool snippets`` and ``# Tool guidelines``.
     SYSTEM_PROMPT = "system_prompt"
     #: Appended to each tool's own ``description`` as one line of plain prose:
-    #: snippet call shapes followed by guideline sentences, with no headings or
-    #: bullets. When the description already spans lines, the guidance starts on
-    #: a new line instead of continuing the last one.
+    #: snippet call shapes introduced by ``You can call it as``, followed by
+    #: guideline sentences, with no headings or bullets. A multi-line snippet lists
+    #: every shape, joined by ``or``. When the description already spans lines, the
+    #: guidance starts on a new line instead of continuing the last one.
     DESCRIPTION = "description"
 
 
@@ -49,9 +50,9 @@ class ToolGuidelinesExtension(AgentExtension):
         snippets: Include each tool's ``Snippet`` section.
         guidelines: Include each tool's ``Guidelines`` section. Placement into
             descriptions renders only the parts enabled here.
-        returns: Describe each tool's return value in its snippet, as JSON Schema.
-            Off by default: most tools return text the model reads directly, and the
-            schema costs a line per tool in every request.
+        returns: Say what each tool returns, in one sentence after its snippet, as
+            JSON Schema. Off by default: most tools return text the model reads
+            directly, and the schema costs a sentence per tool in every request.
 
     Examples:
         Keep guidance in the tool definitions::

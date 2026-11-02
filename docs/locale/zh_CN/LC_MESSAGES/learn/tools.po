@@ -49,20 +49,20 @@ msgid "By default :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesE
 msgstr "默认情况下，:class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` 会把每个工具的 snippet 和 guidelines 写入系统指令。传入 ``placement=ToolGuidancePlacement.DESCRIPTION`` 则会把它们追加到每个工具自己的描述里，适合只展示工具定义的端点："
 
 #: ../../learn/tools.rst:50
-msgid "In that mode the guidance forms one line of prose: no ``Snippet:`` or ``Guidelines:`` labels, no bullets, and no line breaks of its own. Snippet lines appear as bare call shapes, and each guideline follows as a sentence, all separated by spaces. A full stop is added unless the guideline already ends with sentence punctuation; text ending in a CJK ideograph or kana gets ``。``. A description that already spans lines, such as the tool-search catalog, keeps its formatting and receives the guidance on a new line."
-msgstr "在该模式下，guidance 形成一行纯文本：没有 ``Snippet:`` 或 ``Guidelines:`` 标签，没有项目符号，也不会自己引入换行。snippet 的各行以裸调用形式出现，每条 guideline 作为一句话跟在后面，全部用空格分隔。除非 guideline 已以句末标点结尾，否则会补上句号；以 CJK 表意文字或假名结尾的文本则使用全角的 ``。`` 作为句号。本身已跨行的 description（例如 tool search 的目录）保持原有格式，guidance 另起一行。"
+msgid "In that mode the guidance forms one line of prose: no ``Snippet:`` or ``Guidelines:`` labels, no bullets, and no line breaks of its own. Snippet lines appear after ``You can call it as`` and each guideline follows as a sentence, all separated by spaces. A full stop is added unless the guideline already ends with sentence punctuation; text ending in a CJK ideograph or kana gets ``。``. A description that already spans lines, such as the tool-search catalog, keeps its formatting and receives the guidance on a new line."
+msgstr "在该模式下，guidance 形成一行纯文本：没有 ``Snippet:`` 或 ``Guidelines:`` 标签，没有项目符号，也不会自己引入换行。snippet 的各行跟在 ``You can call it as`` 之后出现，每条 guideline 作为一句话跟在后面，全部用空格分隔。除非 guideline 已以句末标点结尾，否则会补上句号；以 CJK 表意文字或假名结尾的文本则使用全角的 ``。`` 作为句号。本身已跨行的 description（例如 tool search 的目录）保持原有格式，guidance 另起一行。"
 
 #: ../../learn/tools.rst:58
 msgid "``snippets=False`` or ``guidelines=False`` drops either part in both modes. Only the request sent to the provider changes; registered tools and stored history stay as they are."
 msgstr "``snippets=False`` 或 ``guidelines=False`` 会在两种模式下去掉相应的部分。只有发送给提供商的请求会改变；已注册的工具和已保存的历史保持原样。"
 
 #: ../../learn/tools.rst:62
-msgid "A tool's return annotation is described as JSON Schema and kept on the tool, but it is not shown by default: most tools return text the model reads directly. ``returns=True`` adds one line after each snippet, so the model knows the shape before it calls:"
-msgstr "工具的返回注解会被描述成 JSON Schema 并保存在工具上，但默认不会展示：大多数工具返回的是模型直接阅读的文本。\\ ``returns=True``\\ 会在每个 snippet 之后加一行，让模型在调用之前就知道返回值的结构："
+msgid "A tool's return annotation is described as JSON Schema and kept on the tool, but it is not shown by default: most tools return text the model reads directly. ``returns=True`` adds one sentence after each snippet, so the model knows the shape before it calls:"
+msgstr "工具的返回注解会被描述成 JSON Schema 并保存在工具上，但默认不会展示：大多数工具返回的是模型直接阅读的文本。\\ ``returns=True``\\ 会在每个 snippet 之后加一句“It returns …”，让模型在调用之前就知道返回值的结构："
 
 #: ../../learn/tools.rst:76
-msgid "The schema belongs to the snippets section, so ``snippets=False`` removes it too. A function without a return annotation, or with one Pydantic cannot describe, simply has no such line, and nothing validates a result against the schema."
-msgstr "schema 属于 snippets 段，所以 ``snippets=False``\\ 也会把它一并去掉。函数没有返回注解，或者注解无法被 Pydantic 描述时，就不会有这一行；也不会有任何逻辑用这个 schema 去校验结果。"
+msgid "The schema belongs to the snippets section, so ``snippets=False`` removes it too. A function without a return annotation, or with one Pydantic cannot describe, simply has no such sentence, and nothing validates a result against the schema."
+msgstr "schema 属于 snippets 段，所以 ``snippets=False``\\ 也会把它一并去掉。函数没有返回注解，或者注解无法被 Pydantic 描述时，就不会有这一句；也不会有任何逻辑用这个 schema 去校验结果。"
 
 #: ../../learn/tools.rst:82
 msgid "Design arguments the model can supply"

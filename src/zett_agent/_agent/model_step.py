@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+from time import monotonic_ns
 from typing import TYPE_CHECKING, Any
 
 from .._compat import aclosing_stream
@@ -11,11 +12,13 @@ from ..events import AgentEventType, ModelOutputTracker
 from ..exceptions import AgentProtocolError
 from ..messages import AssistantMessage
 from ..model import (
+    FIRST_CHUNK_LIMIT,
     NOT_REPORTED_STATUS,
     ModelEvent,
     ModelEventType,
     ModelRequest,
     ModelResponse,
+    ModelUsage,
     ReasoningEffort,
     ServerToolResult,
 )
@@ -77,6 +80,10 @@ class ModelStepMixin(AgentContract):
         await context._emit_event(AgentEventType.MODEL_STARTED)
         response = None
         closed_server_calls: set[str] = set()
+        first_chunk_at: int | None = None
+        first_chunk: str | None = None
+        first_content_at: int | None = None
+        first_content: str | None = None
         model = context.model
         if model is None:
             raise AgentProtocolError("The request context has no model")
@@ -91,6 +98,19 @@ class ModelStepMixin(AgentContract):
                 ):
                     # The paused step already announced this call; do not show a second start card.
                     continue
+                fragment = self._delta_fragment(event)
+                if fragment is not None and first_chunk_at is None:
+                    # A delta is timed when it reaches the runtime, which is the earliest
+                    # moment anything can react to it. model_started precedes the stream,
+                    # so an adapter's own retry is inside the measurement on purpose. A
+                    # fragment carrying only an id still proves the stream began, so it
+                    # sets the time even though it has no excerpt worth keeping.
+                    first_chunk_at = monotonic_ns()
+                if fragment and first_chunk is None:
+                    first_chunk = fragment[:FIRST_CHUNK_LIMIT]
+                if first_content_at is None and event.type is ModelEventType.TEXT_DELTA and event.delta:
+                    first_content_at = monotonic_ns()
+                    first_content = event.delta[:FIRST_CHUNK_LIMIT]
                 for boundary in await output_tracker.observe(context, event):
                     await context._emit_event(boundary)
                 if event.type is ModelEventType.RESPONSE:
@@ -109,6 +129,17 @@ class ModelStepMixin(AgentContract):
         response = await self._settle_paused_server_tools(
             context, response, output_tracker, may_pause, closed_server_calls
         )
+        response = replace(
+            response,
+            usage=self._with_stream_timing(
+                response.usage,
+                started_ns=model_started.monotonic_ns,
+                first_chunk_at=first_chunk_at,
+                first_chunk=first_chunk,
+                first_content_at=first_content_at,
+                first_content=first_content,
+            ),
+        )
         model_completed = await self._finish_model_generation(context)
         await context.append_message(
             response.message,
@@ -118,6 +149,53 @@ class ModelStepMixin(AgentContract):
         await self._broadcast("after_model", context, response)
         await context._emit_event(AgentEventType.MODEL_COMPLETED, response=response)
         return response
+
+    @staticmethod
+    def _delta_fragment(event: ModelEvent) -> str | None:
+        """Return what an event carried as a stream fragment, or None for a non-fragment.
+
+        One predicate covers both questions the loop asks, so a new delta type cannot be
+        recognized by one and missed by the other. None means the event is not a stream
+        fragment at all; an empty string means it is one that carries nothing readable,
+        such as a tool-call fragment with only an id. Timing counts every fragment,
+        because a stream has begun either way; the excerpt waits for readable text.
+        """
+        if event.type is ModelEventType.TOOL_CALL_DELTA and event.tool_call_delta is not None:
+            fragment = event.tool_call_delta
+            # The id is a generated UUID and says nothing about how the stream opened.
+            return fragment.name_delta or fragment.arguments_delta
+        if event.type is ModelEventType.SERVER_TOOL_INPUT_DELTA and event.server_tool_input_delta is not None:
+            return event.server_tool_input_delta.delta
+        if event.type in (ModelEventType.TEXT_DELTA, ModelEventType.REASONING_DELTA):
+            return event.delta
+        return None
+
+    @staticmethod
+    def _with_stream_timing(
+        usage: ModelUsage,
+        *,
+        started_ns: int,
+        first_chunk_at: int | None,
+        first_chunk: str | None,
+        first_content_at: int | None,
+        first_content: str | None,
+    ) -> ModelUsage:
+        """Attach first-delta measurements the provider cannot report.
+
+        Providers own the token counters; the runtime owns when each delta arrived.
+        Keeping both on one record lets a stored message carry the whole picture. A
+        stream with no delta leaves the fields None rather than zero, so a
+        non-streaming provider and a zero-latency stream stay distinguishable. A step
+        that fails mid-stream never reaches here: it raises before the message is
+        appended, so no row records a partial measurement.
+        """
+        return replace(
+            usage,
+            ttft_any_ns=None if first_chunk_at is None else max(0, first_chunk_at - started_ns),
+            ttft_content_ns=None if first_content_at is None else max(0, first_content_at - started_ns),
+            first_chunk=first_chunk,
+            first_content_chunk=first_content,
+        )
 
     @staticmethod
     async def _relay_model_event(context: AgentRunContext, event: ModelEvent) -> None:

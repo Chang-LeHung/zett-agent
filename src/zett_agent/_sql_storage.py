@@ -33,7 +33,7 @@ from .extensions.persistence import ContextSnapshot, RawMessageRecord, SessionSu
 from .ids import new_uuid7
 from .json_types import JsonValue, json_object
 from .messages import AnyMessage, AssistantMessage, ToolMessage, UserMessage
-from .model import ModelUsage
+from .model import FIRST_CHUNK_LIMIT, ModelUsage
 from .storage import _DEFAULT_SESSION_TYPE, MESSAGE_TYPES, MessageKind, decode_messages, encode_messages
 from .sync_runtime import SyncMethodsMixin
 
@@ -105,6 +105,14 @@ class RawLogMessageModel(Base):
     cache_read_tokens: Mapped[int | None] = mapped_column(Integer)
     cache_write_tokens: Mapped[int | None] = mapped_column(Integer)
     reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
+    # Monotonic nanoseconds to the first streamed delta of any kind.
+    ttft_any_ns: Mapped[int | None] = mapped_column(Integer)
+    # Monotonic nanoseconds to the first answer-content delta.
+    ttft_content_ns: Mapped[int | None] = mapped_column(Integer)
+    # First delta of any kind, clipped by the runtime before storage.
+    first_chunk: Mapped[str | None] = mapped_column(String(FIRST_CHUNK_LIMIT))
+    # First answer-content delta, clipped the same way.
+    first_content_chunk: Mapped[str | None] = mapped_column(String(FIRST_CHUNK_LIMIT))
     # UTC timestamps; immutable records have identical creation/modification times.
     created_at: Mapped[datetime] = mapped_column()
     updated_at: Mapped[datetime] = mapped_column()
@@ -142,20 +150,38 @@ def _create_missing_indexes(connection: Connection) -> None:
                 index.create(connection)
 
 
+#: Columns added after a table first shipped, as ``table name -> {column: DDL}``.
+#: A database written by an older version gains them on open; a new one already has them.
+_ADDED_COLUMNS: dict[str, dict[str, str]] = {
+    AgentSessionModel.__tablename__: {
+        "session_type": "INTEGER NOT NULL DEFAULT 0",
+    },
+    RawLogMessageModel.__tablename__: {
+        "ttft_any_ns": "INTEGER",
+        "ttft_content_ns": "INTEGER",
+        # The width comes from the constant, so a longer clip cannot outgrow the column
+        # on a backend that enforces VARCHAR lengths.
+        "first_chunk": f"VARCHAR({FIRST_CHUNK_LIMIT})",
+        "first_content_chunk": f"VARCHAR({FIRST_CHUNK_LIMIT})",
+    },
+}
+
+
 def _add_missing_columns(connection: Connection) -> None:
     """Add columns an older database is missing, with a plain ``ALTER TABLE``.
 
-    SQLAlchemy cannot alter a table portably, and the statement below is accepted by
-    SQLite, MySQL, and PostgreSQL alike. New databases already have the column.
+    SQLAlchemy cannot alter a table portably, and the statements below are accepted by
+    SQLite, MySQL, and PostgreSQL alike. New databases already have the columns, so a
+    table whose column set is current is left alone.
     """
     inspector = inspect(connection)
-    if not inspector.has_table(AgentSessionModel.__tablename__):
-        return
-    columns = {column["name"] for column in inspector.get_columns(AgentSessionModel.__tablename__)}
-    if "session_type" not in columns:
-        connection.exec_driver_sql(
-            f"ALTER TABLE {AgentSessionModel.__tablename__} ADD COLUMN session_type INTEGER NOT NULL DEFAULT 0"
-        )
+    for table, columns in _ADDED_COLUMNS.items():
+        if not inspector.has_table(table):
+            continue
+        existing = {column["name"] for column in inspector.get_columns(table)}
+        for name, definition in columns.items():
+            if name not in existing:
+                connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
 
 def _table_names(connection: Connection) -> set[str]:
@@ -762,6 +788,10 @@ class SQLSessionStorage(SyncMethodsMixin):
             cache_read_tokens=row.cache_read_tokens,
             cache_write_tokens=row.cache_write_tokens,
             reasoning_tokens=row.reasoning_tokens,
+            ttft_any_ns=row.ttft_any_ns,
+            ttft_content_ns=row.ttft_content_ns,
+            first_chunk=row.first_chunk,
+            first_content_chunk=row.first_content_chunk,
             created_at=row.created_at.replace(tzinfo=UTC),
             updated_at=row.updated_at.replace(tzinfo=UTC),
         )
@@ -926,6 +956,10 @@ class SQLSessionStorage(SyncMethodsMixin):
                     cache_read_tokens=usage.cache_read_tokens if usage is not None else None,
                     cache_write_tokens=usage.cache_write_tokens if usage is not None else None,
                     reasoning_tokens=usage.reasoning_tokens if usage is not None else None,
+                    ttft_any_ns=usage.ttft_any_ns if usage is not None else None,
+                    ttft_content_ns=usage.ttft_content_ns if usage is not None else None,
+                    first_chunk=usage.first_chunk if usage is not None else None,
+                    first_content_chunk=usage.first_content_chunk if usage is not None else None,
                     created_at=now,
                     updated_at=now,
                 )

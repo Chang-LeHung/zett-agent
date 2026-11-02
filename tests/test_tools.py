@@ -254,7 +254,7 @@ def test_tool_prompt_metadata_helpers_read_an_undecorated_function():
     assert render_tool_guidance([]) == ""
     assert render_tool_guidance([registered]) == (
         "# Tool snippets\n"
-        "- inspect_value: inspect_value(value=1)\n\n"
+        "- inspect_value: You can call it as inspect_value(value=1).\n\n"
         "# Tool guidelines\n"
         "## inspect_value\n"
         "- Inspect first.\n"
@@ -291,8 +291,9 @@ def test_render_tool_guidance_indents_multiline_snippets():
 
     assert (
         "- create_artifact:\n"
-        '  create_artifact(content={"artifact_type": "card", "title": "One"})\n'
-        '  create_artifact(content={"artifact_type": "slides", "title": "Two", "content": "# Topic"})'
+        "  You can call it as:\n"
+        '    create_artifact(content={"artifact_type": "card", "title": "One"})\n'
+        '    create_artifact(content={"artifact_type": "slides", "title": "Two", "content": "# Topic"})'
     ) in prompt
 
 

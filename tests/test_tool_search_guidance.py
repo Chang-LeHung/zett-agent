@@ -47,7 +47,12 @@ CASES = [
 
 
 def expected(snippet: bool, guidelines: bool) -> str:
-    return " ".join(["Look up stock.", *([SNIPPET] if snippet else []), *([GUIDELINES] if guidelines else [])])
+    parts = ["Look up stock."]
+    if snippet:
+        parts.append(f"You can call it as {SNIPPET}.")
+    if guidelines:
+        parts.append(GUIDELINES)
+    return " ".join(parts)
 
 
 @pytest.mark.parametrize("guidelines_first", [True, False])

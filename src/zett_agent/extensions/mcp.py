@@ -375,6 +375,10 @@ class McpExtension(AgentExtension):
         connect_timeout: Seconds allowed to connect and list one server.
         call_timeout: Seconds allowed for one tool call.
         tools_cache_ttl: Seconds a server's tool list is reused; 0 disables.
+        stable_tool_descriptions: Reuse the first description seen for a remote
+            tool, so a server that re-renders its prose cannot rewrite the
+            request prefix; input schemas always follow the server. Pass
+            ``False`` to take each listing's text as it arrives.
 
     Examples:
         Usage::
@@ -434,6 +438,7 @@ class McpExtension(AgentExtension):
         connect_timeout: float | None = 30.0,
         call_timeout: float | None = 300.0,
         tools_cache_ttl: float = 300.0,
+        stable_tool_descriptions: bool = True,
     ) -> None:
         self.server_keys = _validate_server_keys(server_keys)
         self.namespace_tools = namespace_tools
@@ -441,9 +446,11 @@ class McpExtension(AgentExtension):
         self.connect_timeout = connect_timeout
         self.call_timeout = call_timeout
         self.tools_cache_ttl = tools_cache_ttl
+        self.stable_tool_descriptions = stable_tool_descriptions
         self._client_factory = client_factory or _default_client_factory
         self._requests: dict[AgentRunContext, _McpRequest] = {}
         self._tool_cache: dict[str, _CachedTools] = {}
+        self._descriptions: dict[str, tuple[McpServer, dict[str, str]]] = {}
         self._explicit_servers: tuple[McpServer, ...] = tuple(servers or ())
         self._file_servers: tuple[McpServer, ...] = ()
         self._file_stamp: tuple[int, int] | None | object = _UNREAD
@@ -504,7 +511,9 @@ class McpExtension(AgentExtension):
         Tool lists are cached per server configuration, so a warm cache starts
         no process and opens no socket until the model actually calls a tool.
         A server that fails or times out is reported to the model and skipped
-        instead of failing the request.
+        instead of failing the request. Tools are registered in exposed-name
+        order rather than listing order, so a server that lists the same tools
+        differently cannot reorder the request prefix.
         """
         self._refresh_file_servers(raise_errors=False)
         previous = self._requests.pop(context, None)
@@ -515,8 +524,16 @@ class McpExtension(AgentExtension):
         try:
             discovered = await asyncio.gather(*(self._discover(request, server) for server in request.servers))
             for server, tools in zip(request.servers, discovered, strict=True):
-                for remote_tool in tools or ():
-                    tool = self._adapt_tool(server, request.connections[server.name], remote_tool)
+                connection = request.connections[server.name]
+                # Two remote names can sanitize to one exposed name, so the raw name
+                # breaks the tie: the tool that wins the registry slot stays the same
+                # whatever order the server listed them in.
+                ordered = sorted(
+                    tools or (),
+                    key=lambda remote_tool: (self._exposed_name(server, remote_tool), remote_tool.name),
+                )
+                for remote_tool in ordered:
+                    tool = self._adapt_tool(server, connection, remote_tool)
                     if tool.name in context.tools:
                         logger.warning("Skipping MCP tool %r from %r: name already registered", tool.name, server.name)
                         continue
@@ -604,9 +621,12 @@ class McpExtension(AgentExtension):
         if request is not None:
             request.release()
 
-    def _adapt_tool(self, server: McpServer, connection: _Connection, remote_tool: Tool) -> AgentTool:
+    def _exposed_name(self, server: McpServer, remote_tool: Tool) -> str:
+        """Name one remote tool the way the model will see it."""
         raw_name = f"{server.name}__{remote_tool.name}" if self.namespace_tools else remote_tool.name
+        return _provider_safe_name(raw_name)
 
+    def _adapt_tool(self, server: McpServer, connection: _Connection, remote_tool: Tool) -> AgentTool:
         async def invoke(**arguments: Any) -> Any:
             try:
                 client = await connection.client()
@@ -620,8 +640,12 @@ class McpExtension(AgentExtension):
             return [part.model_dump(mode="json", by_alias=True, exclude_none=True) for part in result.content]
 
         return AgentTool(
-            name=_provider_safe_name(raw_name),
-            description=remote_tool.description or f"Call {remote_tool.name} on the {server.name} MCP server.",
+            name=self._exposed_name(server, remote_tool),
+            description=self._pin_description(
+                server,
+                remote_tool,
+                remote_tool.description or f"Call {remote_tool.name} on the {server.name} MCP server.",
+            ),
             parameters=_compact_schema(remote_tool.input_schema),
             handler=invoke,
             # The system message already says every `<server>__<tool>` name
@@ -629,6 +653,27 @@ class McpExtension(AgentExtension):
             # spends prompt tokens.
             guidelines=(),
         )
+
+    def _pin_description(self, server: McpServer, remote_tool: Tool, description: str) -> str:
+        """Remember and reuse the description a tool was first discovered with.
+
+        Tool descriptions lead every request, ahead of the conversation, so a server that
+        builds one by walking a map or set re-renders the same facts in a new order on
+        every ``tools/list`` and rewrites the prefix a provider has already cached. The
+        first text a tool arrived with is kept for as long as its server definition
+        compares equal; a definition that changes starts over. Input schemas are never
+        pinned: a changed schema is functional, and a stale one would make the model fill
+        arguments the server no longer accepts.
+        """
+        if not self.stable_tool_descriptions:
+            return description
+        entry = self._descriptions.get(server.name)
+        if entry is None or entry[0] != server:
+            pinned: dict[str, str] = {}
+            self._descriptions[server.name] = (server, pinned)
+        else:
+            pinned = entry[1]
+        return pinned.setdefault(remote_tool.name, description)
 
     async def _close(self, context: AgentRunContext) -> None:
         request = self._requests.pop(context, None)

@@ -94,22 +94,26 @@ msgid "Tool schemas are sent without ``title`` and ``$schema`` annotations, whic
 msgstr "发送工具模式时不会包含\\ ``title``\\ 和\\ ``$schema``\\ 注解；服务器生成器会给每个属性都附上这些注解，而它们只是重复属性名。每个工具的 guidelines 也会被省略：系统消息已经说明\\ ``<server>__<tool>``\\ 形式的名称属于对应的服务器，因此为每个工具都重复一遍只会消耗提示词 token。属性的名称、类型、描述和约束都保持不变。"
 
 #: ../../learn/mcp.rst:159
+msgid "The order a server lists its tools in carries no meaning, and tool definitions lead every request, ahead of the conversation a provider caches. Each server's tools are therefore registered in name order instead of listing order, so a different listing cannot change the request prefix. A tool also keeps the description it was first discovered with for as long as its server definition stays the same, because some servers render a description from a map or a set and return the same facts in another order each time. Its input schema still follows the server, because a schema decides which calls are accepted, so a server that reorders the keys of a schema can still change the request prefix. Pass ``stable_tool_descriptions=False`` to take each listing's text as it arrives."
+msgstr "服务器列出工具的顺序没有意义，而工具定义位于每个请求的最前面，排在提供商缓存的对话之前。因此每个服务器的工具会按名称顺序注册，而不是按列表顺序，这样不同的列表顺序无法改变请求前缀。只要服务器定义不变，某个工具就会保留第一次发现时的描述，因为有些服务器会用 map 或 set 来渲染描述，每次返回的事实相同而顺序不同。它的输入模式仍然跟随服务器，因为模式决定了哪些调用会被接受，所以服务器重新排列模式中的键仍会改变请求前缀。传入\\ ``stable_tool_descriptions=False``\\ 可以改用每次列表返回的文本。"
+
+#: ../../learn/mcp.rst:169
 msgid "Exposed tool names are limited to letters, digits, ``_`` and ``-`` and at most 64 characters, the intersection of what model providers accept; longer names are shortened with a stable hash. A tool whose exposed name is already registered is skipped with a warning instead of failing the request. Servers that repeat a pagination cursor or return more than 100 pages are treated as unavailable."
 msgstr "暴露的工具名称只能包含字母、数字、``_``\\ 和\\ ``-``，并且最多 64 个字符，这是各模型提供商接受范围的交集；更长的名称会用稳定哈希缩短。如果某个工具的暴露名称已经被注册，它会被跳过并给出警告，而不会让请求失败。如果服务器重复返回同一个分页游标，或者返回超过 100 页，就会被视为不可用。"
 
-#: ../../learn/mcp.rst:167
+#: ../../learn/mcp.rst:177
 msgid "Verify the integration offline"
 msgstr "离线验证集成"
 
-#: ../../learn/mcp.rst:173
+#: ../../learn/mcp.rst:183
 msgid "Run ``uv run python docs/_examples/mcp_tools.py`` from a checkout:"
 msgstr "在源码检出目录中运行\\ ``uv run python docs/_examples/mcp_tools.py``："
 
-#: ../../learn/mcp.rst:180
+#: ../../learn/mcp.rst:190
 msgid "The :download:`complete example <../_examples/mcp_tools.py>` supplies an in-memory MCP client through ``client_factory``. It verifies registration, dispatch, structured results, and transport cleanup without starting a server."
 msgstr ":download:`完整示例 <../_examples/mcp_tools.py>`\\ 通过\\ ``client_factory``\\ 提供了一个内存中的 MCP 客户端。它无需启动服务器，就能验证注册、分发、结构化结果和传输清理。"
 
-#: ../../learn/mcp.rst:184
+#: ../../learn/mcp.rst:194
 msgid "Next: :doc:`tools` for local tool behavior, or :doc:`../extending/server-tools` for tools executed by a model provider rather than an MCP server."
 msgstr "下一步：:doc:`tools`\\ 介绍本地工具的行为，或者看\\ :doc:`../extending/server-tools`，了解由模型提供商而非 MCP 服务器执行的工具。"
 

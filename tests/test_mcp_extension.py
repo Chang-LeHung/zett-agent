@@ -76,11 +76,13 @@ class ClientFactory:
         return connect()
 
 
-def remote_tool(name: str) -> Tool:
+def remote_tool(name: str, description: str | None = None, schema: dict[str, Any] | None = None) -> Tool:
     return Tool(
         name=name,
-        description=f"Remote {name}",
-        inputSchema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+        description=description if description is not None else f"Remote {name}",
+        inputSchema=schema
+        if schema is not None
+        else {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
     )
 
 
@@ -555,6 +557,154 @@ async def test_mcp_extension_connects_servers_concurrently_and_lazily_with_a_war
     assert factory.opened == ["b"]  # only the server that is actually used connects
     await extension.on_success(second, AssistantMessage(content="done"))
     assert factory.closed.count("b") == 2
+
+
+async def test_mcp_extension_registers_each_servers_tools_in_name_order():
+    """A listing order is the server's business; the request prefix must not follow it."""
+    factory = ClientFactory(
+        {
+            "beta": FakeClient({None: ListToolsResult(tools=[remote_tool("z"), remote_tool("a")])}),
+            "alpha": FakeClient({None: ListToolsResult(tools=[remote_tool("y"), remote_tool("b")])}),
+        }
+    )
+    extension = McpExtension(
+        [McpHttpServer("beta", "https://beta.test/mcp"), McpHttpServer("alpha", "https://alpha.test/mcp")],
+        client_factory=factory,
+    )
+    context = AgentRunContext(AgentRunConfig("tool-order"), AgentState(), {})
+
+    await extension.on_tool(context)
+
+    # Servers stay in configuration order, so one server's tools remain one group;
+    # only the order inside a group is normalized.
+    assert list(context.tools) == ["beta__a", "beta__z", "alpha__b", "alpha__y"]
+    await extension.on_success(context, AssistantMessage(content="done"))
+
+
+async def test_mcp_extension_keeps_the_same_tool_when_exposed_names_collide():
+    """Two remote names can sanitize to one exposed name; the listing order must not pick the winner."""
+    results = {
+        "a b": CallToolResult(content=[TextContent(text="space")]),
+        "a.b": CallToolResult(content=[TextContent(text="dot")]),
+    }
+    space = remote_tool("a b", schema={"type": "object", "properties": {"space": {"type": "string"}}})
+    dot = remote_tool("a.b", schema={"type": "object", "properties": {"dot": {"type": "string"}}})
+    client = FakeClient({None: ListToolsResult(tools=[dot, space])}, results)
+    factory = ClientFactory({"server": client})
+    extension = McpExtension(
+        [McpHttpServer("server", "https://example.test/mcp")], client_factory=factory, tools_cache_ttl=0
+    )
+    first = AgentRunContext(AgentRunConfig("first-list"), AgentState(), {})
+    await extension.on_tool(first)
+    assert list(first.tools) == ["server__a_b"]
+    assert await first.tools["server__a_b"]({}) == [{"type": "text", "text": "space"}]
+    assert set(first.tools["server__a_b"].parameters["properties"]) == {"space"}
+    await extension.on_success(first, AssistantMessage(content="done"))
+
+    client.pages[None] = ListToolsResult(tools=[space, dot])
+    second = AgentRunContext(AgentRunConfig("second-list"), AgentState(), {})
+    await extension.on_tool(second)
+    assert list(second.tools) == ["server__a_b"]
+    assert await second.tools["server__a_b"]({}) == [{"type": "text", "text": "space"}]
+    assert set(second.tools["server__a_b"].parameters["properties"]) == {"space"}
+    await extension.on_success(second, AssistantMessage(content="done"))
+
+
+async def test_mcp_extension_reuses_the_first_description_of_a_remote_tool():
+    """A server that re-renders its prose must not rewrite the cached request prefix."""
+    client = FakeClient({None: ListToolsResult(tools=[remote_tool("alpha", "Remote alpha"), remote_tool("beta")])})
+    factory = ClientFactory({"server": client})
+    extension = McpExtension(
+        [McpHttpServer("server", "https://example.test/mcp")], client_factory=factory, tools_cache_ttl=0
+    )
+    first = AgentRunContext(AgentRunConfig("first-list"), AgentState(), {})
+    await extension.on_tool(first)
+    await extension.on_success(first, AssistantMessage(content="done"))
+
+    client.pages[None] = ListToolsResult(
+        tools=[
+            remote_tool("beta"),
+            remote_tool(
+                "alpha",
+                "Remote alpha, rendered again",
+                {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}},
+            ),
+        ]
+    )
+    second = AgentRunContext(AgentRunConfig("second-list"), AgentState(), {})
+    await extension.on_tool(second)
+    await extension.on_success(second, AssistantMessage(content="done"))
+
+    assert second.tools["server__alpha"].description == "Remote alpha"
+    # An input schema is functional, so it still follows the server.
+    assert set(second.tools["server__alpha"].parameters["properties"]) == {"query", "limit"}
+
+
+async def test_mcp_extension_can_follow_a_new_remote_description():
+    client = FakeClient({None: ListToolsResult(tools=[remote_tool("alpha", "Remote alpha")])})
+    factory = ClientFactory({"server": client})
+    extension = McpExtension(
+        [McpHttpServer("server", "https://example.test/mcp")],
+        client_factory=factory,
+        tools_cache_ttl=0,
+        stable_tool_descriptions=False,
+    )
+    first = AgentRunContext(AgentRunConfig("first-list"), AgentState(), {})
+    await extension.on_tool(first)
+    await extension.on_success(first, AssistantMessage(content="done"))
+
+    client.pages[None] = ListToolsResult(tools=[remote_tool("alpha", "Remote alpha, rendered again")])
+    second = AgentRunContext(AgentRunConfig("second-list"), AgentState(), {})
+    await extension.on_tool(second)
+    await extension.on_success(second, AssistantMessage(content="done"))
+
+    assert second.tools["server__alpha"].description == "Remote alpha, rendered again"
+
+
+async def test_mcp_extension_forgets_a_pinned_description_when_the_server_definition_changes():
+    client = FakeClient({None: ListToolsResult(tools=[remote_tool("alpha", "Remote alpha")])})
+    factory = ClientFactory({"server": client})
+    extension = McpExtension(
+        [McpHttpServer("server", "http://one.test/mcp")], client_factory=factory, tools_cache_ttl=0
+    )
+    first = AgentRunContext(AgentRunConfig("first-list"), AgentState(), {})
+    await extension.on_tool(first)
+    await extension.on_success(first, AssistantMessage(content="done"))
+
+    extension._explicit_servers = (McpHttpServer("server", "http://two.test/mcp"),)
+    client.pages[None] = ListToolsResult(tools=[remote_tool("alpha", "Remote alpha from the other server")])
+    second = AgentRunContext(AgentRunConfig("second-list"), AgentState(), {})
+    await extension.on_tool(second)
+    await extension.on_success(second, AssistantMessage(content="done"))
+
+    assert second.tools["server__alpha"].description == "Remote alpha from the other server"
+
+
+async def test_mcp_extension_keeps_a_pinned_description_through_an_equal_configuration_reload(tmp_path):
+    """A reload rebuilds the server objects, so a pin must survive value equality, not identity."""
+    path = tmp_path / "mcp.json"
+    path.write_text(json.dumps({"servers": {"docs": {"type": "http", "url": "http://docs"}}}), encoding="utf-8")
+    client = FakeClient({None: ListToolsResult(tools=[remote_tool("search", "Search the docs")])})
+    factory = ClientFactory({"docs": client})
+    extension = McpExtension(config_path=path, client_factory=factory, tools_cache_ttl=0)
+    before_reload = extension.servers[0]
+    first = AgentRunContext(AgentRunConfig("before-reload"), AgentState(), {})
+    await extension.on_tool(first)
+    await extension.on_success(first, AssistantMessage(content="done"))
+
+    # Reformatting the file changes its stamp without changing any server, so the next
+    # request reloads the same configuration as new objects.
+    path.write_text(
+        json.dumps({"servers": {"docs": {"type": "http", "url": "http://docs"}}}, indent=2), encoding="utf-8"
+    )
+    client.pages[None] = ListToolsResult(tools=[remote_tool("search", "Search the docs, rendered again")])
+    second = AgentRunContext(AgentRunConfig("after-reload"), AgentState(), {})
+    await extension.on_tool(second)
+    await extension.on_success(second, AssistantMessage(content="done"))
+
+    assert extension.servers[0] == before_reload
+    assert extension.servers[0] is not before_reload
+    assert second.tools["docs__search"].description == "Search the docs"
 
 
 async def test_mcp_extension_reloads_a_changed_configuration_file(tmp_path):

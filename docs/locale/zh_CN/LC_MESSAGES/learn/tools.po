@@ -29,8 +29,8 @@ msgid "Write a typed function"
 msgstr "编写带类型注解的函数"
 
 #: ../../learn/tools.rst:15
-msgid "``@tool`` reads the type annotations to build a JSON Schema. The docstring is model-facing documentation: ``Args`` describes each parameter, ``Snippet`` shows the call shape, and ``Guidelines`` states when to use the tool. ``@tool`` and ``@tool(name=\"public_name\")`` both work."
-msgstr "``@tool`` 会读取类型注解来构建 JSON Schema。文档字符串是面向模型的文档：``Args`` 描述每个参数，``Snippet`` 展示调用形式，``Guidelines`` 说明何时使用该工具。\\ ``@tool`` 和 ``@tool(name=\"public_name\")`` 都可以使用。"
+msgid "``@tool`` reads the type annotations to build a JSON Schema. The docstring is model-facing documentation: ``Args`` describes each parameter, ``Returns`` describes the result, ``Snippet`` shows the call shape, and ``Guidelines`` states when to use the tool. ``@tool`` and ``@tool(name=\"public_name\")`` both work."
+msgstr "``@tool`` 会读取类型注解来构建 JSON Schema。文档字符串是面向模型的文档：``Args`` 描述每个参数，``Returns`` 描述返回值，``Snippet`` 展示调用形式，``Guidelines`` 说明何时使用该工具。\\ ``@tool`` 和\\ ``@tool(name=\"public_name\")`` 都可以使用。"
 
 #: ../../learn/tools.rst:20
 msgid "A description and at least one nonempty guideline are required. For a small tool, provide the guideline on the decorator:"
@@ -57,12 +57,12 @@ msgid "``snippets=False`` or ``guidelines=False`` drops either part in both mode
 msgstr "``snippets=False`` 或 ``guidelines=False`` 会在两种模式下去掉相应的部分。只有发送给提供商的请求会改变；已注册的工具和已保存的历史保持原样。"
 
 #: ../../learn/tools.rst:62
-msgid "A tool's return annotation is described as JSON Schema and kept on the tool, but it is not shown by default: most tools return text the model reads directly. ``returns=True`` adds one sentence after each snippet, so the model knows the shape before it calls:"
-msgstr "工具的返回注解会被描述成 JSON Schema 并保存在工具上，但默认不会展示：大多数工具返回的是模型直接阅读的文本。\\ ``returns=True``\\ 会在每个 snippet 之后加一句“It returns …”，让模型在调用之前就知道返回值的结构："
+msgid "A tool's return annotation is described as JSON Schema and kept on the tool, but it is not shown by default: most tools return text the model reads directly. ``returns=True`` adds one sentence after each snippet, so the model knows the shape before it calls, and it ends a tool whose docstring has a ``Returns`` section with that prose:"
+msgstr "工具的返回注解会被描述成 JSON Schema 并保存在工具上，但默认不会展示：大多数工具返回的是模型直接阅读的文本。\\ ``returns=True``\\ 会在每个 snippet 之后加一句“It returns …”，让模型在调用之前就知道返回值的结构；如果工具的文档字符串里有\\ ``Returns``\\ 段，该段的描述会接在整个工具描述的最后："
 
-#: ../../learn/tools.rst:76
-msgid "The schema belongs to the snippets section, so ``snippets=False`` removes it too. A function without a return annotation, or with one Pydantic cannot describe, simply has no such sentence, and nothing validates a result against the schema."
-msgstr "schema 属于 snippets 段，所以 ``snippets=False``\\ 也会把它一并去掉。函数没有返回注解，或者注解无法被 Pydantic 描述时，就不会有这一句；也不会有任何逻辑用这个 schema 去校验结果。"
+#: ../../learn/tools.rst:85
+msgid "Return information belongs to the snippets section, so ``snippets=False`` removes it too. A function without a return annotation, or with one Pydantic cannot describe, has no sentence about the shape, while a ``Returns`` section alone still tells the model what the result means. Nothing validates a result against the schema."
+msgstr "返回信息属于 snippets 段，所以\\ ``snippets=False``\\ 也会把它一并去掉。函数没有返回注解，或者注解无法被 Pydantic 描述时，就没有关于返回值结构的句子；而只要有\\ ``Returns``\\ 段，仍然会告诉模型结果意味着什么。不会有任何逻辑用这个 schema 去校验结果。"
 
 #: ../../learn/tools.rst:82
 msgid "Design arguments the model can supply"

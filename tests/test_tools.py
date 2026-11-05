@@ -307,6 +307,9 @@ def test_render_tool_search_text_collects_every_model_facing_field():
 
         Snippet:
             depot_report(site="sh")
+
+        Returns:
+            Pallets per zone for the requested depot.
         """
         return site
 
@@ -318,6 +321,138 @@ def test_render_tool_search_text_collects_every_model_facing_field():
     assert 'depot_report(site="sh")' in text
     assert "Inspect the depot inventory." in text
     assert "Report exact pallet counts." in text
+    assert "Pallets per zone for the requested depot." in text
+
+
+def test_a_returns_section_documents_the_result_without_becoming_a_parameter():
+    @tool(guidelines="Read a document before editing it.")
+    def read_document(path: str) -> str:
+        """Read a document.
+
+        Args:
+            path: File path relative to the workspace.
+
+        Returns:
+            The document's text,
+            decoded as UTF-8.
+        """
+        return path
+
+    assert read_document.returns_description == "The document's text, decoded as UTF-8."
+    assert list(read_document.parameters["properties"]) == ["path"]
+
+
+def test_a_return_heading_can_carry_its_first_line():
+    @tool(guidelines="Add two integers.")
+    def add(left: int, right: int) -> int:
+        """Add two integers.
+
+        Args:
+            left: First addend.
+            right: Second addend.
+
+        Returns: the sum
+        """
+        return left + right
+
+    assert add.returns_description == "the sum"
+    assert list(add.parameters["properties"]) == ["left", "right"]
+
+
+def test_a_returns_line_after_args_stays_out_of_the_parameters():
+    @tool(guidelines="Read one value.")
+    def read(key: str) -> str:
+        """Read a value.
+
+        Args:
+            key: Key to read.
+
+        Returns: the stored text
+        """
+        return key
+
+    assert read.returns_description == "the stored text"
+    assert list(read.parameters["properties"]) == ["key"]
+
+
+def test_an_unrecognized_section_ends_the_one_before_it():
+    @tool(guidelines="Use a narrow query.")
+    def lookup(query: str) -> dict[str, str]:
+        """Look names up.
+
+        Args:
+            query: Text to find.
+
+        Returns:
+            A mapping from name to description.
+
+        Raises:
+            ValueError: When the query is empty.
+        """
+        return {}
+
+    assert lookup.returns_description == "A mapping from name to description."
+    assert list(lookup.parameters["properties"]) == ["query"]
+
+
+def test_an_unrecognized_inline_heading_ends_the_one_before_it():
+    @tool(guidelines="Look names up.")
+    def lookup(query: str) -> dict[str, str]:
+        """Look names up.
+
+        Args:
+            query: Text to find.
+
+        Returns:
+            A mapping from name to description.
+
+        Raises: ValueError: when the query is empty.
+        """
+        return {}
+
+    assert lookup.returns_description == "A mapping from name to description."
+
+    @tool(guidelines="Read once.")
+    def fetch(key: str) -> str:
+        """Fetch a value.
+
+        Args:
+            key: Key to read.
+
+        Note: cached for a minute.
+        """
+        return key
+
+    assert list(fetch.parameters["properties"]) == ["key"]
+
+
+def test_a_note_after_args_does_not_become_a_parameter():
+    @tool(guidelines="Read once.")
+    def fetch(key: str) -> str:
+        """Fetch a value.
+
+        Args:
+            key: Key to read.
+
+        Note:
+            Values are cached for a minute.
+        """
+        return key
+
+    assert list(fetch.parameters["properties"]) == ["key"]
+
+
+def test_the_singular_return_heading_is_the_same_section():
+    @tool(guidelines="Read a file.")
+    def load(path: str) -> str:
+        """Load a file.
+
+        Return:
+            The file's text.
+        """
+        return path
+
+    assert load.returns_description == "The file's text."
 
 
 def test_tool_docstring_rejects_unknown_argument_documentation():

@@ -134,6 +134,7 @@ class ToolSpec:
     snippet: str
     execution_mode: ToolExecutionMode
     return_schema: dict[str, JsonValue] | None = None
+    returns_description: str = ""
 
     @classmethod
     def of(cls, tool: AgentTool) -> ToolSpec:
@@ -150,6 +151,7 @@ class ToolSpec:
                 if tool.return_schema is None
                 else cast("dict[str, JsonValue]", json.loads(json.dumps(tool.return_schema)))
             ),
+            returns_description=tool.returns_description,
         )
 
     def to_json(self) -> dict[str, JsonValue]:
@@ -162,6 +164,7 @@ class ToolSpec:
             "snippet": self.snippet,
             "execution_mode": self.execution_mode.value,
             "return_schema": self.return_schema,
+            "returns_description": self.returns_description,
         }
 
     @classmethod
@@ -175,6 +178,7 @@ class ToolSpec:
             snippet = payload["snippet"]
             execution_mode = payload["execution_mode"]
             return_schema = payload.get("return_schema")
+            returns_description = payload.get("returns_description", "")
         except KeyError as missing:
             raise JITHostError(f"The repository process sent a tool without {missing.args[0]}") from None
         if (
@@ -183,6 +187,7 @@ class ToolSpec:
             or not isinstance(parameters, dict)
             or not isinstance(snippet, str)
             or not isinstance(execution_mode, str)
+            or not isinstance(returns_description, str)
             or (return_schema is not None and not isinstance(return_schema, dict))
         ):
             raise JITHostError("The repository process sent a malformed tool description")
@@ -196,6 +201,7 @@ class ToolSpec:
             snippet,
             ToolExecutionMode(execution_mode),
             return_schema,
+            returns_description,
         )
 
     def build(self, invoke: Callable[[dict[str, JsonValue]], Awaitable[ToolResult]]) -> AgentTool:
@@ -215,6 +221,7 @@ class ToolSpec:
             return_schema=None
             if self.return_schema is None
             else cast("dict[str, JsonValue]", json.loads(json.dumps(self.return_schema))),
+            returns_description=self.returns_description,
         )
 
 

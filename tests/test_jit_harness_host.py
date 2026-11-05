@@ -228,6 +228,30 @@ def test_a_tool_spec_round_trips_through_json():
     assert again.build(lambda arguments: _never()).return_schema == {"type": "integer"}
     assert again.build(lambda arguments: _never()).name == "add"
 
+    @tool(guidelines="Describe the result.")
+    def documented(left: int, right: int) -> int:
+        """Add two integers.
+
+        Returns:
+            The sum.
+        """
+        return left + right
+
+    payload = ToolSpec.of(documented).to_json()
+    assert ToolSpec.from_json(payload).build(lambda arguments: _never()).returns_description == "The sum."
+    # A child built before the field existed sends no prose, and that reads as none.
+    assert ToolSpec.from_json({key: value for key, value in payload.items() if key != "returns_description"}) == (
+        ToolSpec(
+            documented.name,
+            documented.description,
+            payload["parameters"],
+            documented.guidelines,
+            documented.snippet,
+            documented.execution_mode,
+            documented.return_schema,
+        )
+    )
+
 
 async def _never() -> None:  # pragma: no cover - only used to build a handler
     raise AssertionError("not called")

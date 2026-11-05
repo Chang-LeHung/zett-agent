@@ -38,6 +38,19 @@ async def bare() -> str:
     return "x"
 
 
+@tool(guidelines="Describe before editing.", snippet='reported(path="a.py")')
+def reported(path: str) -> str:
+    """Describe a file.
+
+    Args:
+        path: File path.
+
+    Returns:
+        The file's text and its size in bytes.
+    """
+    return path
+
+
 class Model:
     def __init__(self) -> None:
         self.requests = []
@@ -330,6 +343,55 @@ def test_the_return_sentence_matches_the_documented_example():
 
 def test_the_return_sentence_needs_the_snippet_section():
     assert "returns" not in render_tool_guidance([answer], snippets=False, returns=True)
+
+
+def test_the_docstring_returns_prose_closes_the_description():
+    text = render_tool_description(reported, returns=True)
+
+    assert text.endswith("Describe before editing. The file's text and its size in bytes.")
+
+
+def test_the_docstring_returns_prose_follows_the_schema_in_the_system_prompt():
+    text = render_tool_guidance([reported], returns=True)
+
+    assert (
+        '- reported: You can call it as reported(path="a.py"). '
+        'It returns {"type":"string"}. '
+        "The file's text and its size in bytes."
+    ) in text
+
+
+def test_return_prose_needs_the_returns_switch():
+    assert "size in bytes" not in render_tool_description(reported)
+    assert "size in bytes" not in render_tool_guidance([reported])
+
+
+def test_return_prose_stays_last_when_guidelines_are_hidden():
+    text = render_tool_description(reported, guidelines=False, returns=True)
+
+    assert "Describe before editing." not in text
+    assert text.endswith("The file's text and its size in bytes.")
+
+
+def test_return_prose_needs_the_snippet_section_too():
+    text = render_tool_description(reported, snippet=False, returns=True)
+
+    assert "size in bytes" not in text and "It returns" not in text
+
+
+def test_return_prose_without_a_describable_annotation_still_renders():
+    @tool(guidelines="Read it.")
+    def opaque() -> object:
+        """Read something.
+
+        Returns:
+            Whatever the file holds.
+        """
+
+    assert render_tool_guidance([opaque], returns=True) == (
+        "# Tool snippets\n- opaque: Whatever the file holds.\n\n# Tool guidelines\n## opaque\n- Read it."
+    )
+    assert render_tool_description(opaque, returns=True).endswith("Whatever the file holds.")
 
 
 def test_blank_lines_in_a_snippet_are_dropped():

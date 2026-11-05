@@ -13,9 +13,9 @@ Write a typed function
    :pyobject: add
 
 ``@tool`` reads the type annotations to build a JSON Schema. The docstring is
-model-facing documentation: ``Args`` describes each parameter, ``Snippet`` shows
-the call shape, and ``Guidelines`` states when to use the tool. ``@tool`` and
-``@tool(name="public_name")`` both work.
+model-facing documentation: ``Args`` describes each parameter, ``Returns``
+describes the result, ``Snippet`` shows the call shape, and ``Guidelines`` states
+when to use the tool. ``@tool`` and ``@tool(name="public_name")`` both work.
 
 A description and at least one nonempty guideline are required. For a small
 tool, provide the guideline on the decorator:
@@ -62,19 +62,30 @@ history stay as they are.
 A tool's return annotation is described as JSON Schema and kept on the tool, but
 it is not shown by default: most tools return text the model reads directly.
 ``returns=True`` adds one sentence after each snippet, so the model knows the
-shape before it calls:
+shape before it calls, and it ends a tool whose docstring has a ``Returns``
+section with that prose:
 
 .. code-block:: python
+
+   @tool(guidelines="Look up names.")
+   def lookup(query: str) -> list[str]:
+       """Look up names.
+
+       Returns:
+           Matching names, most relevant first.
+       """
+       return []
 
    guidance = ToolGuidelinesExtension(returns=True)
 
 .. code-block:: text
 
-   - lookup: You can call it as lookup(query="zett"). It returns {"items":{"type":"string"},"type":"array"}.
+   - lookup: You can call it as lookup(query="zett"). It returns {"items":{"type":"string"},"type":"array"}. Matching names, most relevant first.
 
-The schema belongs to the snippets section, so ``snippets=False`` removes it
-too. A function without a return annotation, or with one Pydantic cannot
-describe, simply has no such sentence, and nothing validates a result against the
+Return information belongs to the snippets section, so ``snippets=False`` removes
+it too. A function without a return annotation, or with one Pydantic cannot
+describe, has no sentence about the shape, while a ``Returns`` section alone still
+tells the model what the result means. Nothing validates a result against the
 schema.
 
 Design arguments the model can supply

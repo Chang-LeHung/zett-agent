@@ -53,6 +53,9 @@ class ToolGuidelinesExtension(AgentExtension):
         returns: Say what each tool returns, in one sentence after its snippet, as
             JSON Schema. Off by default: most tools return text the model reads
             directly, and the schema costs a sentence per tool in every request.
+            A tool whose docstring has a ``Returns`` section also ends with that
+            prose, so the model reads what the result means and not only its
+            shape.
 
     Examples:
         Keep guidance in the tool definitions::

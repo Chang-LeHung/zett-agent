@@ -101,6 +101,12 @@ class AgentTool(SyncMethodsMixin):
     #: and routes every search request to this handler, whose result decides
     #: which tools the model may load. Other provider protocols reject it.
     local_tool_search: bool = False
+    #: Prose describing the return value, taken from the docstring's ``Returns`` section.
+    #: Empty means the tool says nothing about its result in words. Like
+    #: :attr:`return_schema` it is shown only to renderers that ask for return information;
+    #: it ends the tool's description, after its snippet and guidelines. It stays last
+    #: among the fields so a caller that passes the others positionally keeps working.
+    returns_description: str = ""
 
     def __post_init__(self) -> None:
         if not self.description.strip():
@@ -115,6 +121,8 @@ class AgentTool(SyncMethodsMixin):
             raise ValueError("local_tool_search must be a boolean")
         if self.return_schema is not None and not isinstance(self.return_schema, dict):
             raise ValueError("return_schema must be a JSON schema object or None")
+        if not isinstance(self.returns_description, str):
+            raise ValueError("returns_description must be a string")
         if self.local_tool_search and self.deferred:
             raise ValueError("A local tool search tool cannot also defer its own schema")
 
@@ -174,10 +182,17 @@ class _ToolDocumentation:
     parameter_descriptions: dict[str, str]
     snippet: str
     guidelines: tuple[str, ...]
+    returns_description: str
 
 
 def _parse_tool_docstring(function: Callable[..., Any]) -> _ToolDocumentation:
-    """Parse Description, Args, Snippet, and Guidelines from a Google-style docstring."""
+    """Parse Description, Args, Returns, Snippet, and Guidelines from a Google-style docstring.
+
+    A recognized section runs until the next left-margin heading, which may state a first
+    line after its colon (``Returns: the sum``). An unrecognized one, such as ``Raises:``
+    or ``Examples:``, ends the section before it, with or without text after its colon,
+    so its lines never reach the model as part of a description or an argument.
+    """
     document = inspect.getdoc(function) or ""
     lines = document.splitlines()
     description_lines = []
@@ -189,14 +204,26 @@ def _parse_tool_docstring(function: Callable[..., Any]) -> _ToolDocumentation:
     if not description:
         raise ValueError("A tool needs a docstring description")
 
-    sections: dict[str, list[str]] = {"args": [], "snippet": [], "guidelines": []}
-    aliases = {"arguments": "args", "parameters": "args"}
+    sections: dict[str, list[str]] = {"args": [], "snippet": [], "guidelines": [], "returns": []}
+    aliases = {"arguments": "args", "parameters": "args", "return": "returns"}
     current: str | None = None
     for line in lines[len(description_lines) :]:
-        heading = line.strip().removesuffix(":").lower()
-        heading = aliases.get(heading, heading)
-        if heading in sections and line.strip().endswith(":"):
-            current = heading
+        stripped = line.strip()
+        heading, colon, inline = stripped.partition(":")
+        key = aliases.get(heading.strip().lower(), heading.strip().lower())
+        # A heading sits at the left margin; a bullet is content even when it ends with a
+        # colon. ``Returns: the sum`` states a heading and its first line together. An
+        # unrecognized heading (``Raises:``, ``Examples:``, ``Note:``) ends the section
+        # before it, with or without text after its colon: otherwise ``Args:`` would
+        # invent a parameter named after the heading, and prose would join a description
+        # it does not belong to.
+        if not line[:1].isspace() and colon and not stripped.startswith("-"):
+            if key in sections:
+                current = key
+                if inline.strip():
+                    sections[key].append(inline.strip())
+            else:
+                current = None
             continue
         if current is not None:
             sections[current].append(line)
@@ -218,7 +245,10 @@ def _parse_tool_docstring(function: Callable[..., Any]) -> _ToolDocumentation:
 
     snippet = "\n".join(line.strip() for line in sections["snippet"] if line.strip())
     guidelines = tuple(line.strip().removeprefix("-").strip() for line in sections["guidelines"] if line.strip())
-    return _ToolDocumentation(description, parameter_descriptions, snippet, guidelines)
+    # A Returns section is prose about the result, not a parameter: it is kept on one
+    # line so a renderer can end a tool's description with it.
+    returns_description = " ".join(line.strip() for line in sections["returns"] if line.strip())
+    return _ToolDocumentation(description, parameter_descriptions, snippet, guidelines, returns_description)
 
 
 def get_tool_snippet(function: Callable[..., Any]) -> str:
@@ -374,6 +404,7 @@ def _build_agent_tool(
         guidelines=resolved_guidelines,
         snippet=snippet if snippet is not None else documentation.snippet,
         return_schema=_build_return_schema(hints),
+        returns_description=documentation.returns_description,
         execution_mode=execution_mode,
         deferred=deferred,
         local_tool_search=local_tool_search,
@@ -562,6 +593,9 @@ def tool(
 
                 Guidelines:
                     - Read a file before changing it.
+
+                Returns:
+                    The file's text, decoded as UTF-8.
                 \"\"\"
                 return path
     """
@@ -589,13 +623,15 @@ def render_tool_guidance(
     shapes first. Guidelines follow in one named group per tool, which avoids
     repeating a tool name for every rule. ``snippets`` and ``guidelines`` switch
     either section off. ``returns`` adds one sentence after each snippet saying
-    what the tool returns, as JSON Schema; it is off by default, because most
-    tools return plain text the model already reads.
+    what the tool returns, as JSON Schema, and ends that tool's entry with the
+    prose from its docstring ``Returns`` section; it is off by default, because
+    most tools return plain text the model already reads. Return information
+    belongs to the snippets section, so ``snippets=False`` removes it.
     """
     rendered_snippets = [
         _render_tool_snippet(registered, returns=returns)
         for registered in tools
-        if snippets and (registered.snippet or (returns and registered.return_schema is not None))
+        if snippets and (registered.snippet or (returns and _describes_return(registered)))
     ]
     guideline_groups = [
         f"## {registered.name}\n" + "\n".join(f"- {guideline}" for guideline in registered.guidelines)
@@ -627,7 +663,9 @@ def render_tool_description(
     a sentence, all separated by spaces. A guideline gets a full stop unless it
     already ends with sentence punctuation; text ending in a CJK ideograph or
     kana gets ``。`` instead of ``.``. When ``returns`` is on, one more sentence
-    says what the tool returns.
+    says what the tool returns as JSON Schema, and the prose from its ``Returns``
+    section ends the description, after the guidelines. Like the schema sentence,
+    that prose belongs to the snippet part, so ``snippet=False`` leaves it out.
     When ``base`` already spans lines, as a tool-search catalog does, the
     guidance starts on its own line instead of continuing the base's last one,
     and the base keeps its formatting. The result is the plain description when
@@ -637,7 +675,8 @@ def render_tool_description(
         tool: Tool whose metadata is rendered.
         snippet: Include the tool's snippet when it has one.
         guidelines: Include the tool's guidelines when it has any.
-        returns: Add one sentence saying what the tool returns, after the snippet.
+        returns: Add one sentence saying what the tool returns, after the snippet,
+            and its docstring ``Returns`` prose at the end of the description.
         base: Text to put before the guidance, instead of ``tool.description``.
             Extensions that each add to a request's descriptions pass the text
             they received, so one does not overwrite what another appended.
@@ -648,15 +687,20 @@ def render_tool_description(
             text = render_tool_description(read_file)
     """
     head = (tool.description if base is None else base).rstrip()
+    show_returns = returns and snippet
     guidance_parts = []
-    if snippet and (tool.snippet or (returns and tool.return_schema is not None)):
+    if snippet and (tool.snippet or (show_returns and _describes_return(tool))):
         calls = [line.strip() for line in tool.snippet.splitlines() if line.strip()]
         if calls:
             guidance_parts.append(f"You can call it as {_or_list(calls)}.")
-        if returns and tool.return_schema is not None:
+        if show_returns and tool.return_schema is not None:
             guidance_parts.append(f"It returns {_schema_text(tool.return_schema)}.")
     if guidelines and tool.guidelines:
         guidance_parts.append(" ".join(_as_sentence(guideline) for guideline in tool.guidelines))
+    if show_returns and tool.returns_description:
+        # The prose about the result closes the whole description: a schema says what
+        # shape it has, and this says what it means.
+        guidance_parts.append(_as_sentence(tool.returns_description))
     guidance = " ".join(guidance_parts)
     if not head:
         return guidance
@@ -700,9 +744,9 @@ def render_tool_search_text(tool: AgentTool) -> str:
     """Return every model-facing text field of one tool for search indexing.
 
     The result includes the normalized tool name, description, parameter
-    descriptions from its JSON Schema, snippet, and guidelines. Search
-    extensions can index this text without knowing how ``AgentTool`` stores or
-    renders those fields.
+    descriptions from its JSON Schema, snippet, guidelines, and the prose about
+    its result. Search extensions can index this text without knowing how
+    ``AgentTool`` stores or renders those fields.
     """
     properties = tool.parameters.get("properties")
     parameter_descriptions = (
@@ -717,6 +761,7 @@ def render_tool_search_text(tool: AgentTool) -> str:
             parameter_descriptions,
             tool.snippet,
             " ".join(tool.guidelines),
+            tool.returns_description,
         )
     )
 
@@ -726,6 +771,11 @@ def _schema_text(schema: Mapping[str, Any]) -> str:
     return json.dumps(schema, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _describes_return(tool: AgentTool) -> bool:
+    """Whether the tool says anything about its result: a shape, prose, or both."""
+    return tool.return_schema is not None or bool(tool.returns_description)
+
+
 def _render_tool_snippet(tool: AgentTool, *, returns: bool = False) -> str:
     """Keep every line of a multiline snippet inside its tool bullet.
 
@@ -733,15 +783,18 @@ def _render_tool_snippet(tool: AgentTool, *, returns: bool = False) -> str:
     between two of them says nothing to the model. A single shape stays on the tool's
     line; several are listed one per line, each introduced as a way to call the tool.
     The return hint is one sentence after them, so its schema cannot run into the
-    next tool's bullet.
+    next tool's bullet. The docstring's ``Returns`` prose follows that sentence,
+    ending the tool's own entry.
     """
     lines = [line for line in tool.snippet.splitlines() if line.strip()]
     hint = f"It returns {_schema_text(tool.return_schema)}." if returns and tool.return_schema is not None else ""
+    prose = _as_sentence(tool.returns_description) if returns and tool.returns_description else ""
+    tail = " ".join(part for part in (hint, prose) if part)
     if not lines:
-        return f"- {tool.name}:" + (f" {hint}" if hint else "")
+        return f"- {tool.name}:" + (f" {tail}" if tail else "")
     if len(lines) == 1:
         text = f"- {tool.name}: You can call it as {lines[0]}."
-        return f"{text} {hint}" if hint else text
+        return f"{text} {tail}" if tail else text
     body = "\n".join(f"    {line}" for line in lines)
     text = f"- {tool.name}:\n  You can call it as:\n{body}"
-    return f"{text}\n  {hint}" if hint else text
+    return f"{text}\n  {tail}" if tail else text

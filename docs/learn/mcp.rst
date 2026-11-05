@@ -156,6 +156,18 @@ states that ``<server>__<tool>`` names belong to their server, so repeating it
 for every tool only costs prompt tokens. Property names, types, descriptions,
 and constraints are untouched.
 
+The order a server lists its tools in carries no meaning, and tool definitions
+lead every request, ahead of the conversation a provider caches. Each server's
+tools are therefore registered in name order instead of listing order, so a
+different listing cannot change the request prefix. A tool also keeps the
+description it was first discovered with for as long as its server definition
+stays the same, because some servers render a description from a map or a set
+and return the same facts in another order each time. Its input schema still
+follows the server, because a schema decides which calls are accepted, so a
+server that reorders the keys of a schema can still change the request prefix.
+Pass ``stable_tool_descriptions=False`` to take each listing's text as it
+arrives.
+
 Exposed tool names are limited to letters, digits, ``_`` and ``-`` and at most
 64 characters, the intersection of what model providers accept; longer names
 are shortened with a stable hash. A tool whose exposed name is already

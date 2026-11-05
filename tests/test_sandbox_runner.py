@@ -107,7 +107,10 @@ async def test_a_run_that_exceeds_its_time_limit_is_killed_and_flagged(sandbox, 
     result = await sandbox.run("echo started; sleep 30", cwd=tmp_path, timeout=0.5)
 
     assert result.timed_out is True and result.succeeded is False
-    assert result.exit_code == -9
+    # The process that was killed reports -9. A shell wrapping it can instead report the
+    # child's status as 128 + 9, which is the same outcome and what _limit_for_exit
+    # already accepts for a limit the kernel reports by killing the process.
+    assert result.exit_code in (-signal.SIGKILL, 128 + signal.SIGKILL)
     assert result.stdout == "started\n"
     assert time.monotonic() - started < 10
 

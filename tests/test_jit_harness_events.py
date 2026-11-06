@@ -145,7 +145,9 @@ async def test_base_tools_and_unknown_names_emit_no_jit_events(tmp_path):
     assert harness.origin("absent_tool") is ToolOrigin.UNKNOWN
     assert harness.origin("add") is ToolOrigin.BASE
     assert harness.origin("helper") is ToolOrigin.PYTHON
-    assert harness.origin("repo_load") is ToolOrigin.MANAGEMENT
+    # The request has ended, so nothing is registered as management any more.
+    assert harness.origin("repo_load") is ToolOrigin.UNKNOWN
+    assert harness.management_names == frozenset()
     harness.close()
 
 

@@ -467,7 +467,7 @@ Notes are not tools and have no row.
 
 Without ``names`` it answers with an overview: every tool of the repository,
 called or not, and every application tool that has been called, most called first,
-at most 20 rows; ``omitted`` counts the rest. The management tools are never
+at most 20 rows; ``omitted`` counts the rest. The control tools are never
 measured, and asking for one is an error.
 
 .. code-block:: json
@@ -617,7 +617,7 @@ harness as it works, including calls that never surface as ``TOOL_STARTED``:
    * - Event name
      - Emitted when
    * - ``jit_tool_started``
-     - A repository tool or ``repo_*`` call is about to run.
+     - A repository tool or control-tool call is about to run.
    * - ``jit_tool_completed``
      - That call returned or raised, adding ``success`` and ``error_type``.
 
@@ -648,6 +648,56 @@ Events pair up for calls that reach dispatch. A call the harness rejects before
 running any handler emits no pair of its own; read ``profile()`` for its
 ``rejected`` record and ``tool_errors()`` for the message. Names this harness has
 never seen are ignored rather than reported as JIT calls.
+
+Customize the control surface
+-----------------------------
+
+Applications that wrap the harness can subclass
+:class:`~zett_agent.jit_harness.extension.JITHarnessExtension`. Override
+:meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.management_tools`
+to choose the control tools, and use ``dataclasses.replace`` to reword one
+without rebuilding its handler. The harness validates the result, forces every
+control tool serial, and reserves its names from repository tools.
+
+.. code-block:: python
+
+   from dataclasses import replace
+
+   from zett_agent.jit_harness import JITHarnessExtension
+
+
+   class PreviewJIT(JITHarnessExtension):
+       def management_tools(self, harness):
+           tools = {tool.name: tool for tool in super().management_tools(harness)}
+           tools.pop("profile_tools", None)
+           tools["repo_create"] = replace(
+               tools["repo_create"],
+               description="Create the session's tool repository and return its path.",
+               guidelines=("Create it once; reuse it on later turns.",),
+           )
+           return tuple(tools.values())
+
+The default guidance block names the default tools. If a subclass removes or
+renames one of them, override
+:meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.instructions` to
+match, and point
+:attr:`~zett_agent.jit_harness.extension.JITHarnessExtension.guidance_tool` at
+the tool whose presence should still inject the block. Set ``guidance_tool`` to
+``None`` to inject it when any registered control tool is offered:
+
+.. code-block:: python
+
+   class CustomJIT(JITHarnessExtension):
+       guidance_tool = None
+
+       def instructions(self, harness):
+           return "Use the repository only for reusable helpers.\n"
+
+The names ``repo_create``, ``repo_load``, ``repo_unload``, and ``profile_tools``
+stay reserved for repository tools even when a subclass removes one; a new
+control-tool name is reserved for the session that registers it. Before the
+first ``attach()`` and after ``detach()``, ``origin()`` reports those names as
+``unknown`` because the harness can no longer route them.
 
 Try the complete offline example
 --------------------------------

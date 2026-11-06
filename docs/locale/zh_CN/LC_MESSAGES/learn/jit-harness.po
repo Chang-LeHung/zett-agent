@@ -385,8 +385,8 @@ msgid "``profile_tools(names)`` takes the names of up to 10 tools and answers wi
 msgstr "``profile_tools(names)``\\ 接收最多 10 个工具的名字，并按提问的顺序为每个工具返回一行。它对任何工具都有效，既包括应用的工具，也包括模型自己写的工具，因此模型可以把打算替换的工具和自己的工具比较。从未被调用过的工具会得到全零的一行：“未使用”也是一个答案。笔记不是工具，没有对应的行。"
 
 #: ../../learn/jit-harness.rst:468
-msgid "Without ``names`` it answers with an overview: every tool of the repository, called or not, and every application tool that has been called, most called first, at most 20 rows; ``omitted`` counts the rest. The management tools are never measured, and asking for one is an error."
-msgstr "不传 ``names`` 时返回概览：仓库中的每个工具（无论是否被调用过），以及每个被调用过的应用工具，调用最多的排在前面，最多 20 行； ``omitted`` 表示被省略的数量。管理工具永远不会被测量，查询它们会报错。"
+msgid "Without ``names`` it answers with an overview: every tool of the repository, called or not, and every application tool that has been called, most called first, at most 20 rows; ``omitted`` counts the rest. The control tools are never measured, and asking for one is an error."
+msgstr "不传 ``names`` 时返回概览：仓库中的每个工具（无论是否被调用过），以及每个被调用过的应用工具，调用最多的排在前面，最多 20 行； ``omitted`` 表示被省略的数量。控制工具永远不会被测量，查询它们会报错。"
 
 #: ../../learn/jit-harness.rst:484
 msgid "``success_rate`` is completed over completed plus failed; rejected and cancelled attempts say nothing about the tool and are left out. ``avg_output_chars`` is what a call handed back, and the message of a failed call counts because the model reads it too. A tool asked for by name carries up to three recent distinct errors, which is where to look before fixing it; in the overview each carries one. The numbers live in memory and start again from zero with the process, and a few calls are thin evidence, which the guidance says. Application tools are measured only with ``manage_base_tools=True``; with it off, asking for one is an error rather than a row of zeros that would read as unused. The same summary is :meth:`~zett_agent.jit_harness.runtime.JITHarness.profile_tools` in Python."
@@ -513,8 +513,8 @@ msgid "``jit_tool_started``"
 msgstr "``jit_tool_started``"
 
 #: ../../learn/jit-harness.rst:620
-msgid "A repository tool or ``repo_*`` call is about to run."
-msgstr "仓库中的某个工具或 ``repo_*`` 调用即将运行。"
+msgid "A repository tool or control-tool call is about to run."
+msgstr "仓库中的某个工具或控制工具调用即将运行。"
 
 #: ../../learn/jit-harness.rst:621
 msgid "``jit_tool_completed``"
@@ -537,6 +537,56 @@ msgid "Events pair up for calls that reach dispatch. A call the harness rejects 
 msgstr "事件会为进入分发的调用成对出现。harness 在运行任何处理函数之前就拒绝的调用不会自己发出一对事件；请读取 ``profile()`` 获取它的 ``rejected`` 记录，读取 ``tool_errors()`` 获取相应消息。这个 harness 从未见过的名称会被忽略，而不会作为 JIT 调用上报。"
 
 #: ../../learn/jit-harness.rst:653
+msgid "Customize the control surface"
+msgstr "自定义控制面"
+
+#: ../../learn/jit-harness.rst:655
+msgid ""
+"Applications that wrap the harness can subclass "
+":class:`~zett_agent.jit_harness.extension.JITHarnessExtension`. Override "
+":meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.management_tools`"
+" to choose the control tools, and use ``dataclasses.replace`` to reword "
+"one without rebuilding its handler. The harness validates the result, "
+"forces every control tool serial, and reserves its names from repository "
+"tools."
+msgstr ""
+"包装 harness 的应用可以继承 "
+":class:`~zett_agent.jit_harness.extension.JITHarnessExtension`\\ 。覆盖 "
+":meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.management_tools`"
+" 可以选择控制工具，并使用 ``dataclasses.replace`` 改写某个工具而不重建它的 handler。harness "
+"会校验结果，强制所有控制工具串行，并保留它们的名字，使仓库工具不能占用。"
+
+#: ../../learn/jit-harness.rst:680
+msgid ""
+"The default guidance block names the default tools. If a subclass removes"
+" or renames one of them, override "
+":meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.instructions`"
+" to match, and point "
+":attr:`~zett_agent.jit_harness.extension.JITHarnessExtension.guidance_tool`"
+" at the tool whose presence should still inject the block. Set "
+"``guidance_tool`` to ``None`` to inject it when any registered control "
+"tool is offered:"
+msgstr ""
+"默认 guidance 块会点名默认工具。如果子类删除或重命名了其中一个，请同时覆盖 "
+":meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.instructions`"
+" 以保持一致，并把 "
+":attr:`~zett_agent.jit_harness.extension.JITHarnessExtension.guidance_tool`"
+" 指向仍然应触发该块的工具。把 ``guidance_tool`` 设为 ``None``\\ ，可以在任意已注册控制工具出现时注入："
+
+#: ../../learn/jit-harness.rst:696
+msgid ""
+"The names ``repo_create``, ``repo_load``, ``repo_unload``, and "
+"``profile_tools`` stay reserved for repository tools even when a subclass"
+" removes one; a new control-tool name is reserved for the session that "
+"registers it. Before the first ``attach()`` and after ``detach()``, "
+"``origin()`` reports those names as ``unknown`` because the harness can "
+"no longer route them."
+msgstr ""
+"即使子类删除了某个工具， ``repo_create``、 ``repo_load``、 ``repo_unload`` 和 "
+"``profile_tools`` 这些名字仍为仓库工具保留；新增控制工具的名字会在注册它的会话内保留。首次 ``attach()`` "
+"之前和 ``detach()`` 之后， ``origin()`` 会把这些名字报告为 ``unknown``\\ ，因为 harness 已无法路由它们。"
+
+#: ../../learn/jit-harness.rst:703
 msgid "Try the complete offline example"
 msgstr "试用完整的离线示例"
 

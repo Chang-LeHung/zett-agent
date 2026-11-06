@@ -165,6 +165,13 @@ class JITHarnessExtension(AgentExtension):
         Application tools added later in setup or before-model hooks are adopted
         before dispatch; existing policy removals are not restored.
 
+    A subclass can change the model-facing surface: override
+    :meth:`management_tools` to add, remove, rename, or reword the control
+    tools, :meth:`instructions` to replace the stable prompt block, and
+    :attr:`guidance_tool` / :meth:`wants_guidance` to decide when that block is
+    injected. If a subclass renames or removes a tool named by the default
+    instructions, it must override :meth:`instructions` to match.
+
     Examples:
         Keep each session's tools under the application's data directory::
 
@@ -175,6 +182,9 @@ class JITHarnessExtension(AgentExtension):
     """
 
     priority = 900_000
+    #: Tool whose presence in a request enables the repository guidance block.
+    #: None means any registered management tool enables it.
+    guidance_tool: str | None = "repo_create"
 
     def __init__(
         self,
@@ -279,7 +289,9 @@ class JITHarnessExtension(AgentExtension):
                 )
                 self._sessions[session_id] = harness
             self._last_used[session_id] = monotonic()
-            harness.attach(context, self._management_tools(harness))
+            tools = tuple(self.management_tools(harness))
+            self._check_guidance_tool(tools)
+            harness.attach(context, tools)
 
     async def on_state(self, context: AgentRunContext) -> None:
         """Adopt tools registered by later setup hooks before context loading."""
@@ -329,8 +341,49 @@ class JITHarnessExtension(AgentExtension):
         origin = harness.origin(name)
         return origin if origin in _OBSERVED_ORIGINS else None
 
+    def management_tools(self, harness: JITHarness) -> Sequence[AgentTool]:
+        """Return the control tools this session exposes to the model.
+
+        The default is :meth:`_management_tools`. Override to add, remove,
+        rename, or reword them. The harness validates the result, forces every
+        tool serial, and classifies their names as management, so repository
+        tools cannot shadow them.
+
+        Called once per request, before :meth:`JITHarness.attach`. Keep the
+        returned set deterministic for one session: changing it between
+        requests changes the model-facing prompt and the guidance condition.
+        """
+        return self._management_tools(harness)
+
+    def instructions(self, harness: JITHarness) -> str:
+        """Return the stable guidance block placed before the repository line.
+
+        The default is the packaged ``instructions.md``. Override it when the
+        tool set or workflow differs, and keep concrete tool names consistent
+        with :meth:`management_tools`.
+        """
+        return _INSTRUCTIONS
+
+    def wants_guidance(self, harness: JITHarness, offered: set[str]) -> bool:
+        """Return whether this request carries the JIT guidance block.
+
+        ``offered`` is the set of tool names the provider will see after policy
+        filtering. By default the block follows :attr:`guidance_tool`; None
+        means any registered management tool activates it.
+        """
+        if self.guidance_tool is None:
+            return bool(offered & harness.management_names)
+        return self.guidance_tool in offered
+
+    def _check_guidance_tool(self, tools: Sequence[AgentTool]) -> None:
+        """Fail fast when a renamed surface leaves the default trigger dangling."""
+        if self.guidance_tool is None or not tools:
+            return
+        if self.guidance_tool not in {tool.name for tool in tools}:
+            raise ValueError(f"guidance_tool {self.guidance_tool!r} is not one of this session's management tools")
+
     def _management_tools(self, harness: JITHarness) -> tuple[AgentTool, ...]:
-        """Build this session's four repository tools."""
+        """Build this session's default repository tools."""
 
         @tool(execution_mode=ToolExecutionMode.SERIAL)
         async def repo_create(repo: str) -> RepoResult:
@@ -426,7 +479,7 @@ class JITHarnessExtension(AgentExtension):
         # A later policy extension may have filtered tools. Respect the actual
         # request rather than revealing every locally registered capability.
         offered = {definition.name for definition in request.tools}
-        if "repo_create" not in offered:
+        if not self.wants_guidance(harness, offered):
             filtered = request
         else:
             guidance = render_tool_guidance([tool for name, tool in context.tools.items() if name in offered])
@@ -459,7 +512,7 @@ class JITHarnessExtension(AgentExtension):
         block, so providers that join system texts in order keep the stable
         instructions at the front of the joined prompt.
         """
-        parts = [_INSTRUCTIONS]
+        parts = [self.instructions(harness)]
         if (path := harness.repo_path) is not None:
             parts.append(f"Your repository is `{harness.repo}` at `{path}`. `repo_load` lists its tools and notes.")
         if guidance:

@@ -18,6 +18,7 @@ from ..messages import ImageContent, TextContent, ToolCall, ToolMessage
 from ..tools.base import (
     _SYNC_TOOL_RUNNER,
     AgentTool,
+    ToolExecutionMode,
     ToolResult,
     _bind_tool_call,
     _reset_tool_call,
@@ -27,7 +28,7 @@ from ..tools.invocation import invoke_tool
 from .enums import ToolCallStatus, ToolOrigin
 from .errors import ToolErrorReport
 from .host import HarnessCalls, HostedRepo, InProcessToolHost, JITToolHost
-from .manifest import MANIFEST_FILE, _tool_problems
+from .manifest import MANIFEST_FILE, _tool_problems, is_tool_name
 from .profiling import MAX_RETAINED_CALLS, ActiveToolCall, JITHarnessProfile, ToolProfiler, ToolProfileStats
 from .repo import (
     INIT_FILE,
@@ -201,6 +202,10 @@ class JITHarness(HarnessCalls):
         # Control tools registered for the current request; cleared on detach
         # because they close over that request's harness state.
         self._management: dict[str, AgentTool] = {}
+        # Names the last attach() registered as management tools. Routing and
+        # profiling trust this set, not the module-level reservation, so a
+        # subclass can add or remove control tools.
+        self._management_names: frozenset[str] = frozenset()
         # Wrapper handlers created in this request. Registry synchronization
         # recognizes old wrappers (for example a restored policy baseline)
         # without mistaking them for a new base implementation or wrapping twice.
@@ -234,25 +239,44 @@ class JITHarness(HarnessCalls):
             raise RuntimeError("This tool's request has already closed")
 
     def _known(self, name: str) -> None:
-        if name in MANAGEMENT_NAMES:
+        """Reject a dispatch name the harness cannot route."""
+        if name in self._management_names:
             raise ValueError("JIT management tools cannot be changed or composed")
         if name not in self._kinds and name not in self._base_names:
             raise ValueError(f"Unknown tool: {name}")
+
+    def _known_mutation(self, name: str) -> None:
+        """Reject unloading or loading a management name, including a removed one."""
+        if name in self._management_names or name in MANAGEMENT_NAMES:
+            raise ValueError("JIT management tools cannot be changed or composed")
+        self._known(name)
+
+    @property
+    def management_names(self) -> frozenset[str]:
+        """Return the names the last attach() registered as management tools.
+
+        Empty before the first attach and after detach. Names reserved by the
+        module-level ``MANAGEMENT_NAMES`` stay reserved for repository tools
+        whether or not they are currently registered.
+        """
+        with self._lock:
+            return self._management_names
 
     def origin(self, name: str) -> ToolOrigin:
         """Return which registry currently serves one tool name.
 
         Labels observability events and profile records: ``BASE`` for application
         tools, ``PYTHON`` for tools the repository defines, ``MANAGEMENT`` for the
-        harness's own tools, and ``UNKNOWN`` for a
-        name this harness has never seen. The answer does not depend on the
-        request binding.
+        tools the last attach() registered, and ``UNKNOWN`` for a name this
+        harness has never seen. The answer depends on attach state, not on the
+        request binding: before attach and after detach, management names are
+        ``UNKNOWN`` because the harness cannot route them.
         """
         with self._lock:
             return self._resolve_origin(name)
 
     def _resolve_origin(self, name: str) -> ToolOrigin:
-        if name in MANAGEMENT_NAMES:
+        if name in self._management_names:
             return ToolOrigin.MANAGEMENT
         if name in self._kinds:
             return self._kinds[name]
@@ -355,7 +379,7 @@ class JITHarness(HarnessCalls):
         status = ToolCallStatus.REJECTED
         try:
             with self._lock:
-                if name in MANAGEMENT_NAMES:
+                if name in self._management_names:
                     if context is None or name not in context.tools:
                         raise ValueError(f"Tool {name!r} is not registered in the current request")
                     target = self._management[name]
@@ -416,7 +440,9 @@ class JITHarness(HarnessCalls):
 
         Args:
             context: Request-scoped tool registry and session identity to bind.
-            management_tools: Harness control tools to expose to the model.
+            management_tools: Harness control tools to expose to the model. They
+                are validated, forced serial, and become the only names
+                :meth:`origin` reports as ``MANAGEMENT`` until detach.
         """
         with self._lock:
             if self._context is not None:
@@ -429,14 +455,34 @@ class JITHarness(HarnessCalls):
                 if registered.local_tool_search:
                     raise ValueError("JIT harness does not manage client-side tool search")
                 bases[registered.name] = registered
+
+            tools = tuple(management_tools)
+            for tool in tools:
+                if not isinstance(tool, AgentTool):
+                    raise ValueError("Management tools must be AgentTool instances")
+            names = [tool.name for tool in tools]
+            if len(names) != len(set(names)):
+                raise ValueError("Duplicate management tool name")
+            for tool in tools:
+                if not is_tool_name(tool.name):
+                    raise ValueError(f"Invalid management tool name: {tool.name!r}")
+                if tool.local_tool_search or tool.deferred:
+                    raise ValueError("Management tools must be ordinary, non-deferred function tools")
+                if tool.name in bases or tool.name in self._base_names or tool.name in self._kinds:
+                    raise ValueError(f"Management tool conflicts with an existing tool: {tool.name}")
+            tools = tuple(replace(tool, execution_mode=ToolExecutionMode.SERIAL) for tool in tools)
+
             self._context = context
             self._bases = bases
             self._base_names.update(bases)
+            # Publish the actual names before adopting a repository: its loader
+            # must reject a tool that would shadow a management name.
+            self._management = {tool.name: tool for tool in tools}
+            self._management_names = frozenset(self._management)
             self._adopt_existing()
             for name in self._base_names | self._kinds.keys():
                 self._publish(name)
-            for registered in management_tools:
-                self._management[registered.name] = registered
+            for registered in self._management.values():
                 context.register_tool(self._wrapper(registered, context))
 
     def sync_tools(self, context: AgentRunContext) -> None:
@@ -460,6 +506,8 @@ class JITHarness(HarnessCalls):
                 validate_name(name)
                 if name in self._kinds:
                     raise ValueError(f"Base tool conflicts with dynamic tool: {name}")
+                if name in self._management_names:
+                    raise ValueError(f"Base tool conflicts with management tool: {name}")
                 if registered.local_tool_search:
                     raise ValueError("JIT harness does not manage client-side tool search")
                 replacements[name] = registered
@@ -485,6 +533,7 @@ class JITHarness(HarnessCalls):
                 # those callables or allow them to run after their request.
                 self._bases = dict(self._provided)
                 self._management.clear()
+                self._management_names = frozenset()
                 self._wrapper_handlers.clear()
                 for task, owner in tuple(self._nested_tasks.items()):
                     if owner is context:
@@ -622,6 +671,10 @@ class JITHarness(HarnessCalls):
             loaded = self._host.load(directory, scan, self)
         finally:
             self._compiling = False
+        management_clash = sorted(loaded.tools.keys() & self._management_names)
+        if management_clash:
+            loaded.close()
+            raise ValueError(f"Tool {management_clash[0]!r} is reserved for JIT management")
         clash = sorted(loaded.tools.keys() & self._base_names)
         if clash:
             loaded.close()
@@ -729,7 +782,7 @@ class JITHarness(HarnessCalls):
         """
         with self._lock:
             self._check_mutation()
-            self._known(name)
+            self._known_mutation(name)
             if name in self._base_names and not self.manage_base_tools:
                 raise ValueError("Base tool management is disabled; cannot unload a base tool")
             self._unloaded.add(name)
@@ -743,7 +796,7 @@ class JITHarness(HarnessCalls):
         """
         with self._lock:
             self._check_mutation()
-            self._known(name)
+            self._known_mutation(name)
             if name in self._base_names and not self.manage_base_tools:
                 raise ValueError("Base tool management is disabled; cannot load a base tool")
             if name not in self._dynamic and name not in self._bases:
@@ -768,7 +821,7 @@ class JITHarness(HarnessCalls):
         Read profile() for statistics.
         """
         with self._lock:
-            self._known(name)
+            self._known_mutation(name)
             registered = self._dynamic.get(name) or self._bases.get(name)
             status: Literal["loaded", "unloaded", "missing", "unavailable"] = (
                 "unloaded" if self._is_unloaded(name) else "loaded" if registered is not None else "missing"
@@ -806,7 +859,7 @@ class JITHarness(HarnessCalls):
         Without ``names`` the answer is an overview: every tool of the repository,
         called or not, and every application tool that has been called, most called
         first, one recent error each, and at most :data:`MAX_PROFILE_ROWS` rows with
-        ``omitted`` counting the rest. The management tools are never measured.
+        ``omitted`` counting the rest. The control tools are never measured.
 
         Application tools are measured only with ``manage_base_tools=True``; with it
         off they have no numbers, so asking for one is an error instead of a row of
@@ -817,7 +870,7 @@ class JITHarness(HarnessCalls):
             names: Tools to look at, or None for the overview.
 
         Raises:
-            ValueError: If a name is unknown, is a management tool, is an application
+            ValueError: If a name is unknown, is a control tool, is an application
                 tool while base management is off, or if there are too many names.
         """
         explicit = names is not None
@@ -831,7 +884,7 @@ class JITHarness(HarnessCalls):
                     raise ValueError(f"Name between 1 and {MAX_PROFILE_NAMES} tools")
                 unknown = [item for item in wanted if item not in known]
                 if unknown:
-                    raise ValueError(f"Unknown tool: {', '.join(unknown)} (the repo_* tools are not measured)")
+                    raise ValueError(f"Unknown tool: {', '.join(unknown)} (the control tools are not measured)")
                 if not self.manage_base_tools:
                     unmeasured = [item for item in wanted if item not in self._kinds]
                     if unmeasured:

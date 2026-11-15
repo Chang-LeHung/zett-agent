@@ -599,6 +599,20 @@ class JITHarness(HarnessCalls):
             for resource in sorted(self._resources.values(), key=lambda item: item.name)
         ]
 
+    @property
+    def resources(self) -> list[ResourceInfo]:
+        """Return the Markdown notes the last successful repository scan found.
+
+        Each entry carries its name, kind, description, and absolute path. Notes
+        are files, not tools: the model reads one with its file tools. The list
+        is empty before a repository is created or loaded, and reflects the last
+        successful ``create_repo`` or ``load_repo`` until the next one. A failed
+        load keeps the previous list, and a note deleted on disk stays listed
+        until the next successful scan.
+        """
+        with self._lock:
+            return self._resource_infos() if self._repo is not None else []
+
     def create_repo(self, repo: str) -> RepoResult:
         """Create this harness's repository, or return the one that already exists.
 

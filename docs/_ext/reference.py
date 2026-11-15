@@ -227,6 +227,8 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "JITHarnessExtension",
         "JITToolCompletedEvent",
         "JITToolStartedEvent",
+        "MAX_NOTE_CATALOG_CHARS",
+        "render_note_catalog",
     ),
     "zett_agent.jit_harness.results": (
         "RepoResult",

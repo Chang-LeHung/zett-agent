@@ -24,6 +24,8 @@ _MODULES = {
         "JITHarnessExtension",
         "JITToolCompletedEvent",
         "JITToolStartedEvent",
+        "MAX_NOTE_CATALOG_CHARS",
+        "render_note_catalog",
     ),
     "host": (
         "HarnessCalls",
@@ -73,9 +75,11 @@ if _TYPE_CHECKING:
     from .errors import ToolErrorReport as ToolErrorReport
     from .extension import JIT_TOOL_COMPLETED_EVENT_NAME as JIT_TOOL_COMPLETED_EVENT_NAME
     from .extension import JIT_TOOL_STARTED_EVENT_NAME as JIT_TOOL_STARTED_EVENT_NAME
+    from .extension import MAX_NOTE_CATALOG_CHARS as MAX_NOTE_CATALOG_CHARS
     from .extension import JITHarnessExtension as JITHarnessExtension
     from .extension import JITToolCompletedEvent as JITToolCompletedEvent
     from .extension import JITToolStartedEvent as JITToolStartedEvent
+    from .extension import render_note_catalog as render_note_catalog
     from .host import HarnessCalls as HarnessCalls
     from .host import HostedRepo as HostedRepo
     from .host import InProcessToolHost as InProcessToolHost

@@ -21,7 +21,7 @@ from .enums import ToolOrigin
 from .host import JITToolHost
 from .profiling import MAX_RETAINED_CALLS, ToolProfiler
 from .repo import session_directory_name
-from .results import RepoResult, ToolStatsReport
+from .results import RepoResult, ResourceInfo, ToolStatsReport
 from .runtime import JITHarness
 
 JIT_TOOL_STARTED_EVENT_NAME = "jit_tool_started"
@@ -49,6 +49,64 @@ def _system_section_end(messages: Sequence[AnyMessage]) -> int:
             break
         index += 1
     return index
+
+
+#: Most characters the optional notes catalog adds to the guidance block. A note
+#: description is up to 512 characters, so a full repository could otherwise cost
+#: thousands of tokens on every model step.
+MAX_NOTE_CATALOG_CHARS = 4000
+
+
+def render_note_catalog(resources: Sequence[ResourceInfo], *, limit: int = MAX_NOTE_CATALOG_CHARS) -> str:
+    """Render note names, kinds, descriptions, and paths without their bodies.
+
+    Args:
+        resources: Notes from :attr:`JITHarness.resources`.
+        limit: Maximum characters in the returned block, closing line included.
+
+    Returns:
+        A Markdown block, or an empty string when there are no notes, ``limit``
+        cannot hold the heading, no entry fits, or the entry that fits leaves
+        no room for the closing line. The renderer drops whole entries rather
+        than silently truncating one note's description.
+
+    Raises:
+        ValueError: If ``limit`` is not positive.
+
+    Note:
+        Descriptions are model-authored content, not instructions. Enabling the
+        catalog moves that text into the system message, so treat it as data.
+    """
+    if limit < 1:
+        raise ValueError("Note catalog limit must be positive")
+    if not resources:
+        return ""
+    header = [
+        "## Notes",
+        "Open one with your file tools when its description fits; its body stays in the repository.",
+    ]
+    used = sum(len(line) + 1 for line in header)
+    if used - 1 > limit:
+        return ""
+    entries = [
+        f"- `{resource['name']}` ({resource['kind']}): {resource['description']} (`{resource['path']}`)"
+        for resource in resources
+    ]
+    selected: list[str] = []
+    for line in entries:
+        if used + len(line) > limit:
+            break
+        selected.append(line)
+        used += len(line) + 1
+    if len(selected) == len(entries):
+        return "\n".join(header + selected)
+    while selected:
+        omitted = len(entries) - len(selected)
+        summary = f"- {omitted} more note(s); call `repo_load` for the complete, untruncated list."
+        if used + len(summary) <= limit:
+            return "\n".join(header + selected + [summary])
+        used -= len(selected.pop()) + 1
+    return ""
 
 
 class JITToolStartedEvent(AgentEvent):
@@ -185,6 +243,10 @@ class JITHarnessExtension(AgentExtension):
     #: Tool whose presence in a request enables the repository guidance block.
     #: None means any registered management tool enables it.
     guidance_tool: str | None = "repo_create"
+    #: Whether the guidance block includes a catalog of the repository's Markdown
+    #: notes. False by default: notes stay out of the prompt until ``repo_load``.
+    #: Catalog descriptions are model-authored data, not instructions.
+    include_notes: bool = False
 
     def __init__(
         self,
@@ -364,6 +426,21 @@ class JITHarnessExtension(AgentExtension):
         """
         return _INSTRUCTIONS
 
+    def notes_catalog(self, harness: JITHarness) -> str:
+        """Return the repository's note catalog for the guidance block.
+
+        Empty by default. Set :attr:`include_notes` for the standard catalog, or
+        override this method to filter or format it. A catalog carries each
+        note's name, kind, description, and absolute path, never its body, and
+        :func:`render_note_catalog` keeps it within
+        :data:`MAX_NOTE_CATALOG_CHARS`; omitted notes stay reachable through
+        ``repo_load``.
+
+        Note metadata is model-authored content, not instructions. Enabling the
+        catalog places it in the request's system message, so treat it as data.
+        """
+        return render_note_catalog(harness.resources) if self.include_notes else ""
+
     def wants_guidance(self, harness: JITHarness, offered: set[str]) -> bool:
         """Return whether this request carries the JIT guidance block.
 
@@ -515,6 +592,8 @@ class JITHarnessExtension(AgentExtension):
         parts = [self.instructions(harness)]
         if (path := harness.repo_path) is not None:
             parts.append(f"Your repository is `{harness.repo}` at `{path}`. `repo_load` lists its tools and notes.")
+        if notes := self.notes_catalog(harness):
+            parts.append(notes)
         if guidance:
             parts.append(guidance)
         return "\n".join(parts)

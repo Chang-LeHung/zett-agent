@@ -19,7 +19,9 @@ class OpenAIProvider(OpenAICompatibleProvider):
         model: Model identifier understood by the configured endpoint.
         api_key: API credential supplied by the application.
         transport: Optional HTTPX transport, useful for isolated tests.
-        base_url: Compatible API root; None uses the official OpenAI v1 endpoint.
+        base_url: Compatible API root; None uses the official OpenAI v1 endpoint. A value that
+            already names the ``/v1/chat/completions`` or ``/v1/responses`` route is accepted, and
+            the path is trimmed.
         temperature: Optional sampling temperature passed to the provider.
         response: Use the Responses API instead of Chat Completions.
         retry: Exponential backoff applied before the first emitted event only.

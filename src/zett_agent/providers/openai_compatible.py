@@ -78,6 +78,7 @@ from .base import (
     ProviderResponseError,
     RetryingProvider,
     ToolCallAccumulator,
+    api_root,
     describe_status_error,
     empty_stream_message,
     guard_idle,
@@ -406,6 +407,10 @@ class OpenAICompatibleProvider(RetryingProvider):
         base_url = base_url or self.default_base_url
         if not base_url:
             raise ValueError("base_url is required")
+        # A service's documentation shows its route, so a connection string often names
+        # ``.../v1/chat/completions`` rather than the root the SDK expects. Accept both: only the
+        # route is trimmed, so a version segment the caller wrote stays where it is.
+        base_url = api_root(base_url, "/chat/completions", "/responses")
         self.model = model
         self.temperature = temperature
         self.response = response

@@ -404,15 +404,20 @@ msgstr "对于实现了现有协议的服务，请使用 ``base_url``，而不�
 
 #: ../../learn/providers.rst:286
 msgid ""
-"The URL is the API root, for example a service's ``.../v1``, not its "
-"``.../chat/completions`` route. Match the protocol to the gateway. Some "
-"gateways reject optional fields such as ``prompt_cache_key`` or "
-"particular reasoning levels; configure only supported options and test "
-"your combination. The adapter does not auto-detect model capabilities "
-"from an endpoint URL."
+"The URL is the API root — the part before the route: the host, or a prefix "
+"such as ``.../anthropic`` for an Anthropic-compatible service. An adapter "
+"also accepts its own route — ``.../v1/chat/completions``, "
+"``.../v1/responses``, or ``.../v1/messages`` — and trims it, because the SDK "
+"appends that path itself; any other path is part of the service's address "
+"and is kept. Match the protocol to the gateway. Some gateways reject optional "
+"fields such as ``prompt_cache_key`` or particular reasoning levels; configure "
+"only supported options and test your combination. The adapter does not auto-"
+"detect model capabilities from an endpoint URL."
 msgstr ""
-"URL 应指向 API 根路径，例如服务的 ``.../v1``，而不是它的 ``.../chat/completions`` "
-"路由。请让协议与网关匹配。有些网关会拒绝可选字段，比如 ``prompt_cache_key`` "
+"URL 应指向 API 根路径——路由之前的部分：主机，或 Anthropic 兼容服务的前缀（如 ``.../anthropic``）。"
+"适配器也接受它自己的路由——\\ ``.../v1/chat/completions``、``.../v1/responses``，或 "
+"``.../v1/messages``\\ ——并会去掉这段路径，因为它由 SDK 自己追加；其他路径属于服务地址的一部分，"
+"会原样保留。请让协议与网关匹配。有些网关会拒绝可选字段，比如 ``prompt_cache_key`` "
 "或某些推理级别；请只配置受支持的选项，并测试你的组合。适配器不会从端点 URL 自动探测模型能力。"
 
 #: ../../learn/providers.rst:292

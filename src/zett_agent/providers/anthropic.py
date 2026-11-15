@@ -17,7 +17,8 @@ class AnthropicProvider(AnthropicCompatibleProvider):
     Args:
         model: Model identifier accepted by the Anthropic-compatible endpoint.
         api_key: API credential supplied by the application.
-        base_url: API root, defaulting to the official Anthropic endpoint.
+        base_url: API root, defaulting to the official Anthropic endpoint. A value that already
+            names the ``/v1/messages`` endpoint is accepted, and the path is trimmed.
         transport: Optional HTTPX transport for isolated tests or custom routing.
         response: Must remain false; this adapter uses Anthropic Messages API.
         retry: Exponential backoff for transient failures before output starts.

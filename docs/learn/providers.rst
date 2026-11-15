@@ -283,11 +283,15 @@ writing a new adapter:
        send_prompt_cache_key=False,
    )
 
-The URL is the API root, for example a service's ``.../v1``, not its
-``.../chat/completions`` route. Match the protocol to the gateway. Some
-gateways reject optional fields such as ``prompt_cache_key`` or particular
-reasoning levels; configure only supported options and test your combination.
-The adapter does not auto-detect model capabilities from an endpoint URL.
+The URL is the API root — the part before the route: the host, or a prefix such
+as ``.../anthropic`` for an Anthropic-compatible service. An adapter also
+accepts its own route — ``.../v1/chat/completions``, ``.../v1/responses``, or
+``.../v1/messages`` — and trims it, because the SDK appends that path itself;
+any other path is part of the service's address and is kept. Match the protocol
+to the gateway. Some gateways reject optional fields such as
+``prompt_cache_key`` or particular reasoning levels; configure only supported
+options and test your combination. The adapter does not auto-detect model
+capabilities from an endpoint URL.
 
 :class:`~zett_agent.providers.openai.OpenAIProvider` speaks OpenAI's own dialect:
 it sends ``parallel_tool_calls`` and a top-level ``reasoning_effort``. A gateway

@@ -128,6 +128,35 @@ async def test_openai_responses_sends_body_fields_too():
     assert capture.json["model"] == "gpt"
 
 
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("https://gateway.example/v1/chat/completions", "https://gateway.example/v1/chat/completions"),
+        ("https://gateway.example/v1/chat/completions/", "https://gateway.example/v1/chat/completions"),
+        ("https://gateway.example/proxy/v1/chat/completions", "https://gateway.example/proxy/v1/chat/completions"),
+    ],
+)
+async def test_openai_chat_accepts_a_base_url_that_names_its_own_route(given, expected):
+    """A route copied from a service's documentation is trimmed, not joined to the SDK's own path."""
+    capture = Capture(CHAT)
+    provider = OpenAIProvider("gpt", "key", capture.transport, base_url=given)
+
+    await drain(provider)
+
+    assert capture.request is not None and str(capture.request.url) == expected
+
+
+async def test_openai_responses_accepts_a_base_url_that_names_its_own_route():
+    capture = Capture(RESPONSES)
+    provider = OpenAIProvider(
+        "gpt", "key", capture.transport, response=True, base_url="https://gateway.example/v1/responses"
+    )
+
+    await drain(provider)
+
+    assert capture.request is not None and str(capture.request.url) == "https://gateway.example/v1/responses"
+
+
 async def test_deepseek_body_fields_override_the_adapters_own_extra_fields():
     capture = Capture(CHAT)
     provider = DeepSeekProvider("deepseek-chat", "key", capture.transport, extra_body={"thinking": {"type": "enabled"}})

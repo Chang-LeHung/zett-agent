@@ -29,7 +29,7 @@ from zett_agent.model import (
 )
 from zett_agent.providers.anthropic import AnthropicProvider
 from zett_agent.providers.anthropic_compatible import AnthropicCompatibleProvider
-from zett_agent.providers.base import ProviderAuthError, ProviderResponseError
+from zett_agent.providers.base import ProviderAuthError, ProviderResponseError, api_root
 from zett_agent.providers.deepseek import DeepSeekAnthropicProvider
 from zett_agent.providers.glm import GLMAnthropicProvider
 from zett_agent.providers.kimi import KimiAnthropicProvider
@@ -127,6 +127,70 @@ async def test_a_compatible_endpoint_works_with_nothing_but_a_base_url():
     assert body["output_config"] == {"effort": "medium"}
     assert response.message.content == "hi" and response.message.provider == "anthropic"
     assert (response.usage.input_tokens, response.usage.output_tokens) == (3, 2)
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("https://gateway.example/v1/messages", "https://gateway.example/v1/messages"),
+        ("https://gateway.example/v1/messages/", "https://gateway.example/v1/messages"),
+        ("https://gateway.example/v1/messages//", "https://gateway.example/v1/messages"),
+        ("https://gateway.example/V1/MESSAGES", "https://gateway.example/v1/messages"),
+        ("  https://gateway.example/v1/messages\n", "https://gateway.example/v1/messages"),
+        ("https://gateway.example/proxy/v1/messages", "https://gateway.example/proxy/v1/messages"),
+        ("https://gateway.example/v1/messages#frag", "https://gateway.example/v1/messages#frag"),
+    ],
+)
+async def test_a_base_url_that_already_names_the_endpoint_is_not_sent_twice(given, expected):
+    """Copied from a service's documentation, the endpoint is accepted where the root belongs."""
+    wire = Wire(answer("hi"))
+    provider = AnthropicCompatibleProvider(model="local", api_key="k", base_url=given, transport=wire.transport)
+
+    final(await run(provider))
+
+    assert str(wire.requests[0].url) == expected
+
+
+async def test_a_base_url_with_another_path_is_left_alone():
+    """Only the endpoint this module speaks is trimmed; another prefix is part of the service's address."""
+    wire = Wire(answer("hi"))
+    provider = AnthropicCompatibleProvider(
+        model="local", api_key="k", base_url="https://api.deepseek.com/anthropic", transport=wire.transport
+    )
+
+    final(await run(provider))
+
+    assert str(wire.requests[0].url) == "https://api.deepseek.com/anthropic/v1/messages"
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("https://api.deepseek.com/anthropic/", "https://api.deepseek.com/anthropic/"),
+        ("https://gateway.example", "https://gateway.example"),
+        ("/v1/messages", "/v1/messages"),
+        ("https://gateway.example/v1/messages?x=1", "https://gateway.example/v1/messages?x=1"),
+    ],
+)
+def test_a_base_url_that_cannot_be_trimmed_is_kept_as_written(given, expected):
+    """A path-only value cannot stand alone, and the SDK appends its path inside a query."""
+    assert api_root(given, "/v1/messages") == expected
+
+
+def test_a_fragment_is_carried_when_the_endpoint_is_trimmed():
+    """The SDK merges its path before a fragment rather than inside it, so the trim still applies."""
+    assert api_root("https://gateway.example/v1/messages#frag", "/v1/messages") == "https://gateway.example#frag"
+
+
+def test_an_endpoint_is_matched_at_a_path_boundary():
+    """``api_root`` is module-level: an endpoint written without its slash must not match mid-segment."""
+    assert api_root("https://gateway.example/v1/messages", "v1/messages") == "https://gateway.example"
+    assert api_root("https://gateway.example/xv1/messages", "v1/messages") == "https://gateway.example/xv1/messages"
+
+
+def test_a_base_url_is_at_least_trimmed_of_whitespace():
+    """A value copied from an environment variable carries what the variable carried."""
+    assert api_root("  https://gateway.example/v1  \n") == "https://gateway.example/v1"
 
 
 class Quirky(AnthropicCompatibleProvider):

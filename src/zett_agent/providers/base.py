@@ -6,6 +6,7 @@ from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, M
 from dataclasses import dataclass
 from functools import wraps
 from typing import TYPE_CHECKING, Protocol, TypeVar
+from urllib.parse import urlsplit, urlunsplit
 
 from .._compat import aclosing_stream
 from .._compat import timeout as async_timeout
@@ -264,6 +265,49 @@ def timeout_error(phase: str, seconds: float | None) -> ProviderTimeoutError:
         case _:
             message = f"The provider stopped sending data for {shown} seconds; the response is incomplete."
     return ProviderTimeoutError(message, phase=phase, seconds=seconds)
+
+
+def api_root(base_url: str, *endpoints: str) -> str:
+    """Return ``base_url`` without a request path that the protocol's SDK appends itself.
+
+    A service's documentation shows the endpoint it answers on, so a connection string is easily copied
+    as ``https://host/v1/messages`` (or ``.../v1/chat/completions``) where the SDK expects the API root.
+    The SDK then appends its own path, and the service receives a doubled one and refuses it. Trimming
+    the endpoint here keeps that harmless, and keeps any prefix the service lives under:
+    ``https://host/proxy/v1/messages`` becomes ``https://host/proxy``.
+
+    Only a value with a host is changed, and only by the endpoint's own path: a value that is just the
+    path, or that carries a query, is left as written. The SDK appends its path inside a query rather
+    than beside it, so trimming the path would not make it work; ``extra_query`` is how a query is
+    added. A fragment is carried along, because the SDK merges the path before it.
+
+    Args:
+        base_url: The API root, or the endpoint itself.
+        endpoints: The request paths the adapter's SDK appends, such as ``"/v1/messages"``. Each begins
+            with ``/``; one written without it is taken as if it had it.
+
+    Examples:
+        >>> api_root("https://api.example.com/v1/messages/", "/v1/messages")
+        'https://api.example.com'
+        >>> api_root("https://api.example.com/anthropic", "/v1/messages")
+        'https://api.example.com/anthropic'
+    """
+    root = base_url.strip()
+    parts = urlsplit(root)
+    path = parts.path.rstrip("/")
+    lowered = path.lower()
+    for endpoint in endpoints:
+        if not endpoint.startswith("/"):
+            endpoint = f"/{endpoint}"
+        if not lowered.endswith(endpoint.lower()):
+            continue
+        # A path-only value, or one carrying a query, is not an API root: the SDK appends its path
+        # inside it, so trimming would not make it work.
+        if not parts.netloc or parts.query:
+            return root
+        trimmed = path[: -len(endpoint)].rstrip("/")
+        return urlunsplit((parts.scheme, parts.netloc, trimmed, "", parts.fragment))
+    return root
 
 
 def validate_extra_headers(value: Mapping[str, str] | None) -> dict[str, str]:

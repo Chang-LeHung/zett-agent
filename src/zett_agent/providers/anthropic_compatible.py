@@ -75,6 +75,7 @@ from .base import (
     ProviderResponseError,
     RetryingProvider,
     ToolCallAccumulator,
+    api_root,
     describe_status_error,
     empty_stream_message,
     guard_idle,
@@ -440,7 +441,9 @@ class AnthropicCompatibleProvider(RetryingProvider):
     Args:
         model: Model identifier the endpoint accepts.
         api_key: API credential supplied by the application.
-        base_url: API root. Required unless the subclass sets :attr:`default_base_url`.
+        base_url: API root. Required unless the subclass sets :attr:`default_base_url`. A value that
+            already names the ``/v1/messages`` endpoint is accepted, and the path is trimmed before the
+            client is built; the trimmed value is what the client keeps.
         transport: Optional HTTPX transport for isolated tests or custom routing.
         retry: Exponential backoff for transient failures before output starts.
         timeout: How long the provider may stay silent before the request is given up on. See
@@ -488,6 +491,9 @@ class AnthropicCompatibleProvider(RetryingProvider):
         base_url = base_url or self.default_base_url
         if not base_url:
             raise ValueError("base_url is required")
+        # A service's documentation shows its endpoint, so a configuration often names
+        # ``.../v1/messages`` rather than the root the SDK expects. Accept both.
+        base_url = api_root(base_url, "/v1/messages")
         validate_retry(retry)
         validate_timeout(timeout)
         if not isinstance(prompt_cache, bool):

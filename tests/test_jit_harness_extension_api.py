@@ -6,9 +6,15 @@ from dataclasses import replace
 
 import pytest
 
-from jit_support import put_tool
+from jit_support import put_resource, put_tool, seed_repo
 from zett_agent.agent import AgentRunConfig, AgentRunContext, AgentState
-from zett_agent.jit_harness import JITHarness, JITHarnessExtension
+from zett_agent.jit_harness import (
+    MAX_NOTE_CATALOG_CHARS,
+    JITHarness,
+    JITHarnessExtension,
+    TextKind,
+    render_note_catalog,
+)
 from zett_agent.jit_harness.enums import ToolCallStatus, ToolOrigin
 from zett_agent.jit_harness.extension import _INSTRUCTIONS
 from zett_agent.jit_harness.repo import MANAGEMENT_NAMES
@@ -285,3 +291,205 @@ async def test_a_repository_tool_cannot_shadow_a_custom_management_name(tmp_path
     finally:
         harness.detach(ctx)
         harness.close()
+
+
+def test_resources_follow_the_last_successful_repository_scan(tmp_path):
+    harness = JITHarness(tmp_path)
+    assert harness.resources == []
+    harness.create_repo("kit")
+    assert harness.resources == []
+    put_resource(harness, "debugging", "Use when a test fails.", "Read the traceback.", kind="skill")
+    try:
+        resources = harness.resources
+        assert [item["name"] for item in resources] == ["debugging"]
+        assert resources[0]["kind"] == "skill"
+        assert resources[0]["description"] == "Use when a test fails."
+        assert resources[0]["path"].endswith("resources/debugging.md")
+    finally:
+        harness.close()
+
+
+def test_the_notes_catalog_is_off_by_default(tmp_path):
+    harness = JITHarness(tmp_path)
+    put_resource(harness, "debugging", "Use when a test fails.", "Read the traceback.", kind="skill")
+    extension = JITHarnessExtension(tmp_path)
+    try:
+        assert extension.notes_catalog(harness) == ""
+        prompt = extension._guidance(harness, "")
+        assert "Use when a test fails." not in prompt
+        assert "Read the traceback." not in prompt
+    finally:
+        harness.close()
+
+
+def test_an_enabled_catalog_is_empty_when_there_are_no_notes(tmp_path):
+    class NotesJIT(JITHarnessExtension):
+        include_notes = True
+
+    harness = JITHarness(tmp_path)
+    harness.create_repo("kit")
+    try:
+        assert NotesJIT(tmp_path).notes_catalog(harness) == ""
+    finally:
+        harness.close()
+
+
+def test_notes_catalog_can_filter_the_default_format(tmp_path):
+    class SkillsOnly(JITHarnessExtension):
+        def notes_catalog(self, harness):
+            return render_note_catalog([note for note in harness.resources if note["kind"] == "skill"])
+
+    harness = JITHarness(tmp_path)
+    put_resource(harness, "debugging", "Use when a test fails.", "Read the traceback.", kind="skill")
+    put_resource(harness, "release", "Use when cutting a release.", "Publish it.", kind="workflow")
+    try:
+        catalog = SkillsOnly(tmp_path).notes_catalog(harness)
+        assert "`debugging`" in catalog
+        assert "`release`" not in catalog
+    finally:
+        harness.close()
+
+
+def test_resources_keep_the_previous_scan_after_a_failed_load(tmp_path):
+    harness = JITHarness(tmp_path)
+    put_resource(harness, "debugging", "Use when a test fails.", "Read the traceback.", kind="skill")
+    try:
+        before = harness.resources
+        assert harness.repo_path is not None
+        (harness.repo_path / "resources" / "broken.md").write_text(
+            "---\nkind: unknown\ndescription: Broken\n---\nBody\n", encoding="utf-8"
+        )
+        with pytest.raises(ValueError, match="kind"):
+            harness.load_repo()
+        assert harness.resources == before
+    finally:
+        harness.close()
+
+
+def test_a_deleted_note_stays_listed_until_the_next_successful_scan(tmp_path):
+    harness = JITHarness(tmp_path)
+    put_resource(harness, "debugging", "Use when a test fails.", "Read the traceback.", kind="skill")
+    try:
+        assert harness.repo_path is not None
+        (harness.repo_path / "resources" / "debugging.md").unlink()
+        assert [note["name"] for note in harness.resources] == ["debugging"]
+        harness.load_repo()
+        assert harness.resources == []
+    finally:
+        harness.close()
+
+
+async def test_include_notes_adds_the_catalog_to_the_injected_guidance(tmp_path):
+    class NotesJIT(JITHarnessExtension):
+        include_notes = True
+
+    extension = NotesJIT(tmp_path)
+    ctx = context(session="notes")
+    await extension.on_tool(ctx)
+    harness = extension.get_harness("notes")
+    try:
+        put_resource(harness, "debugging", "Use when a test fails.", "Read the traceback.", kind="skill")
+        request = ModelRequest(
+            messages=(SystemMessage(content="base"),), tools=tuple(t.definition for t in ctx.tools.values())
+        )
+        current = await _request_messages(extension, ctx, request)
+        guidance = next(
+            message
+            for message in current.messages
+            if isinstance(message, SystemMessage) and message.attributes.get("jit_harness:guidance")
+        )
+        assert "## Notes" in guidance.content
+        assert "Use when a test fails." in guidance.content
+        assert str(harness.repo_path / "resources" / "debugging.md") in guidance.content
+        assert "Read the traceback." not in guidance.content
+        assert guidance.content.index("Your repository") < guidance.content.index("## Notes")
+        assert guidance.content.index("## Notes") < guidance.content.index("# Tool guidelines")
+    finally:
+        extension._request_finished(ctx)
+        extension.forget_session("notes")
+
+
+async def test_a_resumed_session_includes_notes_without_calling_repo_load(tmp_path):
+    class NotesJIT(JITHarnessExtension):
+        include_notes = True
+
+    repo = seed_repo(tmp_path, "resumed", {})
+    resources = repo / "resources"
+    resources.mkdir()
+    (resources / "debugging.md").write_text(
+        "---\nkind: skill\ndescription: Use when a test fails.\n---\nRead the traceback.\n",
+        encoding="utf-8",
+    )
+    extension = NotesJIT(tmp_path)
+    ctx = context(session="resumed")
+    await extension.on_tool(ctx)
+    try:
+        harness = extension.get_harness("resumed")
+        assert [note["name"] for note in harness.resources] == ["debugging"]
+        request = ModelRequest(
+            messages=(SystemMessage(content="base"),), tools=tuple(t.definition for t in ctx.tools.values())
+        )
+        current = await _request_messages(extension, ctx, request)
+        guidance = next(
+            message
+            for message in current.messages
+            if isinstance(message, SystemMessage) and message.attributes.get("jit_harness:guidance")
+        )
+        assert "Use when a test fails." in guidance.content
+    finally:
+        extension._request_finished(ctx)
+        extension.forget_session("resumed")
+
+
+def test_the_notes_catalog_is_bounded_and_names_the_remaining_notes():
+    resources = [
+        {
+            "name": f"note-{index}",
+            "kind": TextKind.WORKFLOW,
+            "description": "x" * 512,
+            "path": f"/repo/resources/note-{index}.md",
+        }
+        for index in range(50)
+    ]
+    catalog = render_note_catalog(resources)
+    assert len(catalog) <= MAX_NOTE_CATALOG_CHARS
+    assert "more note(s); call `repo_load` for the complete, untruncated list." in catalog
+    assert "note-49" not in catalog
+
+    short = [
+        {
+            "name": f"short-{index}",
+            "kind": TextKind.WORKFLOW,
+            "description": "short",
+            "path": f"/repo/resources/short-{index}.md",
+        }
+        for index in range(20)
+    ]
+    bounded = render_note_catalog(short, limit=500)
+    assert "more note(s); call `repo_load` for the complete, untruncated list." in bounded
+    assert len(bounded) <= 500
+    assert render_note_catalog(short, limit=50) == ""
+    full = render_note_catalog(short)
+    assert render_note_catalog(short, limit=len(full)) == full
+    with pytest.raises(ValueError, match="positive"):
+        render_note_catalog(short, limit=0)
+
+
+def test_the_catalog_drops_entries_rather_than_omit_the_summary():
+    notes = [
+        {
+            "name": f"note-{index}",
+            "kind": TextKind.WORKFLOW,
+            "description": "x" * 80,
+            "path": f"/repo/resources/note-{index}.md",
+        }
+        for index in range(2)
+    ]
+    one = render_note_catalog(notes[:1])
+    assert one
+    # One entry fits exactly, but its closing line does not: drop it rather than truncate it.
+    assert render_note_catalog(notes, limit=len(one)) == ""
+    assert render_note_catalog(notes, limit=len(one) - 1) == ""
+    summary = "- 1 more note(s); call `repo_load` for the complete, untruncated list."
+    exact = render_note_catalog(notes, limit=len(one) + len(summary) + 1)
+    assert exact == one + "\n" + summary

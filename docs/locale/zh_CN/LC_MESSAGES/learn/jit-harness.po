@@ -317,8 +317,8 @@ msgid "A note is not a tool. ``repo_load`` lists each one as a :class:`~zett_age
 msgstr "笔记不是工具。 ``repo_load`` 把每份笔记列为一个 :class:`~zett_agent.jit_harness.results.ResourceInfo`\\ ，其中没有正文："
 
 #: ../../learn/jit-harness.rst:363
-msgid "The model opens the file with its own file tools when a description fits the task, and reads only what it needs. Nothing about the body is registered or injected into a request, and the harness never reads it past the front matter. Follow a workflow only after checking that it applies and is safe: it cannot grant permissions or make an unloaded dependency available. A note may share a name with a tool, because only one of them is a tool. Every description is repeated in each ``repo_load`` answer, so a repository lists at most 50 notes; more fails the load, and so does an unknown ``kind`` (the error lists the valid ones) or a note with no front matter."
-msgstr "模型在某份描述符合任务时，用自己的文件工具打开该文件，并只读需要的部分。正文不会被注册，也不会被注入请求，harness 除了 front matter 之外也不会读取它。只有在确认工作流适用且安全之后才去遵循它：它不能授予权限，也不能让已卸载的依赖变得可用。笔记可以和工具同名，因为二者之中只有一个是工具。每条描述都会在每次 ``repo_load`` 的返回中重复出现，因此一个仓库最多列出 50 份笔记；超过会让加载失败，未知的 ``kind``\\ （错误信息会列出有效的取值）或没有 front matter 的笔记也会。"
+msgid "The model opens the file with its own file tools when a description fits the task, and reads only what it needs. Nothing about the body is registered or injected into a request, and the harness never reads it past the front matter. The metadata stays out of the request too, unless a subclass opts in to a catalog; see :ref:`jit-customize-control-surface`. Follow a workflow only after checking that it applies and is safe: it cannot grant permissions or make an unloaded dependency available. A note may share a name with a tool, because only one of them is a tool. Every description is repeated in each ``repo_load`` answer, so a repository lists at most 50 notes; more fails the load, and so does an unknown ``kind`` (the error lists the valid ones) or a note with no front matter."
+msgstr "模型在某份描述符合任务时，用自己的文件工具打开该文件，并只读需要的部分。正文不会被注册，也不会被注入请求，harness 除了 front matter 之外也不会读取它。元数据同样不会进入请求，除非子类选择启用目录；参见 :ref:`jit-customize-control-surface`\\ 。只有在确认工作流适用且安全之后才去遵循它：它不能授予权限，也不能让已卸载的依赖变得可用。笔记可以和工具同名，因为二者之中只有一个是工具。每条描述都会在每次 ``repo_load`` 的返回中重复出现，因此一个仓库最多列出 50 份笔记；超过会让加载失败，未知的 ``kind``\\ （错误信息会列出有效的取值）或没有 front matter 的笔记也会。"
 
 #: ../../learn/jit-harness.rst:373
 msgid "Validate a proposed optimization against representative tasks and account for the cost of creating and testing it. Guidance encourages this behavior; it does not guarantee that a model will learn, or that a saved path is globally optimal."
@@ -364,9 +364,9 @@ msgstr "在这种模式下，基础工具保留它们正常的请求处理函数
 msgid "The Python API"
 msgstr "Python API"
 
-#: ../../learn/jit-harness.rst:425
-msgid "``JITHarness`` is the same toolbox without the model: ``JITHarness(directory, tools=[...])`` with ``create_repo(name)``, ``load_repo()``, ``unload_repo()`` and ``close()``, plus ``repo`` and ``repo_path``. ``unload_tool(name)`` and ``load_tool(name)`` hide or restore one tool, base or repository, from your own code; the model has no tool for them. ``list_tools()`` and ``describe(name)`` read a compact catalog of names, origins, states, and descriptions. Measurements stay on their own methods: ``profile_stats(name)``, ``profile(name)``, and ``tool_errors(name)``."
-msgstr "``JITHarness`` 就是没有模型参与的同一个工具箱： ``JITHarness(directory, tools=[...])``，提供 ``create_repo(name)``、 ``load_repo()``、 ``unload_repo()`` 和 ``close()``，以及 ``repo`` 和 ``repo_path``\\ 。 ``unload_tool(name)`` 和 ``load_tool(name)`` 让你从自己的代码里隐藏或恢复单个工具（基础工具或仓库工具）；模型没有对应的工具。 ``list_tools()`` 和 ``describe(name)`` 读取由名称、来源、状态和描述组成的紧凑目录。测量数据留在各自的方法上： ``profile_stats(name)``、 ``profile(name)`` 和 ``tool_errors(name)``\\ 。"
+#: ../../learn/jit-harness.rst:427
+msgid "``JITHarness`` is the same toolbox without the model: ``JITHarness(directory, tools=[...])`` with ``create_repo(name)``, ``load_repo()``, ``unload_repo()`` and ``close()``, plus ``repo``, ``repo_path``, and ``resources`` (the notes from the last successful scan). ``unload_tool(name)`` and ``load_tool(name)`` hide or restore one tool, base or repository, from your own code; the model has no tool for them. ``list_tools()`` and ``describe(name)`` read a compact catalog of names, origins, states, and descriptions. Measurements stay on their own methods: ``profile_stats(name)``, ``profile(name)``, and ``tool_errors(name)``."
+msgstr "``JITHarness`` 就是没有模型参与的同一个工具箱： ``JITHarness(directory, tools=[...])``，提供 ``create_repo(name)``、 ``load_repo()``、 ``unload_repo()`` 和 ``close()``，以及 ``repo``、 ``repo_path`` 和 ``resources``\\ （最近一次成功扫描得到的笔记）。 ``unload_tool(name)`` 和 ``load_tool(name)`` 让你从自己的代码里隐藏或恢复单个工具（基础工具或仓库工具）；模型没有对应的工具。 ``list_tools()`` 和 ``describe(name)`` 读取由名称、来源、状态和描述组成的紧凑目录。测量数据留在各自的方法上： ``profile_stats(name)``、 ``profile(name)`` 和 ``tool_errors(name)``\\ 。"
 
 #: ../../learn/jit-harness.rst:447
 msgid "Use profiling to build useful tools"
@@ -573,7 +573,11 @@ msgstr ""
 ":attr:`~zett_agent.jit_harness.extension.JITHarnessExtension.guidance_tool`"
 " 指向仍然应触发该块的工具。把 ``guidance_tool`` 设为 ``None``\\ ，可以在任意已注册控制工具出现时注入："
 
-#: ../../learn/jit-harness.rst:696
+#: ../../learn/jit-harness.rst:701
+msgid "Notes stay out of the prompt by default. To put the repository's note catalog into the guidance block, set ``include_notes = True`` on the subclass; the catalog lists each note's name, kind, description, and absolute path, never its body, and :func:`~zett_agent.jit_harness.extension.render_note_catalog` keeps it within :data:`~zett_agent.jit_harness.extension.MAX_NOTE_CATALOG_CHARS` (4,000 characters by default, which can be several thousand tokens in Chinese). Override ``notes_catalog(harness)`` to filter or format it, for example ``render_note_catalog([n for n in harness.resources if n[\"kind\"] == \"skill\"])``. Descriptions are model-authored data, not instructions, and gain system-message authority when enabled."
+msgstr "默认不会把笔记放进提示词。要把仓库的笔记目录加入 guidance 块，可在子类上设置 ``include_notes = True``\\ ；目录会列出每个笔记的名字、类型、描述和绝对路径，不包含正文，并由 :func:`~zett_agent.jit_harness.extension.render_note_catalog` 限制在 :data:`~zett_agent.jit_harness.extension.MAX_NOTE_CATALOG_CHARS` 以内\\ （默认 4,000 字符，在中文里可能相当于数千 token）。覆盖 ``notes_catalog(harness)`` 可以过滤或自定义格式，例如 ``render_note_catalog([n for n in harness.resources if n[\"kind\"] == \"skill\"])``\\ 。描述是模型写的数据，不是指令；启用后它会获得 system message 的权威性。"
+
+#: ../../learn/jit-harness.rst:713
 msgid ""
 "The names ``repo_create``, ``repo_load``, ``repo_unload``, and "
 "``profile_tools`` stay reserved for repository tools even when a subclass"
@@ -586,7 +590,7 @@ msgstr ""
 "``profile_tools`` 这些名字仍为仓库工具保留；新增控制工具的名字会在注册它的会话内保留。首次 ``attach()`` "
 "之前和 ``detach()`` 之后， ``origin()`` 会把这些名字报告为 ``unknown``\\ ，因为 harness 已无法路由它们。"
 
-#: ../../learn/jit-harness.rst:703
+#: ../../learn/jit-harness.rst:719
 msgid "Try the complete offline example"
 msgstr "试用完整的离线示例"
 

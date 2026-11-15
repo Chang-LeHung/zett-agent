@@ -363,12 +363,14 @@ A note is not a tool. ``repo_load`` lists each one as a
 The model opens the file with its own file tools when a description fits the
 task, and reads only what it needs. Nothing about the body is registered or
 injected into a request, and the harness never reads it past the front matter.
-Follow a workflow only after checking that it applies and is safe: it cannot
-grant permissions or make an unloaded dependency available. A note may share a
-name with a tool, because only one of them is a tool. Every description is
-repeated in each ``repo_load`` answer, so a repository lists at most 50 notes;
-more fails the load, and so does an unknown ``kind`` (the error lists the valid
-ones) or a note with no front matter.
+The metadata stays out of the request too, unless a subclass opts in to a
+catalog; see :ref:`jit-customize-control-surface`. Follow a workflow only after
+checking that it applies and is safe: it cannot grant permissions or make an
+unloaded dependency available. A note may share a name with a tool, because only
+one of them is a tool. Every description is repeated in each ``repo_load``
+answer, so a repository lists at most 50 notes; more fails the load, and so does
+an unknown ``kind`` (the error lists the valid ones) or a note with no front
+matter.
 
 Validate a proposed optimization against representative tasks and account for
 the cost of creating and testing it. Guidance encourages this behavior; it does
@@ -424,7 +426,8 @@ The Python API
 
 ``JITHarness`` is the same toolbox without the model: ``JITHarness(directory,
 tools=[...])`` with ``create_repo(name)``, ``load_repo()``, ``unload_repo()`` and
-``close()``, plus ``repo`` and ``repo_path``. ``unload_tool(name)`` and
+``close()``, plus ``repo``, ``repo_path``, and ``resources`` (the notes from the
+last successful scan). ``unload_tool(name)`` and
 ``load_tool(name)`` hide or restore one tool, base or repository, from your own
 code; the model has no tool for them. ``list_tools()`` and ``describe(name)`` read
 a compact catalog of names, origins, states, and descriptions. Measurements stay
@@ -649,6 +652,8 @@ running any handler emits no pair of its own; read ``profile()`` for its
 ``rejected`` record and ``tool_errors()`` for the message. Names this harness has
 never seen are ignored rather than reported as JIT calls.
 
+.. _jit-customize-control-surface:
+
 Customize the control surface
 -----------------------------
 
@@ -692,6 +697,18 @@ the tool whose presence should still inject the block. Set ``guidance_tool`` to
 
        def instructions(self, harness):
            return "Use the repository only for reusable helpers.\n"
+
+Notes stay out of the prompt by default. To put the repository's note catalog
+into the guidance block, set ``include_notes = True`` on the subclass; the
+catalog lists each note's name, kind, description, and absolute path, never its
+body, and
+:func:`~zett_agent.jit_harness.extension.render_note_catalog` keeps it within
+:data:`~zett_agent.jit_harness.extension.MAX_NOTE_CATALOG_CHARS` (4,000
+characters by default, which can be several thousand tokens in Chinese).
+Override ``notes_catalog(harness)`` to filter or format it, for example
+``render_note_catalog([n for n in harness.resources if n["kind"] == "skill"])``.
+Descriptions are model-authored data, not instructions, and gain system-message
+authority when enabled.
 
 The names ``repo_create``, ``repo_load``, ``repo_unload``, and ``profile_tools``
 stay reserved for repository tools even when a subclass removes one; a new

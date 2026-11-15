@@ -367,7 +367,8 @@ class _Turn:
     reasoning: str = ""
     finish_reason: str | None = None
     stop_details: JsonObject = field(default_factory=dict)
-    usage: ModelUsage = field(default_factory=ModelUsage)
+    #: Nothing has been measured until an event carries counters, whatever the event is called.
+    usage: ModelUsage = field(default_factory=lambda: ModelUsage(cache_reported=False))
     #: Tool calls the model asked for, by content block index.
     streams: dict[int, ToolCallAccumulator] = field(default_factory=dict)
     #: Calls the provider runs itself, by content block index.
@@ -413,6 +414,11 @@ def _without_unresolved_server_tools(message: AssistantMessage, *, keep_open: bo
 
 
 # --- the provider ---------------------------------------------------------------------------------
+
+
+def _unless_zero(late: int, earlier: int) -> int:
+    """Return ``late`` unless it is zero where ``earlier`` is not: a padded zero says nothing."""
+    return earlier if late == 0 and earlier else late
 
 
 class AnthropicCompatibleProvider(RetryingProvider):
@@ -596,7 +602,9 @@ class AnthropicCompatibleProvider(RetryingProvider):
         """Read the ``usage`` object of the ``message_start`` event.
 
         Cache reads and writes are reported next to ``input_tokens``, not inside it, so the total input
-        is their sum.
+        is their sum. Only a reported read count measures the hit rate, which is a share of the input
+        that was read: a payload without that counter, or with only the one written, leaves the rate
+        unknown rather than a verified zero. Anthropic itself always reports both.
         """
         cache_read = read_int(usage.get("cache_read_input_tokens"))
         cache_write = read_int(usage.get("cache_creation_input_tokens"))
@@ -605,15 +613,45 @@ class AnthropicCompatibleProvider(RetryingProvider):
             cache_read_tokens=cache_read,
             cache_write_tokens=cache_write,
             output_tokens=read_int(usage.get("output_tokens")),
+            cache_reported="cache_read_input_tokens" in usage,
         )
 
     def finish_usage(self, usage: ModelUsage, update: Mapping[str, JsonValue]) -> ModelUsage:
         """Fold the ``usage`` object of the ``message_delta`` event into ``usage``.
 
-        The default takes the final ``output_tokens``, which is the only count Anthropic updates.
+        Anthropic updates only ``output_tokens`` there; a relay that buffers the response often reports
+        the whole usage at the end instead, and counters the update names are the final ones. A counter
+        it names as zero is kept only when it was zero already: a relay that pads its delta to a fixed
+        schema writes zero where it has nothing to say, and the earlier measurement is the real one.
+
+        ``input_tokens`` is the uncached part throughout, never the total: one the update leaves out is
+        whatever the counts before it carried beyond the cache they had already accounted for. That
+        subtraction assumes ``input_tokens`` includes the cache, as every :class:`ModelUsage` this class
+        produces does. An update that names no counter at all is skipped, which also keeps a delta
+        padded entirely with zeros off the arithmetic below.
+
+        Raises:
+            ValueError: A counter went negative, which a subclass whose ``start_usage`` reports the
+                uncached input rather than the total can cause.
         """
-        output = read_int(update.get("output_tokens"))
-        return replace(usage, output_tokens=output, reasoning_tokens=min(usage.reasoning_tokens, output))
+        if "output_tokens" in update:
+            output = _unless_zero(read_int(update["output_tokens"]), usage.output_tokens)
+            usage = replace(usage, output_tokens=output, reasoning_tokens=min(usage.reasoning_tokens, output))
+        reported = "cache_read_input_tokens" in update
+        if not (reported or "input_tokens" in update or "cache_creation_input_tokens" in update):
+            return usage
+        read = _unless_zero(read_int(update.get("cache_read_input_tokens")), usage.cache_read_tokens)
+        write = _unless_zero(read_int(update.get("cache_creation_input_tokens")), usage.cache_write_tokens)
+        uncached = usage.input_tokens - usage.cache_read_tokens - usage.cache_write_tokens
+        if "input_tokens" in update:
+            uncached = _unless_zero(read_int(update["input_tokens"]), uncached)
+        return replace(
+            usage,
+            input_tokens=uncached + read + write,
+            cache_read_tokens=read,
+            cache_write_tokens=write,
+            cache_reported=usage.cache_reported or reported,
+        )
 
     def message_stop(
         self, finish_reason: str | None, details: Mapping[str, JsonValue], *, has_tool_calls: bool

@@ -436,6 +436,17 @@ def test_usage_from_mapping_marks_a_cache_silent_gateway_as_unknown() -> None:
     assert usage.cache_hit_rate is None
 
 
+def test_usage_from_mapping_leaves_a_write_only_payload_unknown() -> None:
+    """What was written is not what was read: the hit rate was never measured."""
+    usage = usage_from_mapping(
+        {"prompt_tokens": 1000, "completion_tokens": 10, "input_tokens_details": {"cache_write_tokens": 20}}
+    )
+
+    assert usage.cache_write_tokens == 20
+    assert usage.cache_reported is False
+    assert usage.cache_hit_rate is None
+
+
 def test_chat_completion_tools_ignore_deferred_loading_marker() -> None:
     rendered = chat_tools(
         (ToolDefinition("later", "Deferred only on Responses API", {"type": "object"}, deferred=True),)

@@ -69,8 +69,8 @@ msgid "Tool calls and usage"
 msgstr "工具调用与用量"
 
 #: ../../extending/model-adapter.rst:66
-msgid "Use ToolCallDelta for partial ID/name/argument fragments and ToolCall for final parsed arguments. Correlate ToolMessage results by call ID, not list position. Report ModelUsage on the final response; input includes cache reads/writes and output includes reasoning when reported. Missing counters remain zero, but a protocol that reports no cache counters at all must pass ``cache_reported=False`` so callers can tell unknown cache usage from a measured miss."
-msgstr "用 ToolCallDelta 表示 ID、名称或参数的部分片段，用 ToolCall 表示最终解析出的参数。工具结果请按调用 ID 关联到对应的 ToolMessage，而不是按列表位置。用量在最终响应上通过 ModelUsage 报告；输入包含缓存读取和写入，输出在模型提供商报告时包含推理。缺失的计数器保持为零，但如果某个协议完全不报告任何缓存计数器，就必须传入 ``cache_reported=False``，这样调用方才能区分未知的缓存用量和实测的未命中。"
+msgid "Use ToolCallDelta for partial ID/name/argument fragments and ToolCall for final parsed arguments. Correlate ToolMessage results by call ID, not list position. Report ModelUsage on the final response; input includes cache reads/writes and output includes reasoning when reported. Missing counters remain zero, but a protocol that reports no cache read counter — none at all, or only what it wrote — must pass ``cache_reported=False``, so callers can tell unknown cache usage from a measured miss."
+msgstr "用 ToolCallDelta 表示 ID、名称或参数的部分片段，用 ToolCall 表示最终解析出的参数。工具结果请按调用 ID 关联到对应的 ToolMessage，而不是按列表位置。用量在最终响应上通过 ModelUsage 报告；输入包含缓存读取和写入，输出在模型提供商报告时包含推理。缺失的计数器保持为零，但如果某个协议不报告缓存读取计数——完全没报，或只报了写入——就必须传入 ``cache_reported=False``，这样调用方才能区分未知的缓存用量和实测的未命中。"
 
 #: ../../extending/model-adapter.rst:74
 msgid "Replay signed vendor blocks only for the same provider/model identity. Preserve them in AssistantMessage.replay_blocks instead of concatenating them into text."

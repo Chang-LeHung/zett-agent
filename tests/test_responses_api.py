@@ -298,6 +298,38 @@ async def test_responses_usage_reports_unknown_when_cache_details_are_absent() -
     assert usage.cache_hit_rate is None
 
 
+async def test_responses_usage_naming_only_the_write_is_unknown() -> None:
+    """What was written is not what was read: the hit rate was never measured."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        completed = {
+            "type": "response.completed",
+            "sequence_number": 99,
+            "response": _response(
+                [],
+                model="deepseek-flash",
+                usage={
+                    "input_tokens": 20,
+                    "output_tokens": 8,
+                    "total_tokens": 28,
+                    "input_tokens_details": {"cache_write_tokens": 2},
+                },
+            ),
+        }
+        return httpx.Response(200, content=_responses_sse([completed]), headers={"content-type": "text/event-stream"})
+
+    provider = OpenAIProvider("deepseek-flash", "key", transport=httpx.MockTransport(handler), response=True)
+    try:
+        events = await _collect(provider.stream(ModelRequest(messages=(UserMessage(content="Hello"),))))
+    finally:
+        await provider.aclose()
+
+    usage = events[-1].response.usage
+    assert usage.cache_write_tokens == 2
+    assert usage.cache_reported is False
+    assert usage.cache_hit_rate is None
+
+
 async def test_deepseek_responses_uses_stateless_endpoint_and_replays_output() -> None:
     captured: dict[str, Any] = {}
     prior = {"id": "reason_1", "type": "reasoning", "content": [], "summary": [], "status": "completed"}

@@ -420,7 +420,7 @@ class ModelUsage:
     cache_read_tokens: int = 0
     #: Input tokens written to the provider cache, not extra input tokens.
     cache_write_tokens: int = 0
-    #: Whether the response carried cache counters at all; False means unknown.
+    #: Whether the provider reported how much input came from the cache; False means unknown.
     cache_reported: bool = True
     #: Reasoning subset of output_tokens; zero when not reported.
     reasoning_tokens: int = 0

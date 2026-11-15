@@ -387,6 +387,245 @@ async def test_system_prompts_are_joined_and_tools_are_left_out_when_there_are_n
     assert body["system"] == "one\n\ntwo" and "tools" not in body
 
 
+async def test_a_reported_cache_zero_is_a_verified_miss():
+    """Anthropic always reports its cache reads; a zero there is a measured miss."""
+    wire = Wire(answer(usage={"cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}))
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.cache_reported is True
+    assert response.usage.cache_hit_rate == 0.0
+
+
+async def test_usage_without_a_cache_read_counter_is_unknown_not_a_miss():
+    """No read counter means the rate was not measured; reporting 0% would invent the answer."""
+    wire = Wire(answer())
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.cache_reported is False
+    assert response.usage.cache_hit_rate is None
+
+
+async def test_a_write_only_usage_leaves_the_hit_rate_unknown():
+    """What was written is not what was read: the share of read input was never measured."""
+    wire = Wire(answer(usage={"cache_creation_input_tokens": 5}))
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.cache_reported is False
+    assert response.usage.cache_hit_rate is None
+
+
+async def test_usage_reported_at_the_end_of_the_response_is_still_counted():
+    """A buffering relay sends the whole usage in ``message_delta`` and nothing at the start."""
+    wire = Wire(
+        sse(
+            {"type": "message_start", "message": {"id": "m", "usage": {}}},
+            {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}},
+            {"type": "content_block_stop", "index": 0},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {
+                    "input_tokens": 100,
+                    "cache_read_input_tokens": 90,
+                    "cache_creation_input_tokens": 5,
+                    "output_tokens": 2,
+                },
+            },
+            {"type": "message_stop"},
+        )
+    )
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.input_tokens == 195  # the uncached 100 plus 90 read and 5 written
+    assert (response.usage.cache_read_tokens, response.usage.cache_write_tokens) == (90, 5)
+    assert response.usage.cache_reported is True
+    assert response.usage.cache_hit_rate == pytest.approx(90 / 195)
+
+
+async def test_a_zero_the_update_pads_in_does_not_override_a_measured_start():
+    """A relay that fills every usage field writes zero where it has nothing to say."""
+    measured = {
+        "input_tokens": 100,
+        "cache_read_input_tokens": 90,
+        "cache_creation_input_tokens": 5,
+        "output_tokens": 1,
+    }
+    padded = {
+        "input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 0,
+    }
+    for delta in (
+        {**padded, "cache_read_input_tokens": 90, "cache_creation_input_tokens": 5},
+        padded,
+    ):
+        wire = Wire(answer(usage=measured, **delta))
+        provider = AnthropicCompatibleProvider(
+            model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+        )
+
+        response = final(await run(provider))
+
+        assert response.usage.input_tokens == 195  # the start's uncached 100 plus 90 and 5
+        assert (response.usage.cache_read_tokens, response.usage.cache_write_tokens) == (90, 5)
+        assert response.usage.output_tokens == 1  # the start's count, not the pad
+        assert response.usage.cache_reported is True
+
+
+async def test_a_stream_without_a_start_event_does_not_claim_a_verified_cache():
+    """Nothing has been measured until an event carries counters, whatever the event is called."""
+    wire = Wire(
+        sse(
+            {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}},
+            {"type": "content_block_stop", "index": 0},
+            {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 2}},
+            {"type": "message_stop"},
+        )
+    )
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.cache_reported is False
+    assert response.usage.cache_hit_rate is None
+
+
+async def test_a_delta_without_output_tokens_keeps_the_counted_output():
+    """An update carrying only the cache says nothing about what was generated."""
+    wire = Wire(
+        sse(
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "m",
+                    "usage": {"input_tokens": 3, "output_tokens": 1, "cache_read_input_tokens": 50},
+                },
+            },
+            {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}},
+            {"type": "content_block_stop", "index": 0},
+            {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"cache_read_input_tokens": 90}},
+            {"type": "message_stop"},
+        )
+    )
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.output_tokens == 1  # the start's count, not a zero the update did not send
+    assert response.usage.input_tokens == 93  # the start's uncached 3 plus the 90 read late
+    assert response.usage.cache_read_tokens == 90
+
+
+async def test_cache_counters_late_in_the_stream_keep_the_uncached_input():
+    """An update that names only the cache keeps the input the start counted beyond it."""
+    wire = Wire(answer(usage={"cache_read_input_tokens": 50}, cache_read_input_tokens=90))
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.input_tokens == 93  # the start's uncached 3 plus the 90 read late
+    assert response.usage.cache_read_tokens == 90
+
+
+async def test_two_partial_updates_do_not_count_the_same_tokens_twice():
+    """The uncached part is derived from the counts before each update, not from the start alone."""
+    wire = Wire(
+        sse(
+            {
+                "type": "message_start",
+                "message": {"id": "m", "usage": {"input_tokens": 3, "cache_read_input_tokens": 0}},
+            },
+            {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}},
+            {"type": "content_block_stop", "index": 0},
+            {"type": "message_delta", "delta": {"stop_reason": None}, "usage": {"cache_read_input_tokens": 50}},
+            {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"cache_read_input_tokens": 90}},
+            {"type": "message_stop"},
+        )
+    )
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.input_tokens == 93  # the uncached 3 plus the final 90, not 3 + 50 + 90
+    assert response.usage.cache_read_tokens == 90
+
+
+async def test_cache_counters_reported_as_zero_at_the_end_are_a_verified_miss():
+    """A start that said nothing and an end that says zero together are a measured miss."""
+    wire = Wire(answer(usage={}, cache_read_input_tokens=0, cache_creation_input_tokens=0))
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.cache_reported is True
+    assert response.usage.cache_hit_rate == 0.0
+
+
+async def test_an_input_only_update_does_not_measure_the_cache():
+    """A delta naming the uncached input but no cache leaves the hit rate unknown."""
+    wire = Wire(answer(input_tokens=5))
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.input_tokens == 5
+    assert response.usage.cache_reported is False
+    assert response.usage.cache_hit_rate is None
+
+
+async def test_a_delta_that_repeats_the_start_counters_leaves_them_alone():
+    """The update is the final statement: repeating what the start said changes no total."""
+    wire = Wire(
+        answer(
+            usage={"cache_read_input_tokens": 10, "cache_creation_input_tokens": 5},
+            input_tokens=3,
+            cache_read_input_tokens=10,
+            cache_creation_input_tokens=5,
+        )
+    )
+    provider = AnthropicCompatibleProvider(
+        model="m", api_key="k", base_url="https://g.example", transport=wire.transport
+    )
+
+    response = final(await run(provider))
+
+    assert response.usage.input_tokens == 18  # the uncached 3 plus 10 read and 5 written
+    assert (response.usage.cache_read_tokens, response.usage.cache_write_tokens) == (10, 5)
+
+
 # -------------------------------------------------------------------------------------- Anthropic
 
 

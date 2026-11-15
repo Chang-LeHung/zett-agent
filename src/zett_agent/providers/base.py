@@ -453,7 +453,9 @@ def _cache_counters(payload: Mapping[str, JsonValue]) -> tuple[int, int, bool]:
 
     Nested detail objects are applied after the top level so a detailed payload
     wins over a flattened copy of itself, matching the OpenAI schema where
-    ``prompt_tokens_details`` is authoritative.
+    ``prompt_tokens_details`` is authoritative. The third value says whether a
+    *read* counter was there: the hit rate is a share of the input that was read,
+    so a payload naming only what it wrote has not measured it.
     """
     sources: list[Mapping[str, JsonValue]] = [payload]
     sources.extend(details for key in _CACHE_DETAIL_KEYS if isinstance(details := payload.get(key), Mapping))
@@ -468,7 +470,6 @@ def _cache_counters(payload: Mapping[str, JsonValue]) -> tuple[int, int, bool]:
         for key in _CACHE_WRITE_KEYS:
             if key in source:
                 write_tokens = _count(source[key])
-                reported = True
     return read_tokens, write_tokens, reported
 
 
@@ -503,9 +504,10 @@ def usage_from_mapping(payload: Mapping[str, JsonValue]) -> ModelUsage:
     added to them. Both providers return ``total_tokens``, but ``ModelUsage``
     derives that total from input plus output to preserve one internal invariant.
 
-    A payload that carries no cache counter at all leaves ``cache_reported``
-    False, so :attr:`~zett_agent.model.ModelUsage.cache_hit_rate` reports
-    unknown instead of a false zero. Anthropic reports ``input_tokens``,
+    A payload that carries no cache read counter leaves ``cache_reported`` False,
+    so :attr:`~zett_agent.model.ModelUsage.cache_hit_rate` reports unknown instead
+    of a false zero. One that names only the tokens written has not measured the
+    reads either, and is treated the same way. Anthropic reports ``input_tokens``,
     ``cache_read_input_tokens``, and ``cache_creation_input_tokens`` separately.
     Gemini reports ``prompt_token_count``, ``candidates_token_count``,
     ``cached_content_token_count``, and ``thoughts_token_count``. Ollama reports

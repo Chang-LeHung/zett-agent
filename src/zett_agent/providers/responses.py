@@ -576,7 +576,9 @@ def _response_reasoning(output: Sequence[Mapping[str, JsonValue]]) -> str:
 def _responses_usage(payload: Mapping[str, JsonValue]) -> ModelUsage:
     input_details = read_object(payload.get("input_tokens_details"))
     output_details = read_object(payload.get("output_tokens_details"))
-    cache_reported = any(key in input_details for key in ("cached_tokens", "cache_write_tokens"))
+    # The hit rate is a share of the input that was read: a payload naming only what it wrote
+    # has not measured it, and says so rather than reporting a verified zero.
+    cache_reported = "cached_tokens" in input_details
     return ModelUsage(
         input_tokens=read_int(payload.get("input_tokens")),
         output_tokens=read_int(payload.get("output_tokens")),

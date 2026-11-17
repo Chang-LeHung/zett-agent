@@ -273,9 +273,9 @@ async def run_request(agent: Agent, session_id: str, prompt: str) -> None:
 async def main() -> None:
     """Start the REPL, restoring the requested or most recently active session."""
     args = parse_args()
-    api_key = os.getenv("DEEPSEEK_API")
+    api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
-        raise SystemExit("DEEPSEEK_API is required")
+        raise SystemExit("DEEPSEEK_API_KEY is required")
 
     persistence = SQLiteSessionExtension(args.database)
     storage = persistence.storage

@@ -1,4 +1,10 @@
-"""View encoded image files or remote URLs as model-facing content."""
+"""Recognising the image files ``read`` hands to a model, by their first bytes, never by their name.
+
+``view_image`` also covers an image that is not in the working directory at all: an HTTP(S) URL. It is the one
+reader here that needs the network, so its client is imported only when a URL is asked for.
+"""
+
+from __future__ import annotations
 
 import asyncio
 import ssl
@@ -11,28 +17,31 @@ from pydantic import Field
 from ..messages import ImageBytesSource, ImageContent
 from .base import tool
 
-#: Largest encoded image a tool returns unless the caller passes a smaller bound.
+#: The largest image file a reader returns.
 MAX_IMAGE_BYTES = 10_000_000
 
-#: Bytes needed to recognize every supported image signature.
-IMAGE_SIGNATURE_BYTES = 12
+#: Bytes needed to recognise every signature below.
+SIGNATURE_BYTES = 12
 
 
-def image_media_type(data: bytes) -> str:
-    """Return the media type for one supported image signature.
+def image_media_type(header: bytes) -> str | None:
+    """Return the media type of a PNG, JPEG, GIF or WebP from the first bytes of a file, or ``None`` for anything else.
 
-    Raises:
-        ValueError: When the leading bytes are not a PNG, JPEG, GIF, or WebP.
+    A file's name says what its author meant; its first bytes say what it is, and a model rejects a picture
+    announced as the wrong type. A file that is not one of the four is text as far as ``read`` is concerned.
+
+    Args:
+        header: At least :data:`SIGNATURE_BYTES` bytes from the start of the file (fewer for a short file).
     """
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
-    if data.startswith(b"\xff\xd8\xff"):
+    if header.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
-    if data.startswith((b"GIF87a", b"GIF89a")):
+    if header.startswith((b"GIF87a", b"GIF89a")):
         return "image/gif"
-    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+    if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
         return "image/webp"
-    raise ValueError("Unsupported image signature; expected PNG, JPEG, GIF, or WebP")
+    return None
 
 
 def _read_local_image(path: str, max_bytes: int) -> bytes:
@@ -89,13 +98,16 @@ async def view_image(
         path: HTTP(S) URL, absolute path, or path relative to the current working directory.
         max_bytes: Maximum encoded image size; oversized files are rejected.
 
+    Returns:
+        The image itself, which only a vision-capable model can read.
+
     Snippet:
         view_image(path="https://example.com/chart.png")
 
     Guidelines:
         - Use this tool to inspect screenshots and images with a vision-capable model.
+        - It accepts a local path or an HTTP(S) URL; remote images are downloaded with redirects enabled.
         - Use read_file for text. PDF and SVG files are not supported by this tool.
-        - Remote images must use HTTP or HTTPS and are downloaded with redirects enabled.
         - Images are returned intact; resize large images before viewing them.
     """
     parsed = urlparse(path)
@@ -108,7 +120,13 @@ async def view_image(
         target = Path(path).expanduser().resolve()
         data = await asyncio.to_thread(_read_local_image, path, max_bytes)
         alt_text = target.name
+    media_type = image_media_type(data)
+    if media_type is None:
+        raise ValueError("Unsupported image signature; expected PNG, JPEG, GIF, or WebP")
     return ImageContent(
-        source=ImageBytesSource(data=data, media_type=image_media_type(data)),
+        source=ImageBytesSource(data=data, media_type=media_type),
         alt_text=alt_text,
     )
+
+
+__all__ = ["MAX_IMAGE_BYTES", "SIGNATURE_BYTES", "image_media_type", "view_image"]

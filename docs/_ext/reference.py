@@ -84,7 +84,6 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
     ),
     "zett_agent.extensions.external": ("ExternalEvent", "ExternalEventExtension"),
     "zett_agent.extensions.file_system": (
-        "DeleteFileExtension",
         "EditExtension",
         "FileSystemExtension",
         "GlobExtension",
@@ -426,17 +425,16 @@ PUBLIC_API: dict[str, tuple[str, ...]] = {
         "render_tool_search_text",
         "tool",
     ),
-    "zett_agent.tools.coding": (
-        "bash",
-        "delete_file",
+    "zett_agent.tools.files": (
+        "edit",
         "glob",
         "grep",
         "read",
         "read_file",
-        "edit",
         "write_file",
     ),
     "zett_agent.tools.images": ("view_image",),
+    "zett_agent.tools.shell": ("CommandFailed", "bash"),
 }
 
 GROUPS = {

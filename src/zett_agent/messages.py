@@ -100,7 +100,7 @@ class ToolCall:
             call = ToolCall(
                 id="call-7",
                 name="read_file",
-                arguments={"path": "README.md", "start_line": 1},
+                arguments={"file_path": "README.md", "offset": 1},
             )
     """
 

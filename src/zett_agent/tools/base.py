@@ -148,7 +148,7 @@ class AgentTool(SyncMethodsMixin):
         Examples:
             Invoke a decorated tool from Python::
 
-                result = await read_file({"path": "README.md"})
+                result = await read_file({"file_path": "README.md"})
 
         Note:
             Decorated synchronous functions run in a worker thread; async

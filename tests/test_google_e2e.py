@@ -168,16 +168,16 @@ async def test_an_image_in_a_user_message_is_sent_as_inline_data(provider_for, s
 
 async def test_an_image_returned_by_a_tool_reaches_gemini(provider_for, tmp_path, monkeypatch):
     from zett_agent.messages import AssistantMessage, ToolCall
-    from zett_agent.tools.coding import read
+    from zett_agent.tools.files import read
 
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pixel.png").write_bytes(PNG)
-    outcome = await read({"path": "pixel.png"})
+    outcome = await read({"file_path": "pixel.png"})
     assert isinstance(outcome[1], ImageContent)
     request = ModelRequest(
         [
             UserMessage(content="look"),
-            AssistantMessage(tool_calls=(ToolCall("1", "read", {"path": "pixel.png"}),)),
+            AssistantMessage(tool_calls=(ToolCall("1", "read", {"file_path": "pixel.png"}),)),
             ToolMessage(tool_call_id="1", name="read", content=outcome, success=True),
         ]
     )

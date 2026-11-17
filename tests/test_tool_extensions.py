@@ -6,7 +6,6 @@ from zett_agent.agent import Agent, AgentRunConfig
 from zett_agent.extensions.bash import BashExtension
 from zett_agent.extensions.coding import CodingExtension
 from zett_agent.extensions.file_system import (
-    DeleteFileExtension,
     EditExtension,
     FileSystemExtension,
     GlobExtension,
@@ -20,8 +19,9 @@ from zett_agent.extensions.tool import ToolExtension
 from zett_agent.messages import AssistantMessage, ToolCall, ToolMessage
 from zett_agent.model import ModelEvent, ModelResponse
 from zett_agent.tools.base import tool
-from zett_agent.tools.coding import bash, delete_file, edit, glob, grep, read, read_file, write_file
+from zett_agent.tools.files import edit, glob, grep, read, read_file, write_file
 from zett_agent.tools.images import view_image
+from zett_agent.tools.shell import bash
 
 SINGLE = [
     (ReadFileExtension, "read_file"),
@@ -31,7 +31,6 @@ SINGLE = [
     (GrepExtension, "grep"),
     (WriteFileExtension, "write_file"),
     (EditExtension, "edit"),
-    (DeleteFileExtension, "delete_file"),
     (BashExtension, "bash"),
 ]
 
@@ -65,9 +64,9 @@ async def test_a_subset_of_extensions_runs_only_its_own_tools(tmp_path, monkeypa
     monkeypatch.chdir(tmp_path)
     (tmp_path / "a.txt").write_text("alpha\n")
     model = RecordingModel(
-        ToolCall("1", "read_file", {"path": "a.txt"}),
+        ToolCall("1", "read_file", {"file_path": "a.txt"}),
         ToolCall("2", "grep", {"pattern": "alpha"}),
-        ToolCall("3", "write_file", {"path": "b.txt", "content": "x"}),
+        ToolCall("3", "write_file", {"file_path": "b.txt", "content": "x"}),
     )
     agent = await Agent.create(
         model, config=AgentRunConfig("subset"), extensions=[ReadFileExtension(), GrepExtension()]
@@ -76,7 +75,7 @@ async def test_a_subset_of_extensions_runs_only_its_own_tools(tmp_path, monkeypa
     await agent.run("go")
 
     results = {m.tool_call_id: m for m in model.requests[1].messages if isinstance(m, ToolMessage)}
-    assert results["1"].success and results["1"].content == "alpha\n"
+    assert results["1"].success and results["1"].content == "1\talpha\n"
     assert results["2"].success
     assert not results["3"].success  # write_file was not offered
     assert not (tmp_path / "b.txt").exists()
@@ -87,7 +86,7 @@ def test_the_bundles_are_exactly_the_union_of_the_single_tool_extensions():
     writable = {registered.name for registered in FileSystemExtension().tools}
 
     assert read_only == {"read_file", "view_image", "glob", "grep"}
-    assert writable == read_only | {"write_file", "edit", "delete_file"}
+    assert writable == read_only | {"write_file", "edit"}
     singles = {
         registered.name
         for extension_type, name in SINGLE
@@ -143,7 +142,7 @@ def test_every_builtin_tool_is_reachable_through_one_extension():
     exposed = [registered for extension_type, _ in SINGLE for registered in extension_type().tools]
 
     assert {id(registered) for registered in exposed} == {
-        id(registered) for registered in (read, read_file, view_image, glob, grep, write_file, edit, delete_file, bash)
+        id(registered) for registered in (read, read_file, view_image, glob, grep, write_file, edit, bash)
     }
 
 
@@ -158,7 +157,9 @@ async def test_the_read_tool_returns_an_image_through_the_agent_loop(tmp_path, m
     )
     (tmp_path / "pixel.png").write_bytes(png)
     (tmp_path / "note.txt").write_text("hello\n")
-    model = RecordingModel(ToolCall("1", "read", {"path": "pixel.png"}), ToolCall("2", "read", {"path": "note.txt"}))
+    model = RecordingModel(
+        ToolCall("1", "read", {"file_path": "pixel.png"}), ToolCall("2", "read", {"file_path": "note.txt"})
+    )
     agent = await Agent.create(model, config=AgentRunConfig("read"), extensions=[ReadExtension()])
 
     await agent.run("look")
@@ -166,4 +167,4 @@ async def test_the_read_tool_returns_an_image_through_the_agent_loop(tmp_path, m
     results = {m.tool_call_id: m for m in model.requests[1].messages if isinstance(m, ToolMessage)}
     assert results["1"].success and isinstance(results["1"].content[1], ImageContent)
     assert results["1"].content[1].source.data == png
-    assert results["2"].content == "hello\n"
+    assert results["2"].content == "1\thello\n"

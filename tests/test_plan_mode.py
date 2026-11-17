@@ -205,7 +205,6 @@ async def test_model_proposal_waits_for_approval_then_enters_plan_mode():
         "view_image",
         "write_file",
         "edit",
-        "delete_file",
         "glob",
         "grep",
         "bash",
@@ -376,8 +375,8 @@ async def test_active_plan_mode_executes_filesystem_and_shell_tools(tmp_path, mo
         AssistantMessage(content="Plan ready"),
         AssistantMessage(
             tool_calls=(
-                ToolCall("write", "write_file", {"path": "plan.md", "content": "# Plan"}),
-                ToolCall("read", "read_file", {"path": "plan.md"}),
+                ToolCall("write", "write_file", {"file_path": "plan.md", "content": "# Plan"}),
+                ToolCall("read", "read_file", {"file_path": "plan.md"}),
                 ToolCall("shell", "bash", {"command": "printf plan-mode"}),
             )
         ),
@@ -398,7 +397,7 @@ async def test_active_plan_mode_executes_filesystem_and_shell_tools(tmp_path, mo
         message.name: message.content for message in model.requests[3].messages if isinstance(message, ToolMessage)
     }
     assert (tmp_path / "plan.md").read_text() == "# Plan"
-    assert results["read_file"] == "# Plan"
+    assert results["read_file"] == "1\t# Plan"
     assert results["bash"] == "plan-mode"
     assert all(message.success for message in model.requests[3].messages if isinstance(message, ToolMessage))
 
@@ -532,7 +531,6 @@ async def test_full_lifecycle_restores_empty_prompt_and_empty_original_tool_set(
         "view_image",
         "write_file",
         "edit",
-        "delete_file",
         "glob",
         "grep",
         "bash",

@@ -115,6 +115,28 @@ async def test_view_image_bounds_and_validates_remote_sources(monkeypatch):
         await view_image({"path": "ftp://example.com/image.png"})
 
 
+async def test_view_image_bounds_a_remote_body_that_states_no_length(monkeypatch):
+    """A chunked response says nothing up front, so the running total is what stops it."""
+
+    def handler(request):
+        response = httpx.Response(200, content=PNG)
+        # A real chunked response states no length, so only the running total can stop a body that runs over.
+        del response.headers["content-length"]
+        return response
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient
+
+    def client_factory(**kwargs):
+        return client(transport=transport, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", client_factory)
+    with pytest.raises(ValueError, match="limit"):
+        await view_image({"path": "https://example.com/chunked.png", "max_bytes": 4})
+    image = await view_image({"path": "https://example.com/chunked.png"})
+    assert image.source.data == PNG
+
+
 async def test_parallel_tool_images_follow_all_tool_results(tmp_path):
     path = tmp_path / "pixel.png"
     path.write_bytes(PNG)

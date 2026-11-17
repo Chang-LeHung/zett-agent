@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..tools.coding import bash
+from ..tools.shell import bash
 from .tool import ToolExtension
 
 
@@ -10,7 +10,8 @@ class BashExtension(ToolExtension):
     """Register the ``bash`` tool and nothing else.
 
     The command runs with the host process's permissions in the current working
-    directory, and ``timeout_seconds`` defaults to 60. Pair it with
+    directory, or in the ``work_dir`` a call names, and ``timeout_seconds``
+    defaults to 60. Pair it with
     :class:`~zett_agent.extensions.shell_approval.ShellApprovalExtension` when a
     person must approve commands.
 

@@ -25,7 +25,7 @@ from zett_agent.messages import (
 )
 from zett_agent.model import ModelEvent, ModelRequest
 from zett_agent.tools.base import ToolResult, tool
-from zett_agent.tools.coding import LineCount
+from zett_agent.tools.files import Limit
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "zett_agent"
 ALIASES = {
@@ -43,7 +43,8 @@ ALIASES = {
     "json_types": ("JsonValue",),
     "messages": ("ImageSource", "UserContentPart", "UserContent", "AnyMessage"),
     "tools.base": ("ToolResult",),
-    "tools.coding": ("FilePath", "StartLine", "LineCount", "TimeoutSeconds", "MaxResults"),
+    "tools.files": ("Expression", "FilePath", "Limit", "MaxResults", "Offset", "OldString"),
+    "tools.shell": ("Command", "TimeoutSeconds", "WorkDir"),
 }
 PARAMETERS = [(f"zett_agent.{module}", name) for module, names in ALIASES.items() for name in names]
 
@@ -132,11 +133,14 @@ def test_message_union_alias_validates_and_serializes_all_roles(message):
 
 
 CONSTRAINTS = [
-    ("tools.coding", "FilePath", "file.txt", "", "minLength", 1),
-    ("tools.coding", "StartLine", 1, 0, "minimum", 1),
-    ("tools.coding", "LineCount", 2_000, 2_001, "maximum", 2_000),
-    ("tools.coding", "TimeoutSeconds", 300, 301, "maximum", 300),
-    ("tools.coding", "MaxResults", 5_000, 5_001, "maximum", 5_000),
+    ("tools.files", "FilePath", "file.txt", "", "minLength", 1),
+    ("tools.files", "OldString", "text", "", "minLength", 1),
+    ("tools.files", "Offset", 1, 0, "minimum", 1),
+    ("tools.files", "Limit", 2_000, 2_001, "maximum", 2_000),
+    ("tools.files", "MaxResults", 5_000, 5_001, "maximum", 5_000),
+    ("tools.shell", "Command", "pwd", "", "minLength", 1),
+    ("tools.shell", "WorkDir", "src", "", "minLength", 1),
+    ("tools.shell", "TimeoutSeconds", 600, 601, "maximum", 600),
     ("extensions.ask_user", "Question", "question", "", "maxLength", 4_000),
     ("extensions.ask_user", "Option", "choice", "", "maxLength", 500),
     ("extensions.ask_user", "Options", ["choice"], [""] * 21, "maxItems", 20),
@@ -215,7 +219,7 @@ def test_nested_aliases_keep_item_constraints_and_discriminated_union():
 
 async def test_custom_tools_accept_named_aliases_in_function_annotations():
     @tool(guidelines="Use to validate a named tool parameter.")
-    async def bounded(value: LineCount) -> int:
+    async def bounded(value: Limit) -> int:
         """Return a value only after named constraints are checked."""
         return value
 

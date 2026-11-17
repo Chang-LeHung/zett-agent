@@ -206,14 +206,36 @@ Filesystem and shell tools
 --------------------------
 
 ``FileSystemExtension(read_only=True)`` adds ``read_file``, ``view_image``,
-``glob``, and ``grep``. Writable mode also adds ``write_file``, ``edit``, and
-``delete_file``; ``CodingExtension`` adds ``bash``, whose ``timeout_seconds``
-defaults to 60.
+``glob``, and ``grep``. Writable mode also adds ``write_file`` and ``edit``;
+``CodingExtension`` adds ``bash``, whose ``timeout_seconds`` defaults to 60 and
+may not exceed 600.
 
-``read_file`` returns UTF-8 text as a line range. The separate ``read`` tool
-(add it with ``ReadExtension``) does the same for text and also returns a PNG,
-JPEG, GIF, or WebP file as an image with a one-line description, so one tool
-covers both. ``view_image`` remains for HTTP(S) image URLs.
+``read_file`` returns a line range of UTF-8 text, each line prefixed with its
+1-based number and a tab. ``offset`` names the first line and ``limit`` the most
+to return, 2,000 by default; a trailing hint says which offset continues the
+file, or points at the shell when a single line is longer than one result may
+carry. The line numbers are for reference and are not part of the file.
+
+The separate ``read`` tool (add it with ``ReadExtension``) does the same for text
+and also returns a PNG, JPEG, GIF, or WebP file as an image with a one-line
+description, so one tool covers both. The bundles register ``read_file`` with
+``view_image`` instead, which reads a local image or an HTTP(S) URL.
+
+``edit`` replaces one exact ``old_string`` with ``new_string`` and refuses an
+``old_string`` that does not appear exactly once unless ``replace_all`` is set.
+``write_file`` replaces a whole file, and there is no delete tool: removing a
+file is a shell command, so it goes through the same permission as any other
+command.
+
+Both file readers and ``edit`` read with universal newlines, and ``edit`` writes
+LF back, so a one-line edit of a CRLF file comes back with LF endings and a CRLF
+checkout shows it as a whole-file diff. ``write_file`` writes exactly the text it
+is given. A replacement keeps the permission bits of the file it replaces, except
+the set-user-ID and set-group-ID bits, which a write clears anyway, and a new file
+gets the mode a plain create would give it.
+
+``bash`` runs its command in the working directory, or in ``work_dir``, which is
+how a call reaches a subdirectory without ``cd`` lasting into an unrelated call.
 
 Each tool also has its own extension, so an application can offer exactly the
 ones it wants:

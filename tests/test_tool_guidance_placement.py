@@ -9,7 +9,7 @@ from zett_agent.extensions.tool_guidelines import ToolGuidancePlacement, ToolGui
 from zett_agent.messages import AssistantMessage, SystemMessage
 from zett_agent.model import ModelEvent, ModelResponse
 from zett_agent.tools.base import render_tool_description, render_tool_guidance, tool
-from zett_agent.tools.coding import edit, read_file
+from zett_agent.tools.files import edit, read_file
 
 
 @tool(guidelines=("Use for lookups.", "Never guess."))
@@ -146,7 +146,7 @@ async def test_builtin_tools_carry_their_guidance_in_description_mode():
 
     description = descriptions(request)["edit"]
     assert description.startswith(edit.description + " ")
-    assert "Read the target lines with read_file first" in description
+    assert "Read the target lines first" in description
     assert "Guidelines:" not in description and "Snippet:" not in description
     assert "Tool guidelines" not in system_text(request)
 
@@ -160,7 +160,7 @@ async def test_plan_mode_keeps_guidance_out_of_the_system_prompt_in_description_
     )
 
     assert "Tool guidelines" not in system_text(request) and "Tool snippets" not in system_text(request)
-    assert "Read the target lines with read_file first" in descriptions(request)["edit"]
+    assert "Read the target lines first" in descriptions(request)["edit"]
     assert "Guidelines:" not in descriptions(request)["edit"]
 
 
@@ -183,7 +183,7 @@ def test_render_tool_description_is_the_plain_description_when_there_is_nothing_
     without_snippet = render_tool_description(read_file, snippet=False)
     assert without_snippet.startswith(read_file.description + " Use line ranges for large files.")
     assert "Guidelines:" not in without_snippet and "- " not in without_snippet
-    assert 'read_file(path="src/app.py", start_line=1, line_count=200)' in render_tool_description(read_file)
+    assert 'read_file(file_path="src/app.py", offset=500)' in render_tool_description(read_file)
 
 
 @pytest.mark.parametrize("ending", [".", "!", "?", "。", "！", "？", "…"])

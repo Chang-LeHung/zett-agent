@@ -16,7 +16,7 @@ from ..tools.base import (
     render_tool_guidance,
     tool,
 )
-from ..tools.coding import bash
+from ..tools.shell import bash
 from .events import ExtensionEvent, RunCancelledEvent
 from .external import ExternalEventExtension
 from .file_system import FileSystemExtension

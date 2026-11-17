@@ -1,93 +1,81 @@
-"""Bounded UTF-8 previews; full shell output stays in files for later reads."""
+"""Bounded UTF-8 previews: a long text is cut to a budget, and the full output stays in a file for later reads."""
+
+from __future__ import annotations
 
 from pathlib import Path
+from typing import NamedTuple
 
+#: The most bytes, lines and bytes-per-matching-line any one tool result may carry.
 MAX_OUTPUT_BYTES = 50 * 1024
 MAX_OUTPUT_LINES = 2000
 MAX_MATCH_BYTES = 2000
 
+#: What stands where the middle of a long output was left out.
+OMISSION = "\n... [middle omitted; read the output file for full content] ...\n"
+
+
+class Preview(NamedTuple):
+    """A bounded view of one output stream.
+
+    Attributes:
+        text: What fits the budget.
+        truncated: Whether the stream was longer than that, so the full text has to be kept.
+    """
+
+    text: str
+    truncated: bool
+
 
 def utf8_prefix(text: str, budget: int) -> str:
-    """Keep a valid UTF-8 prefix without exceeding the byte budget."""
+    """Return the longest prefix of ``text`` whose UTF-8 encoding fits in ``budget`` bytes, never half a character."""
     return text.encode("utf-8")[:budget].decode("utf-8", errors="ignore")
 
 
-def shell_preview(path: Path) -> tuple[str, bool]:
-    """Keep a quarter of the budget for startup and the rest for final results.
+def stream_preview(path: Path, marker: str = OMISSION) -> Preview:
+    """Return a bounded preview of a stream written to ``path``: its start and its end, with the middle left out.
 
-    Read only bounded windows from disk. Line and byte limits apply to the
-    returned text, including the omission marker. UTF-8 boundary fragments are
-    dropped. Full output remains available even when errors occur in the middle.
+    A quarter of the byte budget goes to the start (what a command printed while it started up) and the rest to
+    the end (its final results). Only bounded windows are read from disk, so a gigabyte of output costs what fifty
+    kilobytes does, and a partial UTF-8 character at either edge of a window is dropped. The line limit applies to
+    the text returned, the marker included. The file is never changed, which is what lets the model read what was
+    omitted.
 
-    Preview construction (the file on disk is never changed)::
-
-        +------------------------------------------------------------+
-        | FULL OUTPUT FILE                                           |
-        | START .............................................. END   |
-        +------------------------------------------------------------+
-                                      |
-                                      v
-        +------------------------------------------------------------+          +---------------------------+
-        | PROBE                                                      |-- yes -->| RETURN FULL TEXT          |
-        | Read at most MAX_OUTPUT_BYTES + 1 bytes                    |          | truncated = False         |
-        | Does all text fit BOTH byte and line limits?               |          +---------------------------+
-        +------------------------------------------------------------+
-                                      |
-                                      | no
-                                      v
-        +------------------------------------------------------------+
-        | RESERVE MARKER SPACE                                       |
-        | B = byte limit - marker size                               |
-        +------------------------------------------------------------+
-                                      |
-                                      |
-                                      v
-        +------------------------------------------------------------+
-        | READ BOUNDED BYTE WINDOWS                                  |
-        | Head: B // 4 bytes from START                              |
-        | Tail: remaining bytes by seeking to END                    |
-        | Middle: omitted from preview                               |
-        +------------------------------------------------------------+
-                                      |
-                                      |
-                                      v
-        +------------------------------------------------------------+
-        | DECODE AND TRIM                                            |
-        | Drop partial UTF-8 characters at window boundaries         |
-        | Reserve 4 lines for marker and boundary newlines           |
-        | Keep first ~1/4 of remaining lines from head               |
-        | Keep last ~3/4 of remaining lines from tail                |
-        +------------------------------------------------------------+
-                                      |
-                                      |
-                                      v
-        +------------------------------------------------------------+
-        | ASSEMBLE PREVIEW                                           |
-        | Head preview + omission marker + tail preview              |
-        | Return combined text, truncated = True                     |
-        +------------------------------------------------------------+
-
-    Byte windows are selected before line trimming; unused space is not
-    redistributed. The 1:3 split is a budget allocation, not a guarantee of
-    final text lengths. Window edges may contain partial lines. Consumers
-    can read the original file to recover omitted text.
+    Args:
+        path: The stream that was written.
+        marker: What stands between the two windows. A caller that knows where the whole text is kept puts that in
+            the marker; it is written once, where the cut is, so a copy of the default marker inside the text cannot
+            be mistaken for the cut.
     """
-    marker = "\n... [middle omitted; read the output file for full content] ...\n"
     with path.open("rb") as source:
         data = source.read(MAX_OUTPUT_BYTES + 1)
         text = data.decode("utf-8", errors="replace")
-        if len(data) <= MAX_OUTPUT_BYTES and len(text.encode("utf-8")) <= MAX_OUTPUT_BYTES:
-            if len(text.splitlines()) <= MAX_OUTPUT_LINES:
-                return text, False
-        budget = MAX_OUTPUT_BYTES - len(marker.encode("utf-8"))
+        if (
+            len(data) <= MAX_OUTPUT_BYTES
+            and len(text.encode("utf-8")) <= MAX_OUTPUT_BYTES
+            and len(text.splitlines()) <= MAX_OUTPUT_LINES
+        ):
+            return Preview(text, False)
+        budget = max(2, MAX_OUTPUT_BYTES - len(marker.encode("utf-8")))
         head_budget = budget // 4
         tail_budget = budget - head_budget
         head = data[:head_budget].decode("utf-8", errors="ignore")
         source.seek(max(0, path.stat().st_size - tail_budget))
         tail = source.read(tail_budget).decode("utf-8", errors="ignore")
-    # Reserve lines for the marker and boundary newlines.
-    lines = max(2, MAX_OUTPUT_LINES - 4)
+    # What the marker takes is held back so the line limit covers the text that comes back: a caller's marker is a
+    # sentence or two, and the floor keeps a long one from eating the whole preview.
+    lines = max(2, MAX_OUTPUT_LINES - max(1, marker.count("\n")) - 1)
     head_lines = max(1, lines // 4)
     head = "".join(head.splitlines(keepends=True)[:head_lines])
     tail = "".join(tail.splitlines(keepends=True)[-(lines - head_lines) :])
-    return head + marker + tail, True
+    return Preview(head + marker + tail, True)
+
+
+__all__ = [
+    "MAX_MATCH_BYTES",
+    "MAX_OUTPUT_BYTES",
+    "MAX_OUTPUT_LINES",
+    "OMISSION",
+    "Preview",
+    "stream_preview",
+    "utf8_prefix",
+]

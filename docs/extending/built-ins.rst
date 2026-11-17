@@ -35,7 +35,7 @@ runtime already provides them.
      - Add writable filesystem tools and shell execution.
      - Injects the directory used by relative paths and shell execution.
    * - ReadFileExtension, EditExtension, and the other single-tool extensions
-     - Offer one built-in tool on its own: read_file, read (text or image), view_image, glob, grep, write_file, edit, delete_file, or bash.
+     - Offer one built-in tool on its own: read_file, read (text or image), view_image, glob, grep, write_file, edit, or bash.
      - One extension, one tool; they inject no directory message. ``ToolExtension`` wraps any tool the same way.
    * - AskUserExtension
      - Let the model ask the UI a question and wait.

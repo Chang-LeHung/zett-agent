@@ -29,8 +29,8 @@ from zett_agent.providers.deepseek import DeepSeekProvider
 from zett_agent.tools.base import tool
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("ZETT_AGENT_LIVE_TESTS") != "1" or not os.getenv("DEEPSEEK_API"),
-    reason="Set ZETT_AGENT_LIVE_TESTS=1 and DEEPSEEK_API to run live provider checks",
+    os.getenv("ZETT_AGENT_LIVE_TESTS") != "1" or not os.getenv("DEEPSEEK_API_KEY"),
+    reason="Set ZETT_AGENT_LIVE_TESTS=1 and DEEPSEEK_API_KEY to run live provider checks",
 )
 
 
@@ -38,7 +38,7 @@ def provider_for(protocol: str):
     """Use the operating system trust store, including locally trusted proxy certificates."""
     transport = httpx.AsyncHTTPTransport(verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
     model = os.getenv("DEEPSEEK_API_MODEL", "deepseek-v4-flash")
-    key = os.environ["DEEPSEEK_API"]
+    key = os.environ["DEEPSEEK_API_KEY"]
     match protocol:
         case "openai":
             return DeepSeekProvider(model=model, api_key=key, transport=transport)

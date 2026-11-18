@@ -129,8 +129,8 @@ msgid "ReadFileExtension, EditExtension, and the other single-tool extensions"
 msgstr "ReadFileExtension、EditExtension 以及其他单工具扩展"
 
 #: ../../../Users/huchang/zett-agent/docs/extending/built-ins.rst:38
-msgid "Offer one built-in tool on its own: read_file, read (text or image), view_image, glob, grep, write_file, edit, delete_file, or bash."
-msgstr "单独提供一个内置工具：read_file、read（文本或图像）、view_image、glob、grep、write_file、edit、delete_file 或 bash。"
+msgid "Offer one built-in tool on its own: read_file, read (text or image), view_image, glob, grep, write_file, edit, or bash."
+msgstr "单独提供一个内置工具：read_file、read（文本或图像）、view_image、glob、grep、write_file、edit 或 bash。"
 
 #: ../../../Users/huchang/zett-agent/docs/extending/built-ins.rst:39
 msgid "One extension, one tool; they inject no directory message. ``ToolExtension`` wraps any tool the same way."

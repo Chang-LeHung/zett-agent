@@ -113,7 +113,7 @@ async def test_a_module_may_define_several_tools_and_imported_tools_are_not_regi
     harness = JITHarness(tmp_path, tools=[add])
     put_tool(
         harness,
-        "from zett_agent.tools.coding import read_file\n"
+        "from zett_agent.tools.files import read_file\n"
         '@tool(guidelines="One.")\ndef one() -> int:\n    """One."""\n    return 1\n\n'
         '@tool(guidelines="Two.")\ndef two() -> int:\n    """Two."""\n    return 2\n',
     )

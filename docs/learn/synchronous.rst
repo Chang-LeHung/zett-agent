@@ -38,7 +38,7 @@ which mirrors their async methods with blocking calls:
        reply = agent.run("Hello")
 
    with read_file.sync() as read:
-       result = read({"path": "README.md"})
+       result = read({"file_path": "README.md"})
 
    with storage.sync() as db:
        session = db.load("session-42")

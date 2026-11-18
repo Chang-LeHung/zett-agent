@@ -32,7 +32,7 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
 
     expected = {
         True: {"read_file", "view_image", "glob", "grep"},
-        False: {"read_file", "view_image", "glob", "grep", "write_file", "edit", "delete_file"},
+        False: {"read_file", "view_image", "glob", "grep", "write_file", "edit"},
     }
     for read_only, tool_names in expected.items():
         model = Model()
@@ -55,23 +55,18 @@ async def test_filesystem_extension_selects_tools_from_read_only_mode():
         if read_only:
             assert "## write_file" not in guidance
             assert "## edit" not in guidance
-            assert "## delete_file" not in guidance
 
 
 async def test_coding_extension_executes_tools_and_registers_again(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls = (
-        ToolCall("write", "write_file", {"path": "note.txt", "content": "hello"}),
-        ToolCall(
-            "replace",
-            "edit",
-            {"path": "note.txt", "edits": [{"old_text": "hello", "new_text": "world"}]},
-        ),
-        ToolCall("read", "read_file", {"path": "note.txt"}),
+        ToolCall("write", "write_file", {"file_path": "note.txt", "content": "hello"}),
+        ToolCall("replace", "edit", {"file_path": "note.txt", "old_string": "hello", "new_string": "world"}),
+        ToolCall("read", "read_file", {"file_path": "note.txt"}),
         ToolCall("glob", "glob", {"pattern": "*.txt"}),
         ToolCall("grep", "grep", {"pattern": "world"}),
         ToolCall("shell", "bash", {"command": "printf coding-extension"}),
-        ToolCall("delete", "delete_file", {"path": "note.txt"}),
+        ToolCall("remove", "bash", {"command": "rm note.txt"}),
     )
 
     class Model:
@@ -100,18 +95,19 @@ async def test_coding_extension_executes_tools_and_registers_again(tmp_path, mon
     ]
     assert len(environment_messages) == 1
     assert f'Current working directory: "{tmp_path}".' in environment_messages[0].content
-    assert "Shell commands run from this directory." in environment_messages[0].content
+    assert "Shell commands run from this directory unless a call names another one." in environment_messages[0].content
     results = {
-        message.name: message.content for message in model.requests[1].messages if isinstance(message, ToolMessage)
+        message.tool_call_id: message.content
+        for message in model.requests[1].messages
+        if isinstance(message, ToolMessage)
     }
-    assert results["write_file"] == "Created note.txt"
-    assert results["read_file"] == "world"
-    assert results["bash"] == "coding-extension"
-    assert results["edit"] == "Replaced 1 occurrence in note.txt"
+    assert results["write"] == "Created note.txt"
+    assert results["replace"] == "Replaced 1 occurrence in note.txt"
+    assert results["read"] == "1\tworld"
     assert results["glob"] == "note.txt"
     assert results["grep"] == "note.txt:1: world"
-    assert results["delete_file"] == "Deleted note.txt"
-    assert not (tmp_path / "note.txt").exists()
+    assert results["shell"] == "coding-extension"
+    assert not (tmp_path / "note.txt").exists(), "the shell removed the file, since there is no delete tool"
     assert all(message.success for message in model.requests[1].messages if isinstance(message, ToolMessage))
 
     await agent.run("Another request", config=AgentRunConfig("other-files"))

@@ -153,43 +153,59 @@ msgstr "工具默认使用\\ ``ToolExecutionMode.PARALLEL``\\ 。如果一个模
 msgid "The runtime finishes the parallel batch before running serial tools one at a time. ``SERIAL`` is not a global lock across sessions or workers. To preserve the model's call order for the whole response, set ``parallel_tool_call=False`` on the agent or request. Shared mutable resources still need application-level synchronization and authorization."
 msgstr "运行时会先完成这一批并行调用，然后逐个运行串行工具。\\ ``SERIAL``\\ 不是跨会话或跨工作进程的全局锁。如果要让整个响应都保持模型的调用顺序，请在智能体或请求上设置\\ ``parallel_tool_call=False``\\ 。共享的可变资源仍然需要应用层面的同步和授权。"
 
-#: ../../learn/tools.rst:196
+#: ../../learn/tools.rst:205
 msgid "Filesystem and shell tools"
 msgstr "文件系统工具与 shell 工具"
 
-#: ../../learn/tools.rst:198
-msgid "``FileSystemExtension(read_only=True)`` adds ``read_file``, ``view_image``, ``glob``, and ``grep``. Writable mode also adds ``write_file``, ``edit``, and ``delete_file``; ``CodingExtension`` adds ``bash``, whose ``timeout_seconds`` defaults to 60."
-msgstr "``FileSystemExtension(read_only=True)`` 会添加 ``read_file``、``view_image``、``glob`` 和 ``grep``\\ 。可写模式还会添加 ``write_file``、``edit`` 和 ``delete_file``；``CodingExtension`` 会添加 ``bash``，其 ``timeout_seconds`` 默认为 60。"
-
-#: ../../learn/tools.rst:203
-msgid "``read_file`` returns UTF-8 text as a line range. The separate ``read`` tool (add it with ``ReadExtension``) does the same for text and also returns a PNG, JPEG, GIF, or WebP file as an image with a one-line description, so one tool covers both. ``view_image`` remains for HTTP(S) image URLs."
-msgstr "``read_file`` 以行范围的形式返回 UTF-8 文本。另一个独立的 ``read`` 工具（通过 ``ReadExtension`` 添加）对文本的处理相同，并且遇到 PNG、JPEG、GIF 或 WebP 文件时会返回图像和一行描述，因此一个工具就能同时处理两种情况。\\ ``view_image`` 仍用于 HTTP(S) 图像 URL。"
-
 #: ../../learn/tools.rst:208
+msgid "``FileSystemExtension(read_only=True)`` adds ``read_file``, ``view_image``, ``glob``, and ``grep``. Writable mode also adds ``write_file`` and ``edit``; ``CodingExtension`` adds ``bash``, whose ``timeout_seconds`` defaults to 60 and may not exceed 600."
+msgstr "``FileSystemExtension(read_only=True)`` 会添加 ``read_file``、``view_image``、``glob`` 和 ``grep``\\ 。可写模式还会添加 ``write_file`` 和 ``edit``；``CodingExtension`` 会添加 ``bash``，其 ``timeout_seconds`` 默认为 60，且不得超过 600。"
+
+#: ../../learn/tools.rst:213
+msgid "``read_file`` returns a line range of UTF-8 text, each line prefixed with its 1-based number and a tab. ``offset`` names the first line and ``limit`` the most to return, 2,000 by default; a trailing hint says which offset continues the file, or points at the shell when a single line is longer than one result may carry. The line numbers are for reference and are not part of the file."
+msgstr "``read_file`` 返回 UTF-8 文本的一个行范围，每行前面带行号（从 1 开始）和一个制表符。\\ ``offset`` 指定起始行，``limit`` 指定最多返回多少行（默认 2,000 行）；结尾的提示会说明用哪个 offset 继续读，或者在单行超过一次结果所能承载的长度时指向 shell。行号仅供引用，并不属于文件内容。"
+
+#: ../../learn/tools.rst:219
+msgid "The separate ``read`` tool (add it with ``ReadExtension``) does the same for text and also returns a PNG, JPEG, GIF, or WebP file as an image with a one-line description, so one tool covers both. The bundles register ``read_file`` with ``view_image`` instead, which reads a local image or an HTTP(S) URL."
+msgstr "另一个独立的 ``read`` 工具（通过 ``ReadExtension`` 添加）对文本的处理相同，并且遇到 PNG、JPEG、GIF 或 WebP 文件时会返回图像和一行描述，因此一个工具就能同时处理两种情况。内置扩展组合改为同时提供 ``read_file`` 和 ``view_image``，后者可以读取本地图像，也可以读取 HTTP(S) URL。"
+
+#: ../../learn/tools.rst:224
+msgid "``edit`` replaces one exact ``old_string`` with ``new_string`` and refuses an ``old_string`` that does not appear exactly once unless ``replace_all`` is set. ``write_file`` replaces a whole file, and there is no delete tool: removing a file is a shell command, so it goes through the same permission as any other command."
+msgstr "``edit`` 把一段完全匹配的 ``old_string`` 替换为 ``new_string``；如果 ``old_string`` 不是恰好出现一次，除非设置了 ``replace_all``，否则会拒绝替换。\\ ``write_file`` 会整份替换文件，而这里没有删除工具：删除文件是一条 shell 命令，因此它和其他命令走同样的权限流程。"
+
+#: ../../learn/tools.rst:230
+msgid "Both file readers and ``edit`` read with universal newlines, and ``edit`` writes LF back, so a one-line edit of a CRLF file comes back with LF endings and a CRLF checkout shows it as a whole-file diff. ``write_file`` writes exactly the text it is given. A replacement keeps the permission bits of the file it replaces, except the set-user-ID and set-group-ID bits, which a write clears anyway, and a new file gets the mode a plain create would give it."
+msgstr "两个文件读取工具和 ``edit`` 都按通用换行读取，而 ``edit`` 写回 LF 换行；因此在 CRLF 检出的仓库里，对 CRLF 文件做一处单行修改，结果会变成 LF 结尾，并表现为整份文件都被改动。\\ ``write_file`` 写入的就是你给的那段文本。替换会保留被替换文件的权限位，set-user-ID 和 set-group-ID 位除外（普通写入本来就会清除它们）；新文件则获得普通创建会得到的权限。"
+
+#: ../../learn/tools.rst:237
+msgid "``bash`` runs its command in the working directory, or in ``work_dir``, which is how a call reaches a subdirectory without ``cd`` lasting into an unrelated call."
+msgstr "``bash`` 在工作目录中运行命令，也可以在 ``work_dir`` 中运行：这样一次调用就能进入子目录，而不必让\\ ``cd``\\ 影响到另一次无关的调用。"
+
+#: ../../learn/tools.rst:240
 msgid "Each tool also has its own extension, so an application can offer exactly the ones it wants:"
 msgstr "每个工具也有自己的扩展，应用可以只提供自己想要的那些："
 
-#: ../../learn/tools.rst:218
+#: ../../learn/tools.rst:250
 msgid ":class:`~zett_agent.extensions.tool.ToolExtension` wraps any ``@tool`` function the same way."
 msgstr ":class:`~zett_agent.extensions.tool.ToolExtension` 可以用同样的方式封装任何 ``@tool`` 函数。"
 
-#: ../../learn/tools.rst:221
+#: ../../learn/tools.rst:253
 msgid "These tools run with the permissions of your process, relative to its working directory. They are not a security sandbox: restrict the process or container, and add approval rules before enabling write or shell access for untrusted input. Long outputs are bounded so a single command cannot consume the whole context; full output is preserved in a reported file when truncated."
 msgstr "这些工具以你的进程权限运行，路径相对于进程的工作目录。它们不是安全沙箱：请限制进程或容器，并在为非受信任的输入启用写入或 shell 访问之前添加审批规则。过长的输出会受到限制，因此单条命令无法占用整个上下文；被截断时，完整输出会保存在一个会上报给模型的文件中。"
 
-#: ../../learn/tools.rst:228
+#: ../../learn/tools.rst:259
 msgid "Load optional tools on demand"
 msgstr "按需加载可选工具"
 
-#: ../../learn/tools.rst:230
+#: ../../learn/tools.rst:262
 msgid "For a large toolbox, :class:`~zett_agent.extensions.tool_search.ToolSearchExtension` keeps tools marked ``deferred=True`` out of the model's context and lets it search for their definitions. This requires a compatible Responses endpoint or the Anthropic Messages API; ordinary tool calling works with all built-in providers."
 msgstr "对于规模较大的工具集，:class:`~zett_agent.extensions.tool_search.ToolSearchExtension` 会把标记为 ``deferred=True`` 的工具排除在模型上下文之外，并让模型可以搜索它们的定义。这需要兼容的 Responses 端点或 Anthropic Messages API；普通工具调用在所有内置提供商上都能正常工作。"
 
-#: ../../learn/tools.rst:236
+#: ../../learn/tools.rst:268
 msgid "See :doc:`on-demand` for setup, a skill-loading example, and the distinction between loading instructions and executing tools."
 msgstr "关于配置方法、加载技能的示例，以及加载指令和执行工具之间的区别，请参见\\ :doc:`on-demand`\\ 。"
 
-#: ../../learn/tools.rst:239
+#: ../../learn/tools.rst:271
 msgid "Next: :doc:`sessions` to keep the conversation, or :doc:`../extending/first-extension` to register tools dynamically."
 msgstr "下一步：:doc:`sessions`\\ 用于保存对话，或者用\\ :doc:`../extending/first-extension`\\ 动态注册工具。"
 

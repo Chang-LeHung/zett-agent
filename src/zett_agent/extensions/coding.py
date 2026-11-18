@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from ..tools.base import AgentTool
-from ..tools.coding import bash
+from ..tools.shell import bash
 from .file_system import FileSystemExtension
 
 
@@ -38,7 +38,10 @@ class CodingExtension(FileSystemExtension):
 
     def _working_directory_instructions(self, working_directory: Path) -> str:
         """Include the directory used by both file tools and shell commands."""
-        return f"{super()._working_directory_instructions(working_directory)}\nShell commands run from this directory."
+        return (
+            f"{super()._working_directory_instructions(working_directory)}\n"
+            "Shell commands run from this directory unless a call names another one."
+        )
 
     @property
     def tools(self) -> tuple[AgentTool, ...]:

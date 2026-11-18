@@ -40,12 +40,19 @@ class ShellApprovalStorage(Protocol):
     async def clear_session_mode(self, session_id: str) -> None:
         """Remove the persisted approval policy for one session."""
 
-    async def is_allowed(self, session_id: str, command: str) -> bool:
-        """Return whether one session permits execution of one exact command."""
-        ...
+    async def is_allowed(self, session_id: str, command: str, work_dir: str | None = None) -> bool:
+        """Return whether one session permits execution of one exact command in one directory.
 
-    async def allow_command(self, command: str) -> None:
-        """Persist one command in the allowlist."""
+        ``work_dir`` is the directory the call named, or ``None`` when it runs in the working directory. It is
+        part of the question: the same command string can act on a different tree through it.
+
+        It is the text the call named, not the path it resolves to, so ``sub``, ``./sub`` and a symbolic link are
+        three keys for one place. An entry stored before ``work_dir`` existed was approved for the working
+        directory, so it does not cover a call that names one.
+        """
+
+    async def allow_command(self, command: str, work_dir: str | None = None) -> None:
+        """Persist one command, and the directory it may run in, in the allowlist."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +94,7 @@ class ShellApprovalRequestedEvent(AgentEvent):
         call: ToolCall,
         *,
         command: str,
+        work_dir: str | None = None,
         timeout_seconds: int,
         remember_supported: bool,
     ) -> None:
@@ -99,6 +107,7 @@ class ShellApprovalRequestedEvent(AgentEvent):
                 "session_id": session_id,
                 "tool_call_id": call.id,
                 "command": command,
+                "work_dir": work_dir,
                 "timeout_seconds": timeout_seconds,
                 "remember_supported": remember_supported,
                 "response_event": SHELL_APPROVAL_RESPONSE_EVENT_NAME,
@@ -135,7 +144,12 @@ class ShellApprovalExtension(ExternalEventExtension):
         if not isinstance(command, str) or not command.strip():
             return await call_next()
         command = command.strip()
-        if self.storage is not None and await self.storage.is_allowed(context.session_id, command):
+        work_dir = call.arguments.get("work_dir")
+        if not isinstance(work_dir, str) or not work_dir.strip():
+            work_dir = None
+        else:
+            work_dir = work_dir.strip()
+        if self.storage is not None and await self.storage.is_allowed(context.session_id, command, work_dir):
             return await call_next()
 
         timeout_seconds = call.arguments.get("timeout_seconds", 30)
@@ -147,6 +161,7 @@ class ShellApprovalExtension(ExternalEventExtension):
                     context.session_id,
                     call,
                     command=command,
+                    work_dir=work_dir,
                     timeout_seconds=timeout_seconds,
                     remember_supported=self.storage is not None,
                 )
@@ -161,5 +176,5 @@ class ShellApprovalExtension(ExternalEventExtension):
         if response.remember:
             if self.storage is None:
                 raise ValueError("Shell approval storage is not configured")
-            await self.storage.allow_command(command)
+            await self.storage.allow_command(command, work_dir)
         return await call_next()

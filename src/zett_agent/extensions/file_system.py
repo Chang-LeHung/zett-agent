@@ -6,8 +6,7 @@ from pathlib import Path
 from ..agent import AgentRunContext
 from ..messages import SystemMessage
 from ..tools.base import AgentTool
-from ..tools.coding import (
-    delete_file,
+from ..tools.files import (
     edit,
     glob,
     grep,
@@ -77,21 +76,14 @@ class EditExtension(ToolExtension):
         super().__init__(edit)
 
 
-class DeleteFileExtension(ToolExtension):
-    """Register ``delete_file`` to remove one regular file."""
-
-    def __init__(self) -> None:
-        super().__init__(delete_file)
-
-
 class FileSystemExtension(AgentExtension):
     """Register filesystem tools with an optional read-only boundary.
 
     Relative paths start from the current working directory; absolute paths are
     accepted. Read-only mode exposes read_file, view_image, glob, and grep. Writable mode
-    additionally exposes write_file, edit, and delete_file. Shell execution is
-    deliberately not a filesystem capability because arbitrary commands cannot
-    guarantee that they will leave the workspace unchanged.
+    additionally exposes write_file and edit. Shell execution is deliberately not a
+    filesystem capability because arbitrary commands cannot guarantee that they will
+    leave the workspace unchanged.
 
     Each tool also has its own extension (:class:`ReadFileExtension`,
     :class:`EditExtension`, and so on) for an application that wants a subset.
@@ -110,7 +102,7 @@ class FileSystemExtension(AgentExtension):
     def tools(self) -> tuple[AgentTool, ...]:
         """Return the exact immutable registration set for the configured mode."""
         read_tools = (read_file, view_image, glob, grep)
-        return read_tools if self.read_only else (*read_tools, write_file, edit, delete_file)
+        return read_tools if self.read_only else (*read_tools, write_file, edit)
 
     async def on_tool(self, context: AgentRunContext) -> None:
         """Register the selected filesystem tools for this request."""

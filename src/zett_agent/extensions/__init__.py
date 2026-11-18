@@ -22,7 +22,6 @@ _MODULES = {
     "compaction": ("CompactionExtension",),
     "external": ("ExternalEventExtension",),
     "file_system": (
-        "DeleteFileExtension",
         "EditExtension",
         "FileSystemExtension",
         "GlobExtension",
@@ -67,7 +66,6 @@ if _TYPE_CHECKING:
     from .coding import CodingExtension as CodingExtension
     from .compaction import CompactionExtension as CompactionExtension
     from .external import ExternalEventExtension as ExternalEventExtension
-    from .file_system import DeleteFileExtension as DeleteFileExtension
     from .file_system import EditExtension as EditExtension
     from .file_system import FileSystemExtension as FileSystemExtension
     from .file_system import GlobExtension as GlobExtension

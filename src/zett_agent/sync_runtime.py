@@ -440,7 +440,7 @@ class SyncMethodsMixin:
             Use a model or tool from a plain function::
 
                 with read_file.sync() as read:
-                    result = read({"path": "README.md"})
+                    result = read({"file_path": "README.md"})
         """
         return SyncObject(self, runtime=runtime)
 

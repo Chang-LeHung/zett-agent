@@ -32,14 +32,18 @@ from zett_agent.tools.base import tool
 
 
 class ShellModel:
-    def __init__(self, command: str = "printf approved") -> None:
+    def __init__(self, command: str = "printf approved", work_dir: str | None = None) -> None:
         self.command = command
+        self.work_dir = work_dir
         self.requests = []
 
     async def stream(self, request):
         self.requests.append(request)
+        arguments = {"command": self.command}
+        if self.work_dir is not None:
+            arguments["work_dir"] = self.work_dir
         message = (
-            AssistantMessage(tool_calls=(ToolCall("shell-1", "bash", {"command": self.command}),))
+            AssistantMessage(tool_calls=(ToolCall("shell-1", "bash", arguments),))
             if len(self.requests) == 1
             else AssistantMessage(content="finished")
         )
@@ -52,13 +56,18 @@ class FakeShellTool(AgentExtension):
 
     async def on_tool(self, context: AgentRunContext) -> None:
         @tool(name="bash")
-        async def bash(command: str, timeout_seconds: int = 30) -> str:
+        async def bash(command: str, work_dir: str | None = None, timeout_seconds: int = 30) -> str:
             """Run a test shell command.
+
+            Args:
+                command: What to run.
+                work_dir: Where to run it.
+                timeout_seconds: How long it may take.
 
             Guidelines:
                 - Test only.
             """
-            _ = timeout_seconds
+            _ = (work_dir, timeout_seconds)
             self.commands.append(command)
             return f"ran: {command}"
 
@@ -101,7 +110,8 @@ class SequentialShellModel:
 
 class MemoryShellApprovalStorage:
     def __init__(self, allowed: set[str] | None = None) -> None:
-        self.allowed = set(allowed or ())
+        # A remembered command is the command and the directory it may run in; None is the working directory.
+        self.allowed: set[tuple[str, str | None]] = {(command, None) for command in allowed or ()}
         self.modes: dict[str, ShellApprovalMode] = {}
 
     async def get_session_mode(self, session_id: str) -> ShellApprovalMode:
@@ -113,13 +123,13 @@ class MemoryShellApprovalStorage:
     async def clear_session_mode(self, session_id: str) -> None:
         self.modes.pop(session_id, None)
 
-    async def is_allowed(self, session_id: str, command: str) -> bool:
+    async def is_allowed(self, session_id: str, command: str, work_dir: str | None = None) -> bool:
         if self.modes.get(session_id) is ShellApprovalMode.ALLOW_ALL:
             return True
-        return command in self.allowed
+        return (command, work_dir) in self.allowed
 
-    async def allow_command(self, command: str) -> None:
-        self.allowed.add(command)
+    async def allow_command(self, command: str, work_dir: str | None = None) -> None:
+        self.allowed.add((command, work_dir))
 
 
 async def test_shell_approval_storage_allowlist_bypasses_ui() -> None:
@@ -205,7 +215,7 @@ async def test_shell_approval_execute_and_remember() -> None:
     await asyncio.wait_for(task, timeout=1)
 
     assert shell.commands == ["printf approved"]
-    assert storage.allowed == {"printf approved"}
+    assert storage.allowed == {("printf approved", None)}
     result = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
     assert result.success is True
 
@@ -376,6 +386,41 @@ def test_shell_approval_response_parses_only_known_fields() -> None:
     )
     assert response.decision == "execute" and response.remember is True
     assert ShellApprovalResponse.from_payload({"decision": "abort"}) == ShellApprovalResponse("abort")
+
+
+async def test_work_dir_is_part_of_what_is_approved_and_remembered() -> None:
+    """One command string can act on another tree through work_dir, so the approval covers both."""
+    storage = MemoryShellApprovalStorage()
+    shell = FakeShellTool()
+    model = ShellModel(work_dir="sub")
+    config = AgentRunConfig("work-dir")
+    agent = await Agent.create(model, config=config, extensions=[ShellApprovalExtension(storage), shell])
+    events = []
+    approved = asyncio.Event()
+
+    async def consume() -> None:
+        async for event in agent.stream("run"):
+            events.append(event)
+            if event.name == SHELL_APPROVAL_EVENT_NAME:
+                approved.set()
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(approved.wait(), timeout=1)
+    request = next(event for event in events if event.name == SHELL_APPROVAL_EVENT_NAME)
+    assert request.payload["command"] == "printf approved" and request.payload["work_dir"] == "sub"
+    agent.emit_external_event(
+        ExternalEvent(
+            SHELL_APPROVAL_RESPONSE_EVENT_NAME,
+            {"tool_call_id": "shell-1", "decision": "execute", "remember": True},
+        ),
+        config=config,
+    )
+    await asyncio.wait_for(task, timeout=1)
+
+    assert storage.allowed == {("printf approved", "sub")}
+    # Remembering the command for one directory does not approve it in the working directory.
+    assert not await storage.is_allowed("work-dir", "printf approved")
+    assert await storage.is_allowed("work-dir", "printf approved", "sub")
 
 
 async def wait_until(predicate, *, seconds: float = 1) -> None:

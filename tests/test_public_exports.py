@@ -39,7 +39,7 @@ MODULE_LEVEL_IMPORTS = {
     "AgentRunConfig": "zett_agent.agent",
     "tool": "zett_agent.tools.base",
     "AgentTool": "zett_agent.tools.base",
-    "read_file": "zett_agent.tools.coding",
+    "read_file": "zett_agent.tools.files",
     "UserMessage": "zett_agent.messages",
     "ModelRequest": "zett_agent.model",
     "AgentExtension": "zett_agent.extensions.base",
@@ -334,7 +334,7 @@ def test_pydantic_loads_only_when_validation_is_needed():
         "print('pydantic' in sys.modules)"
     )
     assert fields == ["False"]
-    fields = run_python("import sys; import zett_agent.tools.coding; print('pydantic' in sys.modules)")
+    fields = run_python("import sys; import zett_agent.tools.files; print('pydantic' in sys.modules)")
     assert fields == ["True"], "declaring tools must build their schema"
     fields = run_python(
         "import sys; "

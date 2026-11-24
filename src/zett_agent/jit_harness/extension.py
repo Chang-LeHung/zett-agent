@@ -14,6 +14,7 @@ from ..agent import AgentRunContext
 from ..events import AgentEvent, AgentEventType, AgentPhase
 from ..extensions.base import AgentExtension, ModelRequestNext, ToolCallNext
 from ..extensions.events import ExtensionEvent, PhaseTransitionEvent, RunCancelledEvent
+from ..extensions.tool_guidelines import ToolGuidelinesExtension
 from ..messages import AnyMessage, AssistantMessage, SystemMessage, ToolCall, ToolMessage
 from ..model import ModelEvent, ModelRequest
 from ..tools.base import AgentTool, ToolExecutionMode, ToolResult, render_tool_guidance, tool
@@ -216,6 +217,15 @@ class JITHarnessExtension(AgentExtension):
     Nothing closes a session when a run ends: a later turn of the same conversation
     expects its tools and its child process to still be there.
 
+    The block placed in each request carries the offered tools' snippets and
+    guidelines, because the tools a session makes appear mid-conversation and
+    the block is recomputed for every request. A registered
+    :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`
+    decides what it renders: its switches turn snippets, guidelines and return
+    schemas on or off, and in the description placement it has already put each
+    rule beside its tool, so :meth:`wants_tool_guidance` leaves tool guidance
+    out of the block instead of sending it twice.
+
     Note:
         Opt in only for trusted generated Python. The model can only run what it
         can write, so give it file tools that reach ``root``. The three control
@@ -225,10 +235,12 @@ class JITHarnessExtension(AgentExtension):
 
     A subclass can change the model-facing surface: override
     :meth:`management_tools` to add, remove, rename, or reword the control
-    tools, :meth:`instructions` to replace the stable prompt block, and
+    tools, :meth:`instructions` to replace the stable prompt block,
     :attr:`guidance_tool` / :meth:`wants_guidance` to decide when that block is
-    injected. If a subclass renames or removes a tool named by the default
-    instructions, it must override :meth:`instructions` to match.
+    injected, and :meth:`wants_tool_guidance` to decide whether it carries the
+    tools' snippets and guidelines. If a subclass renames or removes a tool
+    named by the default instructions, it must override :meth:`instructions` to
+    match.
 
     Examples:
         Keep each session's tools under the application's data directory::
@@ -452,6 +464,38 @@ class JITHarnessExtension(AgentExtension):
             return bool(offered & harness.management_names)
         return self.guidance_tool in offered
 
+    def wants_tool_guidance(self, context: AgentRunContext) -> bool:
+        """Return whether the block carries the tools' snippets and guidelines.
+
+        A registered
+        :class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`
+        that folds guidance into tool descriptions has already put every rule
+        beside its tool, so repeating them here would send each one twice. With
+        that extension in its system-prompt placement, or with none registered,
+        the block is where the model reads them, as far as its switches allow,
+        including for the tools this session made.
+        """
+        guidance = self._guidance_extension(context)
+        return guidance is None or guidance.in_system_prompt
+
+    @staticmethod
+    def _guidance_extension(context: AgentRunContext) -> ToolGuidelinesExtension | None:
+        """Return the guidance extension registered for this request, if any."""
+        return ToolGuidelinesExtension.registered(context.extensions)
+
+    def _guidance_options(self, context: AgentRunContext) -> dict[str, bool]:
+        """Return the guidance switches this request's extension asked for.
+
+        Empty when none is registered, which is also
+        :func:`~zett_agent.tools.base.render_tool_guidance`'s own default. A
+        registered extension decides the parts, so one setting governs the block
+        and every tool's description rather than the block overriding it.
+        """
+        guidance = self._guidance_extension(context)
+        if guidance is None:
+            return {}
+        return {"snippets": guidance.snippets, "guidelines": guidance.guidelines, "returns": guidance.returns}
+
     def _check_guidance_tool(self, tools: Sequence[AgentTool]) -> None:
         """Fail fast when a renamed surface leaves the default trigger dangling."""
         if self.guidance_tool is None or not tools:
@@ -559,11 +603,16 @@ class JITHarnessExtension(AgentExtension):
         if not self.wants_guidance(harness, offered):
             filtered = request
         else:
-            guidance = render_tool_guidance([tool for name, tool in context.tools.items() if name in offered])
+            guidance = ""
+            if self.wants_tool_guidance(context):
+                offered_tools = [tool for name, tool in context.tools.items() if name in offered]
+                guidance = render_tool_guidance(offered_tools, **self._guidance_options(context))
             messages = tuple(
                 message
                 for message in request.messages
                 if not isinstance(message, SystemMessage)
+                # The whole message is replaced, which is only safe because these
+                # markers sit on messages that carry guidance and nothing else.
                 or not (message.attributes.get(_GUIDANCE_KEY) or message.attributes.get("tool_guidelines"))
             )
             instructions = SystemMessage(

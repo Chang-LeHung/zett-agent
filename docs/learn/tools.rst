@@ -59,6 +59,11 @@ keeps its formatting and receives the guidance on a new line.
 Only the request sent to the provider changes; registered tools and stored
 history stay as they are.
 
+The blocks other extensions add to a request follow the same choice. The JIT
+harness's per-request block and Plan Mode's prompt render the parts enabled
+here, and in that mode they carry no tool guidance at all, because each rule
+already travels beside its tool.
+
 A tool's return annotation is described as JSON Schema and kept on the tool, but
 it is not shown by default: most tools return text the model reads directly.
 ``returns=True`` adds one sentence after each snippet, so the model knows the

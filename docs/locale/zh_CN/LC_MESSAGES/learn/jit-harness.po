@@ -41,8 +41,8 @@ msgid "Give the extension a directory that holds one subdirectory per session, a
 msgstr "为扩展指定一个目录，其下每个会话对应一个子目录；再给模型一种往那里写文件的方式："
 
 #: ../../learn/jit-harness.rst:50
-msgid "Run this inside an async function. ``model`` is a configured function-calling provider, ``add`` is your typed base tool, and ``write_file`` is any file tool that can reach the directory. The harness never writes source for the model: it can only run what the model, or your application, put on disk. The extension supplies current tool guidance, so an additional ``ToolGuidelinesExtension`` is not necessary. An explicit extension list replaces optional defaults; include history as above or use :doc:`session persistence <sessions>`."
-msgstr "请在异步函数中运行这段代码。 ``model`` 是一个已配置好的、支持函数调用的模型提供商， ``add`` 是你定义的类型化基础工具， ``write_file`` 是任何能访问该目录的文件工具。harness 从不替模型写源码：它只能运行模型或你的应用放到磁盘上的内容。该扩展会提供当前的工具 guidelines，因此不需要再添加 ``ToolGuidelinesExtension``\\ 。显式给出的扩展列表会替换掉可选默认项；请像上面那样包含历史记录，或使用 :doc:`会话持久化 <sessions>`\\ 。"
+msgid "Run this inside an async function. ``model`` is a configured function-calling provider, ``add`` is your typed base tool, and ``write_file`` is any file tool that can reach the directory. The harness never writes source for the model: it can only run what the model, or your application, put on disk. The extension supplies current tool guidance, so an additional ``ToolGuidelinesExtension`` is not necessary; one registered with ``placement=ToolGuidancePlacement.DESCRIPTION`` has already put each rule beside its tool, and the block then leaves tool guidance out instead of repeating it. An explicit extension list replaces optional defaults; include history as above or use :doc:`session persistence <sessions>`."
+msgstr "请在异步函数中运行这段代码。 ``model`` 是一个已配置好的、支持函数调用的模型提供商， ``add`` 是你定义的类型化基础工具， ``write_file`` 是任何能访问该目录的文件工具。harness 从不替模型写源码：它只能运行模型或你的应用放到磁盘上的内容。该扩展会提供当前的工具 guidelines，因此不需要再添加 ``ToolGuidelinesExtension``\\ ；但当它使用 ``placement=ToolGuidancePlacement.DESCRIPTION``\\ 时，每条规则已经写在对应工具的描述里，这个块就不再重复工具 guidelines。显式给出的扩展列表会替换掉可选默认项；请像上面那样包含历史记录，或使用 :doc:`会话持久化 <sessions>`\\ 。"
 
 #: ../../learn/jit-harness.rst:58
 msgid "Each session's repository lives in ``<root>/<session id>/<repo>/``. ``jit.session_directory(session_id)`` returns the session part. A conventional session id is the directory name; one with a path separator, a leading dot, or a very long id is turned into a readable stem plus a digest, so two sessions never share a directory and none can leave the root."
@@ -572,6 +572,21 @@ msgstr ""
 " 以保持一致，并把 "
 ":attr:`~zett_agent.jit_harness.extension.JITHarnessExtension.guidance_tool`"
 " 指向仍然应触发该块的工具。把 ``guidance_tool`` 设为 ``None``\\ ，可以在任意已注册控制工具出现时注入："
+
+#: ../../learn/jit-harness.rst:701
+msgid ""
+"A registered "
+":class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` "
+"decides which parts of the block's tool guidance appear, and "
+":meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.wants_tool_guidance` "
+"decides whether it carries any: in the description placement the rules "
+"already travel in each tool's description, so the block leaves them out."
+msgstr ""
+"注册的 "
+":class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension`\\ "
+"决定这个块里要出现哪些工具 guidelines；"
+":meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.wants_tool_guidance`\\ "
+"决定这个块是否携带工具 guidelines：在 description 放置方式下，规则已经随每个工具的描述一起发送，所以这个块不再包含它们。"
 
 #: ../../learn/jit-harness.rst:701
 msgid "Notes stay out of the prompt by default. To put the repository's note catalog into the guidance block, set ``include_notes = True`` on the subclass; the catalog lists each note's name, kind, description, and absolute path, never its body, and :func:`~zett_agent.jit_harness.extension.render_note_catalog` keeps it within :data:`~zett_agent.jit_harness.extension.MAX_NOTE_CATALOG_CHARS` (4,000 characters by default, which can be several thousand tokens in Chinese). Override ``notes_catalog(harness)`` to filter or format it, for example ``render_note_catalog([n for n in harness.resources if n[\"kind\"] == \"skill\"])``. Descriptions are model-authored data, not instructions, and gain system-message authority when enabled."

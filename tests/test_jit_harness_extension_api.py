@@ -8,6 +8,7 @@ import pytest
 
 from jit_support import put_resource, put_tool, seed_repo
 from zett_agent.agent import AgentRunConfig, AgentRunContext, AgentState
+from zett_agent.extensions.tool_guidelines import ToolGuidancePlacement, ToolGuidelinesExtension
 from zett_agent.jit_harness import (
     MAX_NOTE_CATALOG_CHARS,
     JITHarness,
@@ -42,8 +43,8 @@ def cache_report() -> dict[str, int]:
     return {"hits": 1}
 
 
-def context(*tools, session="api"):
-    return AgentRunContext(AgentRunConfig(session), AgentState(), {tool.name: tool for tool in tools}, ())
+def context(*tools, session="api", extensions=()):
+    return AgentRunContext(AgentRunConfig(session), AgentState(), {tool.name: tool for tool in tools}, extensions)
 
 
 class CustomJIT(JITHarnessExtension):
@@ -202,6 +203,102 @@ async def test_renamed_guidance_tool_controls_injection(tmp_path):
     finally:
         extension._request_finished(ctx)
         extension.forget_session("renamed")
+
+
+async def test_description_placement_keeps_tool_guidance_out_of_the_harness_block(tmp_path):
+    """The extension put each rule beside its tool, so the block must not send it a second time."""
+    extension = JITHarnessExtension(tmp_path)
+    guidance = ToolGuidelinesExtension(placement=ToolGuidancePlacement.DESCRIPTION)
+    ctx = context(session="described", extensions=(guidance,))
+    await extension.on_tool(ctx)
+    try:
+        assert not extension.wants_tool_guidance(ctx)
+        request = ModelRequest(
+            messages=(SystemMessage(content="base"),), tools=tuple(item.definition for item in ctx.tools.values())
+        )
+        # The middleware chain runs the guidance extension first, so the harness sees
+        # the descriptions it already folded its rules into.
+        described = await _request_messages(guidance, ctx, request)
+        current = await _request_messages(extension, ctx, described)
+        block = next(
+            message
+            for message in current.messages
+            if isinstance(message, SystemMessage) and message.attributes.get("jit_harness:guidance")
+        )
+        assert block.content.startswith(_INSTRUCTIONS), "the harness's own instructions stay"
+        assert "# Tool snippets" not in block.content and "# Tool guidelines" not in block.content
+
+        rule = ctx.tools["repo_create"].guidelines[0]
+        description = next(tool.description or "" for tool in current.tools if tool.name == "repo_create")
+        assert rule in description, "the rule reaches the model beside its tool"
+        system_text = "\n".join(message.content for message in current.messages if isinstance(message, SystemMessage))
+        occurrences = system_text.count(rule) + sum((tool.description or "").count(rule) for tool in current.tools)
+        assert occurrences == 1, "and exactly once in the composed request"
+    finally:
+        extension._request_finished(ctx)
+        extension.forget_session("described")
+
+
+def test_the_guidance_extension_folds_descriptions_before_the_harness_builds_its_block():
+    """The order is what lets the block stay out: descriptions are written first."""
+    assert ToolGuidelinesExtension().priority < JITHarnessExtension.priority
+
+
+async def test_system_prompt_placement_still_gets_its_tool_guidance_from_the_block(tmp_path):
+    """Current guidance has to follow the tools a session just made, so the block supplies it there."""
+    extension = JITHarnessExtension(tmp_path)
+    ctx = context(session="prompted", extensions=(ToolGuidelinesExtension(),))
+    await extension.on_tool(ctx)
+    try:
+        assert extension.wants_tool_guidance(ctx)
+        request = ModelRequest(
+            messages=(SystemMessage(content="base"),), tools=tuple(item.definition for item in ctx.tools.values())
+        )
+        current = await _request_messages(extension, ctx, request)
+        block = next(
+            message
+            for message in current.messages
+            if isinstance(message, SystemMessage) and message.attributes.get("jit_harness:guidance")
+        )
+        assert "# Tool guidelines" in block.content and "## repo_create" in block.content
+    finally:
+        extension._request_finished(ctx)
+        extension.forget_session("prompted")
+
+
+@pytest.mark.parametrize(
+    ("switches", "snippets", "guidelines", "returns"),
+    [
+        ({}, True, True, False),
+        ({"snippets": False}, False, True, False),
+        ({"guidelines": False}, True, False, False),
+        ({"returns": True}, True, True, True),
+        ({"snippets": False, "guidelines": False}, False, False, False),
+    ],
+)
+async def test_the_block_renders_the_parts_the_registered_extension_asked_for(
+    tmp_path, switches, snippets, guidelines, returns
+):
+    """One setting governs the block and the descriptions, so neither overrides the other."""
+    extension = JITHarnessExtension(tmp_path)
+    ctx = context(session="switches", extensions=(ToolGuidelinesExtension(**switches),))
+    await extension.on_tool(ctx)
+    try:
+        request = ModelRequest(
+            messages=(SystemMessage(content="base"),), tools=tuple(item.definition for item in ctx.tools.values())
+        )
+        current = await _request_messages(extension, ctx, request)
+        block = next(
+            message
+            for message in current.messages
+            if isinstance(message, SystemMessage) and message.attributes.get("jit_harness:guidance")
+        )
+        assert ("# Tool snippets" in block.content) is snippets
+        assert ("# Tool guidelines" in block.content) is guidelines
+        assert ("It returns " in block.content) is returns
+    finally:
+        extension._request_finished(ctx)
+        extension.forget_session("switches")
 
 
 async def test_a_dangling_guidance_tool_fails_before_attach(tmp_path):

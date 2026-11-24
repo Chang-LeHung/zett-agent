@@ -8,4 +8,4 @@ example ``from zett_agent.providers import OpenAIProvider`` and
 ``from zett_agent.extensions import CodingExtension``.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"

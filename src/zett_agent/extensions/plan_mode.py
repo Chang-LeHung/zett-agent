@@ -484,8 +484,9 @@ class PlanModeExtension(ExternalEventExtension):
 
     def _replace_plan_system_messages(self, context: AgentRunContext, baseline: _RequestBaseline) -> None:
         dialogue = [message for message in context.state.messages if not isinstance(message, SystemMessage)]
-        guidance = render_tool_guidance(
-            (*self._filesystem_tools, baseline.exit_tool), **self._guidance_options(context)
+        options = self._guidance_options(context)
+        guidance = (
+            "" if options is None else render_tool_guidance((*self._filesystem_tools, baseline.exit_tool), **options)
         )
         prompt = self.system_prompt if not guidance else f"{self.system_prompt}\n\n{guidance}"
         context.replace_messages([SystemMessage(content=prompt), *dialogue])
@@ -504,22 +505,19 @@ class PlanModeExtension(ExternalEventExtension):
         return baseline
 
     @staticmethod
-    def _guidance_options(context: AgentRunContext) -> dict[str, bool]:
-        """Mirror the switches of the system-prompt guidance extension, when it is registered.
+    def _guidance_options(context: AgentRunContext) -> dict[str, bool] | None:
+        """Return the switches to render tool guidance with, or None to render none.
 
         Both plan-mode blocks render the same options, so turning a part off turns it off
-        in the block the model reads now and in the one restored on exit.
+        in the block the model reads now and in the one restored on exit. A registered
+        guidance extension that writes each tool's own description has already put the
+        rules there, so these blocks render none rather than send them a second time.
         """
-        guidance = next(
-            (
-                extension
-                for extension in context.extensions
-                if isinstance(extension, ToolGuidelinesExtension) and extension.in_system_prompt
-            ),
-            None,
-        )
+        guidance = ToolGuidelinesExtension.registered(context.extensions)
         if guidance is None:
             return {}
+        if guidance.in_descriptions:
+            return None
         return {"snippets": guidance.snippets, "guidelines": guidance.guidelines, "returns": guidance.returns}
 
     def _normal_system_messages(
@@ -531,13 +529,20 @@ class PlanModeExtension(ExternalEventExtension):
         if not self.is_plan_mode(context.session_id):
             return tuple(instructions)
         options = self._guidance_options(context)
+        if options is None:
+            return tuple(instructions)
         plan_guidance = render_tool_guidance((*self._filesystem_tools, baseline.exit_tool), **options)
         if plan_guidance:
             instructions = [message for message in instructions if message.content != plan_guidance]
         if options:
-            normal_guidance = render_tool_guidance((*baseline.tools.values(), baseline.enter_tool), **options)
+            # A deferred tool reaches the model through tool search, so its rule travels
+            # with the definition rather than announcing a tool the block cannot call.
+            visible = (*(tool for tool in baseline.tools.values() if not tool.deferred), baseline.enter_tool)
+            normal_guidance = render_tool_guidance(visible, **options)
             if normal_guidance:
-                instructions.append(SystemMessage(content=normal_guidance))
+                # Marked like the guidance extension's own block, so a JIT harness
+                # replaces it with its current one instead of sending both.
+                instructions.append(SystemMessage(content=normal_guidance, attributes={"tool_guidelines": True}))
         return tuple(instructions)
 
     @staticmethod

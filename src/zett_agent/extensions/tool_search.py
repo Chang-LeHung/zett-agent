@@ -385,10 +385,10 @@ class ToolSearchExtension(AgentExtension):
         its guidelines only, which keeps the rules next to a tool that has no
         other channel.
         """
-        for extension in context.extensions:
-            if isinstance(extension, ToolGuidelinesExtension):
-                return extension.snippets, extension.guidelines, extension.returns
-        return False, True, False
+        guidance = ToolGuidelinesExtension.registered(context.extensions)
+        if guidance is None:
+            return False, True, False
+        return guidance.snippets, guidance.guidelines, guidance.returns
 
     async def on_event(self, context: AgentRunContext, event: ExtensionEvent) -> None:
         """Let the conversation rediscover definitions a compaction removed.

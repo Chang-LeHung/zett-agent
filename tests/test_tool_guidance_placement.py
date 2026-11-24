@@ -430,6 +430,30 @@ async def test_the_returns_switch_reaches_description_placement():
     assert "returns" not in descriptions(plain)["lookup"]
 
 
+async def test_plan_mode_started_in_that_mode_restores_without_a_guidance_block():
+    """The restored block is decided in that mode too, so it must stay empty there."""
+    plan_mode = PlanModeExtension()
+    model = Model()
+    agent = await Agent.create(
+        model,
+        config=AgentRunConfig("already-planning"),
+        tools=[],
+        extensions=[
+            CodingExtension(),
+            ToolGuidelinesExtension(placement=ToolGuidancePlacement.DESCRIPTION),
+            plan_mode,
+        ],
+    )
+    # Start in plan mode without walking the approval flow.
+    plan_mode._active_sessions.add("already-planning")
+    await agent.run("hi")
+
+    request = model.requests[0]
+    assert "Tool snippets" not in system_text(request) and "Tool guidelines" not in system_text(request)
+    rule = next(tool for tool in CodingExtension().tools if tool.name == "write_file").guidelines[0]
+    assert rule in descriptions(request)["write_file"], "the rule reaches the model beside its tool"
+
+
 async def test_plan_mode_honors_the_returns_switch():
     """Plan mode renders its own block, so it must mirror the guidance switches."""
 

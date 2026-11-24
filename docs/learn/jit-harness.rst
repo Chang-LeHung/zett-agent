@@ -52,8 +52,11 @@ provider, ``add`` is your typed base tool, and ``write_file`` is any file tool
 that can reach the directory. The harness never writes source for the model: it
 can only run what the model, or your application, put on disk. The extension
 supplies current tool guidance, so an additional ``ToolGuidelinesExtension`` is
-not necessary. An explicit extension list replaces optional defaults; include
-history as above or use :doc:`session persistence <sessions>`.
+not necessary; one registered with
+``placement=ToolGuidancePlacement.DESCRIPTION`` has already put each rule beside
+its tool, and the block then leaves tool guidance out instead of repeating it.
+An explicit extension list replaces optional defaults; include history as above
+or use :doc:`session persistence <sessions>`.
 
 Each session's repository lives in ``<root>/<session id>/<repo>/``.
 ``jit.session_directory(session_id)`` returns the session part. A conventional
@@ -697,6 +700,13 @@ the tool whose presence should still inject the block. Set ``guidance_tool`` to
 
        def instructions(self, harness):
            return "Use the repository only for reusable helpers.\n"
+
+A registered
+:class:`~zett_agent.extensions.tool_guidelines.ToolGuidelinesExtension` decides
+which parts of the block's tool guidance appear, and
+:meth:`~zett_agent.jit_harness.extension.JITHarnessExtension.wants_tool_guidance`
+decides whether it carries any: in the description placement the rules already
+travel in each tool's description, so the block leaves them out.
 
 Notes stay out of the prompt by default. To put the repository's note catalog
 into the guidance block, set ``include_notes = True`` on the subclass; the

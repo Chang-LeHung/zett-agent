@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import replace
 
 from .._compat import StrEnum, aclosing_stream
@@ -39,6 +39,11 @@ class ToolGuidelinesExtension(AgentExtension):
     catalog, keeps its own formatting and gets the guidance on a new line.
     Use it for endpoints and gateways that surface only tool definitions, or
     when the guidance should travel with the tool wherever the definition goes.
+    The blocks other extensions add to a request follow both choices: Plan Mode
+    and a registered
+    :class:`~zett_agent.jit_harness.extension.JITHarnessExtension` render the
+    parts enabled here, and leave tool guidance out entirely in this placement,
+    so no rule is sent twice.
 
     Tools marked ``deferred=True`` are skipped in both modes: their definitions
     reach the model through tool search, so rendering their guidance would
@@ -91,6 +96,28 @@ class ToolGuidelinesExtension(AgentExtension):
     def in_system_prompt(self) -> bool:
         """Whether this extension writes guidance into the system instructions."""
         return self.placement is ToolGuidancePlacement.SYSTEM_PROMPT
+
+    @property
+    def in_descriptions(self) -> bool:
+        """Whether this extension writes guidance into each tool's own description."""
+        return self.placement is ToolGuidancePlacement.DESCRIPTION
+
+    @classmethod
+    def registered(cls, extensions: Sequence[AgentExtension]) -> ToolGuidelinesExtension | None:
+        """Return the guidance extension whose placement governs a request, or None.
+
+        Extensions that render guidance into a block of their own ask this, and
+        follow :attr:`in_system_prompt`, :attr:`in_descriptions` and the three
+        switches, so the request carries each rule once. Two instances may be
+        registered under different names, because a name is unique while a type
+        is not; then the first in ``extensions`` decides, since one placement has
+        to govern a request. The other still places its guidance where its own
+        placement says, so duplicate rules are the cost of that configuration.
+        """
+        for extension in extensions:
+            if isinstance(extension, cls):
+                return extension
+        return None
 
     async def on_state(self, context: AgentRunContext) -> None:
         """Place guidance after existing system instructions and before dialogue."""

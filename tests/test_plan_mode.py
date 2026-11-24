@@ -28,7 +28,9 @@ from zett_agent.extensions.plan_mode import (
     PLAN_MODE_SYSTEM_PROMPT,
     PlanModeExtension,
 )
-from zett_agent.extensions.tool_guidelines import ToolGuidelinesExtension
+from zett_agent.extensions.tool_guidelines import ToolGuidancePlacement, ToolGuidelinesExtension
+from zett_agent.extensions.tool_search import ToolSearchExtension
+from zett_agent.jit_harness import JITHarnessExtension
 from zett_agent.messages import (
     AssistantMessage,
     SystemMessage,
@@ -39,6 +41,7 @@ from zett_agent.model import (
     ModelEvent,
     ModelResponse,
 )
+from zett_agent.tools.base import tool
 
 
 class ScriptedModel:
@@ -220,6 +223,96 @@ async def test_model_proposal_waits_for_approval_then_enters_plan_mode():
 
     decision = next(message for message in model.requests[1].messages if isinstance(message, ToolMessage))
     assert json.loads(decision.content) == {"entered": True, "message": "Plan Mode is active"}
+
+
+async def test_description_placement_leaves_the_plan_prompt_without_a_guidance_block():
+    """Each plan tool carries its rules already, so the prompt must not repeat them."""
+    model = ScriptedModel(proposal(), AssistantMessage(content="Detailed plan"))
+    plan_mode = PlanModeExtension()
+    agent = await Agent.create(
+        model,
+        config=AgentRunConfig("described-plan"),
+        system_prompt="Normal implementation prompt",
+        extensions=[
+            CodingExtension(),
+            ToolGuidelinesExtension(placement=ToolGuidancePlacement.DESCRIPTION),
+            plan_mode,
+        ],
+    )
+
+    await run_with_decision(agent, approved=True)
+
+    instructions = [message.content for message in model.requests[1].messages if isinstance(message, SystemMessage)]
+    assert instructions == [PLAN_MODE_SYSTEM_PROMPT.strip()], "no snippets or guidelines section was appended"
+    rule = next(tool for tool in CodingExtension().tools if tool.name == "write_file").guidelines[0]
+    write = next(tool for tool in model.requests[1].tools if tool.name == "write_file")
+    assert rule in (write.description or ""), "the rule reaches the model beside its tool"
+    system_text = "\n".join(instructions)
+    occurrences = system_text.count(rule) + sum(
+        (tool.description or "").count(rule) for tool in model.requests[1].tools
+    )
+    assert occurrences == 1, "and exactly once in the composed request"
+
+
+@tool(deferred=True, guidelines="Only after a search.")
+def searched_tool() -> str:
+    """Hidden until searched."""
+    return "x"
+
+
+async def test_a_harness_leaves_one_guidance_block_after_plan_mode_exits(tmp_path):
+    """Plan mode restores its own block, and the harness must replace it rather than add a second."""
+    model = ScriptedModel(
+        proposal(),
+        AssistantMessage(content="Detailed plan"),
+        exit_proposal(),
+        AssistantMessage(content="Implemented"),
+    )
+    plan_mode = PlanModeExtension()
+    agent = await Agent.create(
+        model,
+        config=AgentRunConfig("restored-guidance"),
+        system_prompt="Normal implementation prompt",
+        extensions=[
+            CodingExtension(),
+            ToolGuidelinesExtension(),
+            plan_mode,
+            JITHarnessExtension(tmp_path),
+        ],
+    )
+
+    await run_with_decision(agent, approved=True)
+    await run_with_exit_decision(agent, approved=True)
+
+    request = model.requests[-1]
+    system = "\n".join(message.content for message in request.messages if isinstance(message, SystemMessage))
+    rule = next(tool for tool in CodingExtension().tools if tool.name == "write_file").guidelines[0]
+    assert system.count("# Tool guidelines") == 1
+    occurrences = system.count(rule) + sum((tool.description or "").count(rule) for tool in request.tools)
+    assert occurrences == 1
+
+
+async def test_the_restored_block_skips_a_deferred_tool():
+    """A deferred tool's rule travels with its definition, so the restored block must omit it."""
+    model = ScriptedModel(exit_proposal(), AssistantMessage(content="Done"))
+    plan_mode = PlanModeExtension()
+    agent = await Agent.create(
+        model,
+        config=AgentRunConfig("restored-deferred"),
+        tools=[searched_tool],
+        extensions=[CodingExtension(), ToolGuidelinesExtension(), ToolSearchExtension(), plan_mode],
+    )
+    # Begin in plan mode, leave it inside the run, and read the restored request.
+    plan_mode._active_sessions.add("restored-deferred")
+    await run_with_exit_decision(agent, approved=True)
+
+    request = model.requests[-1]
+    restored = "\n".join(message.content for message in request.messages if isinstance(message, SystemMessage))
+    assert "## searched_tool" not in restored and "Only after a search." not in restored
+    assert "## write_file" in restored, "an ordinary tool's rule is still there"
+    assert any("Only after a search." in (tool.description or "") for tool in request.tools), (
+        "the rule rides with the definition its search shows"
+    )
 
 
 async def test_declined_proposal_keeps_normal_mode_prompt_and_tools():

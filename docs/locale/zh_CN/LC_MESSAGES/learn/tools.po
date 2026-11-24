@@ -57,6 +57,10 @@ msgid "``snippets=False`` or ``guidelines=False`` drops either part in both mode
 msgstr "``snippets=False`` 或 ``guidelines=False`` 会在两种模式下去掉相应的部分。只有发送给提供商的请求会改变；已注册的工具和已保存的历史保持原样。"
 
 #: ../../learn/tools.rst:62
+msgid "The blocks other extensions add to a request follow the same choice. The JIT harness's per-request block and Plan Mode's prompt render the parts enabled here, and in that mode they carry no tool guidance at all, because each rule already travels beside its tool."
+msgstr "其他扩展加到请求里的块遵循同样的选择。JIT harness 的每请求块和 Plan Mode 的提示词只渲染这里启用的部分；在这种模式下，这些块完全不携带工具 guidelines，因为每条规则已经随对应工具一起发送。"
+
+#: ../../learn/tools.rst:62
 msgid "A tool's return annotation is described as JSON Schema and kept on the tool, but it is not shown by default: most tools return text the model reads directly. ``returns=True`` adds one sentence after each snippet, so the model knows the shape before it calls, and it ends a tool whose docstring has a ``Returns`` section with that prose:"
 msgstr "工具的返回注解会被描述成 JSON Schema 并保存在工具上，但默认不会展示：大多数工具返回的是模型直接阅读的文本。\\ ``returns=True``\\ 会在每个 snippet 之后加一句“It returns …”，让模型在调用之前就知道返回值的结构；如果工具的文档字符串里有\\ ``Returns``\\ 段，该段的描述会接在整个工具描述的最后："
 
